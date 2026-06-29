@@ -1,0 +1,28 @@
+{
+  "name": "contentbuilder",
+  "version": "0.1.0",
+  "private": true,
+  "description": "On-brand Instagram carousel & story asset generator (internal tool)",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n db,api,web -c green,blue,magenta \"npm:db\" \"npm:dev:api\" \"npm:dev:web\"",
+    "db": "node scripts/start-mongo.mjs",
+    "dev:api": "npm run dev --workspace apps/api",
+    "dev:web": "npm run dev --workspace apps/web",
+    "build": "npm run build --workspace apps/api && npm run build --workspace apps/web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "fonts": "node scripts/copy-fonts.mjs",
+    "seed": "npm run seed --workspace apps/api"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "mongodb-memory-server": "^11.2.0",
+    "typescript": "^5.6.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

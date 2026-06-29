@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="96" viewBox="0 0 360 96">
+  <g fill="none">
+    <path d="M48 12 L80 84 L16 84 Z" fill="#00C2FF"/>
+    <path d="M48 36 L66 84 L30 84 Z" fill="#0B1F3A"/>
+  </g>
+  <text x="104" y="64" font-family="Montserrat, Arial, sans-serif" font-size="52" font-weight="700" fill="#F5F7FA" letter-spacing="2">APEX</text>
+</svg>
