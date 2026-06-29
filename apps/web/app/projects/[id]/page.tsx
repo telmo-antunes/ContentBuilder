@@ -20,6 +20,7 @@ import {
   IMAGE_ASPECTS,
   IMAGE_SIZES,
   type Format,
+  type ImageObject,
   type ImageTreatment,
   type ProjectSettings,
   type SlideOverrides,
@@ -67,6 +68,7 @@ export default function ProjectEditorPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [overflowIds, setOverflowIds] = useState<Set<string>>(new Set());
   const [exporting, setExporting] = useState(false);
   const [exported, setExported] = useState(false);
@@ -115,8 +117,45 @@ export default function ProjectEditorPage() {
     return () => clearTimeout(t);
   }, [title, slides, settings, detail, id]);
 
+  // One-time notice passed from the draft flow (e.g. Free → Designer fallback).
+  useEffect(() => {
+    const n = new URLSearchParams(window.location.search).get('notice');
+    if (n === 'free-fallback') {
+      setNotice("Free-canvas drafting didn't work this time, so Designer layouts were used instead. You can change each slide's layout from the inspector.");
+    }
+    if (n) window.history.replaceState(null, '', window.location.pathname);
+  }, []);
+
+  // Manual re-save after an autosave failure (the debounced effect only fires on edits).
+  const retrySave = async () => {
+    const snap = JSON.stringify({ title, slides, settings });
+    setSaveState('saving');
+    try {
+      await updateProject(id, { title, slides, settings });
+      savedSnapshot.current = snap;
+      setSaveState('saved');
+      setError(null);
+    } catch (e) {
+      setSaveState('error');
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
   const kit: RenderBrandKit = useMemo(() => toRenderKit(detail?.brandKit), [detail]);
   const theme: ThemePreset = settings.theme ?? 'editorial';
+  // Some slides may carry a per-slide theme override (e.g. from a Designer draft)
+  // that diverges from the project theme — offer a one-click unify.
+  const themeDiverges = slides.some((s) => Boolean(s.overrides?.theme) && s.overrides?.theme !== theme);
+  const applyThemeToAll = () => {
+    snapshot();
+    setSlides((prev) =>
+      prev.map((s) => {
+        if (!s.overrides?.theme) return s;
+        const { theme: _drop, ...rest } = s.overrides;
+        return { ...s, overrides: rest };
+      }),
+    );
+  };
   const showCounter = Boolean(settings.slideCounter) && detail?.type === 'carousel';
 
   // The main preview scales to fit the preview column so the full slide is always
@@ -244,6 +283,8 @@ export default function ProjectEditorPage() {
   };
 
   const deleteSlide = (slideId: string) => {
+    const n = slides.findIndex((s) => s.id === slideId) + 1;
+    if (!window.confirm(`Delete ${detail?.type === 'story' ? 'frame' : 'slide'} ${n}? You can undo this with ⌘Z while the editor is open.`)) return;
     snapshot();
     setSlides((prev) => {
       const idx = prev.findIndex((s) => s.id === slideId);
@@ -376,7 +417,7 @@ export default function ProjectEditorPage() {
           />
           <div className="muted" style={{ fontSize: 13, marginTop: 4, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <span>
-              {detail.type} · {FORMAT_LABELS[detail.format]} · <SaveBadge state={saveState} />
+              {detail.type} · {FORMAT_LABELS[detail.format]} · <SaveBadge state={saveState} onRetry={retrySave} />
             </span>
             <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span>· Theme</span>
@@ -392,6 +433,16 @@ export default function ProjectEditorPage() {
                   </option>
                 ))}
               </select>
+              {themeDiverges && (
+                <button
+                  className="btn sm ghost"
+                  style={{ padding: '2px 8px' }}
+                  onClick={applyThemeToAll}
+                  title="Some slides override the theme. Clear those overrides so every slide uses this theme."
+                >
+                  Apply to all
+                </button>
+              )}
             </span>
             {detail.type === 'carousel' && (
               <label style={{ display: 'flex', alignItems: 'center', gap: 5, margin: 0, cursor: 'pointer' }}>
@@ -440,6 +491,18 @@ export default function ProjectEditorPage() {
       </div>
 
       {error && <div className="error-box">{error}</div>}
+      {notice && (
+        <div
+          className="error-box"
+          style={{ marginTop: 12, borderColor: '#5a4a1d', background: '#2a2410', color: '#f0d68a', display: 'flex', alignItems: 'center', gap: 12 }}
+          role="status"
+        >
+          <span style={{ flex: 1 }}>{notice}</span>
+          <button className="btn sm ghost" onClick={() => setNotice(null)} aria-label="Dismiss notice">
+            Dismiss
+          </button>
+        </div>
+      )}
 
       <div className="editor">
         {/* Slide rail */}
@@ -489,7 +552,7 @@ export default function ProjectEditorPage() {
                   brandKit={kit}
                   format={detail.format}
                   image={resolveSlideImage(s, media)}
-                  imageLayout={resolveImageLayout(s)}
+                  imageLayout={resolveImageLayout(s, media)}
                   theme={s.overrides?.theme ?? theme}
                   slideIndex={i}
                   slideTotal={slides.length}
@@ -504,37 +567,40 @@ export default function ProjectEditorPage() {
                 <span style={{ display: 'flex', gap: 2 }}>
                   <button
                     className="icon-btn"
-                    style={{ width: 22, height: 22 }}
+                    style={{ width: 24, height: 24 }}
                     disabled={i === 0}
                     onClick={(e) => {
                       e.stopPropagation();
                       moveSlide(s.id, -1);
                     }}
                     title="Move up"
+                    aria-label="Move slide up"
                   >
                     ↑
                   </button>
                   <button
                     className="icon-btn"
-                    style={{ width: 22, height: 22 }}
+                    style={{ width: 24, height: 24 }}
                     disabled={i === slides.length - 1}
                     onClick={(e) => {
                       e.stopPropagation();
                       moveSlide(s.id, 1);
                     }}
                     title="Move down"
+                    aria-label="Move slide down"
                   >
                     ↓
                   </button>
                   <button
                     className="icon-btn"
-                    style={{ width: 22, height: 22 }}
+                    style={{ width: 24, height: 24 }}
                     disabled={slides.length >= MAX_SLIDES_PER_PROJECT}
                     onClick={(e) => {
                       e.stopPropagation();
                       duplicateSlide(s.id);
                     }}
                     title="Duplicate"
+                    aria-label="Duplicate slide"
                   >
                     ⧉
                   </button>
@@ -574,7 +640,7 @@ export default function ProjectEditorPage() {
                 brandKit={kit}
                 format={detail.format}
                 image={resolveSlideImage(selected, media)}
-                imageLayout={resolveImageLayout(selected)}
+                imageLayout={resolveImageLayout(selected, media)}
                 theme={selected.overrides?.theme ?? theme}
                 slideIndex={slides.findIndex((s) => s.id === selected.id)}
                 slideTotal={slides.length}
@@ -726,7 +792,7 @@ function PreviewOverlay({
             brandKit={kit}
             format={format}
             image={resolveSlideImage(slide, media)}
-            imageLayout={resolveImageLayout(slide)}
+            imageLayout={resolveImageLayout(slide, media)}
             theme={slide.overrides?.theme ?? theme}
             slideIndex={idx}
             slideTotal={slides.length}
@@ -766,13 +832,25 @@ function PreviewOverlay({
   );
 }
 
-function SaveBadge({ state }: { state: SaveState }) {
+function SaveBadge({ state, onRetry }: { state: SaveState; onRetry?: () => void }) {
   const map: Record<SaveState, string> = {
     idle: 'All changes saved',
     saving: 'Saving…',
     saved: 'Saved',
     error: 'Save failed',
   };
+  if (state === 'error') {
+    return (
+      <span className="save-pill" style={{ color: 'var(--danger)', fontWeight: 600 }}>
+        Save failed
+        {onRetry && (
+          <button className="btn sm danger" style={{ marginLeft: 8, padding: '2px 9px' }} onClick={onRetry}>
+            Retry
+          </button>
+        )}
+      </span>
+    );
+  }
   return <span className="save-pill">{map[state]}</span>;
 }
 
@@ -858,7 +936,10 @@ function SlideInspector({
         </select>
       )}
       <p className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-        {LAYOUT_DESCRIPTIONS[slide.layoutType]}
+        {LAYOUT_DESCRIPTIONS[slide.layoutType]}{' '}
+        <a href="/gallery" target="_blank" rel="noreferrer" style={{ whiteSpace: 'nowrap' }}>
+          See all layouts ↗
+        </a>
       </p>
 
       {wantsImage && (
@@ -926,7 +1007,7 @@ function BlockList({ blocks, onChange }: { blocks: Block[]; onChange: (b: Block[
             >
               ↓
             </button>
-            <button className="icon-btn danger" onClick={() => remove(i)} title="Remove block">
+            <button className="icon-btn danger" onClick={() => remove(i)} title="Remove block" aria-label="Remove block">
               ✕
             </button>
           </div>
@@ -975,6 +1056,7 @@ function ListItemsEditor({ items, onChange }: { items: string[]; onChange: (item
             className="icon-btn danger"
             onClick={() => onChange(items.filter((_, idx) => idx !== i))}
             title="Remove item"
+            aria-label="Remove list item"
           >
             ✕
           </button>
@@ -1037,6 +1119,34 @@ function ImageControls({
       return { ...s, mediaAssetId, imageNeed: 'upload', overrides };
     });
 
+  // FreePosition: multiple positioned image objects, each with its own media.
+  const objects = ov?.imageObjects ?? [];
+  const objFileRef = useRef<HTMLInputElement>(null);
+  const [objTarget, setObjTarget] = useState<number | 'new' | null>(null);
+  const setObjects = (next: ImageObject[]) => setOverride({ imageObjects: next });
+  const onPickObject = async (file: File | undefined) => {
+    if (!file) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const asset = await uploadMedia(businessId, file);
+      onUploaded(asset);
+      if (objTarget === 'new' || objTarget == null) {
+        setObjects([
+          ...objects,
+          { id: crypto.randomUUID(), mediaAssetId: asset._id, frame: { x: 0.1, y: 0.1, w: 0.5, h: 0.4 }, fit: 'cover' },
+        ]);
+      } else {
+        setObjects(objects.map((o, i) => (i === objTarget ? { ...o, mediaAssetId: asset._id } : o)));
+      }
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+      setObjTarget(null);
+    }
+  };
+
   const onPick = async (file: File | undefined) => {
     if (!file) return;
     setBusy(true);
@@ -1081,6 +1191,22 @@ function ImageControls({
               ⟲
             </button>
           </div>
+          <div className="row" style={{ alignItems: 'center', gap: 8, marginTop: 6 }}>
+            <span className="muted" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>Zoom (crop)</span>
+            <input
+              type="range"
+              min={1}
+              max={3}
+              step={0.05}
+              value={slide.overrides?.imageZoom ?? 1}
+              onChange={(e) => setOverride({ imageZoom: Number(e.target.value) })}
+              style={{ flex: 1, width: 'auto', padding: 0 }}
+              aria-label="Image zoom"
+            />
+            <span className="muted" style={{ fontSize: 11, width: 32, textAlign: 'right' }}>
+              {(slide.overrides?.imageZoom ?? 1).toFixed(1)}×
+            </span>
+          </div>
           <div style={{ marginTop: 8 }}>
             <span className="muted" style={{ fontSize: 11 }}>Cohesion</span>
             <div className="row" style={{ gap: 4, marginTop: 4 }}>
@@ -1101,7 +1227,9 @@ function ImageControls({
             </button>
             <button
               className="btn sm ghost"
-              onClick={() => onChange((s) => ({ ...s, mediaAssetId: undefined }))}
+              onClick={() => {
+                if (window.confirm('Remove this image from the slide?')) onChange((s) => ({ ...s, mediaAssetId: undefined }));
+              }}
             >
               Remove
             </button>
@@ -1146,6 +1274,76 @@ function ImageControls({
                   Background
                 </button>
               </div>
+
+              <span className="muted" style={{ fontSize: 11, display: 'block', marginTop: 10 }}>
+                Image objects
+              </span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+                {objects.map((o, i) => {
+                  const url = o.mediaAssetId ? media.find((m) => m._id === o.mediaAssetId)?.url : undefined;
+                  const crop = o.crop ?? { x: 0.5, y: 0.5, zoom: 1 };
+                  const setCrop = (patch: Partial<{ x: number; y: number; zoom: number }>) =>
+                    setObjects(objects.map((x, xi) => (xi === i ? { ...x, crop: { ...crop, ...patch } } : x)));
+                  const cover = (o.fit ?? 'cover') === 'cover';
+                  return (
+                    <div key={o.id} style={{ display: 'flex', flexDirection: 'column', gap: 5, padding: 6, border: '1px solid var(--border)', borderRadius: 8 }}>
+                      <div className="row" style={{ gap: 5, alignItems: 'center' }}>
+                        {url ? (
+                          <img src={url} alt="" style={{ width: 34, height: 34, objectFit: 'cover', borderRadius: 6, border: '1px solid var(--border)' }} />
+                        ) : (
+                          <div style={{ width: 34, height: 34, borderRadius: 6, border: '1px dashed var(--border)' }} />
+                        )}
+                        <span className="muted" style={{ fontSize: 12, flex: 1 }}>Image {i + 1}</span>
+                        <button className={`btn sm ${cover ? 'primary' : 'ghost'}`} onClick={() => setObjects(objects.map((x, xi) => (xi === i ? { ...x, fit: 'cover' } : x)))} title="Crop to fill">
+                          Fill
+                        </button>
+                        <button className={`btn sm ${o.fit === 'contain' ? 'primary' : 'ghost'}`} onClick={() => setObjects(objects.map((x, xi) => (xi === i ? { ...x, fit: 'contain' } : x)))} title="Show the whole image">
+                          Fit
+                        </button>
+                        <button className="btn sm ghost" onClick={() => { setObjTarget(i); objFileRef.current?.click(); }} disabled={busy}>
+                          Replace
+                        </button>
+                        <button className="icon-btn danger" title="Remove this image" onClick={() => setObjects(objects.filter((_, xi) => xi !== i))}>
+                          ✕
+                        </button>
+                      </div>
+                      {url && cover && (
+                        <div className="row" style={{ alignItems: 'center', gap: 8 }}>
+                          <span className="muted" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>Zoom</span>
+                          <input
+                            type="range"
+                            min={1}
+                            max={3}
+                            step={0.05}
+                            value={crop.zoom}
+                            onChange={(e) => setCrop({ zoom: Number(e.target.value) })}
+                            style={{ flex: 1, width: 'auto', padding: 0 }}
+                            aria-label={`Image ${i + 1} zoom`}
+                          />
+                          <span className="muted" style={{ fontSize: 11, width: 30, textAlign: 'right' }}>{crop.zoom.toFixed(1)}×</span>
+                        </div>
+                      )}
+                      {url && cover && crop.zoom > 1 && (
+                        <div>
+                          <FocalPicker url={url} focal={{ x: crop.x, y: crop.y }} onSet={(x, y) => setCrop({ x, y })} />
+                          <span className="muted" style={{ fontSize: 11 }}>Drag to pan the crop.</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                <button className="btn sm" onClick={() => { setObjTarget('new'); objFileRef.current?.click(); }} disabled={busy}>
+                  + Add image
+                </button>
+                <span className="muted" style={{ fontSize: 11 }}>Added images appear on the canvas — drag and resize them.</span>
+              </div>
+              <input
+                ref={objFileRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+                style={{ display: 'none' }}
+                onChange={(e) => onPickObject(e.target.files?.[0])}
+              />
             </>
           )}
           {slide.layoutType === 'SplitImageText' && (

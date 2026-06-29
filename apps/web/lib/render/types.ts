@@ -25,6 +25,8 @@ export interface LayoutImage {
   focalPoint?: { x: number; y: number };
   /** Cohesion treatment (brand tint / duotone). */
   treatment?: ImageTreatment;
+  /** Zoom (≥1) for a crop; scales the image about the focal point. */
+  zoom?: number;
 }
 
 /** Per-slide layout config for the in-post image (derived from slide overrides). */
@@ -41,6 +43,17 @@ export interface ImageLayoutConfig {
   imageFrame?: BlockFrame;
   /** FreePosition: render the image full-bleed behind everything. */
   background?: boolean;
+  /** FreePosition: additional positioned image elements (resolved to URLs). */
+  objects?: ResolvedImageObject[];
+}
+
+/** An image object resolved for rendering (media id → url). */
+export interface ResolvedImageObject {
+  frame: BlockFrame;
+  fit?: ImageFit;
+  url?: string;
+  focalPoint?: { x: number; y: number };
+  zoom?: number;
 }
 
 export interface LayoutProps {

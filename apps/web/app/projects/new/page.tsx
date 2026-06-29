@@ -124,6 +124,7 @@ function NewProjectForm() {
             : undefined,
       });
 
+      let notice = '';
       if (mode === 'draft') {
         // Project created empty; the AI fills its slides from the paragraph.
         const wantFree = aiFree && draftMode === 'free';
@@ -132,10 +133,11 @@ function NewProjectForm() {
         } catch (err) {
           // Free layout is the more fragile path; if it fails, fall back to the
           // Designer drafter so the user still gets a populated project, not an
-          // empty one. Only surface an error if that fallback also fails.
+          // empty one. The editor surfaces a notice so the fallback isn't silent.
           if (wantFree) {
             try {
               await draftProject(project._id, paragraph.trim(), 'designer');
+              notice = 'free-fallback';
             } catch (err2) {
               setError(
                 `${err2 instanceof Error ? err2.message : 'Draft failed'} Opening the empty project so you can build manually.`,
@@ -148,7 +150,7 @@ function NewProjectForm() {
           }
         }
       }
-      router.push(`/projects/${project._id}`);
+      router.push(`/projects/${project._id}${notice ? `?notice=${notice}` : ''}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setBusy(false);

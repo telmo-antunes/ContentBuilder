@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { getSettings, updateSettings, type AiSettings, type SettingsResponse } from '../lib/api';
+import { getSettings, updateSettings, getUsage, type AiSettings, type SettingsResponse, type UsageSummary } from '../lib/api';
+
+const usd = (n: number) => `$${n.toFixed(n < 1 ? 4 : 2)}`;
+const compact = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
 
 const FREE_TOKENS = '{{width}} {{height}} {{xMin}} {{xMax}} {{yMin}} {{yMax}} {{blockTypes}} {{maxSlides}}';
 
@@ -11,6 +14,7 @@ export default function SettingsPage() {
   const [form, setForm] = useState<AiSettings | null>(null);
   const [save, setSave] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [usage, setUsage] = useState<UsageSummary | null>(null);
 
   useEffect(() => {
     getSettings()
@@ -19,6 +23,9 @@ export default function SettingsPage() {
         setForm(d.settings);
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+    getUsage()
+      .then(setUsage)
+      .catch(() => {});
   }, []);
 
   const set = (patch: Partial<AiSettings>) => setForm((f) => (f ? { ...f, ...patch } : f));
@@ -79,6 +86,44 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
+
+      {usage && (
+        <div className="panel" style={{ marginTop: 14 }}>
+          <div className="section-label" style={{ marginTop: 0 }}>AI usage &amp; estimated cost</div>
+          <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
+            {usage.totals.calls} draft {usage.totals.calls === 1 ? 'call' : 'calls'} ·{' '}
+            {compact(usage.totals.inputTokens)} in / {compact(usage.totals.outputTokens)} out tokens ·{' '}
+            <strong style={{ color: 'var(--text)' }}>{usd(usage.totals.costUsd)}</strong> total (estimated).
+          </p>
+          {usage.byModel.length > 0 ? (
+            <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ textAlign: 'left', color: 'var(--muted)' }}>
+                  <th style={{ padding: '4px 8px 4px 0', fontWeight: 600 }}>Model</th>
+                  <th style={{ padding: '4px 8px', fontWeight: 600 }}>Calls</th>
+                  <th style={{ padding: '4px 8px', fontWeight: 600 }}>Tokens (in/out)</th>
+                  <th style={{ padding: '4px 0 4px 8px', fontWeight: 600 }}>Cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                {usage.byModel.map((m) => (
+                  <tr key={m.model} style={{ borderTop: '1px solid var(--border)' }}>
+                    <td style={{ padding: '5px 8px 5px 0' }}><code>{m.model}</code></td>
+                    <td style={{ padding: '5px 8px' }}>{m.calls}</td>
+                    <td style={{ padding: '5px 8px' }}>{compact(m.inputTokens)} / {compact(m.outputTokens)}</td>
+                    <td style={{ padding: '5px 0 5px 8px' }}>{usd(m.costUsd)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p className="muted" style={{ fontSize: 12 }}>No drafts generated yet.</p>
+          )}
+          <p className="muted" style={{ fontSize: 11, marginTop: 8 }}>
+            Costs are estimated from list prices and are indicative, not billing-grade.
+          </p>
+        </div>
+      )}
 
       <div className="panel" style={{ marginTop: 14 }}>
         <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>

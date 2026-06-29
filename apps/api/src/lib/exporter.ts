@@ -30,51 +30,60 @@ export async function renderSlidesToPng(project: ExportableProject): Promise<Ren
   const base = config.webUrl.replace(/\/+$/, '');
 
   const ordered = [...project.slides].sort((a, b) => a.order - b.order);
-  const out: RenderedSlide[] = [];
+  const out: RenderedSlide[] = new Array(ordered.length);
 
-  for (let i = 0; i < ordered.length; i++) {
-    const slide = ordered[i]!;
+  // Concurrency pool: each worker reuses ONE page, pulling slides from a shared counter.
+  const CONCURRENCY = 4;
+  let next = 0;
+
+  const worker = async () => {
     const page = await browser.newPage();
     try {
       await page.setViewport({ width, height, deviceScaleFactor: 1 });
-      const url = `${base}/render?projectId=${project._id}&slideId=${encodeURIComponent(slide.id)}`;
-      await page.goto(url, { waitUntil: 'networkidle0', timeout: 45000 });
+      for (let i = next++; i < ordered.length; i = next++) {
+        const slide = ordered[i]!;
+        const url = `${base}/render?projectId=${project._id}&slideId=${encodeURIComponent(slide.id)}`;
+        await page.goto(url, { waitUntil: 'load', timeout: 45000 });
 
-      // Wait for bundled fonts + all images, else we capture fallback fonts or
-      // half-loaded images. (Runs in the browser; use globalThis to avoid
-      // pulling DOM types into the Node build.)
-      await page.evaluate(async () => {
-        const doc = (globalThis as { document?: any }).document;
-        if (doc?.fonts?.ready) await doc.fonts.ready;
-        const imgs: any[] = Array.from(doc?.images ?? []);
-        await Promise.all(
-          imgs.map((img) =>
-            img.complete
-              ? Promise.resolve()
-              : new Promise((resolve) => {
-                  img.onload = () => resolve(null);
-                  img.onerror = () => resolve(null);
-                }),
-          ),
-        );
-      });
-      // Short settle so the client-side text-fit pass has applied.
-      await new Promise((r) => setTimeout(r, 350));
+        // Wait for bundled fonts + all images, else we capture fallback fonts or
+        // half-loaded images. (Runs in the browser; use globalThis to avoid
+        // pulling DOM types into the Node build.)
+        await page.evaluate(async () => {
+          const doc = (globalThis as { document?: any }).document;
+          if (doc?.fonts?.ready) await doc.fonts.ready;
+          const imgs: any[] = Array.from(doc?.images ?? []);
+          await Promise.all(
+            imgs.map((img) =>
+              img.complete
+                ? Promise.resolve()
+                : new Promise((resolve) => {
+                    img.onload = () => resolve(null);
+                    img.onerror = () => resolve(null);
+                  }),
+            ),
+          );
+        });
+        // Short settle so the client-side text-fit pass has applied.
+        await new Promise((r) => setTimeout(r, 350));
 
-      const el = await page.$('[data-slide-root]');
-      if (!el) throw new Error(`Render route produced no slide for ${slide.id}`);
-      const shot = await el.screenshot({ type: 'png' });
-      const buffer = Buffer.from(shot);
+        const el = await page.$('[data-slide-root]');
+        if (!el) throw new Error(`Render route produced no slide for ${slide.id}`);
+        const shot = await el.screenshot({ type: 'png' });
+        const buffer = Buffer.from(shot);
 
-      const name = `${String(i + 1).padStart(2, '0')}.png`;
-      const stored = await storage.save(`renders/${project._id}/${name}`, buffer, {
-        contentType: 'image/png',
-      });
-      out.push({ name, buffer, key: stored.key, url: stored.url });
+        const name = `${String(i + 1).padStart(2, '0')}.png`;
+        const stored = await storage.save(`renders/${project._id}/${name}`, buffer, {
+          contentType: 'image/png',
+        });
+        out[i] = { name, buffer, key: stored.key, url: stored.url };
+      }
     } finally {
       await page.close().catch(() => {});
     }
-  }
+  };
+
+  const workers = Array.from({ length: Math.min(CONCURRENCY, ordered.length) }, () => worker());
+  await Promise.all(workers);
 
   return out;
 }
