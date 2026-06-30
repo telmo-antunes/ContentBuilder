@@ -56,6 +56,12 @@ export default function BrandKitPage() {
   }, [reload]);
 
   const analyze = async () => {
+    if (
+      hasApproved &&
+      !window.confirm('This will replace the current approved brand kit. Continue?')
+    ) {
+      return;
+    }
     setBusy('analyze');
     setError(null);
     try {
@@ -69,6 +75,12 @@ export default function BrandKitPage() {
   };
 
   const startManual = async () => {
+    if (
+      hasApproved &&
+      !window.confirm('This will replace the current approved brand kit. Continue?')
+    ) {
+      return;
+    }
     setBusy('manual');
     setError(null);
     try {
@@ -203,6 +215,14 @@ function KitEditor({
   const colorsValid = ROLES.every(([role]) => HEX.test(colors[role]));
 
   const save = async (approve: boolean) => {
+    if (
+      approve &&
+      hasApproved &&
+      kit.status === 'draft' &&
+      !window.confirm('This will replace the current approved brand kit. Continue?')
+    ) {
+      return;
+    }
     setBusy('save');
     setError(null);
     try {

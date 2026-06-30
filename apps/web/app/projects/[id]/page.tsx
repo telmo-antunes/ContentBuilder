@@ -69,6 +69,9 @@ export default function ProjectEditorPage() {
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // Selected canvas/inspector element, shared so the two highlight in sync.
+  // A target id: 'b<index>' for a text block, 'image', or 'obj-<index>'.
+  const [selTarget, setSelTarget] = useState<string | null>(null);
   const [overflowIds, setOverflowIds] = useState<Set<string>>(new Set());
   const [exporting, setExporting] = useState(false);
   const [exported, setExported] = useState(false);
@@ -116,6 +119,11 @@ export default function ProjectEditorPage() {
     }, 700);
     return () => clearTimeout(t);
   }, [title, slides, settings, detail, id]);
+
+  // Clear the shared selection when switching slides.
+  useEffect(() => {
+    setSelTarget(null);
+  }, [selectedId]);
 
   // One-time notice passed from the draft flow (e.g. Free → Designer fallback).
   useEffect(() => {
@@ -631,6 +639,8 @@ export default function ProjectEditorPage() {
                     slide={selected}
                     scale={previewWidth / dimensionsFor(detail.format).width}
                     onChange={(fn) => mutateSlide(selected.id, fn)}
+                    selected={selTarget}
+                    onSelect={setSelTarget}
                   />
                 ) : undefined
               }
@@ -666,6 +676,8 @@ export default function ProjectEditorPage() {
           onChange={(fn) => mutateSlide(selected.id, fn)}
           onDelete={() => deleteSlide(selected.id)}
           onUploaded={(asset) => setMedia((m) => [asset, ...m])}
+          selectedTarget={selTarget}
+          onSelectTarget={setSelTarget}
         />
       </div>
 
@@ -897,6 +909,8 @@ function SlideInspector({
   onChange,
   onDelete,
   onUploaded,
+  selectedTarget,
+  onSelectTarget,
 }: {
   slide: Slide;
   detail: ProjectDetail;
@@ -904,6 +918,8 @@ function SlideInspector({
   onChange: (fn: (s: Slide) => Slide) => void;
   onDelete: () => void;
   onUploaded: (asset: MediaAsset) => void;
+  selectedTarget: string | null;
+  onSelectTarget: (id: string | null) => void;
 }) {
   const wantsImage =
     layoutWantsImage(slide.layoutType) || isFreeLayout(slide.layoutType) || slide.imageNeed === 'upload';
@@ -947,7 +963,7 @@ function SlideInspector({
       )}
 
       <div className="section-label">Content blocks</div>
-      <BlockList blocks={slide.blocks} onChange={setBlocks} />
+      <BlockList blocks={slide.blocks} onChange={setBlocks} selectedTarget={selectedTarget} onSelectTarget={onSelectTarget} />
 
       <div style={{ marginTop: 16, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
         <button className="btn danger sm" onClick={onDelete}>
@@ -958,7 +974,17 @@ function SlideInspector({
   );
 }
 
-function BlockList({ blocks, onChange }: { blocks: Block[]; onChange: (b: Block[]) => void }) {
+function BlockList({
+  blocks,
+  onChange,
+  selectedTarget,
+  onSelectTarget,
+}: {
+  blocks: Block[];
+  onChange: (b: Block[]) => void;
+  selectedTarget?: string | null;
+  onSelectTarget?: (id: string | null) => void;
+}) {
   const [addType, setAddType] = useState<BlockType>('paragraph');
 
   const update = (i: number, fn: (b: Block) => Block) =>
@@ -987,7 +1013,11 @@ function BlockList({ blocks, onChange }: { blocks: Block[]; onChange: (b: Block[
     <div>
       {blocks.length === 0 && <p className="muted" style={{ fontSize: 13 }}>No blocks yet.</p>}
       {blocks.map((b, i) => (
-        <div className="block-card" key={i}>
+        <div
+          className={`block-card ${selectedTarget === `b${i}` ? 'selected' : ''}`}
+          key={i}
+          onPointerDown={() => onSelectTarget?.(`b${i}`)}
+        >
           <div className="block-head">
             <select value={b.type} onChange={(e) => changeType(i, e.target.value as BlockType)}>
               {BLOCK_TYPES.map((t) => (

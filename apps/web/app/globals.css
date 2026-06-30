@@ -402,6 +402,36 @@ label {
   .editor {
     grid-template-columns: 1fr;
   }
+  /* The slide rail becomes a horizontal thumbnail strip rather than a tall column. */
+  .rail {
+    flex-direction: row;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    gap: 8px;
+    padding-bottom: 6px;
+  }
+  .rail > * {
+    flex: 0 0 auto;
+  }
+}
+/* Tablet (iPad landscape, narrow laptops): keep preview + inspector side by side
+   with the rail strip spanning the top, instead of one giant single column. */
+@media (min-width: 760px) and (max-width: 1100px) {
+  .editor {
+    grid-template-columns: minmax(0, 1fr) 340px;
+    grid-template-areas:
+      'rail rail'
+      'preview inspector';
+  }
+  .editor > :nth-child(1) {
+    grid-area: rail;
+  }
+  .editor > :nth-child(2) {
+    grid-area: preview;
+  }
+  .editor > :nth-child(3) {
+    grid-area: inspector;
+  }
 }
 .panel {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 30%), var(--panel);
@@ -478,6 +508,11 @@ label {
   padding: 11px;
   background: var(--panel-2);
   margin-bottom: 10px;
+}
+/* Selected block — synced with the free-canvas selection. */
+.block-card.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(91, 140, 255, 0.18);
 }
 .block-card .block-head {
   display: flex;

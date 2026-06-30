@@ -85,6 +85,42 @@ export default function BusinessDetailPage() {
             </Link>
           </div>
 
+          {!biz.hasApprovedKit && (
+            <div className="card" style={{ marginBottom: 16, maxWidth: 560 }}>
+              <strong style={{ display: 'block', marginBottom: 8 }}>Getting started</strong>
+              <ol className="list" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                <li className="row" style={{ gap: 8, alignItems: 'baseline' }}>
+                  <span
+                    aria-hidden="true"
+                    style={{ color: biz.hasProfile ? 'var(--ok)' : 'var(--muted)' }}
+                  >
+                    {biz.hasProfile ? '✓' : '○'}
+                  </span>
+                  <span style={biz.hasProfile ? { color: 'var(--muted)' } : undefined}>
+                    1. Business profile{biz.hasProfile ? '' : ' — fill it in below'}
+                  </span>
+                </li>
+                <li className="row" style={{ gap: 8, alignItems: 'baseline' }}>
+                  <span aria-hidden="true" style={{ color: 'var(--muted)' }}>
+                    ○
+                  </span>
+                  <span>
+                    2. Approve a brand kit{' '}
+                    <Link className="btn sm" href={`/businesses/${biz._id}/brand-kit`} style={{ marginLeft: 4 }}>
+                      {biz.hasDraftKit ? 'Open brand kit' : 'Create brand kit'}
+                    </Link>
+                  </span>
+                </li>
+                <li className="row" style={{ gap: 8, alignItems: 'baseline' }}>
+                  <span aria-hidden="true" style={{ color: 'var(--muted)' }}>
+                    ○
+                  </span>
+                  <span className="muted">3. Create a project (unlocks after a kit is approved)</span>
+                </li>
+              </ol>
+            </div>
+          )}
+
           <ProfileCard businessId={biz._id} profile={biz.profile} onSaved={reload} />
 
           <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
@@ -102,10 +138,15 @@ export default function BusinessDetailPage() {
 
           {biz.projects.length === 0 ? (
             <div className="empty" style={{ marginTop: 12 }}>
-              No projects yet.
-              {biz.hasApprovedKit
-                ? ' Create one to start building slides.'
-                : ' Approve a brand kit first (brand extraction arrives in a later milestone).'}
+              {biz.hasApprovedKit ? (
+                'No projects yet. Create your first project to start building slides.'
+              ) : (
+                <>
+                  No projects yet.{' '}
+                  <Link href={`/businesses/${biz._id}/brand-kit`}>Approve a brand kit</Link> to unlock
+                  projects.
+                </>
+              )}
             </div>
           ) : (
             <div className="list" style={{ marginTop: 12 }}>
