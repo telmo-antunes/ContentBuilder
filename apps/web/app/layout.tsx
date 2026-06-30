@@ -3,6 +3,7 @@ import Link from 'next/link';
 import './globals.css';
 import HealthDot from './components/HealthDot';
 import ThemeToggle from './components/ThemeToggle';
+import TopNav from './components/TopNav';
 
 export const metadata: Metadata = {
   title: 'ContentBuilder',
@@ -25,12 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               Content<span className="dot">Builder</span>
             </Link>
             <span className="tagline muted">internal asset studio</span>
-            <nav className="topnav">
-              <Link href="/">Businesses</Link>
-              <Link href="/projects/new">New project</Link>
-              <Link href="/gallery">Layouts</Link>
-              <Link href="/settings">Settings</Link>
-            </nav>
+            <TopNav />
             <ThemeToggle />
             <HealthDot />
           </div>

@@ -182,13 +182,41 @@ a:hover {
   font-size: 14px;
 }
 .topnav a {
+  position: relative;
   color: var(--muted);
   font-weight: 500;
   white-space: nowrap;
+  padding-bottom: 3px;
+  transition: color var(--dur-1) var(--ease);
 }
 .topnav a:hover {
   color: var(--text);
   text-decoration: none;
+}
+.topnav a.active {
+  color: var(--text);
+  font-weight: 600;
+}
+.topnav a.active::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -2px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent-grad);
+  animation: nav-underline var(--dur-2) var(--ease-out);
+}
+@keyframes nav-underline {
+  from {
+    transform: scaleX(0);
+    opacity: 0;
+  }
+  to {
+    transform: scaleX(1);
+    opacity: 1;
+  }
 }
 .health-pill {
   flex: 0 0 auto;
