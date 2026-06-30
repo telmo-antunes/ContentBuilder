@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import type { Block, BlockType, LayoutType, MediaAsset, Slide } from '@contentbuilder/shared';
@@ -501,8 +501,8 @@ export default function ProjectEditorPage() {
       {error && <div className="error-box">{error}</div>}
       {notice && (
         <div
-          className="error-box"
-          style={{ marginTop: 12, borderColor: '#5a4a1d', background: '#2a2410', color: '#f0d68a', display: 'flex', alignItems: 'center', gap: 12 }}
+          className="warn-box"
+          style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 12 }}
           role="status"
         >
           <span style={{ flex: 1 }}>{notice}</span>
@@ -660,7 +660,7 @@ export default function ProjectEditorPage() {
             </ScaledSlide>
           </div>
           {overflowIds.has(selected.id) && (
-            <div className="error-box" style={{ marginTop: 12, borderColor: '#5a4a1d', background: '#2a2410', color: '#f0d68a' }}>
+            <div className="warn-box" style={{ marginTop: 12 }}>
               ⚠ Text is too long to fit at the minimum size. Shorten the copy, remove a block, or split
               across slides.
             </div>
@@ -902,6 +902,37 @@ function EmptyProject({
 }
 
 // ── Inspector ────────────────────────────────────────────────────────────────
+/** Collapsible inspector group with a header chevron + smooth height motion. */
+function Section({
+  title,
+  count,
+  defaultOpen = true,
+  children,
+}: {
+  title: string;
+  count?: number;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="insp-section">
+      <button type="button" className="insp-section-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        <span className="insp-section-title">
+          {title}
+          {typeof count === 'number' && <span className="insp-count">{count}</span>}
+        </span>
+        <span className={`insp-chevron ${open ? 'open' : ''}`} aria-hidden="true">
+          ▸
+        </span>
+      </button>
+      <div className={`insp-section-body ${open ? 'open' : ''}`}>
+        <div className="insp-section-inner">{children}</div>
+      </div>
+    </div>
+  );
+}
+
 function SlideInspector({
   slide,
   detail,
@@ -934,38 +965,38 @@ function SlideInspector({
   const setBlocks = (blocks: Block[]) => onChange((s) => ({ ...s, blocks }));
 
   return (
-    <div className="panel">
-      <div className="section-label" style={{ marginTop: 0 }}>
-        Layout
-      </div>
-      {isFreeLayout(slide.layoutType) ? (
-        <div className="muted" style={{ fontSize: 13, padding: '8px 10px', border: '1px solid #333', borderRadius: 6 }}>
-          Free canvas — drag blocks in the preview
-        </div>
-      ) : (
-        <select value={slide.layoutType} onChange={(e) => setLayout(e.target.value as LayoutType)}>
-          {SELECTABLE_LAYOUT_TYPES.map((l) => (
-            <option key={l} value={l}>
-              {l}
-            </option>
-          ))}
-        </select>
-      )}
-      <p className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-        {LAYOUT_DESCRIPTIONS[slide.layoutType]}{' '}
-        <a href="/gallery" target="_blank" rel="noreferrer" style={{ whiteSpace: 'nowrap' }}>
-          See all layouts ↗
-        </a>
-      </p>
+    <div className="panel inspector-panel">
+      <Section title="Layout">
+        {isFreeLayout(slide.layoutType) ? (
+          <div className="hint-box">Free canvas — drag blocks in the preview</div>
+        ) : (
+          <select value={slide.layoutType} onChange={(e) => setLayout(e.target.value as LayoutType)}>
+            {SELECTABLE_LAYOUT_TYPES.map((l) => (
+              <option key={l} value={l}>
+                {l}
+              </option>
+            ))}
+          </select>
+        )}
+        <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+          {LAYOUT_DESCRIPTIONS[slide.layoutType]}{' '}
+          <a href="/gallery" target="_blank" rel="noreferrer" style={{ whiteSpace: 'nowrap' }}>
+            See all layouts ↗
+          </a>
+        </p>
+      </Section>
 
       {wantsImage && (
-        <ImageControls slide={slide} format={detail.format} businessId={detail.businessId} media={media} onChange={onChange} onUploaded={onUploaded} />
+        <Section title="Image">
+          <ImageControls slide={slide} format={detail.format} businessId={detail.businessId} media={media} onChange={onChange} onUploaded={onUploaded} />
+        </Section>
       )}
 
-      <div className="section-label">Content blocks</div>
-      <BlockList blocks={slide.blocks} onChange={setBlocks} selectedTarget={selectedTarget} onSelectTarget={onSelectTarget} />
+      <Section title="Content" count={slide.blocks.length}>
+        <BlockList blocks={slide.blocks} onChange={setBlocks} selectedTarget={selectedTarget} onSelectTarget={onSelectTarget} />
+      </Section>
 
-      <div style={{ marginTop: 16, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+      <div className="insp-danger">
         <button className="btn danger sm" onClick={onDelete}>
           Delete this {detail.type === 'story' ? 'frame' : 'slide'}
         </button>
@@ -1201,7 +1232,6 @@ function ImageControls({
 
   return (
     <div>
-      <div className="section-label">Image</div>
       {err && <div className="error-box" style={{ fontSize: 13 }}>{err}</div>}
 
       {current ? (

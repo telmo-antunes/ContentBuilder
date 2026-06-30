@@ -19,9 +19,62 @@
   --warn: #f0b429;
   --radius: 14px;
   --radius-sm: 9px;
+  --radius-lg: 20px;
   --maxw: 1040px;
   --shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 12px 32px rgba(0, 0, 0, 0.35);
   --shadow-sm: 0 6px 18px rgba(0, 0, 0, 0.28);
+  /* Spacing scale — used to decongest layouts consistently. */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+  /* Motion tokens. */
+  --ease: cubic-bezier(0.22, 0.7, 0.22, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-1: 130ms;
+  --dur-2: 220ms;
+  --dur-3: 360ms;
+  /* Surface tints used by the chrome (theme-aware). */
+  --glow-1: rgba(91, 140, 255, 0.1);
+  --glow-2: rgba(54, 214, 195, 0.07);
+  --topbar-bg: rgba(12, 14, 19, 0.72);
+  /* Text colors that sit on tinted badge/button surfaces (theme-aware). */
+  --on-ok: #aef0d4;
+  --on-accent: #b9cdff;
+  --on-warn: #f3d68a;
+  --on-bad: #ffc4c8;
+}
+
+/* ── Light theme ──────────────────────────────────────────────────────────── */
+[data-theme='light'] {
+  --bg: #eef1f6;
+  --bg-2: #ffffff;
+  --panel: #ffffff;
+  --panel-2: #f4f6fa;
+  --panel-3: #e9edf4;
+  --border: #e0e5ee;
+  --border-strong: #cbd2df;
+  --text: #161b24;
+  --muted: #586173;
+  --faint: #818b9c;
+  --accent: #355cf0;
+  --accent-2: #119e8e;
+  --accent-grad: linear-gradient(135deg, #4d7bff, #2bb6a4);
+  --danger: #e0444f;
+  --ok: #0f9d6e;
+  --warn: #c98a08;
+  --shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 0 12px 30px rgba(36, 50, 84, 0.1);
+  --shadow-sm: 0 6px 18px rgba(36, 50, 84, 0.08);
+  --glow-1: rgba(91, 140, 255, 0.12);
+  --glow-2: rgba(54, 214, 195, 0.1);
+  --topbar-bg: rgba(255, 255, 255, 0.78);
+  --on-ok: #0a7d56;
+  --on-accent: #2a51c8;
+  --on-warn: #8a5e04;
+  --on-bad: #c12f3a;
 }
 
 * {
@@ -38,11 +91,40 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   background:
-    radial-gradient(120% 70% at 80% -10%, rgba(91, 140, 255, 0.1), transparent 60%),
-    radial-gradient(90% 60% at -10% 0%, rgba(54, 214, 195, 0.07), transparent 55%),
+    radial-gradient(120% 70% at 80% -10%, var(--glow-1), transparent 60%),
+    radial-gradient(90% 60% at -10% 0%, var(--glow-2), transparent 55%),
     var(--bg);
   background-attachment: fixed;
   min-height: 100vh;
+  transition: background-color var(--dur-2) var(--ease), color var(--dur-2) var(--ease);
+}
+
+/* Theme-switch easing for surfaces that carry their own bg/border colors. */
+.card,
+.panel,
+.item,
+.btn,
+.badge,
+input,
+select,
+textarea,
+.topbar {
+  transition:
+    background-color var(--dur-2) var(--ease),
+    border-color var(--dur-2) var(--ease),
+    color var(--dur-2) var(--ease),
+    box-shadow var(--dur-2) var(--ease),
+    transform var(--dur-1) var(--ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 a {
@@ -64,7 +146,7 @@ a:hover {
   top: 0;
   z-index: 20;
   border-bottom: 1px solid var(--border);
-  background: rgba(12, 14, 19, 0.72);
+  background: var(--topbar-bg);
   backdrop-filter: saturate(140%) blur(10px);
 }
 .topbar .inner {
@@ -100,17 +182,111 @@ a:hover {
   font-size: 14px;
 }
 .topnav a {
+  position: relative;
   color: var(--muted);
   font-weight: 500;
   white-space: nowrap;
+  padding-bottom: 3px;
+  transition: color var(--dur-1) var(--ease);
 }
 .topnav a:hover {
   color: var(--text);
   text-decoration: none;
 }
+.topnav a.active {
+  color: var(--text);
+  font-weight: 600;
+}
+.topnav a.active::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -2px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent-grad);
+  animation: nav-underline var(--dur-2) var(--ease-out);
+}
+@keyframes nav-underline {
+  from {
+    transform: scaleX(0);
+    opacity: 0;
+  }
+  to {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+}
 .health-pill {
   flex: 0 0 auto;
   white-space: nowrap;
+}
+
+/* Theme toggle (pill switch). */
+.theme-toggle {
+  flex: 0 0 auto;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  line-height: 0;
+}
+.theme-toggle-track {
+  display: inline-flex;
+  align-items: center;
+  width: 46px;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  border: 1px solid var(--border-strong);
+  padding: 2px;
+  transition: background var(--dur-2) var(--ease), border-color var(--dur-2) var(--ease);
+}
+.theme-toggle:hover .theme-toggle-track {
+  border-color: var(--accent);
+}
+.theme-toggle-thumb {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent-grad);
+  color: #07121f;
+  font-size: 12px;
+  transform: translateX(0);
+  transition: transform var(--dur-2) var(--ease-out);
+}
+[data-theme='light'] .theme-toggle-thumb {
+  transform: translateX(20px);
+}
+
+/* ── Motion: tasteful hover + entrance ──────────────────────────────────────── */
+.btn:hover {
+  transform: translateY(-1px);
+}
+.btn:active {
+  transform: translateY(0);
+}
+.item:hover {
+  transform: translateY(-2px);
+}
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.card,
+.item,
+.panel {
+  animation: fade-up var(--dur-3) var(--ease-out) both;
 }
 @media (max-width: 640px) {
   .tagline {
@@ -139,12 +315,15 @@ a:hover {
   .brand {
     order: 1;
   }
-  .health-pill {
+  .theme-toggle {
     order: 2;
     margin-left: auto;
   }
-  .topnav {
+  .health-pill {
     order: 3;
+  }
+  .topnav {
+    order: 4;
     width: 100%;
     margin-left: 0;
     gap: 20px;
@@ -184,7 +363,7 @@ a:hover {
   background: var(--muted);
 }
 .badge.ok {
-  color: #aef0d4;
+  color: var(--on-ok);
   border-color: rgba(52, 211, 153, 0.3);
   background: rgba(52, 211, 153, 0.1);
 }
@@ -193,7 +372,7 @@ a:hover {
   box-shadow: 0 0 8px var(--ok);
 }
 .badge.bad {
-  color: #ffc4c8;
+  color: var(--on-bad);
   border-color: rgba(241, 96, 106, 0.3);
   background: rgba(241, 96, 106, 0.1);
 }
@@ -366,12 +545,12 @@ label {
 .badge.accent {
   border-color: rgba(91, 140, 255, 0.32);
   background: rgba(91, 140, 255, 0.12);
-  color: #b9cdff;
+  color: var(--on-accent);
 }
 .badge.warn {
   border-color: rgba(240, 180, 41, 0.32);
   background: rgba(240, 180, 41, 0.12);
-  color: #f3d68a;
+  color: var(--on-warn);
 }
 .badge.warn .dot {
   background: var(--warn);
@@ -379,7 +558,7 @@ label {
 .error-box {
   border: 1px solid rgba(241, 96, 106, 0.35);
   background: rgba(241, 96, 106, 0.1);
-  color: #ffc4c8;
+  color: var(--on-bad);
   border-radius: var(--radius-sm);
   padding: 11px 15px;
   font-size: 14px;
@@ -605,13 +784,13 @@ label {
   cursor: not-allowed;
 }
 .icon-btn.danger {
-  color: #ffc4c8;
+  color: var(--on-bad);
   border-color: rgba(241, 96, 106, 0.35);
 }
 .btn.danger {
   border-color: rgba(241, 96, 106, 0.35);
   background: rgba(241, 96, 106, 0.1);
-  color: #ffc4c8;
+  color: var(--on-bad);
 }
 .btn.danger:hover {
   border-color: var(--danger);
@@ -654,6 +833,96 @@ textarea {
   letter-spacing: 0.08em;
   color: var(--muted);
   margin: 16px 0 8px;
+}
+
+/* ── Inspector: collapsible sections + breathing room ───────────────────────── */
+.inspector-panel {
+  padding: var(--sp-1) var(--sp-5) var(--sp-4);
+}
+.insp-section {
+  border-top: 1px solid var(--border);
+}
+.insp-section:first-child {
+  border-top: none;
+}
+.insp-section-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  background: none;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  padding: var(--sp-4) 0;
+  font-family: inherit;
+}
+.insp-section-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.insp-section-head:hover .insp-section-title {
+  color: var(--text);
+}
+.insp-count {
+  background: var(--panel-3);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.insp-chevron {
+  color: var(--faint);
+  font-size: 12px;
+  transition: transform var(--dur-2) var(--ease);
+}
+.insp-chevron.open {
+  transform: rotate(90deg);
+}
+.insp-section-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--dur-2) var(--ease);
+}
+.insp-section-body.open {
+  grid-template-rows: 1fr;
+}
+.insp-section-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+.insp-section-body.open .insp-section-inner {
+  padding-bottom: var(--sp-4);
+}
+.insp-danger {
+  margin-top: var(--sp-2);
+  border-top: 1px solid var(--border);
+  padding-top: var(--sp-4);
+}
+.hint-box {
+  font-size: 13px;
+  padding: 10px 12px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  background: var(--panel-2);
+}
+.warn-box {
+  border: 1px solid color-mix(in srgb, var(--warn) 55%, transparent);
+  background: color-mix(in srgb, var(--warn) 13%, transparent);
+  color: var(--warn);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: 13px;
 }
 .thumb .need-img-badge {
   position: absolute;
