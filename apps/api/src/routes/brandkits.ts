@@ -8,6 +8,7 @@ import {
 import { BusinessModel, BrandKitModel } from '../models';
 import { ApiError, asyncHandler, parseBody, requireObjectId } from '../lib/http';
 import { extractBrand } from '../lib/analyze';
+import { generateBusinessBackgrounds } from '../lib/backgrounds';
 import { assignRolesAndVibe } from '../lib/vision';
 
 const hex = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Expected a #rrggbb color');
@@ -176,6 +177,17 @@ brandKitRouter.patch(
     if (body.status) kit.set('status', body.status);
 
     await kit.save();
+
+    // On approval, (re)generate the brand backgrounds so the business has 3
+    // ready-to-use post/story backgrounds. Best-effort — never block approval.
+    if (body.status === 'approved') {
+      try {
+        await generateBusinessBackgrounds(String(kit.get('businessId')), kit.get('colors'));
+      } catch (err) {
+        console.error('[backgrounds] generation on approval failed:', err);
+      }
+    }
+
     res.json(kit.toJSON());
   }),
 );

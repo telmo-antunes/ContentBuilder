@@ -6,3 +6,4 @@ export * from './types';
 export * from './shorthand';
 export * from './profile';
 export * from './theme';
+export * from './backgrounds';

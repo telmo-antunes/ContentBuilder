@@ -5,6 +5,7 @@ import { imageSize } from 'image-size';
 import { BusinessModel, MediaAssetModel } from '../models';
 import { getStorage } from '../storage';
 import { ApiError, asyncHandler, requireObjectId } from '../lib/http';
+import { generateBusinessBackgrounds } from '../lib/backgrounds';
 
 /** Business-scoped media uploads. Mounted at /businesses/:id/media. */
 export const mediaRouter = Router({ mergeParams: true });
@@ -32,6 +33,29 @@ mediaRouter.get(
     const businessId = requireObjectId((req.params as Record<string, string>).id, 'Business');
     const docs = await MediaAssetModel.find({ businessId }).sort({ createdAt: -1 }).lean();
     res.json(docs);
+  }),
+);
+
+// Regenerate the procedural brand backgrounds from a palette (on-demand button).
+mediaRouter.post(
+  '/backgrounds',
+  asyncHandler(async (req, res) => {
+    const businessId = requireObjectId((req.params as Record<string, string>).id, 'Business');
+    const business = await BusinessModel.findById(businessId).lean();
+    if (!business) throw new ApiError(404, 'Business not found');
+    const colors = (req.body as { colors?: Record<string, string> })?.colors;
+    if (!colors?.background || !colors?.primary) {
+      throw new ApiError(400, 'Missing brand colors.');
+    }
+    const assets = await generateBusinessBackgrounds(businessId, {
+      primary: colors.primary,
+      secondary: colors.secondary ?? colors.primary,
+      accent: colors.accent ?? colors.primary,
+      background: colors.background,
+      text: colors.text,
+      palette: (req.body as { colors?: { palette?: string[] } })?.colors?.palette,
+    });
+    res.status(201).json(assets);
   }),
 );
 

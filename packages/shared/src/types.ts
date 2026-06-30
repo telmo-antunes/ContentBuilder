@@ -65,7 +65,9 @@ export interface BrandKit {
 export interface MediaAsset {
   _id: string;
   businessId: string;
-  type: 'upload';
+  type: 'upload' | 'generated';
+  /** Human label for generated assets (e.g. brand backgrounds). */
+  label?: string;
   key: string;
   url: string;
   width: number;

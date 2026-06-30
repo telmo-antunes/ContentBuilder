@@ -149,6 +149,12 @@ export const draftProject = (id: string, paragraph: string, mode: 'designer' | '
 export const listMedia = (businessId: string) =>
   request<MediaAsset[]>(`/businesses/${businessId}/media`);
 
+export const regenerateBackgrounds = (businessId: string, colors: object) =>
+  request<MediaAsset[]>(`/businesses/${businessId}/media/backgrounds`, {
+    method: 'POST',
+    body: JSON.stringify({ colors }),
+  });
+
 // ── Brand kits ────────────────────────────────────────────────────────────────
 export interface BrandKitState {
   draft: BrandKit | null;

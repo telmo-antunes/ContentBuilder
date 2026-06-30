@@ -6,7 +6,8 @@ const { Schema, model, models } = mongoose;
 const mediaAssetSchema = new Schema(
   {
     businessId: { type: Schema.Types.ObjectId, ref: 'Business', required: true, index: true },
-    type: { type: String, enum: ['upload'], default: 'upload' },
+    type: { type: String, enum: ['upload', 'generated'], default: 'upload' },
+    label: { type: String, required: false },
     key: { type: String, required: true },
     url: { type: String, required: true },
     width: { type: Number, default: 0 },

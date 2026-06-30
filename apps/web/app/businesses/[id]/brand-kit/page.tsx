@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import type { BrandKit } from '@contentbuilder/shared';
+import type { BrandKit, MediaAsset } from '@contentbuilder/shared';
 import { BUNDLED_FONT_FAMILIES } from '@contentbuilder/shared';
 import {
   getBrandKit,
@@ -12,6 +12,8 @@ import {
   createManualKit,
   patchBrandKit,
   uploadMedia,
+  listMedia,
+  regenerateBackgrounds,
   type BusinessDetail,
 } from '../../../lib/api';
 import { SlideRenderer } from '../../../../lib/render/SlideRenderer';
@@ -426,6 +428,8 @@ function KitEditor({
         </div>
       </div>
 
+      <BrandBackgrounds businessId={businessId} colors={colors} colorsValid={colorsValid} setError={setError} />
+
       {/* Actions */}
       <div className="row" style={{ marginTop: 18, justifyContent: 'space-between' }}>
         <div className="row">
@@ -455,5 +459,82 @@ function KitEditor({
         </p>
       )}
     </>
+  );
+}
+
+/** Shows the 3 procedural brand backgrounds + a regenerate-from-palette button. */
+function BrandBackgrounds({
+  businessId,
+  colors,
+  colorsValid,
+  setError,
+}: {
+  businessId: string;
+  colors: BrandKit['colors'];
+  colorsValid: boolean;
+  setError: (s: string | null) => void;
+}) {
+  const [bgs, setBgs] = useState<MediaAsset[]>([]);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const m = await listMedia(businessId);
+      setBgs(m.filter((x) => x.type === 'generated'));
+    } catch {
+      /* non-fatal */
+    }
+  }, [businessId]);
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const regen = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      setBgs(await regenerateBackgrounds(businessId, colors));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="panel" style={{ marginTop: 14 }}>
+      <div className="section-label" style={{ marginTop: 0 }}>
+        Background graphics
+      </div>
+      <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
+        Three subtle, on-brand backgrounds generated from your palette — drop them behind any post or story for depth,
+        and replace anytime. They show up in the editor&apos;s image picker.
+      </p>
+      {bgs.length > 0 ? (
+        <div className="row" style={{ gap: 12 }}>
+          {bgs.map((b) => (
+            <div key={b._id} style={{ textAlign: 'center' }}>
+              <img
+                src={b.url}
+                alt={b.label ?? 'brand background'}
+                style={{ width: 100, height: 125, objectFit: 'cover', borderRadius: 10, border: '1px solid var(--border)', display: 'block' }}
+              />
+              <div className="muted" style={{ fontSize: 11, marginTop: 5 }}>
+                {(b.label ?? '').replace('Brand background — ', '')}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="muted" style={{ fontSize: 12 }}>
+          None yet — approve the kit, or generate them now.
+        </p>
+      )}
+      <div style={{ marginTop: 12 }}>
+        <button className="btn sm" onClick={regen} disabled={busy || !colorsValid} title={!colorsValid ? 'Fix the colors first' : undefined}>
+          {busy ? 'Generating…' : bgs.length ? 'Regenerate from palette' : 'Generate backgrounds'}
+        </button>
+      </div>
+    </div>
   );
 }
