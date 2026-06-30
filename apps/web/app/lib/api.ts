@@ -155,6 +155,9 @@ export const regenerateBackgrounds = (businessId: string, colors: object) =>
     body: JSON.stringify({ colors }),
   });
 
+export const deleteMedia = (businessId: string, assetId: string) =>
+  request<void>(`/businesses/${businessId}/media/${assetId}`, { method: 'DELETE' });
+
 // ── Brand kits ────────────────────────────────────────────────────────────────
 export interface BrandKitState {
   draft: BrandKit | null;

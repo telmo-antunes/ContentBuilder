@@ -50,6 +50,7 @@ export const slideSchema = z.object({
       imageZoom: z.number().min(1).max(5).optional(),
       imageFrame: frameSchema.optional(),
       imageBackground: z.boolean().optional(),
+      backgroundMediaAssetId: z.string().nullable().optional(),
       imageObjects: z
         .array(
           z.object({

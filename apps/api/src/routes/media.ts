@@ -59,6 +59,24 @@ mediaRouter.post(
   }),
 );
 
+// Remove a media asset (e.g. dismiss a generated background you don't like).
+mediaRouter.delete(
+  '/:assetId',
+  asyncHandler(async (req, res) => {
+    const businessId = requireObjectId((req.params as Record<string, string>).id, 'Business');
+    const assetId = requireObjectId((req.params as Record<string, string>).assetId, 'Media asset');
+    const asset = await MediaAssetModel.findOne({ _id: assetId, businessId });
+    if (!asset) throw new ApiError(404, 'Media asset not found');
+    try {
+      await getStorage().remove(asset.get('key'));
+    } catch {
+      /* best-effort: drop the record even if the blob is already gone */
+    }
+    await asset.deleteOne();
+    res.status(204).end();
+  }),
+);
+
 mediaRouter.post(
   '/',
   upload.single('file'),

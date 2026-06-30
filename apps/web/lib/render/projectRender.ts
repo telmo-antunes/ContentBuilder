@@ -54,6 +54,9 @@ export function resolveImageLayout(slide: Slide, media: MediaAsset[] = []): Imag
     fit: slide.overrides?.imageFit,
     imageFrame: slide.overrides?.imageFrame,
     background: slide.overrides?.imageBackground,
+    backgroundUrl: slide.overrides?.backgroundMediaAssetId
+      ? media.find((m) => m._id === slide.overrides?.backgroundMediaAssetId)?.url
+      : undefined,
     objects,
   };
 }

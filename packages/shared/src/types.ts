@@ -127,8 +127,10 @@ export interface SlideOverrides {
   imageZoom?: number;
   /** FreePosition: the canvas region (fractions) where the slide's image renders. */
   imageFrame?: BlockFrame;
-  /** FreePosition: render the image full-bleed behind the elements (ignores imageFrame). */
+  /** FreePosition: render the slide's image full-bleed behind the elements (legacy; ignores imageFrame). */
   imageBackground?: boolean;
+  /** FreePosition: a full-bleed background image, independent of the region image + objects. */
+  backgroundMediaAssetId?: string;
   /** FreePosition: additional positioned image elements, each with its own media. */
   imageObjects?: ImageObject[];
 }

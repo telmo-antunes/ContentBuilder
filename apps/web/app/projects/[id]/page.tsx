@@ -1208,6 +1208,32 @@ function ImageControls({
     }
   };
 
+  // Full-bleed background image, independent of the region image + objects.
+  const bgAssetId = ov?.backgroundMediaAssetId;
+  const bgAsset = bgAssetId ? media.find((m) => m._id === bgAssetId) : undefined;
+  const bgFileRef = useRef<HTMLInputElement>(null);
+  const setBackground = (id: string | undefined) =>
+    onChange((s) => {
+      const overrides = { ...s.overrides };
+      if (id) overrides.backgroundMediaAssetId = id;
+      else delete overrides.backgroundMediaAssetId;
+      return { ...s, overrides };
+    });
+  const onPickBackground = async (file: File | undefined) => {
+    if (!file) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const asset = await uploadMedia(businessId, file);
+      onUploaded(asset);
+      setBackground(asset._id);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const onPick = async (file: File | undefined) => {
     if (!file) return;
     setBusy(true);
@@ -1312,28 +1338,51 @@ function ImageControls({
         <div style={{ marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
           {isFreeLayout(slide.layoutType) && (
             <>
-              <span className="muted" style={{ fontSize: 11 }}>Image placement</span>
-              <div className="row" style={{ gap: 4, marginTop: 4 }}>
-                <button
-                  className={`btn sm ${!ov?.imageBackground ? 'primary' : 'ghost'}`}
-                  onClick={() =>
-                    setOverride({
-                      imageBackground: false,
-                      imageFrame: ov?.imageFrame ?? { x: 0.1, y: 0.28, w: 0.8, h: 0.44 },
-                    })
-                  }
-                  title="A positioned image region you can drag on the canvas"
-                >
-                  Region
-                </button>
-                <button
-                  className={`btn sm ${ov?.imageBackground ? 'primary' : 'ghost'}`}
-                  onClick={() => setOverride({ imageBackground: true })}
-                  title="Full-bleed photo behind the text"
-                >
-                  Background
+              <span className="muted" style={{ fontSize: 11 }}>Background image (full-bleed)</span>
+              <div className="row" style={{ gap: 8, marginTop: 4, alignItems: 'center' }}>
+                {bgAsset ? (
+                  <img src={bgAsset.url} alt="" style={{ width: 42, height: 53, objectFit: 'cover', borderRadius: 6, border: '1px solid var(--border)' }} />
+                ) : (
+                  <span className="muted" style={{ fontSize: 12 }}>None — sits behind the region image &amp; objects.</span>
+                )}
+                {bgAsset && (
+                  <button className="btn sm ghost" onClick={() => setBackground(undefined)}>
+                    Remove
+                  </button>
+                )}
+                <button className="btn sm" onClick={() => bgFileRef.current?.click()} disabled={busy} style={{ marginLeft: 'auto' }}>
+                  Upload
                 </button>
               </div>
+              {media.length > 0 && (
+                <div style={{ display: 'flex', gap: 6, overflowX: 'auto', marginTop: 6, paddingBottom: 2 }}>
+                  {media.map((m) => (
+                    <button
+                      key={m._id}
+                      onClick={() => setBackground(m._id)}
+                      title={m.label ?? 'Use as background'}
+                      style={{
+                        flex: '0 0 auto',
+                        padding: 0,
+                        border: `2px solid ${bgAssetId === m._id ? 'var(--accent)' : 'var(--border)'}`,
+                        borderRadius: 6,
+                        background: 'none',
+                        cursor: 'pointer',
+                        lineHeight: 0,
+                      }}
+                    >
+                      <img src={m.url} alt="" style={{ width: 40, height: 50, objectFit: 'cover', borderRadius: 4, display: 'block' }} />
+                    </button>
+                  ))}
+                </div>
+              )}
+              <input
+                ref={bgFileRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+                style={{ display: 'none' }}
+                onChange={(e) => onPickBackground(e.target.files?.[0])}
+              />
 
               <span className="muted" style={{ fontSize: 11, display: 'block', marginTop: 10 }}>
                 Image objects

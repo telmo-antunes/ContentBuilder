@@ -14,6 +14,7 @@ import {
   uploadMedia,
   listMedia,
   regenerateBackgrounds,
+  deleteMedia,
   type BusinessDetail,
 } from '../../../lib/api';
 import { SlideRenderer } from '../../../../lib/render/SlideRenderer';
@@ -501,6 +502,16 @@ function BrandBackgrounds({
     }
   };
 
+  const remove = async (assetId: string) => {
+    setBgs((prev) => prev.filter((b) => b._id !== assetId)); // optimistic
+    try {
+      await deleteMedia(businessId, assetId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      void load(); // resync on failure
+    }
+  };
+
   return (
     <div className="panel" style={{ marginTop: 14 }}>
       <div className="section-label" style={{ marginTop: 0 }}>
@@ -513,12 +524,21 @@ function BrandBackgrounds({
       {bgs.length > 0 ? (
         <div className="row" style={{ gap: 12 }}>
           {bgs.map((b) => (
-            <div key={b._id} style={{ textAlign: 'center' }}>
+            <div key={b._id} style={{ textAlign: 'center', position: 'relative' }}>
               <img
                 src={b.url}
                 alt={b.label ?? 'brand background'}
                 style={{ width: 100, height: 125, objectFit: 'cover', borderRadius: 10, border: '1px solid var(--border)', display: 'block' }}
               />
+              <button
+                className="icon-btn danger"
+                onClick={() => remove(b._id)}
+                title="Remove this background"
+                aria-label={`Remove ${(b.label ?? 'background').replace('Brand background — ', '')} background`}
+                style={{ position: 'absolute', top: 4, right: 4, width: 24, height: 24, background: 'rgba(0,0,0,0.55)' }}
+              >
+                ✕
+              </button>
               <div className="muted" style={{ fontSize: 11, marginTop: 5 }}>
                 {(b.label ?? '').replace('Brand background — ', '')}
               </div>
