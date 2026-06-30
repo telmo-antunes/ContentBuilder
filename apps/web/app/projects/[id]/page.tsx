@@ -416,12 +416,12 @@ export default function ProjectEditorPage() {
       <p className="muted" style={{ marginBottom: 6 }}>
         <Link href={`/businesses/${detail.businessId}`}>← {/* business */}Back to business</Link>
       </p>
-      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+      <div className="editor-head">
         <div style={{ flex: 1, minWidth: 0 }}>
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Montserrat', sans-serif", maxWidth: 520 }}
+            style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Montserrat', sans-serif", width: '100%', maxWidth: 520 }}
           />
           <div className="muted" style={{ fontSize: 13, marginTop: 4, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <span>
@@ -465,7 +465,7 @@ export default function ProjectEditorPage() {
             )}
           </div>
         </div>
-        <div className="row" style={{ flexWrap: 'nowrap' }}>
+        <div className="editor-actions">
           <button className="btn sm" onClick={undo} disabled={!canUndo} title="Undo (⌘/Ctrl+Z)">
             ↶ Undo
           </button>
