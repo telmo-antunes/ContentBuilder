@@ -806,6 +806,96 @@ textarea {
   color: var(--muted);
   margin: 16px 0 8px;
 }
+
+/* ── Inspector: collapsible sections + breathing room ───────────────────────── */
+.inspector-panel {
+  padding: var(--sp-1) var(--sp-5) var(--sp-4);
+}
+.insp-section {
+  border-top: 1px solid var(--border);
+}
+.insp-section:first-child {
+  border-top: none;
+}
+.insp-section-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  background: none;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  padding: var(--sp-4) 0;
+  font-family: inherit;
+}
+.insp-section-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.insp-section-head:hover .insp-section-title {
+  color: var(--text);
+}
+.insp-count {
+  background: var(--panel-3);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.insp-chevron {
+  color: var(--faint);
+  font-size: 12px;
+  transition: transform var(--dur-2) var(--ease);
+}
+.insp-chevron.open {
+  transform: rotate(90deg);
+}
+.insp-section-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--dur-2) var(--ease);
+}
+.insp-section-body.open {
+  grid-template-rows: 1fr;
+}
+.insp-section-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+.insp-section-body.open .insp-section-inner {
+  padding-bottom: var(--sp-4);
+}
+.insp-danger {
+  margin-top: var(--sp-2);
+  border-top: 1px solid var(--border);
+  padding-top: var(--sp-4);
+}
+.hint-box {
+  font-size: 13px;
+  padding: 10px 12px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  background: var(--panel-2);
+}
+.warn-box {
+  border: 1px solid color-mix(in srgb, var(--warn) 55%, transparent);
+  background: color-mix(in srgb, var(--warn) 13%, transparent);
+  color: var(--warn);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: 13px;
+}
 .thumb .need-img-badge {
   position: absolute;
   top: 8px;
