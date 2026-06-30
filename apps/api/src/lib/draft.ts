@@ -10,6 +10,7 @@ import {
 } from '@contentbuilder/shared';
 import { config } from '../config';
 import { SettingModel } from '../models';
+import { recordUsage } from './usage';
 import { slideSchema, type SlideInput } from './validation';
 
 export type DraftMode = 'designer' | 'free';
@@ -116,7 +117,7 @@ function freeSystem(type: AssetType, format: Format, override?: string): string 
   });
 }
 
-function extractSlides(raw: string, mode: DraftMode): SlideInput[] {
+export function extractSlides(raw: string, mode: DraftMode): SlideInput[] {
   const start = raw.indexOf('[');
   const end = raw.lastIndexOf(']');
   if (start === -1 || end === -1) throw new Error('model did not return a JSON array');
@@ -156,7 +157,7 @@ function extractSlides(raw: string, mode: DraftMode): SlideInput[] {
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
 /** Coerce a model-supplied frame into a valid in-bounds rectangle (fractions). */
-function repairFrame(raw: unknown, i: number): { x: number; y: number; w: number; h: number } {
+export function repairFrame(raw: unknown, i: number): { x: number; y: number; w: number; h: number } {
   const f = (raw ?? {}) as Record<string, unknown>;
   const n = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
   let w = Math.min(1, Math.max(0.05, n(f.w, 0.8)));
@@ -189,6 +190,27 @@ export async function draftSlidesFromParagraph(
     `Asset type: ${type} (${format}).\n` +
     `Arrange the EXACT copy in this paragraph into slides per the rules:\n\n"""${paragraph}"""`;
 
+  // Run one create call, record its token usage, and parse slides. Retries ONCE if
+  // the model returns nothing usable (empty/garbled JSON) — cheap insurance against
+  // a flaky single completion before the caller's mode-fallback kicks in.
+  const run = async (params: Anthropic.MessageCreateParamsNonStreaming, m: DraftMode): Promise<SlideInput[]> => {
+    let last: SlideInput[] = [];
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      const resp = await client.messages.create(params);
+      await recordUsage({
+        feature: `draft:${m}`,
+        model: params.model,
+        inputTokens: resp.usage?.input_tokens,
+        outputTokens: resp.usage?.output_tokens,
+      });
+      const textPart = resp.content.find((c) => c.type === 'text');
+      const raw = textPart && 'text' in textPart ? textPart.text : '';
+      last = extractSlides(raw, m);
+      if (last.some((s) => (s.blocks?.length ?? 0) > 0)) return last;
+    }
+    return last;
+  };
+
   if (mode === 'free') {
     // Free layout is a harder reasoning/JSON task — prefer a dedicated large model,
     // then the Sonnet-class draft model; the small vision model (Haiku) is the last
@@ -206,19 +228,16 @@ export async function draftSlidesFromParagraph(
       params.thinking = { type: 'adaptive' };
       params.output_config = { effort: 'high' };
     }
-    const resp = await client.messages.create(params);
-    const textPart = resp.content.find((c) => c.type === 'text');
-    const raw = textPart && 'text' in textPart ? textPart.text : '';
-    return extractSlides(raw, 'free');
+    return run(params, 'free');
   }
 
-  const resp = await client.messages.create({
-    model: pick(settings.designerModel, config.ai.modelSmall!),
-    max_tokens: 3000,
-    system: pick(settings.designerSystem, DESIGNER_SYSTEM),
-    messages: [{ role: 'user', content: userMsg }],
-  });
-  const textPart = resp.content.find((c) => c.type === 'text');
-  const raw = textPart && 'text' in textPart ? textPart.text : '';
-  return extractSlides(raw, 'designer');
+  return run(
+    {
+      model: pick(settings.designerModel, config.ai.modelSmall!),
+      max_tokens: 3000,
+      system: pick(settings.designerSystem, DESIGNER_SYSTEM),
+      messages: [{ role: 'user', content: userMsg }],
+    },
+    'designer',
+  );
 }

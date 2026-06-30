@@ -21,6 +21,7 @@ export default function FreePosition({ brandKit, blocks, image, imageLayout, for
   const insets = safeInsets(format);
   const background = imageLayout?.background ?? false;
   const imageFrame = background ? undefined : imageLayout?.imageFrame;
+  const objects = imageLayout?.objects ?? [];
 
   // Stable paint order: explicit z, falling back to array index.
   const ordered = blocks
@@ -38,6 +39,23 @@ export default function FreePosition({ brandKit, blocks, image, imageLayout, for
           <div style={{ position: 'absolute', inset: 0, background: rgba(bg, 0.28) }} />
         </div>
       )}
+      {objects.map((o, i) => (
+        <div
+          key={`obj-${i}`}
+          style={{
+            position: 'absolute',
+            left: `${o.frame.x * 100}%`,
+            top: `${o.frame.y * 100}%`,
+            width: `${o.frame.w * 100}%`,
+            height: `${o.frame.h * 100}%`,
+            borderRadius: 16,
+            overflow: 'hidden',
+            zIndex: 0,
+          }}
+        >
+          <ImageSlot image={o.url ? { url: o.url, focalPoint: o.focalPoint, zoom: o.zoom } : null} kit={brandKit} fit={o.fit} />
+        </div>
+      ))}
       {imageFrame && (
         <div
           style={{

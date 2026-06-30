@@ -47,8 +47,22 @@ export const slideSchema = z.object({
       imageAspect: z.enum(['square', 'landscape', 'wide', 'portrait']).optional(),
       imageSize: z.enum(['sm', 'md', 'lg']).optional(),
       imageFit: z.enum(['cover', 'contain']).optional(),
+      imageZoom: z.number().min(1).max(5).optional(),
       imageFrame: frameSchema.optional(),
       imageBackground: z.boolean().optional(),
+      imageObjects: z
+        .array(
+          z.object({
+            id: z.string(),
+            mediaAssetId: z.string().nullable().optional(),
+            frame: frameSchema,
+            fit: z.enum(['cover', 'contain']).optional(),
+            crop: z
+              .object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), zoom: z.number().min(1).max(5) })
+              .optional(),
+          }),
+        )
+        .optional(),
     })
     .optional(),
 });

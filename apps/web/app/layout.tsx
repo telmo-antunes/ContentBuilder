@@ -21,6 +21,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <nav className="topnav">
               <Link href="/">Businesses</Link>
               <Link href="/projects/new">New project</Link>
+              <Link href="/gallery">Layouts</Link>
               <Link href="/settings">Settings</Link>
             </nav>
             <HealthDot />

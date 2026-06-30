@@ -10,6 +10,7 @@ import { projectsRouter } from './routes/projects';
 import { mediaRouter } from './routes/media';
 import { businessBrandKitRouter, brandKitRouter } from './routes/brandkits';
 import { settingsRouter } from './routes/settings';
+import { usageRouter } from './routes/usage';
 
 const CONTENT_TYPES: Record<string, string> = {
   '.png': 'image/png',
@@ -68,6 +69,7 @@ export function createApp() {
   app.use('/brandkits', brandKitRouter);
   app.use('/projects', projectsRouter);
   app.use('/settings', settingsRouter);
+  app.use('/usage', usageRouter);
 
   // Serve stored media through the StorageProvider (provider-agnostic).
   app.get(`${MEDIA_ROUTE}/*`, async (req: Request, res: Response) => {

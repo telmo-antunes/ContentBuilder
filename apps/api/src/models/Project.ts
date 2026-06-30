@@ -52,8 +52,30 @@ const slideSchema = new Schema(
           },
           imageSize: { type: String, enum: ['sm', 'md', 'lg'], required: false },
           imageFit: { type: String, enum: ['cover', 'contain'], required: false },
+          imageZoom: { type: Number, required: false },
           imageFrame: { type: frameSchema, required: false },
           imageBackground: { type: Boolean, required: false },
+          imageObjects: {
+            type: [
+              new Schema(
+                {
+                  id: { type: String, required: true },
+                  mediaAssetId: { type: String, required: false },
+                  frame: { type: frameSchema, required: true },
+                  fit: { type: String, enum: ['cover', 'contain'], required: false },
+                  crop: {
+                    type: new Schema(
+                      { x: { type: Number }, y: { type: Number }, zoom: { type: Number } },
+                      { _id: false },
+                    ),
+                    required: false,
+                  },
+                },
+                { _id: false },
+              ),
+            ],
+            default: undefined,
+          },
         },
         { _id: false },
       ),

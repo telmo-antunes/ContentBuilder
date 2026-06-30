@@ -33,7 +33,7 @@ export default async function RenderPage({
       format={project.format}
       kit={kit}
       image={image}
-      imageLayout={resolveImageLayout(slide)}
+      imageLayout={resolveImageLayout(slide, project.media)}
       theme={slide.overrides?.theme ?? project.settings?.theme ?? 'editorial'}
       slideIndex={idx}
       slideTotal={ordered.length}

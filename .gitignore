@@ -15,8 +15,9 @@ out/
 .env.local
 .env.*.local
 
-# local storage (disk StorageProvider) — media is regenerated/seeded
-storage/
+# local storage (disk StorageProvider) data dir — media is regenerated/seeded.
+# Anchored to repo root so it does NOT match the source dir apps/api/src/storage.
+/storage/
 
 # bundled dev MongoDB data dir
 .mongo-data/

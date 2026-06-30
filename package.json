@@ -14,13 +14,16 @@
     "dev:web": "npm run dev --workspace apps/web",
     "build": "npm run build --workspace apps/api && npm run build --workspace apps/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "fonts": "node scripts/copy-fonts.mjs",
     "seed": "npm run seed --workspace apps/api"
   },
   "devDependencies": {
     "concurrently": "^9.1.0",
     "mongodb-memory-server": "^11.2.0",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.9"
   },
   "engines": {
     "node": ">=20"

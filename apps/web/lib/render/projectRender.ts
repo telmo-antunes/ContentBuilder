@@ -34,11 +34,19 @@ export function resolveSlideImage(slide: Slide, media: MediaAsset[]): LayoutImag
     url: asset.url,
     focalPoint: slide.overrides?.focalPoint,
     treatment: slide.overrides?.imageTreatment,
+    zoom: slide.overrides?.imageZoom,
   };
 }
 
 /** Image layout knobs for a slide (split orientation/order, aspect, size, fit). */
-export function resolveImageLayout(slide: Slide): ImageLayoutConfig {
+export function resolveImageLayout(slide: Slide, media: MediaAsset[] = []): ImageLayoutConfig {
+  const objects = slide.overrides?.imageObjects?.map((o) => ({
+    frame: o.frame,
+    fit: o.fit,
+    url: o.mediaAssetId ? media.find((m) => m._id === o.mediaAssetId)?.url : undefined,
+    focalPoint: o.crop ? { x: o.crop.x, y: o.crop.y } : undefined,
+    zoom: o.crop?.zoom,
+  }));
   return {
     split: slide.overrides?.split,
     aspect: slide.overrides?.imageAspect,
@@ -46,5 +54,6 @@ export function resolveImageLayout(slide: Slide): ImageLayoutConfig {
     fit: slide.overrides?.imageFit,
     imageFrame: slide.overrides?.imageFrame,
     background: slide.overrides?.imageBackground,
+    objects,
   };
 }

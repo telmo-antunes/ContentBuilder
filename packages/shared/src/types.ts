@@ -95,6 +95,16 @@ export const IMAGE_SIZES: readonly ImageSizePreset[] = ['sm', 'md', 'lg'];
 /** How an image fills its slot: 'cover' crops to fill, 'contain' shows it whole. */
 export type ImageFit = 'cover' | 'contain';
 
+/** A positioned image element on a FreePosition card (its own uploaded media). */
+export interface ImageObject {
+  id: string;
+  mediaAssetId?: string;
+  frame: BlockFrame;
+  fit?: ImageFit;
+  /** Crop: pan focal point in [0..1] + zoom (≥1 zooms in within the frame). */
+  crop?: { x: number; y: number; zoom: number };
+}
+
 /** Optional per-slide manual tweaks. */
 export interface SlideOverrides {
   /** Image focal point as fractions [0..1] for object-position when cropping. */
@@ -111,10 +121,14 @@ export interface SlideOverrides {
   imageSize?: ImageSizePreset;
   /** How the image fills its slot (default 'cover'). 'contain' shows the whole image. */
   imageFit?: ImageFit;
+  /** Zoom (≥1) for the slide's image; pairs with focalPoint for a crop. */
+  imageZoom?: number;
   /** FreePosition: the canvas region (fractions) where the slide's image renders. */
   imageFrame?: BlockFrame;
   /** FreePosition: render the image full-bleed behind the elements (ignores imageFrame). */
   imageBackground?: boolean;
+  /** FreePosition: additional positioned image elements, each with its own media. */
+  imageObjects?: ImageObject[];
 }
 
 export interface Slide {

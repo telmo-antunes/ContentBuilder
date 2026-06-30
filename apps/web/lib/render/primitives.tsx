@@ -103,6 +103,7 @@ export function ImageSlot({
 }) {
   if (image?.url) {
     const treatment = image.treatment ?? 'none';
+    const zoom = image.zoom && image.zoom > 1 ? image.zoom : 1;
     const img = (
       <img
         src={image.url}
@@ -114,6 +115,9 @@ export function ImageSlot({
           height: '100%',
           objectFit: fit,
           objectPosition: focalCss(image.focalPoint),
+          // Crop zoom: scale about the focal point (the frame's overflow clips it).
+          transform: zoom !== 1 ? `scale(${zoom})` : undefined,
+          transformOrigin: zoom !== 1 ? focalCss(image.focalPoint) : undefined,
           // Duotone: desaturate the photo, then re-color via the overlay below.
           filter: treatment === 'duotone' ? 'grayscale(1) contrast(1.05)' : undefined,
           ...style,

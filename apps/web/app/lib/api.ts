@@ -92,6 +92,13 @@ export const getSettings = () => request<SettingsResponse>('/settings');
 export const updateSettings = (s: Partial<AiSettings>) =>
   request<unknown>('/settings', { method: 'PUT', body: JSON.stringify(s) });
 
+export interface UsageSummary {
+  totals: { calls: number; inputTokens: number; outputTokens: number; costUsd: number };
+  byModel: Array<{ model: string; calls: number; inputTokens: number; outputTokens: number; costUsd: number }>;
+  recent: Array<{ feature: string; model: string; inputTokens: number; outputTokens: number; costUsd: number; createdAt: string }>;
+}
+export const getUsage = () => request<UsageSummary>('/usage');
+
 export const listBusinesses = () => request<BusinessSummary[]>('/businesses');
 
 export const getBusiness = (id: string) => request<BusinessDetail>(`/businesses/${id}`);

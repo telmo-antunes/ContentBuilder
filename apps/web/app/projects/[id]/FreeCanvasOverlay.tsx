@@ -8,8 +8,22 @@ type Frame = { x: number; y: number; w: number; h: number };
 type Corner = 'nw' | 'ne' | 'sw' | 'se';
 
 const MIN = 0.05;
+const SNAP = 0.01; // snap threshold in canvas fractions (~10px on a 1080 canvas)
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 const fallback = (i: number): Frame => ({ x: 0.1, y: 0.1 + (i % 4) * 0.04, w: 0.8, h: 0.18 });
+
+/** Snap any of `lines` to the nearest of `targets` within SNAP; returns the shift + the matched guide line. */
+function snapAxis(lines: number[], targets: number[], enabled: boolean): { delta: number; guide: number | null } {
+  if (!enabled) return { delta: 0, guide: null };
+  let best = { delta: 0, guide: null as number | null, dist: SNAP };
+  for (const line of lines) {
+    for (const t of targets) {
+      const dist = Math.abs(t - line);
+      if (dist < best.dist) best = { delta: t - line, guide: t, dist };
+    }
+  }
+  return best;
+}
 
 /** A draggable element on the canvas: a text block (`b<i>`) or the image (`image`). */
 type Target = { id: string; label: string; frame: Frame; isImage: boolean };
@@ -38,6 +52,10 @@ export function FreeCanvasOverlay({
   const [selected, setSelected] = useState<string | null>(null);
   const [drag, setDrag] = useState<DragState>(null);
   const [live, setLive] = useState<{ id: string; frame: Frame } | null>(null);
+  const [guides, setGuides] = useState<{ x: number[]; y: number[] }>({ x: [], y: [] });
+  // Snap candidates (canvas edges/centers + the other elements' edges/centers),
+  // captured at drag start so the moving element never snaps to itself.
+  const snapTargets = useRef<{ v: number[]; h: number[] }>({ v: [], h: [] });
 
   const px = 1 / scale; // a displayed pixel expressed in canvas units
   const HANDLE = 12 * px;
@@ -52,12 +70,37 @@ export function FreeCanvasOverlay({
   if (slide.overrides?.imageFrame && !slide.overrides?.imageBackground) {
     targets.push({ id: 'image', label: 'Image', frame: slide.overrides.imageFrame, isImage: true });
   }
+  (slide.overrides?.imageObjects ?? []).forEach((o, i) => {
+    targets.push({ id: `obj-${i}`, label: `Image ${i + 1}`, frame: o.frame, isImage: true });
+  });
 
   const blockIndex = (id: string) => Number(id.slice(1));
+
+  // Capture snap lines from the canvas (0/0.5/1) and every OTHER element's edges + centers.
+  const buildTargets = (excludeId: string) => {
+    const v = [0, 0.5, 1];
+    const h = [0, 0.5, 1];
+    for (const t of targets) {
+      if (t.id === excludeId) continue;
+      const f = t.frame;
+      v.push(f.x, f.x + f.w / 2, f.x + f.w);
+      h.push(f.y, f.y + f.h / 2, f.y + f.h);
+    }
+    snapTargets.current = { v, h };
+  };
 
   const commitFrame = (id: string, frame: Frame) => {
     if (id === 'image') {
       onChange((s) => ({ ...s, overrides: { ...s.overrides, imageFrame: frame } }));
+    } else if (id.startsWith('obj-')) {
+      const i = Number(id.slice(4));
+      onChange((s) => ({
+        ...s,
+        overrides: {
+          ...s.overrides,
+          imageObjects: (s.overrides?.imageObjects ?? []).map((o, oi) => (oi === i ? { ...o, frame } : o)),
+        },
+      }));
     } else {
       const i = blockIndex(id);
       onChange((s) => ({ ...s, blocks: s.blocks.map((b, bi) => (bi === i ? { ...b, frame } : b)) }));
@@ -72,21 +115,35 @@ export function FreeCanvasOverlay({
   const onMove = (e: ReactPointerEvent) => {
     if (!drag) return;
     const p = ptrFrac(e.clientX, e.clientY);
+    const enabled = !e.altKey; // hold Alt to bypass snapping
+    const T = snapTargets.current;
     if (drag.kind === 'move') {
       const { w, h } = drag.start;
-      const x = Math.max(0, Math.min(1 - w, drag.start.x + (p.x - drag.startPx)));
-      const y = Math.max(0, Math.min(1 - h, drag.start.y + (p.y - drag.startPy)));
+      let x = drag.start.x + (p.x - drag.startPx);
+      let y = drag.start.y + (p.y - drag.startPy);
+      // Snap the element's left/center/right (and top/middle/bottom) to nearby lines.
+      const sx = snapAxis([x, x + w / 2, x + w], T.v, enabled);
+      const sy = snapAxis([y, y + h / 2, y + h], T.h, enabled);
+      x = Math.max(0, Math.min(1 - w, x + sx.delta));
+      y = Math.max(0, Math.min(1 - h, y + sy.delta));
       setLive({ id: drag.id, frame: { x, y, w, h } });
+      setGuides({ x: sx.guide != null ? [sx.guide] : [], y: sy.guide != null ? [sy.guide] : [] });
     } else {
-      const left = Math.min(drag.anchorX, p.x);
-      const right = Math.max(drag.anchorX, p.x);
-      const top = Math.min(drag.anchorY, p.y);
-      const bottom = Math.max(drag.anchorY, p.y);
+      // Snap the dragged corner to nearby lines.
+      const sx = snapAxis([p.x], T.v, enabled);
+      const sy = snapAxis([p.y], T.h, enabled);
+      const cx = p.x + sx.delta;
+      const cy = p.y + sy.delta;
+      const left = Math.min(drag.anchorX, cx);
+      const right = Math.max(drag.anchorX, cx);
+      const top = Math.min(drag.anchorY, cy);
+      const bottom = Math.max(drag.anchorY, cy);
       const w = Math.max(MIN, right - left);
       const h = Math.max(MIN, bottom - top);
       const x = Math.max(0, Math.min(left, 1 - w));
       const y = Math.max(0, Math.min(top, 1 - h));
       setLive({ id: drag.id, frame: { x, y, w, h } });
+      setGuides({ x: sx.guide != null ? [sx.guide] : [], y: sy.guide != null ? [sy.guide] : [] });
     }
   };
 
@@ -94,12 +151,14 @@ export function FreeCanvasOverlay({
     if (drag && live && live.id === drag.id) commitFrame(drag.id, live.frame);
     setDrag(null);
     setLive(null);
+    setGuides({ x: [], y: [] });
   };
 
   const startMove = (e: ReactPointerEvent, t: Target) => {
     e.stopPropagation();
     e.currentTarget.setPointerCapture?.(e.pointerId);
     setSelected(t.id);
+    buildTargets(t.id);
     const p = ptrFrac(e.clientX, e.clientY);
     setDrag({ kind: 'move', id: t.id, startPx: p.x, startPy: p.y, start: t.frame });
   };
@@ -108,6 +167,7 @@ export function FreeCanvasOverlay({
     e.stopPropagation();
     e.currentTarget.setPointerCapture?.(e.pointerId);
     setSelected(t.id);
+    buildTargets(t.id);
     const f = t.frame;
     const anchorX = corner === 'nw' || corner === 'sw' ? f.x + f.w : f.x;
     const anchorY = corner === 'nw' || corner === 'ne' ? f.y + f.h : f.y;
@@ -129,6 +189,19 @@ export function FreeCanvasOverlay({
       onPointerUp={endDrag}
       style={{ position: 'absolute', inset: 0, zIndex: 50 }}
     >
+      {/* Snap guide lines (only visible mid-drag). */}
+      {guides.x.map((g, i) => (
+        <div
+          key={`vg${i}`}
+          style={{ position: 'absolute', left: `${g * 100}%`, top: 0, bottom: 0, width: Math.max(1, px), marginLeft: -px / 2, background: 'rgba(255,86,140,0.9)', pointerEvents: 'none', zIndex: 60 }}
+        />
+      ))}
+      {guides.y.map((g, i) => (
+        <div
+          key={`hg${i}`}
+          style={{ position: 'absolute', top: `${g * 100}%`, left: 0, right: 0, height: Math.max(1, px), marginTop: -px / 2, background: 'rgba(255,86,140,0.9)', pointerEvents: 'none', zIndex: 60 }}
+        />
+      ))}
       {targets.map((t) => {
         const f = live && live.id === t.id ? live.frame : t.frame;
         const isSel = selected === t.id;
