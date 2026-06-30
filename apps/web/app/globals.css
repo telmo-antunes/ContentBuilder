@@ -127,6 +127,31 @@ a:hover {
     gap: 10px;
   }
 }
+/* Phone: the brand + 4 nav links + health pill don't fit one row, so wrap the
+   nav onto its own full-width second row instead of overflowing off-screen. */
+@media (max-width: 560px) {
+  .topbar .inner {
+    flex-wrap: wrap;
+    row-gap: 10px;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .brand {
+    order: 1;
+  }
+  .health-pill {
+    order: 2;
+    margin-left: auto;
+  }
+  .topnav {
+    order: 3;
+    width: 100%;
+    margin-left: 0;
+    gap: 20px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
 
 .card {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 40%), var(--panel);
@@ -398,20 +423,49 @@ label {
   gap: 18px;
   align-items: start;
 }
+/* Editor toolbar header: title/meta on the left, actions on the right. */
+.editor-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.editor-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex: 0 0 auto;
+}
 @media (max-width: 1100px) {
   .editor {
     grid-template-columns: 1fr;
   }
-  /* The slide rail becomes a horizontal thumbnail strip rather than a tall column. */
-  .rail {
+  /* The slide rail becomes a horizontal thumbnail strip rather than a tall column.
+     `.editor > .rail` outranks the base `.rail` rule regardless of source order. */
+  .editor > .rail {
     flex-direction: row;
     overflow-x: auto;
     flex-wrap: nowrap;
     gap: 8px;
     padding-bottom: 6px;
   }
-  .rail > * {
+  .editor > .rail > * {
     flex: 0 0 auto;
+  }
+}
+/* Phone: stack the editor toolbar so actions never collide with the title/meta. */
+@media (max-width: 760px) {
+  .editor-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .editor-actions {
+    width: 100%;
+  }
+  .editor-actions .btn {
+    flex: 1 1 auto;
+    justify-content: center;
   }
 }
 /* Tablet (iPad landscape, narrow laptops): keep preview + inspector side by side
