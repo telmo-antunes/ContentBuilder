@@ -19,9 +19,53 @@
   --warn: #f0b429;
   --radius: 14px;
   --radius-sm: 9px;
+  --radius-lg: 20px;
   --maxw: 1040px;
   --shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 12px 32px rgba(0, 0, 0, 0.35);
   --shadow-sm: 0 6px 18px rgba(0, 0, 0, 0.28);
+  /* Spacing scale — used to decongest layouts consistently. */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+  /* Motion tokens. */
+  --ease: cubic-bezier(0.22, 0.7, 0.22, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-1: 130ms;
+  --dur-2: 220ms;
+  --dur-3: 360ms;
+  /* Surface tints used by the chrome (theme-aware). */
+  --glow-1: rgba(91, 140, 255, 0.1);
+  --glow-2: rgba(54, 214, 195, 0.07);
+  --topbar-bg: rgba(12, 14, 19, 0.72);
+}
+
+/* ── Light theme ──────────────────────────────────────────────────────────── */
+[data-theme='light'] {
+  --bg: #eef1f6;
+  --bg-2: #ffffff;
+  --panel: #ffffff;
+  --panel-2: #f4f6fa;
+  --panel-3: #e9edf4;
+  --border: #e0e5ee;
+  --border-strong: #cbd2df;
+  --text: #161b24;
+  --muted: #586173;
+  --faint: #818b9c;
+  --accent: #355cf0;
+  --accent-2: #119e8e;
+  --accent-grad: linear-gradient(135deg, #4d7bff, #2bb6a4);
+  --danger: #e0444f;
+  --ok: #0f9d6e;
+  --warn: #c98a08;
+  --shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 0 12px 30px rgba(36, 50, 84, 0.1);
+  --shadow-sm: 0 6px 18px rgba(36, 50, 84, 0.08);
+  --glow-1: rgba(91, 140, 255, 0.12);
+  --glow-2: rgba(54, 214, 195, 0.1);
+  --topbar-bg: rgba(255, 255, 255, 0.78);
 }
 
 * {
@@ -38,11 +82,40 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   background:
-    radial-gradient(120% 70% at 80% -10%, rgba(91, 140, 255, 0.1), transparent 60%),
-    radial-gradient(90% 60% at -10% 0%, rgba(54, 214, 195, 0.07), transparent 55%),
+    radial-gradient(120% 70% at 80% -10%, var(--glow-1), transparent 60%),
+    radial-gradient(90% 60% at -10% 0%, var(--glow-2), transparent 55%),
     var(--bg);
   background-attachment: fixed;
   min-height: 100vh;
+  transition: background-color var(--dur-2) var(--ease), color var(--dur-2) var(--ease);
+}
+
+/* Theme-switch easing for surfaces that carry their own bg/border colors. */
+.card,
+.panel,
+.item,
+.btn,
+.badge,
+input,
+select,
+textarea,
+.topbar {
+  transition:
+    background-color var(--dur-2) var(--ease),
+    border-color var(--dur-2) var(--ease),
+    color var(--dur-2) var(--ease),
+    box-shadow var(--dur-2) var(--ease),
+    transform var(--dur-1) var(--ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 a {
@@ -64,7 +137,7 @@ a:hover {
   top: 0;
   z-index: 20;
   border-bottom: 1px solid var(--border);
-  background: rgba(12, 14, 19, 0.72);
+  background: var(--topbar-bg);
   backdrop-filter: saturate(140%) blur(10px);
 }
 .topbar .inner {
@@ -111,6 +184,72 @@ a:hover {
 .health-pill {
   flex: 0 0 auto;
   white-space: nowrap;
+}
+
+/* Theme toggle (pill switch). */
+.theme-toggle {
+  flex: 0 0 auto;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  line-height: 0;
+}
+.theme-toggle-track {
+  display: inline-flex;
+  align-items: center;
+  width: 46px;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  border: 1px solid var(--border-strong);
+  padding: 2px;
+  transition: background var(--dur-2) var(--ease), border-color var(--dur-2) var(--ease);
+}
+.theme-toggle:hover .theme-toggle-track {
+  border-color: var(--accent);
+}
+.theme-toggle-thumb {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent-grad);
+  color: #07121f;
+  font-size: 12px;
+  transform: translateX(0);
+  transition: transform var(--dur-2) var(--ease-out);
+}
+[data-theme='light'] .theme-toggle-thumb {
+  transform: translateX(20px);
+}
+
+/* ── Motion: tasteful hover + entrance ──────────────────────────────────────── */
+.btn:hover {
+  transform: translateY(-1px);
+}
+.btn:active {
+  transform: translateY(0);
+}
+.item:hover {
+  transform: translateY(-2px);
+}
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.card,
+.item,
+.panel {
+  animation: fade-up var(--dur-3) var(--ease-out) both;
 }
 @media (max-width: 640px) {
   .tagline {
