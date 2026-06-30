@@ -41,6 +41,11 @@
   --glow-1: rgba(91, 140, 255, 0.1);
   --glow-2: rgba(54, 214, 195, 0.07);
   --topbar-bg: rgba(12, 14, 19, 0.72);
+  /* Text colors that sit on tinted badge/button surfaces (theme-aware). */
+  --on-ok: #aef0d4;
+  --on-accent: #b9cdff;
+  --on-warn: #f3d68a;
+  --on-bad: #ffc4c8;
 }
 
 /* ── Light theme ──────────────────────────────────────────────────────────── */
@@ -66,6 +71,10 @@
   --glow-1: rgba(91, 140, 255, 0.12);
   --glow-2: rgba(54, 214, 195, 0.1);
   --topbar-bg: rgba(255, 255, 255, 0.78);
+  --on-ok: #0a7d56;
+  --on-accent: #2a51c8;
+  --on-warn: #8a5e04;
+  --on-bad: #c12f3a;
 }
 
 * {
@@ -278,12 +287,15 @@ a:hover {
   .brand {
     order: 1;
   }
-  .health-pill {
+  .theme-toggle {
     order: 2;
     margin-left: auto;
   }
-  .topnav {
+  .health-pill {
     order: 3;
+  }
+  .topnav {
+    order: 4;
     width: 100%;
     margin-left: 0;
     gap: 20px;
@@ -323,7 +335,7 @@ a:hover {
   background: var(--muted);
 }
 .badge.ok {
-  color: #aef0d4;
+  color: var(--on-ok);
   border-color: rgba(52, 211, 153, 0.3);
   background: rgba(52, 211, 153, 0.1);
 }
@@ -332,7 +344,7 @@ a:hover {
   box-shadow: 0 0 8px var(--ok);
 }
 .badge.bad {
-  color: #ffc4c8;
+  color: var(--on-bad);
   border-color: rgba(241, 96, 106, 0.3);
   background: rgba(241, 96, 106, 0.1);
 }
@@ -505,12 +517,12 @@ label {
 .badge.accent {
   border-color: rgba(91, 140, 255, 0.32);
   background: rgba(91, 140, 255, 0.12);
-  color: #b9cdff;
+  color: var(--on-accent);
 }
 .badge.warn {
   border-color: rgba(240, 180, 41, 0.32);
   background: rgba(240, 180, 41, 0.12);
-  color: #f3d68a;
+  color: var(--on-warn);
 }
 .badge.warn .dot {
   background: var(--warn);
@@ -518,7 +530,7 @@ label {
 .error-box {
   border: 1px solid rgba(241, 96, 106, 0.35);
   background: rgba(241, 96, 106, 0.1);
-  color: #ffc4c8;
+  color: var(--on-bad);
   border-radius: var(--radius-sm);
   padding: 11px 15px;
   font-size: 14px;
@@ -744,13 +756,13 @@ label {
   cursor: not-allowed;
 }
 .icon-btn.danger {
-  color: #ffc4c8;
+  color: var(--on-bad);
   border-color: rgba(241, 96, 106, 0.35);
 }
 .btn.danger {
   border-color: rgba(241, 96, 106, 0.35);
   background: rgba(241, 96, 106, 0.1);
-  color: #ffc4c8;
+  color: var(--on-bad);
 }
 .btn.danger:hover {
   border-color: var(--danger);
