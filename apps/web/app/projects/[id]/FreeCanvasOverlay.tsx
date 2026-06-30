@@ -43,13 +43,18 @@ export function FreeCanvasOverlay({
   slide,
   scale,
   onChange,
+  selected,
+  onSelect,
 }: {
   slide: Slide;
   scale: number;
   onChange: (fn: (s: Slide) => Slide) => void;
+  /** Controlled selection (shared with the inspector): a target id like 'b0', 'image', 'obj-0'. */
+  selected: string | null;
+  onSelect: (id: string | null) => void;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
-  const [selected, setSelected] = useState<string | null>(null);
+  const setSelected = onSelect;
   const [drag, setDrag] = useState<DragState>(null);
   const [live, setLive] = useState<{ id: string; frame: Frame } | null>(null);
   const [guides, setGuides] = useState<{ x: number[]; y: number[] }>({ x: [], y: [] });
