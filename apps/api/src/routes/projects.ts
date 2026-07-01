@@ -21,7 +21,7 @@ const draftSchema = z.object({
 export const projectsRouter = Router();
 
 /** Normalize incoming slides: ensure each has an id, and reindex `order`. */
-function normalizeSlides(slides: SlideInput[]) {
+export function normalizeSlides(slides: SlideInput[]) {
   return slides.map((s, i) => ({
     id: s.id ?? randomUUID(),
     order: i,
@@ -36,6 +36,33 @@ function normalizeSlides(slides: SlideInput[]) {
 
 async function approvedKitFor(businessId: string) {
   return BrandKitModel.findOne({ businessId, status: 'approved' }).sort({ createdAt: -1 }).lean();
+}
+
+/**
+ * Finish a freshly-drafted project (slides already set + saved): best-effort layout
+ * polish then caption, in that order so the caption reflects the polished slides.
+ * Never throws — a web-down / AI-off environment still yields a usable draft.
+ * Shared by the draft route and the campaign concept-draft.
+ */
+export async function finalizeDraftedProject(project: {
+  get: (k: string) => any;
+  set: (k: string, v: unknown) => void;
+  save: () => Promise<unknown>;
+}): Promise<void> {
+  try {
+    await critiqueProject(project);
+  } catch (err) {
+    console.warn('[critique] auto-polish failed:', err instanceof Error ? err.message : err);
+  }
+  try {
+    const caption = await buildCaption(project);
+    if (caption.text || caption.hashtags.length) {
+      project.set('caption', caption);
+      await project.save();
+    }
+  } catch (err) {
+    console.warn('[caption] auto-generate failed:', err instanceof Error ? err.message : err);
+  }
 }
 
 /** Write a caption for a project's current slides, grounded in the brand voice + profile. */
@@ -181,24 +208,8 @@ projectsRouter.post(
 
     project.set('slides', normalizeSlides(slides));
     await project.save(); // persist so the critique's /render pass can see the slides
-
-    // Best-effort layout polish: catch overflow/contrast/crowding and auto-fix
-    // before the user even sees the draft. Never fail the draft over it.
-    try {
-      await critiqueProject(project);
-    } catch (err) {
-      console.warn('[critique] auto-polish failed:', err instanceof Error ? err.message : err);
-    }
-    // Best-effort: draft a caption (in the brand voice) from the polished slides.
-    try {
-      const caption = await buildCaption(project);
-      if (caption.text || caption.hashtags.length) {
-        project.set('caption', caption);
-        await project.save();
-      }
-    } catch (err) {
-      console.warn('[caption] auto-generate failed:', err instanceof Error ? err.message : err);
-    }
+    // Best-effort: polish the layout, then caption from the polished slides.
+    await finalizeDraftedProject(project);
     res.json(project.toJSON());
   }),
 );

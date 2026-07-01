@@ -2,6 +2,8 @@ import type {
   Business,
   BrandKit,
   BusinessProfile,
+  BusinessGoal,
+  Campaign,
   Caption,
   MediaAsset,
   Project,
@@ -168,6 +170,28 @@ export const polishProject = (id: string) =>
   request<{ project: Project; report: CritiqueReportItem[] }>(`/projects/${id}/critique`, {
     method: 'POST',
   });
+
+// ── Campaigns ───────────────────────────────────────────────────────────────
+export const listCampaigns = (businessId: string) =>
+  request<Campaign[]>(`/businesses/${businessId}/campaigns`);
+
+export const getCampaign = (id: string) => request<Campaign>(`/campaigns/${id}`);
+
+export const createCampaign = (
+  businessId: string,
+  data: { name?: string; brief: string; count: number; goal?: BusinessGoal; type: AssetType; format: Format },
+) =>
+  request<Campaign>(`/businesses/${businessId}/campaigns`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+
+/** Draft one campaign concept into a real project (returns the created/linked project). */
+export const draftConcept = (campaignId: string, conceptId: string) =>
+  request<Project>(`/campaigns/${campaignId}/concepts/${conceptId}/draft`, { method: 'POST' });
+
+export const deleteCampaign = (id: string) =>
+  request<{ ok: boolean }>(`/campaigns/${id}`, { method: 'DELETE' });
 
 // ── Media ───────────────────────────────────────────────────────────────────
 export const listMedia = (businessId: string) =>

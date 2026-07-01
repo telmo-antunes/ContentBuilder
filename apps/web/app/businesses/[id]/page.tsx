@@ -3,20 +3,29 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { FORMAT_LABELS } from '@contentbuilder/shared';
-import { getBusiness, deleteProject, createProject, type BusinessDetail } from '../../lib/api';
+import { FORMAT_LABELS, type Campaign } from '@contentbuilder/shared';
+import {
+  getBusiness,
+  deleteProject,
+  createProject,
+  listCampaigns,
+  type BusinessDetail,
+} from '../../lib/api';
 import ProfileCard from '../../components/ProfileCard';
 import { confirm } from '../../components/ConfirmDialog';
 
 export default function BusinessDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [biz, setBiz] = useState<BusinessDetail | null>(null);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     setError(null);
     try {
-      setBiz(await getBusiness(id));
+      const [b, c] = await Promise.all([getBusiness(id), listCampaigns(id).catch(() => [])]);
+      setBiz(b);
+      setCampaigns(c);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -129,7 +138,48 @@ export default function BusinessDetailPage() {
 
           <ProfileCard businessId={biz._id} profile={biz.profile} onSaved={reload} />
 
-          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+          {biz.hasApprovedKit && (
+            <>
+              <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                <h2 style={{ margin: 0 }}>Campaigns ({campaigns.length})</h2>
+                <Link className="btn sm" href={`/campaigns/new?businessId=${biz._id}`}>
+                  ✦ New campaign
+                </Link>
+              </div>
+              {campaigns.length === 0 ? (
+                <div className="empty" style={{ marginTop: 12 }}>
+                  Plan a themed series of posts from a single brief.
+                </div>
+              ) : (
+                <div className="list" style={{ marginTop: 12 }}>
+                  {campaigns.map((c) => {
+                    const drafted = c.concepts.filter((x) => x.projectId).length;
+                    return (
+                      <div className="item" key={c._id}>
+                        <div className="grow">
+                          <div className="title">
+                            <Link href={`/campaigns/${c._id}`}>{c.name}</Link>
+                          </div>
+                          <div className="badges">
+                            <span className="badge accent">{c.type}</span>
+                            <span className="badge">{c.concepts.length} posts</span>
+                            <span className={`badge ${drafted === c.concepts.length ? 'ok' : ''}`}>
+                              {drafted} drafted
+                            </span>
+                          </div>
+                        </div>
+                        <Link className="btn sm" href={`/campaigns/${c._id}`}>
+                          Open
+                        </Link>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          )}
+
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
             <h2 style={{ margin: 0 }}>Projects ({biz.projects.length})</h2>
             {biz.hasApprovedKit ? (
               <Link className="btn primary sm" href={`/projects/new?businessId=${biz._id}`}>

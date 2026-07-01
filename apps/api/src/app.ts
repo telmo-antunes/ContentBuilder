@@ -9,6 +9,7 @@ import { businessesRouter } from './routes/businesses';
 import { projectsRouter } from './routes/projects';
 import { mediaRouter } from './routes/media';
 import { businessBrandKitRouter, brandKitRouter } from './routes/brandkits';
+import { businessCampaignRouter, campaignRouter } from './routes/campaigns';
 import { settingsRouter } from './routes/settings';
 import { usageRouter } from './routes/usage';
 
@@ -64,9 +65,11 @@ export function createApp() {
   // More specific business-scoped routers first (extra path segments), so they
   // win over businessesRouter's '/:id'.
   app.use('/businesses/:id/media', mediaRouter);
+  app.use('/businesses/:id/campaigns', businessCampaignRouter);
   app.use('/businesses/:id', businessBrandKitRouter);
   app.use('/businesses', businessesRouter);
   app.use('/brandkits', brandKitRouter);
+  app.use('/campaigns', campaignRouter);
   app.use('/projects', projectsRouter);
   app.use('/settings', settingsRouter);
   app.use('/usage', usageRouter);
