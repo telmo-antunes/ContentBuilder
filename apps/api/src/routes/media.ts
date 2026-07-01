@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import multer from 'multer';
 import { imageSize } from 'image-size';
-import { BusinessModel, MediaAssetModel } from '../models';
+import { BusinessModel, MediaAssetModel, BrandKitModel } from '../models';
 import { getStorage } from '../storage';
 import { ApiError, asyncHandler, requireObjectId } from '../lib/http';
 import { generateBusinessBackgrounds } from '../lib/backgrounds';
@@ -94,8 +94,26 @@ mediaRouter.post(
     if (!business) throw new ApiError(404, 'Business not found');
     const { colors } = readColors(req);
     const profile = (business as Record<string, any>).profile ?? {};
+    const body = req.body as { styleDescriptor?: string; businessName?: string };
 
-    const svg = await generateAiBackground(bgColors(colors), { category: profile.category, tone: profile.tone });
+    // The brand aesthetic is the strongest fit signal — prefer what the editor
+    // sent, else fall back to the approved kit's descriptor.
+    let styleDescriptor = (body.styleDescriptor || '').trim();
+    if (!styleDescriptor) {
+      const kit = await BrandKitModel.findOne({ businessId, status: 'approved' }).sort({ createdAt: -1 }).lean();
+      styleDescriptor = ((kit as Record<string, any>)?.styleDescriptor as string) ?? '';
+    }
+    // Rotate the composition by how many AI backgrounds already exist, so each
+    // new one is deliberately different from the last.
+    const variant = await MediaAssetModel.countDocuments({ businessId, type: 'generated', label: 'AI background' });
+
+    const svg = await generateAiBackground(bgColors(colors), {
+      category: profile.category,
+      tone: profile.tone,
+      styleDescriptor,
+      businessName: body.businessName || ((business as Record<string, any>).name as string),
+      variant,
+    });
     if (!svg) {
       throw new ApiError(502, 'AI background generation is unavailable or produced an unusable result. Try again, or use the generated backgrounds.');
     }

@@ -156,10 +156,14 @@ export const regenerateBackgrounds = (businessId: string, colors: object, count 
   });
 
 /** Generate one AI background (SVG). Returns the new media asset. */
-export const generateAiBackground = (businessId: string, colors: object) =>
+export const generateAiBackground = (
+  businessId: string,
+  colors: object,
+  extra?: { styleDescriptor?: string; businessName?: string },
+) =>
   request<MediaAsset>(`/businesses/${businessId}/media/backgrounds/ai`, {
     method: 'POST',
-    body: JSON.stringify({ colors }),
+    body: JSON.stringify({ colors, ...extra }),
   });
 
 export const deleteMedia = (businessId: string, assetId: string) =>

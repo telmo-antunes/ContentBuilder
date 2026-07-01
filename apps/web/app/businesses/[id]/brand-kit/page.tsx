@@ -443,7 +443,7 @@ function KitEditor({
         </div>
       </div>
 
-      <BrandBackgrounds businessId={businessId} colors={colors} colorsValid={colorsValid} setError={setError} />
+      <BrandBackgrounds businessId={businessId} colors={colors} colorsValid={colorsValid} setError={setError} styleDescriptor={styleDescriptor} businessName={businessName} />
 
       {/* Actions */}
       <div className="row" style={{ marginTop: 18, justifyContent: 'space-between' }}>
@@ -483,11 +483,15 @@ function BrandBackgrounds({
   colors,
   colorsValid,
   setError,
+  styleDescriptor,
+  businessName,
 }: {
   businessId: string;
   colors: BrandKit['colors'];
   colorsValid: boolean;
   setError: (s: string | null) => void;
+  styleDescriptor: string;
+  businessName: string;
 }) {
   const [bgs, setBgs] = useState<MediaAsset[]>([]);
   const [busy, setBusy] = useState(false);
@@ -525,7 +529,7 @@ function BrandBackgrounds({
     setAiBusy(true);
     setError(null);
     try {
-      const asset = await generateAiBackground(businessId, colors);
+      const asset = await generateAiBackground(businessId, colors, { styleDescriptor, businessName });
       setBgs((prev) => [asset, ...prev]);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
