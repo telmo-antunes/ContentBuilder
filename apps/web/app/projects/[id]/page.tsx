@@ -34,6 +34,7 @@ import { api } from '../../lib/config';
 import { SlideRenderer } from '../../../lib/render/SlideRenderer';
 import { ScaledSlide } from '../../../lib/render/SlideFrame';
 import { FreeCanvasOverlay } from './FreeCanvasOverlay';
+import { confirm } from '../../components/ConfirmDialog';
 import { toRenderKit, resolveSlideImage, resolveImageLayout } from '../../../lib/render/projectRender';
 import type { RenderBrandKit } from '../../../lib/render/types';
 
@@ -290,9 +291,15 @@ export default function ProjectEditorPage() {
     });
   };
 
-  const deleteSlide = (slideId: string) => {
+  const deleteSlide = async (slideId: string) => {
     const n = slides.findIndex((s) => s.id === slideId) + 1;
-    if (!window.confirm(`Delete ${detail?.type === 'story' ? 'frame' : 'slide'} ${n}? You can undo this with ⌘Z while the editor is open.`)) return;
+    const unit = detail?.type === 'story' ? 'frame' : 'slide';
+    if (!(await confirm({
+      title: `Delete ${unit}?`,
+      message: `Delete ${unit} ${n}? You can undo this with ⌘Z while the editor is open.`,
+      confirmText: 'Delete',
+      destructive: true,
+    }))) return;
     snapshot();
     setSlides((prev) => {
       const idx = prev.findIndex((s) => s.id === slideId);
@@ -1163,6 +1170,9 @@ function ImageControls({
   const [err, setErr] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const current = media.find((m) => m._id === slide.mediaAssetId) ?? null;
+  // Keep generated brand backgrounds and user uploads independent in the picker.
+  const uploads = media.filter((m) => m.type !== 'generated');
+  const brandBgs = media.filter((m) => m.type === 'generated');
 
   const setOverride = (patch: Partial<SlideOverrides>) =>
     onChange((s) => ({ ...s, overrides: { ...s.overrides, ...patch } }));
@@ -1313,8 +1323,9 @@ function ImageControls({
             </button>
             <button
               className="btn sm ghost"
-              onClick={() => {
-                if (window.confirm('Remove this image from the slide?')) onChange((s) => ({ ...s, mediaAssetId: undefined }));
+              onClick={async () => {
+                if (await confirm({ message: 'Remove this image from the slide?', confirmText: 'Remove', destructive: true }))
+                  onChange((s) => ({ ...s, mediaAssetId: undefined }));
               }}
             >
               Remove
@@ -1354,27 +1365,35 @@ function ImageControls({
                   Upload
                 </button>
               </div>
-              {media.length > 0 && (
-                <div style={{ display: 'flex', gap: 6, overflowX: 'auto', marginTop: 6, paddingBottom: 2 }}>
-                  {media.map((m) => (
-                    <button
-                      key={m._id}
-                      onClick={() => setBackground(m._id)}
-                      title={m.label ?? 'Use as background'}
-                      style={{
-                        flex: '0 0 auto',
-                        padding: 0,
-                        border: `2px solid ${bgAssetId === m._id ? 'var(--accent)' : 'var(--border)'}`,
-                        borderRadius: 6,
-                        background: 'none',
-                        cursor: 'pointer',
-                        lineHeight: 0,
-                      }}
-                    >
-                      <img src={m.url} alt="" style={{ width: 40, height: 50, objectFit: 'cover', borderRadius: 4, display: 'block' }} />
-                    </button>
-                  ))}
-                </div>
+              {[
+                { label: 'Brand backgrounds', items: brandBgs },
+                { label: 'Your uploads', items: uploads },
+              ].map((group) =>
+                group.items.length > 0 ? (
+                  <div key={group.label} style={{ marginTop: 6 }}>
+                    <span className="muted" style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.4 }}>{group.label}</span>
+                    <div style={{ display: 'flex', gap: 6, overflowX: 'auto', marginTop: 3, paddingBottom: 2 }}>
+                      {group.items.map((m) => (
+                        <button
+                          key={m._id}
+                          onClick={() => setBackground(m._id)}
+                          title={m.label ?? 'Use as background'}
+                          style={{
+                            flex: '0 0 auto',
+                            padding: 0,
+                            border: `2px solid ${bgAssetId === m._id ? 'var(--accent)' : 'var(--border)'}`,
+                            borderRadius: 6,
+                            background: 'none',
+                            cursor: 'pointer',
+                            lineHeight: 0,
+                          }}
+                        >
+                          <img src={m.url} alt="" style={{ width: 40, height: 50, objectFit: 'cover', borderRadius: 4, display: 'block' }} />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null,
               )}
               <input
                 ref={bgFileRef}
@@ -1523,30 +1542,34 @@ function ImageControls({
         onChange={(e) => onPick(e.target.files?.[0])}
       />
 
-      {media.length > 0 && (
-        <>
-          <p className="muted" style={{ fontSize: 12, margin: '10px 0 6px' }}>
-            Or reuse an uploaded image:
-          </p>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {media.slice(0, 8).map((m) => (
-              <img
-                key={m._id}
-                src={m.url}
-                alt=""
-                onClick={() => attachImage(m._id)}
-                style={{
-                  width: 46,
-                  height: 46,
-                  objectFit: 'cover',
-                  borderRadius: 6,
-                  cursor: 'pointer',
-                  border: m._id === slide.mediaAssetId ? '2px solid var(--accent)' : '2px solid transparent',
-                }}
-              />
-            ))}
+      {[
+        { label: 'Your uploads', items: uploads },
+        { label: 'Brand backgrounds', items: brandBgs },
+      ].map((group) =>
+        group.items.length > 0 ? (
+          <div key={group.label}>
+            <p className="muted" style={{ fontSize: 12, margin: '10px 0 6px' }}>{group.label}</p>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {group.items.slice(0, 8).map((m) => (
+                <img
+                  key={m._id}
+                  src={m.url}
+                  alt={m.label ?? ''}
+                  title={m.label ?? ''}
+                  onClick={() => attachImage(m._id)}
+                  style={{
+                    width: 46,
+                    height: 46,
+                    objectFit: 'cover',
+                    borderRadius: 6,
+                    cursor: 'pointer',
+                    border: m._id === slide.mediaAssetId ? '2px solid var(--accent)' : '2px solid transparent',
+                  }}
+                />
+              ))}
+            </div>
           </div>
-        </>
+        ) : null,
       )}
     </div>
   );

@@ -6,6 +6,7 @@ import { BusinessModel, MediaAssetModel } from '../models';
 import { getStorage } from '../storage';
 import { ApiError, asyncHandler, requireObjectId } from '../lib/http';
 import { generateBusinessBackgrounds } from '../lib/backgrounds';
+import { generateAiBackground } from '../lib/aiBackground';
 
 /** Business-scoped media uploads. Mounted at /businesses/:id/media. */
 export const mediaRouter = Router({ mergeParams: true });
@@ -36,26 +37,81 @@ mediaRouter.get(
   }),
 );
 
-// Regenerate the procedural brand backgrounds from a palette (on-demand button).
+// Palette + count validation shared by both background endpoints.
+function readColors(req: { body: unknown }): { colors: Record<string, string> & { palette?: string[] }; count: number } {
+  const body = req.body as { colors?: Record<string, string> & { palette?: string[] }; count?: number };
+  const colors = body?.colors;
+  if (!colors?.background || !colors?.primary) throw new ApiError(400, 'Missing brand colors.');
+  const count = Math.max(1, Math.min(12, Math.round(Number(body?.count) || 3)));
+  return { colors, count };
+}
+function bgColors(colors: Record<string, string> & { palette?: string[] }) {
+  return {
+    primary: colors.primary!,
+    secondary: colors.secondary ?? colors.primary!,
+    accent: colors.accent ?? colors.primary!,
+    background: colors.background!,
+    text: colors.text,
+    palette: colors.palette,
+  };
+}
+
+// Regenerate the procedural brand backgrounds — unique per business, themed to
+// the vertical, business-chosen `count`. Replaces the previous procedural set.
 mediaRouter.post(
   '/backgrounds',
   asyncHandler(async (req, res) => {
     const businessId = requireObjectId((req.params as Record<string, string>).id, 'Business');
     const business = await BusinessModel.findById(businessId).lean();
     if (!business) throw new ApiError(404, 'Business not found');
-    const colors = (req.body as { colors?: Record<string, string> })?.colors;
-    if (!colors?.background || !colors?.primary) {
-      throw new ApiError(400, 'Missing brand colors.');
+    const { colors, count } = readColors(req);
+    const profile = (business as Record<string, any>).profile ?? {};
+
+    // Drop the previous procedural set (label prefix) so count/vertical changes
+    // don't leave orphans; AI backgrounds (different label) are untouched.
+    const stale = await MediaAssetModel.find({ businessId, type: 'generated', label: { $regex: '^Brand background' } });
+    for (const a of stale) {
+      try { await getStorage().remove(a.get('key')); } catch { /* best-effort */ }
+      await a.deleteOne();
     }
-    const assets = await generateBusinessBackgrounds(businessId, {
-      primary: colors.primary,
-      secondary: colors.secondary ?? colors.primary,
-      accent: colors.accent ?? colors.primary,
-      background: colors.background,
-      text: colors.text,
-      palette: (req.body as { colors?: { palette?: string[] } })?.colors?.palette,
+
+    const assets = await generateBusinessBackgrounds(businessId, bgColors(colors), {
+      category: profile.category,
+      tone: profile.tone,
+      count,
     });
     res.status(201).json(assets);
+  }),
+);
+
+// Generate ONE AI background (cheap: SVG via the small text model), sanitized and
+// stored alongside the procedural ones. Appends — never overwrites existing.
+mediaRouter.post(
+  '/backgrounds/ai',
+  asyncHandler(async (req, res) => {
+    const businessId = requireObjectId((req.params as Record<string, string>).id, 'Business');
+    const business = await BusinessModel.findById(businessId).lean();
+    if (!business) throw new ApiError(404, 'Business not found');
+    const { colors } = readColors(req);
+    const profile = (business as Record<string, any>).profile ?? {};
+
+    const svg = await generateAiBackground(bgColors(colors), { category: profile.category, tone: profile.tone });
+    if (!svg) {
+      throw new ApiError(502, 'AI background generation is unavailable or produced an unusable result. Try again, or use the generated backgrounds.');
+    }
+
+    const key = `backgrounds/${businessId}/ai-${randomUUID()}.svg`;
+    const stored = await getStorage().save(key, Buffer.from(svg, 'utf8'), { contentType: 'image/svg+xml' });
+    const asset = await MediaAssetModel.create({
+      businessId,
+      type: 'generated',
+      label: 'AI background',
+      key: stored.key,
+      url: stored.url,
+      width: 1080,
+      height: 1350,
+    });
+    res.status(201).json(asset.toJSON());
   }),
 );
 

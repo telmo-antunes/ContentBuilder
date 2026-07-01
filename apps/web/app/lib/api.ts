@@ -149,8 +149,15 @@ export const draftProject = (id: string, paragraph: string, mode: 'designer' | '
 export const listMedia = (businessId: string) =>
   request<MediaAsset[]>(`/businesses/${businessId}/media`);
 
-export const regenerateBackgrounds = (businessId: string, colors: object) =>
+export const regenerateBackgrounds = (businessId: string, colors: object, count = 3) =>
   request<MediaAsset[]>(`/businesses/${businessId}/media/backgrounds`, {
+    method: 'POST',
+    body: JSON.stringify({ colors, count }),
+  });
+
+/** Generate one AI background (SVG). Returns the new media asset. */
+export const generateAiBackground = (businessId: string, colors: object) =>
+  request<MediaAsset>(`/businesses/${businessId}/media/backgrounds/ai`, {
     method: 'POST',
     body: JSON.stringify({ colors }),
   });

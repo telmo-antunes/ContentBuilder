@@ -4,6 +4,7 @@ import './globals.css';
 import HealthDot from './components/HealthDot';
 import ThemeToggle from './components/ThemeToggle';
 import TopNav from './components/TopNav';
+import ConfirmHost from './components/ConfirmDialog';
 
 export const metadata: Metadata = {
   title: 'ContentBuilder',
@@ -32,6 +33,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </div>
         </header>
         <main className="container">{children}</main>
+        <ConfirmHost />
       </body>
     </html>
   );

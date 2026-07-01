@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { FORMAT_LABELS } from '@contentbuilder/shared';
 import { getBusiness, deleteProject, createProject, type BusinessDetail } from '../../lib/api';
 import ProfileCard from '../../components/ProfileCard';
+import { confirm } from '../../components/ConfirmDialog';
 
 export default function BusinessDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -26,7 +27,12 @@ export default function BusinessDetailPage() {
   }, [reload]);
 
   const removeProject = async (pid: string, title: string) => {
-    if (!window.confirm(`Delete project "${title}"?`)) return;
+    if (!(await confirm({
+      title: 'Delete project?',
+      message: `Delete project "${title}"?`,
+      confirmText: 'Delete',
+      destructive: true,
+    }))) return;
     try {
       await deleteProject(pid);
       reload();

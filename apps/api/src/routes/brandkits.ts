@@ -65,7 +65,11 @@ businessBrandKitRouter.post(
         `Could not analyze ${url}: ${err instanceof Error ? err.message : 'load failed'}. You can enter the kit manually instead.`,
       );
     }
-    const roles = await assignRolesAndVibe(extraction.palette, extraction.downscaledBase64);
+    const roles = await assignRolesAndVibe(
+      extraction.palette,
+      extraction.downscaledBase64,
+      extraction.domRoles,
+    );
 
     // One pending draft at a time; keep approved kits as history.
     await BrandKitModel.deleteMany({ businessId: id, status: 'draft' });
@@ -77,7 +81,7 @@ businessBrandKitRouter.post(
       styleDescriptor: roles.styleDescriptor,
       homepageScreenshot: extraction.screenshot,
       provenance: {
-        colors: 'sampled',
+        colors: extraction.colorProvenance,
         fonts: 'computed+mapped',
         roles: roles.provenance,
         logo: extraction.logo ? 'dom' : 'none',
@@ -182,7 +186,13 @@ brandKitRouter.patch(
     // ready-to-use post/story backgrounds. Best-effort — never block approval.
     if (body.status === 'approved') {
       try {
-        await generateBusinessBackgrounds(String(kit.get('businessId')), kit.get('colors'));
+        const biz = await BusinessModel.findById(kit.get('businessId')).lean();
+        const profile = (biz as Record<string, any> | null)?.profile ?? {};
+        await generateBusinessBackgrounds(String(kit.get('businessId')), kit.get('colors'), {
+          category: profile.category,
+          tone: profile.tone,
+          count: profile.backgroundCount,
+        });
       } catch (err) {
         console.error('[backgrounds] generation on approval failed:', err);
       }
