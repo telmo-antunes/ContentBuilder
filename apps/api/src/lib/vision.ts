@@ -76,6 +76,33 @@ function contrast(a: string, b: string): number {
   const lb = luminance(b);
   return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
 }
+/** HSL saturation 0..1 of a hex. */
+function saturation(hex: string): number {
+  const [r, g, b] = rgb(hex).map((n) => n / 255) as [number, number, number];
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  if (max === min) return 0;
+  const l = (max + min) / 2;
+  return l > 0.5 ? (max - min) / (2 - max - min) : (max - min) / (max + min);
+}
+
+/**
+ * Score an extracted palette so a degraded capture (grey/monochrome, or
+ * illegible) can be detected and retried instead of silently shipped. `ok` means
+ * there's a genuine, saturated brand colour AND readable text/background contrast.
+ */
+export function brandColorQuality(colors: {
+  primary: string;
+  accent: string;
+  secondary: string;
+  background: string;
+  text: string;
+}): { score: number; ok: boolean } {
+  const brandSat = Math.max(saturation(colors.primary), saturation(colors.accent), saturation(colors.secondary));
+  const tc = contrast(colors.text, colors.background);
+  const ok = brandSat >= 0.28 && tc >= 3;
+  return { score: brandSat * 3 + Math.min(tc, 12) / 4, ok };
+}
 
 /** Heuristic role assignment used whenever the vision model is unconfigured or fails. */
 export function heuristicRoles(palette: PaletteColor[]): RoleAssignment {

@@ -140,8 +140,15 @@ export async function extractBrand(url: string, businessId: string): Promise<Ext
     await page.evaluate(async () => {
       const d = document as Document & { fonts?: { ready: Promise<unknown> } };
       if (d.fonts?.ready) await d.fonts.ready;
+      // Wait for above-the-fold images too, else a lazy/half-loaded hero yields a
+      // grey capture and a monochrome palette. Cap at 4s so a stuck image can't hang.
+      const imgs = Array.from(document.images).filter((i) => !i.complete);
+      await Promise.race([
+        Promise.all(imgs.map((i) => new Promise((res) => { i.onload = i.onerror = () => res(null); }))),
+        new Promise((res) => setTimeout(res, 4000)),
+      ]);
     });
-    await new Promise((r) => setTimeout(r, 500));
+    await new Promise((r) => setTimeout(r, 600));
 
     // ── Fonts (computed) ────────────────────────────────────────────────────
     // NOTE: keep these callbacks free of named arrow/function consts — esbuild
