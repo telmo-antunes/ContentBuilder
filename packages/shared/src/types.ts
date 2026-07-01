@@ -1,7 +1,7 @@
 import type { Block, BlockFrame } from './blocks';
 import type { LayoutType } from './layouts';
 import type { AssetType, Format } from './formats';
-import type { BusinessProfile } from './profile';
+import type { BusinessProfile, BusinessGoal } from './profile';
 import type { ImageTreatment, LogoTreatment, ThemePreset } from './theme';
 
 /**
@@ -56,6 +56,8 @@ export interface BrandKit {
   /** How the logo is rendered on slides (default 'original'). */
   logoTreatment?: LogoTreatment;
   styleDescriptor: string;
+  /** How the brand talks (register/person/energy) — grounds caption generation. */
+  voice?: string;
   homepageScreenshot?: StoredMedia;
   provenance: BrandProvenance;
   status: BrandKitStatus;
@@ -154,6 +156,12 @@ export interface ProjectSettings {
   slideCounter?: boolean;
 }
 
+/** The social caption + hashtags for a post, written in the brand voice. */
+export interface Caption {
+  text: string;
+  hashtags: string[];
+}
+
 export interface Project {
   _id: string;
   businessId: string;
@@ -161,8 +169,38 @@ export interface Project {
   type: AssetType;
   format: Format;
   slides: Slide[];
+  /** Generated social caption for the post (optional until drafted). */
+  caption?: Caption;
+  /** The campaign this post belongs to, if it was generated as part of a series. */
+  campaignId?: string;
   settings?: ProjectSettings;
   status: ProjectStatus;
   createdAt: string;
   updatedAt: string;
+}
+
+/** One post idea in a campaign — cheap to plan; drafted into a Project on demand. */
+export interface CampaignConcept {
+  id: string;
+  /** Short working title for the post. */
+  title: string;
+  /** One line: the angle/hook this post takes within the series. */
+  angle: string;
+  /** A paragraph ready to feed the draft engine (the post's raw copy source). */
+  paragraph: string;
+  /** Set once this concept has been drafted into a real project. */
+  projectId?: string;
+}
+
+/** A themed series of posts: a brief → a plan of concepts → drafts on demand. */
+export interface Campaign {
+  _id: string;
+  businessId: string;
+  name: string;
+  brief: string;
+  goal?: BusinessGoal;
+  type: AssetType;
+  format: Format;
+  concepts: CampaignConcept[];
+  createdAt: string;
 }

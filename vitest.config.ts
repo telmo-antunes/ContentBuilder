@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 // (it won't transpile TS that resolves through the node_modules symlink).
 export default defineConfig({
   test: {
-    include: ['packages/*/src/**/*.test.ts', 'apps/*/src/**/*.test.ts'],
+    include: ['packages/*/src/**/*.test.ts', 'apps/*/src/**/*.test.ts', 'apps/*/lib/**/*.test.ts'],
   },
   resolve: {
     alias: {

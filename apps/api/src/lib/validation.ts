@@ -73,6 +73,12 @@ const settingsSchema = z.object({
   slideCounter: z.boolean().optional(),
 });
 
+/** The generated social caption + hashtags for a post. */
+export const captionSchema = z.object({
+  text: z.string().max(2400).default(''),
+  hashtags: z.array(z.string().max(60)).max(30).default([]),
+});
+
 export const createProjectSchema = z
   .object({
     businessId: z.string().min(1),
@@ -92,6 +98,7 @@ export const updateProjectSchema = z.object({
   status: z.enum(['draft', 'rendered']).optional(),
   slides: z.array(slideSchema).max(MAX_SLIDES_PER_PROJECT).optional(),
   settings: settingsSchema.optional(),
+  caption: captionSchema.optional(),
 });
 
 export type SlideInput = z.infer<typeof slideSchema>;

@@ -45,6 +45,11 @@ export default function RenderStage({
         slideIndex={slideIndex}
         slideTotal={slideTotal}
         showCounter={showCounter}
+        // Publish the ground-truth text-fit result so the critique pass (which
+        // drives this same /render route headlessly) can read it off the DOM.
+        onOverflow={(o) => {
+          if (typeof document !== 'undefined') document.body.dataset.overflow = o ? 'true' : 'false';
+        }}
       />
     </div>
   );

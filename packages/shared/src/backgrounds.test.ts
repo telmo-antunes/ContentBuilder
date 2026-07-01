@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildBrandBackgrounds } from './backgrounds';
+import { buildBrandBackgrounds, renderMotif, MOTIF_CATALOG } from './backgrounds';
 
 const COLORS = {
   primary: '#C49444',
@@ -52,5 +52,40 @@ describe('buildBrandBackgrounds', () => {
 
   it('does not throw on short/invalid hex', () => {
     expect(() => buildBrandBackgrounds({ primary: '#fff', secondary: '', accent: 'x', background: '#000' })).not.toThrow();
+  });
+});
+
+const NEAR_BLACK = {
+  primary: '#C9A66B',
+  secondary: '#4A5568',
+  accent: '#E3C48D',
+  background: '#000000',
+  text: '#F5F3EF',
+  palette: ['#000000', '#1A1F29', '#C9A66B', '#E3C48D'],
+};
+
+describe('renderMotif', () => {
+  it('renders every catalog motif to valid, seeded SVG (light + near-black palettes)', () => {
+    expect(MOTIF_CATALOG.length).toBe(15);
+    for (const m of MOTIF_CATALOG) {
+      for (const colors of [COLORS, NEAR_BLACK]) {
+        const bg = renderMotif(m.id, colors, { seed: 'seed-1' });
+        expect(bg, `motif ${m.id}`).not.toBeNull();
+        expect(bg!.svg.startsWith('<svg')).toBe(true);
+        expect(bg!.svg).toContain('</svg>');
+        expect(bg!.svg).toMatch(/#[0-9a-fA-F]{6}/);
+        expect(bg!.id).toBe(m.id);
+      }
+    }
+  });
+
+  it('returns null for an unknown motif id', () => {
+    expect(renderMotif('not-a-motif', COLORS, { seed: 'x' })).toBeNull();
+  });
+
+  it('is deterministic for a fixed seed (snapshot)', () => {
+    expect(renderMotif('mesh', COLORS, { seed: 'snap' })!.svg).toMatchSnapshot();
+    expect(renderMotif('dotgrid', COLORS, { seed: 'snap' })!.svg).toMatchSnapshot();
+    expect(renderMotif('waves', COLORS, { seed: 'snap' })!.svg).toMatchSnapshot();
   });
 });

@@ -2,6 +2,9 @@ import type {
   Business,
   BrandKit,
   BusinessProfile,
+  BusinessGoal,
+  Campaign,
+  Caption,
   MediaAsset,
   Project,
   ProjectSettings,
@@ -133,7 +136,13 @@ export const createProject = (data: {
 
 export const updateProject = (
   id: string,
-  data: { title?: string; status?: 'draft' | 'rendered'; slides?: Slide[]; settings?: ProjectSettings },
+  data: {
+    title?: string;
+    status?: 'draft' | 'rendered';
+    slides?: Slide[];
+    settings?: ProjectSettings;
+    caption?: Caption;
+  },
 ) => request<Project>(`/projects/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
 
 export const deleteProject = (id: string) =>
@@ -144,6 +153,45 @@ export const draftProject = (id: string, paragraph: string, mode: 'designer' | '
     method: 'POST',
     body: JSON.stringify({ paragraph, mode }),
   });
+
+/** (Re)generate the social caption for a project's current slides, in the brand voice. */
+export const generateProjectCaption = (id: string) =>
+  request<Project>(`/projects/${id}/caption`, { method: 'POST' });
+
+export interface CritiqueReportItem {
+  slideId: string;
+  order: number;
+  issues: string[];
+  applied: string[];
+}
+
+/** Self-critique the rendered slides and auto-apply bounded layout fixes. */
+export const polishProject = (id: string) =>
+  request<{ project: Project; report: CritiqueReportItem[] }>(`/projects/${id}/critique`, {
+    method: 'POST',
+  });
+
+// ── Campaigns ───────────────────────────────────────────────────────────────
+export const listCampaigns = (businessId: string) =>
+  request<Campaign[]>(`/businesses/${businessId}/campaigns`);
+
+export const getCampaign = (id: string) => request<Campaign>(`/campaigns/${id}`);
+
+export const createCampaign = (
+  businessId: string,
+  data: { name?: string; brief: string; count: number; goal?: BusinessGoal; type: AssetType; format: Format },
+) =>
+  request<Campaign>(`/businesses/${businessId}/campaigns`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+
+/** Draft one campaign concept into a real project (returns the created/linked project). */
+export const draftConcept = (campaignId: string, conceptId: string) =>
+  request<Project>(`/campaigns/${campaignId}/concepts/${conceptId}/draft`, { method: 'POST' });
+
+export const deleteCampaign = (id: string) =>
+  request<{ ok: boolean }>(`/campaigns/${id}`, { method: 'DELETE' });
 
 // ── Media ───────────────────────────────────────────────────────────────────
 export const listMedia = (businessId: string) =>
@@ -181,6 +229,7 @@ export interface BrandKitEdit {
   logo?: { key: string; url: string; sourceUrl?: string };
   logoTreatment?: 'original' | 'mono';
   styleDescriptor?: string;
+  voice?: string;
   status?: 'draft' | 'approved';
 }
 

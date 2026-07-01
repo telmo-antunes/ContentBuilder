@@ -42,6 +42,8 @@ export interface Extraction {
   screenshot: StoredMedia;
   /** Base64 PNG (≤768px long edge) for the one vision call. */
   downscaledBase64: string;
+  /** Homepage copy, harvested for brand-voice inference (never rendered as-is). */
+  copy: { headline: string; tagline: string; description: string; sample: string };
 }
 
 /** Raw weighted color candidates harvested from computed styles (browser-side). */
@@ -191,6 +193,30 @@ export async function extractBrand(url: string, businessId: string): Promise<Ext
       }
     });
 
+    // ── Copy (for brand-voice inference) ─────────────────────────────────────
+    // Harvest a little real homepage text — headline, tagline, meta description,
+    // one substantive paragraph — so the voice pass can hear how the brand talks.
+    // NOTE: as above, no named arrow/function consts inside this callback.
+    const copy = await page.evaluate(() => {
+      const h1 = document.querySelector('h1');
+      const h2 = document.querySelector('h2, [class*="subtitle" i], [class*="tagline" i]');
+      const desc = document.querySelector('meta[name="description"], meta[property="og:description"]');
+      const ps = Array.from(document.querySelectorAll('p'));
+      let sample = '';
+      for (let i = 0; i < ps.length; i++) {
+        const el = ps[i];
+        if (!el) continue;
+        const t = (el.textContent || '').replace(/\s+/g, ' ').trim();
+        if (t.length >= 60) { sample = t; break; }
+      }
+      return {
+        headline: (h1?.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 280),
+        tagline: (h2?.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 280),
+        description: (desc?.getAttribute('content') || '').replace(/\s+/g, ' ').trim().slice(0, 280),
+        sample: sample.slice(0, 400),
+      };
+    });
+
     // ── Colors (computed styles) ─────────────────────────────────────────────
     // Read the *actual* colors the site paints — element backgrounds, text,
     // button/CTA backgrounds, link/nav text — each weighted by the visible area
@@ -328,6 +354,7 @@ export async function extractBrand(url: string, businessId: string): Promise<Ext
       logo,
       screenshot,
       downscaledBase64,
+      copy,
     };
   } finally {
     await page.close().catch(() => {});

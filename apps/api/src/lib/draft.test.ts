@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { repairFrame, extractSlides } from './draft';
+import { slideSchema } from './validation';
 
 describe('repairFrame', () => {
   it('passes a valid in-bounds frame through unchanged', () => {
@@ -90,5 +91,14 @@ describe('extractSlides (designer mode)', () => {
     ]);
     // an invalid block type fails the slide's schema → the whole slide is dropped
     expect(extractSlides(raw, 'designer')).toHaveLength(0);
+  });
+
+  it('produces output that re-validates against slideSchema', () => {
+    const raw = JSON.stringify([
+      { order: 0, layoutType: 'Cover', imageNeed: 'none', blocks: [{ type: 'title', text: 'Hi' }], overrides: { theme: 'bold' } },
+    ]);
+    const slides = extractSlides(raw, 'designer');
+    expect(slides).toHaveLength(1);
+    expect(slideSchema.safeParse(slides[0]).success).toBe(true);
   });
 });

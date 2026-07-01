@@ -9,6 +9,8 @@ import { ApiError, asyncHandler, parseBody, requireObjectId } from '../lib/http'
 import { createProjectSchema, updateProjectSchema, type SlideInput } from '../lib/validation';
 import { renderSlidesToPng, slugify } from '../lib/exporter';
 import { draftSlidesFromParagraph } from '../lib/draft';
+import { generateCaption, type GeneratedCaption } from '../lib/caption';
+import { critiqueProject } from '../lib/critique';
 import { aiDraftConfigured, aiFreeConfigured } from '../config';
 
 const draftSchema = z.object({
@@ -19,7 +21,7 @@ const draftSchema = z.object({
 export const projectsRouter = Router();
 
 /** Normalize incoming slides: ensure each has an id, and reindex `order`. */
-function normalizeSlides(slides: SlideInput[]) {
+export function normalizeSlides(slides: SlideInput[]) {
   return slides.map((s, i) => ({
     id: s.id ?? randomUUID(),
     order: i,
@@ -34,6 +36,53 @@ function normalizeSlides(slides: SlideInput[]) {
 
 async function approvedKitFor(businessId: string) {
   return BrandKitModel.findOne({ businessId, status: 'approved' }).sort({ createdAt: -1 }).lean();
+}
+
+/**
+ * Finish a freshly-drafted project (slides already set + saved): best-effort layout
+ * polish then caption, in that order so the caption reflects the polished slides.
+ * Never throws — a web-down / AI-off environment still yields a usable draft.
+ * Shared by the draft route and the campaign concept-draft.
+ */
+export async function finalizeDraftedProject(project: {
+  get: (k: string) => any;
+  set: (k: string, v: unknown) => void;
+  save: () => Promise<unknown>;
+}): Promise<void> {
+  try {
+    await critiqueProject(project);
+  } catch (err) {
+    console.warn('[critique] auto-polish failed:', err instanceof Error ? err.message : err);
+  }
+  try {
+    const caption = await buildCaption(project);
+    if (caption.text || caption.hashtags.length) {
+      project.set('caption', caption);
+      await project.save();
+    }
+  } catch (err) {
+    console.warn('[caption] auto-generate failed:', err instanceof Error ? err.message : err);
+  }
+}
+
+/** Write a caption for a project's current slides, grounded in the brand voice + profile. */
+async function buildCaption(project: {
+  get: (k: string) => unknown;
+}): Promise<GeneratedCaption> {
+  const businessId = String(project.get('businessId'));
+  const [business, kit] = await Promise.all([
+    BusinessModel.findById(businessId).lean(),
+    approvedKitFor(businessId),
+  ]);
+  const b = business as { profile?: Record<string, unknown> } | null;
+  const k = kit as { voice?: string; styleDescriptor?: string } | null;
+  return generateCaption({
+    title: project.get('title') as string,
+    slides: project.get('slides') as never,
+    voice: k?.voice,
+    styleDescriptor: k?.styleDescriptor,
+    profile: b?.profile as never,
+  });
 }
 
 // Create a project — only on a business that has an APPROVED brand kit.
@@ -102,6 +151,7 @@ projectsRouter.patch(
     if (body.title !== undefined) project.set('title', body.title);
     if (body.status !== undefined) project.set('status', body.status);
     if (body.slides !== undefined) project.set('slides', normalizeSlides(body.slides));
+    if (body.caption !== undefined) project.set('caption', body.caption);
     if (body.settings !== undefined) {
       project.set('settings', { ...(project.get('settings') ?? {}), ...body.settings });
     }
@@ -157,6 +207,52 @@ projectsRouter.post(
     }
 
     project.set('slides', normalizeSlides(slides));
+    await project.save(); // persist so the critique's /render pass can see the slides
+    // Best-effort: polish the layout, then caption from the polished slides.
+    await finalizeDraftedProject(project);
+    res.json(project.toJSON());
+  }),
+);
+
+// Self-critique the rendered slides and auto-apply bounded fixes ("Polish layout").
+projectsRouter.post(
+  '/:id/critique',
+  asyncHandler(async (req, res) => {
+    const id = requireObjectId(req.params.id, 'Project');
+    const project = await ProjectModel.findById(id);
+    if (!project) throw new ApiError(404, 'Project not found');
+    if (!project.get('slides')?.length) throw new ApiError(400, 'Project has no slides to polish.');
+    let report;
+    try {
+      report = await critiqueProject(project);
+    } catch (err) {
+      throw new ApiError(
+        502,
+        `Polish failed: ${err instanceof Error ? err.message : 'render error'}. Is the web server running?`,
+      );
+    }
+    res.json({ project: project.toJSON(), report });
+  }),
+);
+
+// Regenerate the caption for a project's current slides (manual "Regenerate" button).
+projectsRouter.post(
+  '/:id/caption',
+  asyncHandler(async (req, res) => {
+    const id = requireObjectId(req.params.id, 'Project');
+    if (!aiDraftConfigured()) {
+      throw new ApiError(400, 'Captions need ANTHROPIC_API_KEY + ANTHROPIC_MODEL_SMALL.');
+    }
+    const project = await ProjectModel.findById(id);
+    if (!project) throw new ApiError(404, 'Project not found');
+    if (!project.get('slides')?.length) throw new ApiError(400, 'Add slides before generating a caption.');
+    let caption: GeneratedCaption;
+    try {
+      caption = await buildCaption(project);
+    } catch (err) {
+      throw new ApiError(502, `Caption failed: ${err instanceof Error ? err.message : 'AI error'}.`);
+    }
+    project.set('caption', caption);
     await project.save();
     res.json(project.toJSON());
   }),

@@ -89,10 +89,20 @@ const slideSchema = new Schema(
 const projectSchema = new Schema(
   {
     businessId: { type: Schema.Types.ObjectId, ref: 'Business', required: true, index: true },
+    /** Set when this post was generated as part of a campaign series. */
+    campaignId: { type: Schema.Types.ObjectId, ref: 'Campaign', required: false, index: true },
     title: { type: String, required: true, trim: true },
     type: { type: String, enum: ['carousel', 'story'], required: true },
     format: { type: String, required: true },
     slides: { type: [slideSchema], default: [] },
+    /** The social caption + hashtags for this post, generated in the brand voice. */
+    caption: {
+      type: new Schema(
+        { text: { type: String, default: '' }, hashtags: { type: [String], default: [] } },
+        { _id: false },
+      ),
+      required: false,
+    },
     settings: {
       type: new Schema(
         {
