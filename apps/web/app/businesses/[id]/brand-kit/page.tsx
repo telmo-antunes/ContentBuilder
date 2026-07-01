@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import type { BrandKit } from '@contentbuilder/shared';
+import type { BrandKit, MediaAsset } from '@contentbuilder/shared';
 import { BUNDLED_FONT_FAMILIES } from '@contentbuilder/shared';
 import {
   getBrandKit,
@@ -12,11 +12,16 @@ import {
   createManualKit,
   patchBrandKit,
   uploadMedia,
+  listMedia,
+  regenerateBackgrounds,
+  generateAiBackground,
+  deleteMedia,
   type BusinessDetail,
 } from '../../../lib/api';
 import { SlideRenderer } from '../../../../lib/render/SlideRenderer';
 import { ScaledSlide } from '../../../../lib/render/SlideFrame';
 import type { RenderBrandKit } from '../../../../lib/render/types';
+import { confirm } from '../../../components/ConfirmDialog';
 
 type ColorRoleKey = 'primary' | 'secondary' | 'accent' | 'background' | 'text';
 const ROLES: Array<[ColorRoleKey, string]> = [
@@ -58,7 +63,11 @@ export default function BrandKitPage() {
   const analyze = async () => {
     if (
       hasApproved &&
-      !window.confirm('This will replace the current approved brand kit. Continue?')
+      !(await confirm({
+        title: 'Replace brand kit?',
+        message: 'This will replace the current approved brand kit. Continue?',
+        confirmText: 'Replace',
+      }))
     ) {
       return;
     }
@@ -77,7 +86,11 @@ export default function BrandKitPage() {
   const startManual = async () => {
     if (
       hasApproved &&
-      !window.confirm('This will replace the current approved brand kit. Continue?')
+      !(await confirm({
+        title: 'Replace brand kit?',
+        message: 'This will replace the current approved brand kit. Continue?',
+        confirmText: 'Replace',
+      }))
     ) {
       return;
     }
@@ -219,7 +232,11 @@ function KitEditor({
       approve &&
       hasApproved &&
       kit.status === 'draft' &&
-      !window.confirm('This will replace the current approved brand kit. Continue?')
+      !(await confirm({
+        title: 'Replace brand kit?',
+        message: 'This will replace the current approved brand kit. Continue?',
+        confirmText: 'Replace',
+      }))
     ) {
       return;
     }
@@ -426,6 +443,8 @@ function KitEditor({
         </div>
       </div>
 
+      <BrandBackgrounds businessId={businessId} colors={colors} colorsValid={colorsValid} setError={setError} styleDescriptor={styleDescriptor} businessName={businessName} />
+
       {/* Actions */}
       <div className="row" style={{ marginTop: 18, justifyContent: 'space-between' }}>
         <div className="row">
@@ -455,5 +474,144 @@ function KitEditor({
         </p>
       )}
     </>
+  );
+}
+
+/** Shows the 3 procedural brand backgrounds + a regenerate-from-palette button. */
+function BrandBackgrounds({
+  businessId,
+  colors,
+  colorsValid,
+  setError,
+  styleDescriptor,
+  businessName,
+}: {
+  businessId: string;
+  colors: BrandKit['colors'];
+  colorsValid: boolean;
+  setError: (s: string | null) => void;
+  styleDescriptor: string;
+  businessName: string;
+}) {
+  const [bgs, setBgs] = useState<MediaAsset[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [count, setCount] = useState(3);
+
+  const load = useCallback(async () => {
+    try {
+      const m = await listMedia(businessId);
+      setBgs(m.filter((x) => x.type === 'generated'));
+    } catch {
+      /* non-fatal */
+    }
+  }, [businessId]);
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const regen = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      // Regenerate replaces the procedural set; keep any AI backgrounds around.
+      const ai = bgs.filter((b) => b.label === 'AI background');
+      const fresh = await regenerateBackgrounds(businessId, colors, count);
+      setBgs([...fresh, ...ai]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const addAi = async () => {
+    setAiBusy(true);
+    setError(null);
+    try {
+      const asset = await generateAiBackground(businessId, colors, { styleDescriptor, businessName });
+      setBgs((prev) => [asset, ...prev]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setAiBusy(false);
+    }
+  };
+
+  const remove = async (assetId: string) => {
+    setBgs((prev) => prev.filter((b) => b._id !== assetId)); // optimistic
+    try {
+      await deleteMedia(businessId, assetId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      void load(); // resync on failure
+    }
+  };
+
+  return (
+    <div className="panel" style={{ marginTop: 14 }}>
+      <div className="section-label" style={{ marginTop: 0 }}>
+        Background graphics
+      </div>
+      <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
+        Subtle backgrounds themed to your business, unique to you, and generated from your palette — drop them behind any
+        post or story for depth. They appear under &ldquo;Brand backgrounds&rdquo; in the editor&apos;s image picker.
+      </p>
+      {bgs.length > 0 ? (
+        <div className="row" style={{ gap: 12 }}>
+          {bgs.map((b) => (
+            <div key={b._id} style={{ textAlign: 'center', position: 'relative' }}>
+              <img
+                src={b.url}
+                alt={b.label ?? 'brand background'}
+                style={{ width: 100, height: 125, objectFit: 'cover', borderRadius: 10, border: '1px solid var(--border)', display: 'block' }}
+              />
+              <button
+                className="icon-btn danger"
+                onClick={() => remove(b._id)}
+                title="Remove this background"
+                aria-label={`Remove ${(b.label ?? 'background').replace('Brand background — ', '')} background`}
+                style={{ position: 'absolute', top: 4, right: 4, width: 24, height: 24, background: 'rgba(0,0,0,0.55)' }}
+              >
+                ✕
+              </button>
+              <div className="muted" style={{ fontSize: 11, marginTop: 5 }}>
+                {(b.label ?? '').replace('Brand background — ', '')}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="muted" style={{ fontSize: 12 }}>
+          None yet — approve the kit, or generate them now.
+        </p>
+      )}
+      <div className="row" style={{ marginTop: 12, gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <label className="muted" style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+          How many
+          <select
+            value={count}
+            onChange={(e) => setCount(Number(e.target.value))}
+            disabled={busy}
+            style={{ padding: '4px 6px', borderRadius: 6, background: 'var(--panel)', color: 'var(--text)', border: '1px solid var(--border)' }}
+          >
+            {[1, 2, 3, 4, 5, 6, 8].map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+        </label>
+        <button className="btn sm" onClick={regen} disabled={busy || !colorsValid} title={!colorsValid ? 'Fix the colors first' : undefined}>
+          {busy ? 'Generating…' : bgs.some((b) => b.label !== 'AI background') ? 'Regenerate from palette' : 'Generate backgrounds'}
+        </button>
+        <button
+          className="btn sm ghost"
+          onClick={addAi}
+          disabled={aiBusy || !colorsValid}
+          title={!colorsValid ? 'Fix the colors first' : 'Generate one AI background (SVG)'}
+        >
+          {aiBusy ? 'Generating…' : '✨ AI background'}
+        </button>
+      </div>
+    </div>
   );
 }

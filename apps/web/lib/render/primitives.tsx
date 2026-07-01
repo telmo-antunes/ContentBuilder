@@ -151,12 +151,15 @@ export function ImageSlot({
  */
 function ImagePlaceholder({ kit, style }: { kit: RenderBrandKit; style?: CSSProperties }) {
   const { forExport } = useRenderCtx();
-  const a = kit.colors.secondary;
-  const b = mix(kit.colors.background, kit.colors.secondary, 0.5);
+  // A quiet but intentional branded panel — an accent glow over a primary→secondary
+  // blend — so an image-less slot reads as designed, not as an empty box (esp. on
+  // dark brands where a flat dark gradient looked unfinished).
   const base: CSSProperties = {
     position: 'absolute',
     inset: 0,
-    background: `linear-gradient(135deg, ${a}, ${b})`,
+    background:
+      `radial-gradient(130% 100% at 28% 18%, ${rgba(kit.colors.accent, 0.34)}, transparent 62%), ` +
+      `linear-gradient(140deg, ${mix(kit.colors.background, kit.colors.primary, 0.42)}, ${mix(kit.colors.background, kit.colors.secondary, 0.62)})`,
     ...style,
   };
   if (forExport) return <div style={base} />;

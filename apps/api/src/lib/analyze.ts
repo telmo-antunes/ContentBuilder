@@ -17,14 +17,43 @@ export interface PaletteColor {
   hsl: [number, number, number];
 }
 
+/** Brand color roles derived deterministically from the page's computed styles. */
+export interface DomRoles {
+  primary: string;
+  secondary: string;
+  accent: string;
+  background: string;
+  text: string;
+}
+
 export interface Extraction {
   palette: PaletteColor[];
+  /**
+   * Roles read from the DOM's *computed* styles (button/link backgrounds, body
+   * text, page surfaces). Present unless the harvest found too little to be
+   * meaningful, in which case callers fall back to the sampled palette.
+   */
+  domRoles?: DomRoles;
+  /** 'computed' when roles came from the DOM; 'sampled' when from the screenshot. */
+  colorProvenance: 'computed' | 'sampled';
   detectedFonts: { heading: string; body: string };
   renderFonts: { heading: string; body: string };
   logo?: { sourceUrl: string } & StoredMedia;
   screenshot: StoredMedia;
   /** Base64 PNG (≤768px long edge) for the one vision call. */
   downscaledBase64: string;
+}
+
+/** Raw weighted color candidates harvested from computed styles (browser-side). */
+interface RawDomColors {
+  /** hex → total visible area painted with this background. */
+  bgArea: Record<string, number>;
+  /** hex → text weight (char count × font size) rendered in this color. */
+  textWeight: Record<string, number>;
+  /** hex → visible area of button / CTA backgrounds in this color. */
+  btnArea: Record<string, number>;
+  /** hex → text weight of link/nav text in this color. */
+  linkWeight: Record<string, number>;
 }
 
 const DESKTOP_UA =
@@ -155,18 +184,116 @@ export async function extractBrand(url: string, businessId: string): Promise<Ext
       }
     });
 
+    // ── Colors (computed styles) ─────────────────────────────────────────────
+    // Read the *actual* colors the site paints — element backgrounds, text,
+    // button/CTA backgrounds, link/nav text — each weighted by the visible area
+    // (or text amount) it covers. Far more accurate than sampling a screenshot,
+    // which is polluted by hero photos, gradients and imagery.
+    // NOTE: as with the callbacks above, no named arrow/function consts in here.
+    const rawDom: RawDomColors = await page.evaluate(() => {
+      const bgArea: Record<string, number> = {};
+      const textWeight: Record<string, number> = {};
+      const btnArea: Record<string, number> = {};
+      const linkWeight: Record<string, number> = {};
+
+      const vw = window.innerWidth;
+      const maxY = window.innerHeight * 3; // count a few folds, not the whole page
+
+      const els = Array.from(document.querySelectorAll('body *')) as HTMLElement[];
+      for (const el of els) {
+        const cs = getComputedStyle(el);
+        if (cs.display === 'none' || cs.visibility === 'hidden' || parseFloat(cs.opacity || '1') === 0) continue;
+
+        const r = el.getBoundingClientRect();
+        const w = Math.max(0, Math.min(r.right, vw) - Math.max(r.left, 0));
+        const h = Math.max(0, Math.min(r.bottom, maxY) - Math.max(r.top, 0));
+        const area = w * h;
+        if (area < 4) continue;
+
+        const tag = el.tagName.toLowerCase();
+        const cls = (el.getAttribute('class') || '').toLowerCase();
+        const role = el.getAttribute('role') || '';
+
+        // Background color (only if reasonably opaque).
+        const bm = cs.backgroundColor.match(/rgba?\(([^)]+)\)/);
+        if (bm && bm[1]) {
+          const p = bm[1].split(',').map((s) => parseFloat(s));
+          const alpha = p.length > 3 ? (p[3] ?? 1) : 1;
+          if (alpha >= 0.5 && p.length >= 3) {
+            const hex =
+              '#' +
+              [p[0] ?? 0, p[1] ?? 0, p[2] ?? 0]
+                .map((n) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0'))
+                .join('')
+                .toUpperCase();
+            bgArea[hex] = (bgArea[hex] || 0) + area;
+            const isBtn =
+              tag === 'button' ||
+              role === 'button' ||
+              (tag === 'input' && /^(button|submit)$/.test(el.getAttribute('type') || '')) ||
+              /(^|[\s_-])(btn|button|cta)([\s_-]|$)/.test(cls);
+            // ignore page-sized "buttons" (e.g. full-width wrappers)
+            if (isBtn && area < vw * window.innerHeight * 0.25) {
+              btnArea[hex] = (btnArea[hex] || 0) + area;
+            }
+          }
+        }
+
+        // Text color — only elements that own a non-empty text node.
+        let hasText = false;
+        const kids = el.childNodes;
+        for (let i = 0; i < kids.length; i++) {
+          const n = kids[i];
+          if (n && n.nodeType === 3 && (n.textContent || '').trim().length > 0) {
+            hasText = true;
+            break;
+          }
+        }
+        if (hasText) {
+          const tm = cs.color.match(/rgba?\(([^)]+)\)/);
+          if (tm && tm[1]) {
+            const p = tm[1].split(',').map((s) => parseFloat(s));
+            const alpha = p.length > 3 ? (p[3] ?? 1) : 1;
+            if (alpha >= 0.5 && p.length >= 3) {
+              const hex =
+                '#' +
+                [p[0] ?? 0, p[1] ?? 0, p[2] ?? 0]
+                  .map((n) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0'))
+                  .join('')
+                  .toUpperCase();
+              const len = Math.min((el.textContent || '').trim().length, 200); // cap runaway containers
+              const fs = parseFloat(cs.fontSize) || 16;
+              const weight = len * fs;
+              textWeight[hex] = (textWeight[hex] || 0) + weight;
+              if (tag === 'a' || el.closest('nav, header')) linkWeight[hex] = (linkWeight[hex] || 0) + weight;
+            }
+          }
+        }
+      }
+      return { bgArea, textWeight, btnArea, linkWeight };
+    });
+
     // ── Screenshot (viewport) ────────────────────────────────────────────────
     const shot = Buffer.from(await page.screenshot({ type: 'png' }));
     const screenshot = await storage.save(`brand/${businessId}/home-${randomUUID()}.png`, shot, {
       contentType: 'image/png',
     });
 
-    // ── Palette (node-vibrant) ──────────────────────────────────────────────
+    // ── Palette & roles (computed first, sampled only as a fallback) ─────────
+    const dom = rolesFromRawDom(rawDom);
+
+    // node-vibrant on the screenshot — kept ONLY as a fallback for sites where
+    // the DOM harvest is too thin (canvas-rendered, heavily image-based, etc.).
     const swatches = await Vibrant.from(shot).getPalette();
-    const palette: PaletteColor[] = Object.values(swatches)
-      .filter((s): s is NonNullable<typeof s> => Boolean(s))
-      .map((s) => ({ hex: s.hex.toUpperCase(), population: s.population, hsl: s.hsl as [number, number, number] }));
-    const palDeduped = dedupeByHex(palette).sort((a, b) => b.population - a.population);
+    const sampled: PaletteColor[] = dedupeByHex(
+      Object.values(swatches)
+        .filter((s): s is NonNullable<typeof s> => Boolean(s))
+        .map((s) => ({ hex: s.hex.toUpperCase(), population: s.population, hsl: s.hsl as [number, number, number] })),
+    ).sort((a, b) => b.population - a.population);
+
+    const useDom = dom.roles !== null && dom.palette.length >= 3;
+    const palette = useDom ? dom.palette : sampled;
+    const colorProvenance: 'computed' | 'sampled' = useDom ? 'computed' : 'sampled';
 
     // ── Downscaled image for the vision call (≤768px long edge) ──────────────
     const small = await sharp(shot).resize(768, 768, { fit: 'inside', withoutEnlargement: true }).png().toBuffer();
@@ -180,7 +307,9 @@ export async function extractBrand(url: string, businessId: string): Promise<Ext
     }
 
     return {
-      palette: palDeduped,
+      palette,
+      domRoles: useDom ? dom.roles! : undefined,
+      colorProvenance,
       detectedFonts: {
         heading: cleanFamily(detected.heading),
         body: cleanFamily(detected.body),
@@ -234,4 +363,141 @@ function dedupeByHex(colors: PaletteColor[]): PaletteColor[] {
 function cleanFamily(stack: string): string {
   const first = stack.split(',')[0]?.replace(/["']/g, '').trim() ?? '';
   return first || 'Inter';
+}
+
+// ── Computed-color → roles (Node side) ────────────────────────────────────────
+
+function rgbOf(hex: string): [number, number, number] {
+  const h = hex.replace('#', '');
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}
+
+function hslOf(hex: string): [number, number, number] {
+  const [r, g, b] = rgbOf(hex).map((n) => n / 255) as [number, number, number];
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  const d = max - min;
+  let h = 0;
+  let s = 0;
+  if (d !== 0) {
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) * 60;
+    else if (max === g) h = ((b - r) / d + 2) * 60;
+    else h = ((r - g) / d + 4) * 60;
+  }
+  return [h, s, l];
+}
+
+function hueDist(a: number, b: number): number {
+  const d = Math.abs(a - b) % 360;
+  return d > 180 ? 360 - d : d;
+}
+
+function lin(c: number): number {
+  const s = c / 255;
+  return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+}
+function luminance(hex: string): number {
+  const [r, g, b] = rgbOf(hex);
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+function contrast(a: string, b: string): number {
+  const la = luminance(a);
+  const lb = luminance(b);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+
+function topKey(map: Record<string, number>): string | undefined {
+  let best: string | undefined;
+  let max = -Infinity;
+  for (const k in map) if (map[k]! > max) { max = map[k]!; best = k; }
+  return best;
+}
+
+function sortKeysByWeight(map: Record<string, number>): string[] {
+  return Object.keys(map).sort((a, b) => (map[b] ?? 0) - (map[a] ?? 0));
+}
+
+function mostSaturated(keys: string[]): string | undefined {
+  let best: string | undefined;
+  let max = -Infinity;
+  for (const k of keys) {
+    const sat = hslOf(k)[1];
+    if (sat > max) { max = sat; best = k; }
+  }
+  return best;
+}
+
+/**
+ * Turn the weighted, role-tagged color candidates harvested from the DOM into
+ * brand roles + an ordered palette — all deterministic, no AI.
+ *
+ * background = largest painted surface · text = most-used text color ·
+ * primary = dominant CTA/button (else dominant link) · accent = a brand color
+ * with a distinct hue from primary · secondary = a supporting surface color.
+ * Returns roles: null when the page yielded too little to be trustworthy.
+ */
+function rolesFromRawDom(raw: RawDomColors): { roles: DomRoles | null; palette: PaletteColor[] } {
+  const combined: Record<string, number> = {};
+  for (const m of [raw.bgArea, raw.btnArea, raw.linkWeight, raw.textWeight]) {
+    for (const k in m) combined[k] = (combined[k] || 0) + m[k]!;
+  }
+  const palette: PaletteColor[] = sortKeysByWeight(combined)
+    .slice(0, 8)
+    .map((hex) => ({ hex, population: Math.round(combined[hex]!), hsl: hslOf(hex) }));
+
+  const background = topKey(raw.bgArea);
+  // text: the most-used text color that actually reads on the chosen background
+  // (the dominant text color may come from a different-colored section, e.g. a
+  // dark hero, and would be unreadable on a light body surface).
+  let text: string | undefined;
+  if (background) {
+    const texts = sortKeysByWeight(raw.textWeight);
+    text =
+      texts.find((h) => contrast(background, h) >= 4.5) ??
+      texts.find((h) => contrast(background, h) >= 3) ??
+      texts.slice().sort((a, b) => contrast(background, b) - contrast(background, a))[0];
+  } else {
+    text = topKey(raw.textWeight);
+  }
+
+  let primary = topKey(raw.btnArea) ?? topKey(raw.linkWeight);
+  if (!primary && background && text) {
+    primary = mostSaturated(Object.keys(combined).filter((h) => h !== background && h !== text));
+  }
+
+  if (!background || !text || !primary) return { roles: null, palette };
+
+  // accent: prefer a CTA/link color whose hue clearly differs from primary.
+  const brandCandidates: string[] = [];
+  for (const h of [...sortKeysByWeight(raw.btnArea), ...sortKeysByWeight(raw.linkWeight)]) {
+    if (h !== background && h !== text && !brandCandidates.includes(h)) brandCandidates.push(h);
+  }
+  // accent: a *saturated* brand color with a hue distinct from primary; never a
+  // near-grayscale (white/black) pick, which would be invisible on slides.
+  // Falls back to primary for monochrome brands.
+  const primaryHue = hslOf(primary)[0];
+  const sat = (h: string): number => hslOf(h)[1];
+  const accent =
+    brandCandidates.find((h) => h !== primary && sat(h) > 0.12 && hueDist(hslOf(h)[0], primaryHue) > 25) ??
+    brandCandidates.find((h) => h !== primary && sat(h) > 0.12) ??
+    mostSaturated(Object.keys(combined).filter((h) => ![background, text, primary].includes(h) && sat(h) > 0.12)) ??
+    primary;
+
+  // secondary: a supporting surface (e.g. nav/section/card bg) distinct from the rest.
+  const secondary =
+    sortKeysByWeight(raw.bgArea).find((h) => ![background, primary, accent, text].includes(h)) ??
+    sortKeysByWeight(combined).find((h) => ![background, primary, accent, text].includes(h)) ??
+    primary;
+
+  // Make sure every role color is represented in the palette.
+  const merged = [...new Set([background, text, primary, secondary, accent, ...palette.map((p) => p.hex)])].slice(0, 8);
+  const finalPalette: PaletteColor[] = merged.map((hex) => ({
+    hex,
+    population: Math.round(combined[hex] ?? 0),
+    hsl: hslOf(hex),
+  }));
+
+  return { roles: { primary, secondary, accent, background, text }, palette: finalPalette };
 }

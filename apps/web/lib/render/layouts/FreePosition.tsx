@@ -19,8 +19,13 @@ export default function FreePosition({ brandKit, blocks, image, imageLayout, for
   const { theme, forExport } = useRenderCtx();
   const bg = brandKit.colors.background;
   const insets = safeInsets(format);
-  const background = imageLayout?.background ?? false;
-  const imageFrame = background ? undefined : imageLayout?.imageFrame;
+  // A dedicated background image (backgroundUrl) is independent of the region
+  // image, so both can show. Legacy `background` reused the slide image full-bleed
+  // and therefore suppressed the region image — keep that behaviour for old slides.
+  const bgUrl = imageLayout?.backgroundUrl;
+  const legacyBg = !bgUrl && (imageLayout?.background ?? false);
+  const fullBleed = bgUrl ? { url: bgUrl } : legacyBg ? image : null;
+  const imageFrame = legacyBg ? undefined : imageLayout?.imageFrame;
   const objects = imageLayout?.objects ?? [];
 
   // Stable paint order: explicit z, falling back to array index.
@@ -32,9 +37,9 @@ export default function FreePosition({ brandKit, blocks, image, imageLayout, for
 
   return (
     <div style={{ position: 'absolute', inset: 0, background: surface(brandKit, theme) }}>
-      {background && (
+      {fullBleed && (
         <div style={{ position: 'absolute', inset: 0, zIndex: 0, overflow: 'hidden' }}>
-          <ImageSlot image={image} kit={brandKit} fit={imageLayout?.fit} />
+          <ImageSlot image={fullBleed} kit={brandKit} fit={imageLayout?.fit} />
           {/* Subtle scrim so positioned text stays legible over the photo. */}
           <div style={{ position: 'absolute', inset: 0, background: rgba(bg, 0.28) }} />
         </div>

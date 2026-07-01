@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { config, aiVisionConfigured } from '../config';
-import type { PaletteColor } from './analyze';
+import type { PaletteColor, DomRoles } from './analyze';
 
 export interface RoleAssignment {
   colors: {
@@ -12,7 +12,7 @@ export interface RoleAssignment {
     palette: string[];
   };
   styleDescriptor: string;
-  provenance: 'vision' | 'heuristic';
+  provenance: 'computed' | 'vision' | 'heuristic';
 }
 
 const ROLES = ['primary', 'secondary', 'accent', 'background', 'text'] as const;
@@ -84,15 +84,62 @@ function snapToPalette(hex: string, palette: string[]): string | null {
   return best?.hex ?? null;
 }
 
+/** Describe the overall aesthetic in one line (the only thing AI still does for colors). */
+async function describeVibe(downscaledBase64: string): Promise<string> {
+  if (!aiVisionConfigured()) return '';
+  try {
+    const client = new Anthropic({ apiKey: config.ai.apiKey });
+    const resp = await client.messages.create({
+      model: config.ai.model!,
+      max_tokens: 120,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: 'image/png', data: downscaledBase64 } },
+            {
+              type: 'text',
+              text:
+                'In one short line, describe this brand\'s visual style ' +
+                '(e.g. "minimal, high-contrast, generous whitespace"). Respond with the phrase only, no quotes.',
+            },
+          ],
+        },
+      ],
+    });
+    const part = resp.content.find((c) => c.type === 'text');
+    return part && 'text' in part ? part.text.trim().replace(/^["']|["']$/g, '').slice(0, 160) : '';
+  } catch (err) {
+    console.warn('[vision] vibe call failed:', err instanceof Error ? err.message : err);
+    return '';
+  }
+}
+
 /**
- * THE single vision call: assign sampled colors to roles + a style descriptor.
- * The model must choose from the supplied hexes; any deviation is snapped back
- * to the palette. Falls back to the heuristic if AI is unconfigured or errors.
+ * Assign brand colors to roles + a style descriptor.
+ *
+ * When `domRoles` is supplied (colors read from the page's computed styles) those
+ * roles are authoritative — accurate and AI-free — and the only AI touch is a
+ * one-line vibe descriptor. Without them we fall back to the legacy path: let the
+ * vision model pick roles from the screenshot-sampled palette (snapped back to
+ * the palette), or the deterministic heuristic when AI is unconfigured/errors.
  */
 export async function assignRolesAndVibe(
   palette: PaletteColor[],
   downscaledBase64: string,
+  domRoles?: DomRoles,
 ): Promise<RoleAssignment> {
+  // Preferred path: colors from computed styles, AI only for the vibe line.
+  if (domRoles) {
+    const palHexes = palette.map((p) => p.hex);
+    const hexes = palHexes.length > 0 ? palHexes : Object.values(domRoles);
+    return {
+      colors: { ...domRoles, palette: hexes },
+      styleDescriptor: await describeVibe(downscaledBase64),
+      provenance: 'computed',
+    };
+  }
+
   const heuristic = heuristicRoles(palette);
   if (!aiVisionConfigured() || palette.length === 0) return heuristic;
 

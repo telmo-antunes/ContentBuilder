@@ -9,6 +9,7 @@ import {
   deleteBusiness,
   type BusinessSummary,
 } from './lib/api';
+import { confirm } from './components/ConfirmDialog';
 
 export default function BusinessesPage() {
   const [businesses, setBusinesses] = useState<BusinessSummary[] | null>(null);
@@ -152,7 +153,12 @@ function BusinessRow({
   };
 
   const remove = async () => {
-    if (!window.confirm(`Delete "${biz.name}"? This also deletes its brand kits and projects.`)) return;
+    if (!(await confirm({
+      title: 'Delete business?',
+      message: `Delete "${biz.name}"? This also deletes its brand kits and projects.`,
+      confirmText: 'Delete',
+      destructive: true,
+    }))) return;
     setBusy(true);
     try {
       await deleteBusiness(biz._id);

@@ -55,6 +55,7 @@ const slideSchema = new Schema(
           imageZoom: { type: Number, required: false },
           imageFrame: { type: frameSchema, required: false },
           imageBackground: { type: Boolean, required: false },
+          backgroundMediaAssetId: { type: String, required: false },
           imageObjects: {
             type: [
               new Schema(

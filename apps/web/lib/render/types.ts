@@ -41,8 +41,10 @@ export interface ImageLayoutConfig {
   fit?: ImageFit;
   /** FreePosition: the canvas region (fractions) where the image renders. */
   imageFrame?: BlockFrame;
-  /** FreePosition: render the image full-bleed behind everything. */
+  /** FreePosition: render the image full-bleed behind everything (legacy single-image mode). */
   background?: boolean;
+  /** FreePosition: a dedicated full-bleed background image URL, independent of the region image. */
+  backgroundUrl?: string;
   /** FreePosition: additional positioned image elements (resolved to URLs). */
   objects?: ResolvedImageObject[];
 }

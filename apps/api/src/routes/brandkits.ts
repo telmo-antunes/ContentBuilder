@@ -8,6 +8,7 @@ import {
 import { BusinessModel, BrandKitModel } from '../models';
 import { ApiError, asyncHandler, parseBody, requireObjectId } from '../lib/http';
 import { extractBrand } from '../lib/analyze';
+import { generateBusinessBackgrounds } from '../lib/backgrounds';
 import { assignRolesAndVibe } from '../lib/vision';
 
 const hex = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Expected a #rrggbb color');
@@ -64,7 +65,11 @@ businessBrandKitRouter.post(
         `Could not analyze ${url}: ${err instanceof Error ? err.message : 'load failed'}. You can enter the kit manually instead.`,
       );
     }
-    const roles = await assignRolesAndVibe(extraction.palette, extraction.downscaledBase64);
+    const roles = await assignRolesAndVibe(
+      extraction.palette,
+      extraction.downscaledBase64,
+      extraction.domRoles,
+    );
 
     // One pending draft at a time; keep approved kits as history.
     await BrandKitModel.deleteMany({ businessId: id, status: 'draft' });
@@ -76,7 +81,7 @@ businessBrandKitRouter.post(
       styleDescriptor: roles.styleDescriptor,
       homepageScreenshot: extraction.screenshot,
       provenance: {
-        colors: 'sampled',
+        colors: extraction.colorProvenance,
         fonts: 'computed+mapped',
         roles: roles.provenance,
         logo: extraction.logo ? 'dom' : 'none',
@@ -176,6 +181,23 @@ brandKitRouter.patch(
     if (body.status) kit.set('status', body.status);
 
     await kit.save();
+
+    // On approval, (re)generate the brand backgrounds so the business has 3
+    // ready-to-use post/story backgrounds. Best-effort — never block approval.
+    if (body.status === 'approved') {
+      try {
+        const biz = await BusinessModel.findById(kit.get('businessId')).lean();
+        const profile = (biz as Record<string, any> | null)?.profile ?? {};
+        await generateBusinessBackgrounds(String(kit.get('businessId')), kit.get('colors'), {
+          category: profile.category,
+          tone: profile.tone,
+          count: profile.backgroundCount,
+        });
+      } catch (err) {
+        console.error('[backgrounds] generation on approval failed:', err);
+      }
+    }
+
     res.json(kit.toJSON());
   }),
 );
