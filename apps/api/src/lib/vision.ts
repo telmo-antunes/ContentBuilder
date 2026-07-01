@@ -76,13 +76,13 @@ function luminance(hex: string): number {
   const [r, g, b] = rgb(hex);
   return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
 }
-function contrast(a: string, b: string): number {
+export function contrast(a: string, b: string): number {
   const la = luminance(a);
   const lb = luminance(b);
   return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
 }
 /** HSL saturation 0..1 of a hex. */
-function saturation(hex: string): number {
+export function saturation(hex: string): number {
   const [r, g, b] = rgb(hex).map((n) => n / 255) as [number, number, number];
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
@@ -128,7 +128,7 @@ export function heuristicRoles(palette: PaletteColor[]): RoleAssignment {
 }
 
 /** Snap a model-returned hex to the nearest sampled palette hex (Euclidean RGB). */
-function snapToPalette(hex: string, palette: string[]): string | null {
+export function snapToPalette(hex: string, palette: string[]): string | null {
   if (!/^#?[0-9a-fA-F]{6}$/.test(hex)) return null;
   const norm = (hex.startsWith('#') ? hex : `#${hex}`).toUpperCase();
   if (palette.includes(norm)) return norm;

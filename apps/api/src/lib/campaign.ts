@@ -29,6 +29,30 @@ function parseArray(raw: string): unknown[] | null {
 }
 
 /**
+ * Pure parse of a model's JSON reply into validated concepts (drops malformed
+ * entries, caps at `count`). `idFor` supplies concept ids so this stays testable.
+ */
+export function parseConcepts(raw: string, count: number, idFor: () => string): CampaignConcept[] {
+  const arr = parseArray(raw) ?? [];
+  const concepts: CampaignConcept[] = [];
+  for (const item of arr) {
+    if (!item || typeof item !== 'object') continue;
+    const it = item as Record<string, unknown>;
+    const title = typeof it.title === 'string' ? it.title.trim().slice(0, 120) : '';
+    const paragraph = typeof it.paragraph === 'string' ? it.paragraph.trim().slice(0, 2000) : '';
+    if (!title || !paragraph) continue;
+    concepts.push({
+      id: idFor(),
+      title,
+      angle: typeof it.angle === 'string' ? it.angle.trim().slice(0, 200) : '',
+      paragraph,
+    });
+    if (concepts.length >= count) break;
+  }
+  return concepts;
+}
+
+/**
  * Plan a themed content series: turn a brief into N distinct post concepts, each
  * with a title, an angle, and a paragraph ready to feed the draft engine. This is
  * the cheap step — no slides are drafted here; the user drafts each concept on
@@ -68,21 +92,5 @@ export async function planCampaign(ctx: PlanContext): Promise<CampaignConcept[]>
   });
 
   const part = resp.content.find((c) => c.type === 'text');
-  const arr = parseArray(part && 'text' in part ? part.text : '') ?? [];
-  const concepts: CampaignConcept[] = [];
-  for (const item of arr) {
-    if (!item || typeof item !== 'object') continue;
-    const it = item as Record<string, unknown>;
-    const title = typeof it.title === 'string' ? it.title.trim().slice(0, 120) : '';
-    const paragraph = typeof it.paragraph === 'string' ? it.paragraph.trim().slice(0, 2000) : '';
-    if (!title || !paragraph) continue;
-    concepts.push({
-      id: randomUUID(),
-      title,
-      angle: typeof it.angle === 'string' ? it.angle.trim().slice(0, 200) : '',
-      paragraph,
-    });
-    if (concepts.length >= count) break;
-  }
-  return concepts;
+  return parseConcepts(part && 'text' in part ? part.text : '', count, randomUUID);
 }

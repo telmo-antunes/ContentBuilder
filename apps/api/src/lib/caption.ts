@@ -47,7 +47,7 @@ function parseJson(raw: string): Record<string, unknown> | null {
 }
 
 /** Normalize a hashtag to a single `#word` token (letters/digits only, capped). */
-function cleanHashtag(raw: string): string | null {
+export function cleanHashtag(raw: string): string | null {
   const t = raw.replace(/[^A-Za-z0-9#]/g, '');
   const bare = t.replace(/^#+/, '');
   if (!bare) return null;

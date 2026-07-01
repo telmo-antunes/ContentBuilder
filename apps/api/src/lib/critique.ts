@@ -29,7 +29,7 @@ interface SlideShot {
   base64: string;
 }
 
-interface VisionCritique {
+export interface VisionCritique {
   contrastPoor?: boolean;
   crowded?: boolean;
   unbalanced?: boolean;
@@ -140,7 +140,7 @@ async function visionCritique(base64: string, current: ThemePreset): Promise<Vis
  * - contrast/crowding (vision): swap the per-slide theme and/or image treatment.
  * Never touches copy.
  */
-function applyFixes(
+export function applyFixes(
   slide: Slide,
   overflow: boolean,
   critique: VisionCritique | null,
