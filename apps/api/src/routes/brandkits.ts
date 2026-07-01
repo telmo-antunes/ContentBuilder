@@ -9,7 +9,7 @@ import { BusinessModel, BrandKitModel } from '../models';
 import { ApiError, asyncHandler, parseBody, requireObjectId } from '../lib/http';
 import { extractBrand } from '../lib/analyze';
 import { generateBusinessBackgrounds } from '../lib/backgrounds';
-import { assignRolesAndVibe } from '../lib/vision';
+import { assignRolesAndVibe, brandColorQuality } from '../lib/vision';
 
 const hex = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Expected a #rrggbb color');
 const bundledFont = z
@@ -56,39 +56,57 @@ businessBrandKitRouter.post(
       throw new ApiError(400, 'This business has no website URL — use “Enter manually” instead.');
     }
 
-    let extraction;
-    try {
-      extraction = await extractBrand(url, id);
-    } catch (err) {
+    // Capture + assess up to twice: a degraded first frame (grey/monochrome, or a
+    // half-loaded hero) is retried rather than silently shipped as a kit. Keep the
+    // best-scoring attempt. Second load is often clean thanks to browser caching.
+    type Attempt = { extraction: Awaited<ReturnType<typeof extractBrand>>; roles: Awaited<ReturnType<typeof assignRolesAndVibe>>; score: number };
+    let best: Attempt | null = null;
+    let lastErr: unknown = null;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      let extraction;
+      try {
+        extraction = await extractBrand(url, id);
+      } catch (err) {
+        lastErr = err;
+        continue;
+      }
+      const roles = await assignRolesAndVibe(extraction.palette, extraction.downscaledBase64, extraction.domRoles);
+      const q = brandColorQuality(roles.colors);
+      if (!best || q.score > best.score) best = { extraction, roles, score: q.score };
+      if (q.ok) break; // good enough — stop
+      console.warn(`[analyze] low-quality capture for ${url} (attempt ${attempt}), retrying`);
+    }
+    if (!best) {
       throw new ApiError(
         502,
-        `Could not analyze ${url}: ${err instanceof Error ? err.message : 'load failed'}. You can enter the kit manually instead.`,
+        `Could not analyze ${url}: ${lastErr instanceof Error ? lastErr.message : 'load failed'}. You can enter the kit manually instead.`,
       );
     }
-    const roles = await assignRolesAndVibe(
-      extraction.palette,
-      extraction.downscaledBase64,
-      extraction.domRoles,
-    );
+    const { extraction, roles } = best;
+    const lowQuality = !brandColorQuality(roles.colors).ok;
 
     // One pending draft at a time; keep approved kits as history.
     await BrandKitModel.deleteMany({ businessId: id, status: 'draft' });
     const kit = await BrandKitModel.create({
       businessId: id,
       colors: roles.colors,
-      fonts: { detected: extraction.detectedFonts, render: extraction.renderFonts },
+      // Prefer fonts chosen from the headline's *visual personality* (serif vs
+      // condensed vs geometric); fall back to name-matching the detected font.
+      fonts: { detected: extraction.detectedFonts, render: roles.fonts ?? extraction.renderFonts },
       logo: extraction.logo,
       styleDescriptor: roles.styleDescriptor,
       homepageScreenshot: extraction.screenshot,
       provenance: {
         colors: extraction.colorProvenance,
-        fonts: 'computed+mapped',
+        fonts: roles.fonts ? `personality:${roles.typePersonality}` : 'computed+mapped',
         roles: roles.provenance,
         logo: extraction.logo ? 'dom' : 'none',
       },
       status: 'draft',
     });
-    res.status(201).json(kit.toJSON());
+    // Flag a still-degraded capture so the editor can nudge "re-analyze or adjust"
+    // instead of the user silently approving a weak (e.g. monochrome) kit.
+    res.status(201).json({ ...kit.toJSON(), lowQuality });
   }),
 );
 

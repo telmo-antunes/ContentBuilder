@@ -391,12 +391,9 @@ const CATEGORY_MOTIFS: Record<BusinessCategory, string[]> = {
  * Build `count` brand backgrounds for a business: motifs drawn from its
  * category family, each uniquely varied by the per-business seed and tone.
  */
-export function buildBrandBackgrounds(colors: BgColors, opts: BgOptions = {}): BrandBackground[] {
-  const category = opts.category ?? 'other';
-  const family = CATEGORY_MOTIFS[category] ?? CATEGORY_MOTIFS.other;
-  const count = Math.max(1, Math.min(12, opts.count ?? 3));
-  const knobs = toneKnobs(opts.tone);
-  const seed = hashSeed(opts.seed);
+/** Build the drawing context (palette lift on near-black + tone knobs + rng). */
+function makeCtx(colors: BgColors, tone: string[] | undefined, seedNum: number): Ctx {
+  const knobs = toneKnobs(tone);
   const dark = luminance(colors.background) < 0.5;
   const veryDark = luminance(colors.background) < 0.12;
   // On near-black backgrounds, lift the motif colours toward white so shapes read
@@ -410,15 +407,22 @@ export function buildBrandBackgrounds(colors: BgColors, opts: BgOptions = {}): B
   };
   const rawPal = colors.palette && colors.palette.length >= 3 ? colors.palette : [colors.primary, colors.secondary, colors.accent];
   const pal = rawPal.map(lift);
+  const rnd = mulberry32(seedNum >>> 0);
+  return { c: litColors, bg: colors.background, dark, veryDark, pal, rnd, ...knobs };
+}
 
+export function buildBrandBackgrounds(colors: BgColors, opts: BgOptions = {}): BrandBackground[] {
+  const category = opts.category ?? 'other';
+  const family = CATEGORY_MOTIFS[category] ?? CATEGORY_MOTIFS.other;
+  const count = Math.max(1, Math.min(12, opts.count ?? 3));
+  const seed = hashSeed(opts.seed);
   const out: BrandBackground[] = [];
   for (let i = 0; i < count; i++) {
     const motifId = family[i % family.length]!;
     const motif = MOTIFS[motifId]!;
     // Each background gets its own rng stream (seed + index) so repeats of the
     // same motif (when count > family size) still look different.
-    const rnd = mulberry32((seed ^ Math.imul(i + 1, 0x9e3779b1)) >>> 0);
-    const ctx: Ctx = { c: litColors, bg: colors.background, dark, veryDark, pal, rnd, ...knobs };
+    const ctx = makeCtx(colors, opts.tone, seed ^ Math.imul(i + 1, 0x9e3779b1));
     out.push({
       id: `${category}-${motifId}-${i}`,
       label: count > family.length ? `${motif.label} ${Math.floor(i / family.length) + 1}` : motif.label,
@@ -427,3 +431,34 @@ export function buildBrandBackgrounds(colors: BgColors, opts: BgOptions = {}): B
   }
   return out;
 }
+
+/** Render ONE named motif — the reliable, on-brand backbone for the AI-directed path. */
+export function renderMotif(
+  motifId: string,
+  colors: BgColors,
+  opts: { tone?: string[]; seed?: string | number } = {},
+): BrandBackground | null {
+  const motif = MOTIFS[motifId];
+  if (!motif) return null;
+  const ctx = makeCtx(colors, opts.tone, hashSeed(opts.seed) ^ 0x5bd1e995);
+  return { id: motifId, label: motif.label, svg: svgWrap(motif.fn(ctx)) };
+}
+
+/** Motif catalog (id + label + one-line description) — the menu an LLM chooses from. */
+export const MOTIF_CATALOG: ReadonlyArray<{ id: string; label: string; desc: string }> = [
+  { id: 'mesh', label: 'Soft mesh', desc: 'a soft gradient with a few large blurred colour fields' },
+  { id: 'orbs', label: 'Soft orbs', desc: 'scattered large soft blurred orbs at varied depths' },
+  { id: 'livery', label: 'Livery', desc: 'concentric corner arcs plus thin diagonals — automotive/services' },
+  { id: 'speedlines', label: 'Motion', desc: 'diagonal motion/speed lines — momentum, energy' },
+  { id: 'shine', label: 'Shine', desc: 'sparkle glints and a soft diagonal sheen — polish/detailing' },
+  { id: 'dotgrid', label: 'Dot grid', desc: 'a regular dot grid with a soft corner fade — technical/SaaS' },
+  { id: 'nodenet', label: 'Network', desc: 'nodes joined by thin connecting lines — network/SaaS' },
+  { id: 'panels', label: 'Panels', desc: 'offset soft rounded UI panels — product/app' },
+  { id: 'cardgrid', label: 'Card grid', desc: 'a repeating rounded-card grid — catalog/e-commerce' },
+  { id: 'confetti', label: 'Confetti', desc: 'scattered rotated rounded confetti — playful' },
+  { id: 'rings', label: 'Spotlight', desc: 'concentric spotlight rings around a point — personal brand' },
+  { id: 'blobs', label: 'Blobs', desc: 'organic blurred blobs — warm/personal' },
+  { id: 'waves', label: 'Waves', desc: 'stacked flowing waves — calm/motion' },
+  { id: 'geoblocks', label: 'Blocks', desc: 'bold overlapping geometric blocks — agency/editorial' },
+  { id: 'halftone', label: 'Halftone', desc: 'a halftone dot-size gradient — editorial/graphic' },
+];
