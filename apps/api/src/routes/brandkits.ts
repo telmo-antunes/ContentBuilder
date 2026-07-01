@@ -31,6 +31,7 @@ const patchKitSchema = z.object({
   logo: z.object({ sourceUrl: z.string().optional(), key: z.string(), url: z.string() }).optional(),
   logoTreatment: z.enum(['original', 'mono']).optional(),
   styleDescriptor: z.string().max(200).optional(),
+  voice: z.string().max(400).optional(),
   status: z.enum(['draft', 'approved']).optional(),
 });
 
@@ -70,7 +71,12 @@ businessBrandKitRouter.post(
         lastErr = err;
         continue;
       }
-      const roles = await assignRolesAndVibe(extraction.palette, extraction.downscaledBase64, extraction.domRoles);
+      const roles = await assignRolesAndVibe(
+        extraction.palette,
+        extraction.downscaledBase64,
+        extraction.domRoles,
+        extraction.copy,
+      );
       const q = brandColorQuality(roles.colors);
       if (!best || q.score > best.score) best = { extraction, roles, score: q.score };
       if (q.ok) break; // good enough — stop
@@ -95,6 +101,7 @@ businessBrandKitRouter.post(
       fonts: { detected: extraction.detectedFonts, render: roles.fonts ?? extraction.renderFonts },
       logo: extraction.logo,
       styleDescriptor: roles.styleDescriptor,
+      voice: roles.voice ?? '',
       homepageScreenshot: extraction.screenshot,
       provenance: {
         colors: extraction.colorProvenance,
@@ -196,6 +203,7 @@ brandKitRouter.patch(
     if (body.logo) kit.set('logo', body.logo);
     if (body.logoTreatment !== undefined) kit.set('logoTreatment', body.logoTreatment);
     if (body.styleDescriptor !== undefined) kit.set('styleDescriptor', body.styleDescriptor);
+    if (body.voice !== undefined) kit.set('voice', body.voice);
     if (body.status) kit.set('status', body.status);
 
     await kit.save();

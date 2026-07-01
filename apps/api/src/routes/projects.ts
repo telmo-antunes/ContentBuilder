@@ -9,6 +9,7 @@ import { ApiError, asyncHandler, parseBody, requireObjectId } from '../lib/http'
 import { createProjectSchema, updateProjectSchema, type SlideInput } from '../lib/validation';
 import { renderSlidesToPng, slugify } from '../lib/exporter';
 import { draftSlidesFromParagraph } from '../lib/draft';
+import { generateCaption, type GeneratedCaption } from '../lib/caption';
 import { aiDraftConfigured, aiFreeConfigured } from '../config';
 
 const draftSchema = z.object({
@@ -34,6 +35,26 @@ function normalizeSlides(slides: SlideInput[]) {
 
 async function approvedKitFor(businessId: string) {
   return BrandKitModel.findOne({ businessId, status: 'approved' }).sort({ createdAt: -1 }).lean();
+}
+
+/** Write a caption for a project's current slides, grounded in the brand voice + profile. */
+async function buildCaption(project: {
+  get: (k: string) => unknown;
+}): Promise<GeneratedCaption> {
+  const businessId = String(project.get('businessId'));
+  const [business, kit] = await Promise.all([
+    BusinessModel.findById(businessId).lean(),
+    approvedKitFor(businessId),
+  ]);
+  const b = business as { profile?: Record<string, unknown> } | null;
+  const k = kit as { voice?: string; styleDescriptor?: string } | null;
+  return generateCaption({
+    title: project.get('title') as string,
+    slides: project.get('slides') as never,
+    voice: k?.voice,
+    styleDescriptor: k?.styleDescriptor,
+    profile: b?.profile as never,
+  });
 }
 
 // Create a project — only on a business that has an APPROVED brand kit.
@@ -102,6 +123,7 @@ projectsRouter.patch(
     if (body.title !== undefined) project.set('title', body.title);
     if (body.status !== undefined) project.set('status', body.status);
     if (body.slides !== undefined) project.set('slides', normalizeSlides(body.slides));
+    if (body.caption !== undefined) project.set('caption', body.caption);
     if (body.settings !== undefined) {
       project.set('settings', { ...(project.get('settings') ?? {}), ...body.settings });
     }
@@ -157,6 +179,37 @@ projectsRouter.post(
     }
 
     project.set('slides', normalizeSlides(slides));
+    // Best-effort: draft a caption in the brand voice so the post arrives ready to
+    // publish. Never fail the draft over it (AI-off / vision-down still succeeds).
+    try {
+      const caption = await buildCaption(project);
+      if (caption.text || caption.hashtags.length) project.set('caption', caption);
+    } catch (err) {
+      console.warn('[caption] auto-generate failed:', err instanceof Error ? err.message : err);
+    }
+    await project.save();
+    res.json(project.toJSON());
+  }),
+);
+
+// Regenerate the caption for a project's current slides (manual "Regenerate" button).
+projectsRouter.post(
+  '/:id/caption',
+  asyncHandler(async (req, res) => {
+    const id = requireObjectId(req.params.id, 'Project');
+    if (!aiDraftConfigured()) {
+      throw new ApiError(400, 'Captions need ANTHROPIC_API_KEY + ANTHROPIC_MODEL_SMALL.');
+    }
+    const project = await ProjectModel.findById(id);
+    if (!project) throw new ApiError(404, 'Project not found');
+    if (!project.get('slides')?.length) throw new ApiError(400, 'Add slides before generating a caption.');
+    let caption: GeneratedCaption;
+    try {
+      caption = await buildCaption(project);
+    } catch (err) {
+      throw new ApiError(502, `Caption failed: ${err instanceof Error ? err.message : 'AI error'}.`);
+    }
+    project.set('caption', caption);
     await project.save();
     res.json(project.toJSON());
   }),

@@ -208,6 +208,7 @@ function KitEditor({
   const [heading, setHeading] = useState(kit.fonts.render.heading);
   const [body, setBody] = useState(kit.fonts.render.body);
   const [styleDescriptor, setStyleDescriptor] = useState(kit.styleDescriptor ?? '');
+  const [voice, setVoice] = useState(kit.voice ?? '');
   const [logo, setLogo] = useState<{ key: string; url: string; sourceUrl?: string } | undefined>(
     kit.logo?.url ? { key: kit.logo.key ?? '', url: kit.logo.url, sourceUrl: kit.logo.sourceUrl } : undefined,
   );
@@ -249,6 +250,7 @@ function KitEditor({
         ...(logo ? { logo } : {}),
         logoTreatment,
         styleDescriptor,
+        voice,
         status: approve ? 'approved' : 'draft',
       });
       if (approve) onApproved();
@@ -440,6 +442,17 @@ function KitEditor({
             placeholder="e.g. minimal, high-contrast, generous whitespace"
             onChange={(e) => setStyleDescriptor(e.target.value)}
           />
+
+          <div className="section-label">Brand voice</div>
+          <textarea
+            value={voice}
+            rows={2}
+            placeholder="How the brand talks — e.g. confident, plain-spoken; addresses operators directly; avoids hype"
+            onChange={(e) => setVoice(e.target.value)}
+          />
+          <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+            Used to write captions in the brand&rsquo;s own register.
+          </p>
         </div>
       </div>
 

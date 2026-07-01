@@ -56,6 +56,8 @@ export interface BrandKit {
   /** How the logo is rendered on slides (default 'original'). */
   logoTreatment?: LogoTreatment;
   styleDescriptor: string;
+  /** How the brand talks (register/person/energy) — grounds caption generation. */
+  voice?: string;
   homepageScreenshot?: StoredMedia;
   provenance: BrandProvenance;
   status: BrandKitStatus;
@@ -154,6 +156,12 @@ export interface ProjectSettings {
   slideCounter?: boolean;
 }
 
+/** The social caption + hashtags for a post, written in the brand voice. */
+export interface Caption {
+  text: string;
+  hashtags: string[];
+}
+
 export interface Project {
   _id: string;
   businessId: string;
@@ -161,6 +169,8 @@ export interface Project {
   type: AssetType;
   format: Format;
   slides: Slide[];
+  /** Generated social caption for the post (optional until drafted). */
+  caption?: Caption;
   settings?: ProjectSettings;
   status: ProjectStatus;
   createdAt: string;

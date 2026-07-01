@@ -93,6 +93,14 @@ const projectSchema = new Schema(
     type: { type: String, enum: ['carousel', 'story'], required: true },
     format: { type: String, required: true },
     slides: { type: [slideSchema], default: [] },
+    /** The social caption + hashtags for this post, generated in the brand voice. */
+    caption: {
+      type: new Schema(
+        { text: { type: String, default: '' }, hashtags: { type: [String], default: [] } },
+        { _id: false },
+      ),
+      required: false,
+    },
     settings: {
       type: new Schema(
         {

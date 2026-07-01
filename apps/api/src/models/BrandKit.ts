@@ -39,6 +39,8 @@ const brandKitSchema = new Schema(
     },
     logoTreatment: { type: String, enum: ['original', 'mono'], default: 'original' },
     styleDescriptor: { type: String, default: '' },
+    /** How the brand talks — grounds caption generation in the brand's own register. */
+    voice: { type: String, default: '' },
     homepageScreenshot: { type: storedMediaSchema, required: false },
     provenance: {
       colors: { type: String, default: 'sampled' },

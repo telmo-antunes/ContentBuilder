@@ -1,6 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { config, aiVisionConfigured } from '../config';
-import type { PaletteColor, DomRoles } from './analyze';
+import type { PaletteColor, DomRoles, Extraction } from './analyze';
+
+/** Homepage copy harvested during extraction, fed to the voice pass. */
+export type BrandCopy = Extraction['copy'];
 
 export type TypePersonality =
   | 'elegant-serif'
@@ -51,6 +54,8 @@ export interface RoleAssignment {
   typePersonality?: TypePersonality;
   /** Heading/body pairing derived from the type personality (overrides name-matching). */
   fonts?: { heading: string; body: string };
+  /** How the brand *talks* (register/person/energy) — grounds caption generation. */
+  voice?: string;
   provenance: 'computed' | 'vision' | 'heuristic';
 }
 
@@ -152,23 +157,43 @@ function parseJson(raw: string): Record<string, unknown> | null {
   }
 }
 
+/** Assemble the harvested homepage copy into a short block for the voice prompt. */
+function copyBlock(copy?: BrandCopy): string {
+  if (!copy) return '';
+  const lines = [
+    copy.headline && `Headline: ${copy.headline}`,
+    copy.tagline && `Tagline: ${copy.tagline}`,
+    copy.description && `Meta description: ${copy.description}`,
+    copy.sample && `Body sample: ${copy.sample}`,
+  ].filter(Boolean);
+  return lines.join('\n');
+}
+
 /**
  * Vision pass: from the screenshot, read the brand's *type personality* and a
- * vivid style descriptor. Grounded in the actual pixels (the whole point) and run
- * on the larger model since it's once per business.
+ * vivid style descriptor — and, from the harvested homepage copy, its *voice*
+ * (how it talks). Grounded in the actual pixels + words and run on the larger
+ * model since it's once per business.
  */
-async function readTypeAndVibe(base64: string): Promise<{ styleDescriptor: string; typePersonality?: TypePersonality }> {
+async function readTypeAndVibe(
+  base64: string,
+  copy?: BrandCopy,
+): Promise<{ styleDescriptor: string; typePersonality?: TypePersonality; voice?: string }> {
   if (!aiVisionConfigured()) return { styleDescriptor: '' };
   try {
     const client = new Anthropic({ apiKey: config.ai.apiKey });
+    const words = copyBlock(copy);
     const prompt =
       `Look at this brand's homepage. Judge it by what you SEE — especially the HEADLINE typography and overall mood.\n\n` +
+      (words
+        ? `Here is real copy from the page — use it to judge the brand's VOICE (how it talks):\n${words}\n\n`
+        : '') +
       `Return STRICT JSON only, no prose:\n` +
-      `{"typePersonality": one of ${JSON.stringify(PERSONALITIES)}, "styleDescriptor": "one vivid sentence capturing the brand's visual identity — mood, contrast, era, feel"}\n\n` +
+      `{"typePersonality": one of ${JSON.stringify(PERSONALITIES)}, "styleDescriptor": "one vivid sentence capturing the brand's visual identity — mood, contrast, era, feel", "voice": "one or two sentences describing how the brand TALKS — register (formal/casual), person (we/you/I), energy, and any signature words; e.g. 'Confident, plain-spoken B2B that addresses operators directly and avoids hype'"}\n\n` +
       `typePersonality guide (base it on the headlines): high-contrast/elegant serif → "elegant-serif"; traditional book serif → "classic-serif"; magazine serif → "editorial-serif"; heavy CONDENSED / tall all-caps → "bold-condensed"; poster/ultra-bold display → "impact-display"; clean geometric sans → "geometric-sans"; technical modern grotesque → "modern-grotesque"; warm humanist sans → "humanist-sans"; soft rounded sans → "friendly-rounded"; plain neutral UI sans → "clean-neutral".`;
     const resp = await client.messages.create({
       model: visionModel(),
-      max_tokens: 500,
+      max_tokens: 600,
       messages: [
         {
           role: 'user',
@@ -183,7 +208,8 @@ async function readTypeAndVibe(base64: string): Promise<{ styleDescriptor: strin
     const json = parseJson(part && 'text' in part ? part.text : '') ?? {};
     const tp = PERSONALITIES.includes(json.typePersonality as TypePersonality) ? (json.typePersonality as TypePersonality) : undefined;
     const desc = typeof json.styleDescriptor === 'string' ? json.styleDescriptor.trim().slice(0, 200) : '';
-    return { styleDescriptor: desc, typePersonality: tp };
+    const voice = typeof json.voice === 'string' ? json.voice.trim().slice(0, 240) : '';
+    return { styleDescriptor: desc, typePersonality: tp, voice };
   } catch (err) {
     console.warn('[vision] type/vibe call failed:', err instanceof Error ? err.message : err);
     return { styleDescriptor: '' };
@@ -201,15 +227,17 @@ export async function assignRolesAndVibe(
   palette: PaletteColor[],
   downscaledBase64: string,
   domRoles?: DomRoles,
+  copy?: BrandCopy,
 ): Promise<RoleAssignment> {
   if (domRoles) {
     const palHexes = palette.map((p) => p.hex);
     const hexes = palHexes.length > 0 ? palHexes : Object.values(domRoles);
-    const { styleDescriptor, typePersonality } = await readTypeAndVibe(downscaledBase64);
+    const { styleDescriptor, typePersonality, voice } = await readTypeAndVibe(downscaledBase64, copy);
     return {
       colors: { ...domRoles, palette: hexes },
       styleDescriptor,
       typePersonality,
+      voice,
       fonts: fontsForPersonality(typePersonality) ?? undefined,
       provenance: 'computed',
     };
@@ -221,12 +249,14 @@ export async function assignRolesAndVibe(
   const hexes = palette.map((p) => p.hex);
   try {
     const client = new Anthropic({ apiKey: config.ai.apiKey });
+    const words = copyBlock(copy);
     const prompt =
       `These colors were pixel-sampled from the attached homepage screenshot:\n${hexes.join(', ')}\n\n` +
+      (words ? `Real copy from the page (judge the brand's VOICE from it):\n${words}\n\n` : '') +
       `Assign brand roles by choosing EXACTLY ONE hex from that list for each of primary, secondary, accent, background, text ` +
       `(background = dominant surface; text = reads clearly on background; primary = main brand color; accent = highlight; secondary = supporting). ` +
-      `Also judge the HEADLINE typePersonality (one of ${JSON.stringify(PERSONALITIES)}) and write one vivid styleDescriptor sentence.\n\n` +
-      `STRICT JSON only: {"primary":"#hex","secondary":"#hex","accent":"#hex","background":"#hex","text":"#hex","typePersonality":"...","styleDescriptor":"..."}`;
+      `Also judge the HEADLINE typePersonality (one of ${JSON.stringify(PERSONALITIES)}), write one vivid styleDescriptor sentence, and one/two sentences of "voice" (how the brand talks — register, person, energy).\n\n` +
+      `STRICT JSON only: {"primary":"#hex","secondary":"#hex","accent":"#hex","background":"#hex","text":"#hex","typePersonality":"...","styleDescriptor":"...","voice":"..."}`;
     const resp = await client.messages.create({
       model: visionModel(),
       max_tokens: 600,
@@ -253,8 +283,9 @@ export async function assignRolesAndVibe(
       ? (json.typePersonality as TypePersonality)
       : undefined;
     const styleDescriptor = typeof json.styleDescriptor === 'string' ? json.styleDescriptor.trim().slice(0, 200) : '';
+    const voice = typeof json.voice === 'string' ? json.voice.trim().slice(0, 240) : '';
 
-    return { colors, styleDescriptor, typePersonality, fonts: fontsForPersonality(typePersonality) ?? undefined, provenance: 'vision' };
+    return { colors, styleDescriptor, typePersonality, voice, fonts: fontsForPersonality(typePersonality) ?? undefined, provenance: 'vision' };
   } catch (err) {
     console.warn('[vision] role/vibe call failed, using heuristic:', err instanceof Error ? err.message : err);
     return heuristic;

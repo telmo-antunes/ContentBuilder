@@ -28,8 +28,15 @@ import {
   type ImageAspect,
   type ImageSizePreset,
   type ThemePreset,
+  type Caption,
 } from '@contentbuilder/shared';
-import { getProject, updateProject, uploadMedia, type ProjectDetail } from '../../lib/api';
+import {
+  getProject,
+  updateProject,
+  uploadMedia,
+  generateProjectCaption,
+  type ProjectDetail,
+} from '../../lib/api';
 import { api } from '../../lib/config';
 import { SlideRenderer } from '../../../lib/render/SlideRenderer';
 import { ScaledSlide } from '../../../lib/render/SlideFrame';
@@ -672,6 +679,8 @@ export default function ProjectEditorPage() {
               across slides.
             </div>
           )}
+
+          <CaptionPanel projectId={id} initial={detail.caption} hasSlides={slides.length > 0} />
         </div>
 
         {/* Inspector */}
@@ -742,6 +751,133 @@ export default function ProjectEditorPage() {
           showCounter={showCounter}
           onClose={() => setPreviewIdx(null)}
         />
+      )}
+    </div>
+  );
+}
+
+/** Parse a free-text hashtag field into a clean, deduped list of #tags. */
+function parseTags(s: string): string[] {
+  return Array.from(
+    new Set(
+      s
+        .split(/[\s,]+/)
+        .map((t) => t.replace(/[^A-Za-z0-9#]/g, '').replace(/^#+/, ''))
+        .filter(Boolean)
+        .map((t) => `#${t.slice(0, 40)}`),
+    ),
+  ).slice(0, 30);
+}
+
+/**
+ * The post's social caption + hashtags, written in the brand voice. Self-contained:
+ * it persists via updateProject({caption}) on blur and Regenerate hits the caption
+ * endpoint — independent of the slide autosave/undo history.
+ */
+function CaptionPanel({
+  projectId,
+  initial,
+  hasSlides,
+}: {
+  projectId: string;
+  initial?: Caption;
+  hasSlides: boolean;
+}) {
+  const [text, setText] = useState(initial?.text ?? '');
+  const [tags, setTags] = useState((initial?.hashtags ?? []).join(' '));
+  const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const persist = async (nextText: string, nextTags: string) => {
+    setErr(null);
+    try {
+      await updateProject(projectId, { caption: { text: nextText, hashtags: parseTags(nextTags) } });
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const regenerate = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      const p = await generateProjectCaption(projectId);
+      setText(p.caption?.text ?? '');
+      setTags((p.caption?.hashtags ?? []).join(' '));
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const copyAll = async () => {
+    const full = [text, parseTags(tags).join(' ')].filter(Boolean).join('\n\n');
+    if (!full) return;
+    try {
+      await navigator.clipboard.writeText(full);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard blocked — ignore */
+    }
+  };
+
+  const chips = parseTags(tags);
+
+  return (
+    <div className="card" style={{ marginTop: 16 }}>
+      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+        <strong>Caption</strong>
+        <div className="row" style={{ gap: 6 }}>
+          <button
+            className="btn sm ghost"
+            onClick={regenerate}
+            disabled={busy || !hasSlides}
+            title="Write a caption in the brand voice from the current slides"
+          >
+            {busy ? 'Writing…' : '✦ Regenerate'}
+          </button>
+          <button className="btn sm" onClick={copyAll} disabled={!text && !tags.trim()}>
+            {copied ? 'Copied ✓' : 'Copy'}
+          </button>
+        </div>
+      </div>
+      {err && (
+        <div className="error-box" style={{ marginTop: 8 }}>
+          {err}
+        </div>
+      )}
+      <textarea
+        value={text}
+        rows={6}
+        placeholder={
+          hasSlides
+            ? 'Generate a caption in your brand voice, or write your own.'
+            : 'Add slides first, then generate a caption.'
+        }
+        onChange={(e) => setText(e.target.value)}
+        onBlur={() => persist(text, tags)}
+        style={{ marginTop: 8, width: '100%' }}
+      />
+      <div className="section-label" style={{ marginTop: 8 }}>
+        Hashtags
+      </div>
+      <input
+        value={tags}
+        placeholder="#brand #topic"
+        onChange={(e) => setTags(e.target.value)}
+        onBlur={() => persist(text, tags)}
+      />
+      {chips.length > 0 && (
+        <div className="row" style={{ flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+          {chips.map((t) => (
+            <span key={t} className="badge">
+              {t}
+            </span>
+          ))}
+        </div>
       )}
     </div>
   );
