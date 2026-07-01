@@ -10,6 +10,7 @@ import { createProjectSchema, updateProjectSchema, type SlideInput } from '../li
 import { renderSlidesToPng, slugify } from '../lib/exporter';
 import { draftSlidesFromParagraph } from '../lib/draft';
 import { generateCaption, type GeneratedCaption } from '../lib/caption';
+import { critiqueProject } from '../lib/critique';
 import { aiDraftConfigured, aiFreeConfigured } from '../config';
 
 const draftSchema = z.object({
@@ -179,16 +180,47 @@ projectsRouter.post(
     }
 
     project.set('slides', normalizeSlides(slides));
-    // Best-effort: draft a caption in the brand voice so the post arrives ready to
-    // publish. Never fail the draft over it (AI-off / vision-down still succeeds).
+    await project.save(); // persist so the critique's /render pass can see the slides
+
+    // Best-effort layout polish: catch overflow/contrast/crowding and auto-fix
+    // before the user even sees the draft. Never fail the draft over it.
+    try {
+      await critiqueProject(project);
+    } catch (err) {
+      console.warn('[critique] auto-polish failed:', err instanceof Error ? err.message : err);
+    }
+    // Best-effort: draft a caption (in the brand voice) from the polished slides.
     try {
       const caption = await buildCaption(project);
-      if (caption.text || caption.hashtags.length) project.set('caption', caption);
+      if (caption.text || caption.hashtags.length) {
+        project.set('caption', caption);
+        await project.save();
+      }
     } catch (err) {
       console.warn('[caption] auto-generate failed:', err instanceof Error ? err.message : err);
     }
-    await project.save();
     res.json(project.toJSON());
+  }),
+);
+
+// Self-critique the rendered slides and auto-apply bounded fixes ("Polish layout").
+projectsRouter.post(
+  '/:id/critique',
+  asyncHandler(async (req, res) => {
+    const id = requireObjectId(req.params.id, 'Project');
+    const project = await ProjectModel.findById(id);
+    if (!project) throw new ApiError(404, 'Project not found');
+    if (!project.get('slides')?.length) throw new ApiError(400, 'Project has no slides to polish.');
+    let report;
+    try {
+      report = await critiqueProject(project);
+    } catch (err) {
+      throw new ApiError(
+        502,
+        `Polish failed: ${err instanceof Error ? err.message : 'render error'}. Is the web server running?`,
+      );
+    }
+    res.json({ project: project.toJSON(), report });
   }),
 );
 

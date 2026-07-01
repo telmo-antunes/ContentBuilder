@@ -35,6 +35,7 @@ import {
   updateProject,
   uploadMedia,
   generateProjectCaption,
+  polishProject,
   type ProjectDetail,
 } from '../../lib/api';
 import { api } from '../../lib/config';
@@ -83,6 +84,7 @@ export default function ProjectEditorPage() {
   const [overflowIds, setOverflowIds] = useState<Set<string>>(new Set());
   const [exporting, setExporting] = useState(false);
   const [exported, setExported] = useState(false);
+  const [polishing, setPolishing] = useState(false);
   const [showCheck, setShowCheck] = useState(false);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
@@ -357,6 +359,37 @@ export default function ProjectEditorPage() {
     else void runExport();
   };
 
+  // Ask the server to self-critique the rendered slides and auto-apply bounded
+  // fixes (overflow, contrast, crowding). Applied through the undo path.
+  const polish = async () => {
+    if (slides.length === 0 || polishing) return;
+    setPolishing(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await updateProject(id, { title, slides, settings }); // render exactly what's on screen
+      const { project, report } = await polishProject(id);
+      snapshot();
+      setSlides(project.slides);
+      savedSnapshot.current = JSON.stringify({ title, slides: project.slides, settings });
+      setSaveState('saved');
+      const fixed = report.filter((r) => r.applied.length);
+      setNotice(
+        fixed.length
+          ? `Polished ${fixed.length} ${fixed.length === 1 ? 'slide' : 'slides'} — ${fixed
+              .flatMap((r) => r.applied)
+              .join(', ')}.`
+          : report.length
+            ? 'Reviewed the layout — a couple of things are flagged but nothing was safe to auto-fix.'
+            : 'Reviewed the layout — everything looks good.',
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setPolishing(false);
+    }
+  };
+
   const runExport = async () => {
     if (slides.length === 0) return;
     setShowCheck(false);
@@ -485,6 +518,14 @@ export default function ProjectEditorPage() {
           </button>
           <button className="btn sm" onClick={redo} disabled={!canRedo} title="Redo (⌘/Ctrl+Shift+Z)">
             ↷ Redo
+          </button>
+          <button
+            className="btn sm"
+            onClick={() => void polish()}
+            disabled={polishing || slides.length === 0}
+            title="Auto-fix layout issues (overflow, contrast, crowding)"
+          >
+            {polishing ? 'Polishing…' : '✦ Polish'}
           </button>
           <button
             className="btn sm"

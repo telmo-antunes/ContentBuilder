@@ -156,6 +156,19 @@ export const draftProject = (id: string, paragraph: string, mode: 'designer' | '
 export const generateProjectCaption = (id: string) =>
   request<Project>(`/projects/${id}/caption`, { method: 'POST' });
 
+export interface CritiqueReportItem {
+  slideId: string;
+  order: number;
+  issues: string[];
+  applied: string[];
+}
+
+/** Self-critique the rendered slides and auto-apply bounded layout fixes. */
+export const polishProject = (id: string) =>
+  request<{ project: Project; report: CritiqueReportItem[] }>(`/projects/${id}/critique`, {
+    method: 'POST',
+  });
+
 // ── Media ───────────────────────────────────────────────────────────────────
 export const listMedia = (businessId: string) =>
   request<MediaAsset[]>(`/businesses/${businessId}/media`);
