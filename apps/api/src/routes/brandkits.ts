@@ -76,13 +76,15 @@ businessBrandKitRouter.post(
     const kit = await BrandKitModel.create({
       businessId: id,
       colors: roles.colors,
-      fonts: { detected: extraction.detectedFonts, render: extraction.renderFonts },
+      // Prefer fonts chosen from the headline's *visual personality* (serif vs
+      // condensed vs geometric); fall back to name-matching the detected font.
+      fonts: { detected: extraction.detectedFonts, render: roles.fonts ?? extraction.renderFonts },
       logo: extraction.logo,
       styleDescriptor: roles.styleDescriptor,
       homepageScreenshot: extraction.screenshot,
       provenance: {
         colors: extraction.colorProvenance,
-        fonts: 'computed+mapped',
+        fonts: roles.fonts ? `personality:${roles.typePersonality}` : 'computed+mapped',
         roles: roles.provenance,
         logo: extraction.logo ? 'dom' : 'none',
       },
