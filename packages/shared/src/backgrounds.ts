@@ -101,6 +101,8 @@ interface Ctx {
   c: BgColors;
   bg: string;
   dark: boolean;
+  /** Near-black backgrounds need lifted motif colours + a touch more opacity to read. */
+  veryDark: boolean;
   pal: string[];
   rnd: () => number;
   /** Multiplies element counts (Bold/Playful denser, Minimal sparser). */
@@ -132,8 +134,9 @@ function toneKnobs(tone: string[] | undefined): { density: number; alpha: number
 
 /** Opacity helper: dark themes carry a touch more so motifs read; clamp for safety. */
 function op(ctx: Ctx, base: number): string {
-  const v = (ctx.dark ? base : base * 0.72) * ctx.alpha;
-  return Math.max(0, Math.min(0.5, v)).toFixed(3);
+  let v = (ctx.dark ? base : base * 0.72) * ctx.alpha;
+  if (ctx.veryDark) v *= 1.5; // motifs would otherwise vanish into near-black
+  return Math.max(0, Math.min(0.6, v)).toFixed(3);
 }
 
 // ── Motifs (each returns inner SVG; all rng-varied, all text-safe/subtle) ─────
@@ -395,7 +398,18 @@ export function buildBrandBackgrounds(colors: BgColors, opts: BgOptions = {}): B
   const knobs = toneKnobs(opts.tone);
   const seed = hashSeed(opts.seed);
   const dark = luminance(colors.background) < 0.5;
-  const pal = colors.palette && colors.palette.length >= 3 ? colors.palette : [colors.primary, colors.secondary, colors.accent];
+  const veryDark = luminance(colors.background) < 0.12;
+  // On near-black backgrounds, lift the motif colours toward white so shapes read
+  // (the background itself stays true to the brand).
+  const lift = (col: string) => (veryDark ? mix(col, '#ffffff', 0.22) : col);
+  const litColors: BgColors = {
+    ...colors,
+    primary: lift(colors.primary),
+    secondary: lift(colors.secondary),
+    accent: lift(colors.accent),
+  };
+  const rawPal = colors.palette && colors.palette.length >= 3 ? colors.palette : [colors.primary, colors.secondary, colors.accent];
+  const pal = rawPal.map(lift);
 
   const out: BrandBackground[] = [];
   for (let i = 0; i < count; i++) {
@@ -404,7 +418,7 @@ export function buildBrandBackgrounds(colors: BgColors, opts: BgOptions = {}): B
     // Each background gets its own rng stream (seed + index) so repeats of the
     // same motif (when count > family size) still look different.
     const rnd = mulberry32((seed ^ Math.imul(i + 1, 0x9e3779b1)) >>> 0);
-    const ctx: Ctx = { c: colors, bg: colors.background, dark, pal, rnd, ...knobs };
+    const ctx: Ctx = { c: litColors, bg: colors.background, dark, veryDark, pal, rnd, ...knobs };
     out.push({
       id: `${category}-${motifId}-${i}`,
       label: count > family.length ? `${motif.label} ${Math.floor(i / family.length) + 1}` : motif.label,
