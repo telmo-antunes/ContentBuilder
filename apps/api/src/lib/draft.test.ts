@@ -59,8 +59,9 @@ describe('extractSlides (free mode)', () => {
     ]);
     const slides = extractSlides(raw, 'free');
     expect(slides).toHaveLength(1);
-    const imgf = slides[0]!.overrides?.imageFrame!;
-    expect(imgf.w).toBeLessThanOrEqual(1);
+    const imgf = slides[0]!.overrides?.imageFrame;
+    expect(imgf).toBeDefined();
+    expect(imgf!.w).toBeLessThanOrEqual(1);
   });
 
   it('coerces any object into a FreePosition slide (free mode forces the layout)', () => {

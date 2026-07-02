@@ -64,11 +64,14 @@ function BlockView({
   kit: RenderBrandKit;
   bg: string;
 }) {
+  // Hooks must run unconditionally — a block whose style/variant changes in the
+  // editor would otherwise shift the hook order and corrupt component state.
+  const renderCtx = useRenderCtx();
   const text = baseTextStyle(style, kit, bg);
 
   // Eyebrow kicker — decoration follows the active theme.
   if (style.kicker) {
-    const eyebrow = themeTokens(useRenderCtx().theme).eyebrow;
+    const eyebrow = themeTokens(renderCtx.theme).eyebrow;
     if (eyebrow === 'chip') {
       const accent = kit.colors.accent;
       return (
@@ -130,7 +133,7 @@ function BlockView({
   if (style.variant === 'list') {
     const marker = resolveColor('accent', kit, bg);
     const items = (block.items ?? []).filter((i) => i.trim() !== '');
-    const asChecklist = useRenderCtx().checklist;
+    const asChecklist = renderCtx.checklist;
     if (asChecklist) {
       // Check-circle rows with hairline dividers (the Checklist layout).
       return (

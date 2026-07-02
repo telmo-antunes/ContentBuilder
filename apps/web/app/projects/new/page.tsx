@@ -86,7 +86,7 @@ function NewProjectForm() {
     setMode((m) => (m === 'draft' && !(aiDraft && profileReady) ? 'empty' : m));
   }, [aiDraft, profileReady]);
 
-  const useTemplate = (t: StarterTemplate) => {
+  const applyTemplate = (t: StarterTemplate) => {
     setType(t.type);
     setFormat(t.format);
     setShorthand(t.shorthand);
@@ -408,7 +408,7 @@ function NewProjectForm() {
                 <span className="badge">{parseShorthand(t.shorthand).slides.length} slides</span>
               </div>
             </div>
-            <button type="button" className="btn sm" onClick={() => useTemplate(t)}>
+            <button type="button" className="btn sm" onClick={() => applyTemplate(t)}>
               Use template
             </button>
           </div>

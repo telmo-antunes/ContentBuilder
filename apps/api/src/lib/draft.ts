@@ -163,8 +163,8 @@ const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 export function repairFrame(raw: unknown, i: number): { x: number; y: number; w: number; h: number } {
   const f = (raw ?? {}) as Record<string, unknown>;
   const n = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
-  let w = Math.min(1, Math.max(0.05, n(f.w, 0.8)));
-  let h = Math.min(1, Math.max(0.05, n(f.h, 0.18)));
+  const w = Math.min(1, Math.max(0.05, n(f.w, 0.8)));
+  const h = Math.min(1, Math.max(0.05, n(f.h, 0.18)));
   let x = clamp01(n(f.x, 0.1));
   let y = clamp01(n(f.y, 0.1 + (i % 4) * 0.04));
   if (x + w > 1) x = Math.max(0, 1 - w);
