@@ -62,7 +62,14 @@ async function request<T>(path: string, init?: RequestInit, timeoutMs = 120_000)
     clearTimeout(timer);
   }
   const text = await res.text();
-  const data = text ? JSON.parse(text) : undefined;
+  // Guard the parse: a proxy or crashed dev server can answer with an HTML
+  // error page — surface that as a readable error, not a raw SyntaxError.
+  let data: any;
+  try {
+    data = text ? JSON.parse(text) : undefined;
+  } catch {
+    throw new ApiClientError(res.status, `Server returned an invalid response (HTTP ${res.status}).`);
+  }
   if (!res.ok) {
     const message = (data && (data.error as string)) || `HTTP ${res.status}`;
     throw new ApiClientError(res.status, message, data?.details);
@@ -248,14 +255,27 @@ export const patchBrandKit = (kitId: string, data: BrandKitEdit) =>
 export async function uploadMedia(businessId: string, file: File): Promise<MediaAsset> {
   const fd = new FormData();
   fd.append('file', file);
+  // Uploads get their own timeout (large files, no JSON content-type header).
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 120_000);
   let res: Response;
   try {
-    res = await fetch(api(`/businesses/${businessId}/media`), { method: 'POST', body: fd });
-  } catch {
+    res = await fetch(api(`/businesses/${businessId}/media`), { method: 'POST', body: fd, signal: ctrl.signal });
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'AbortError') {
+      throw new ApiClientError(0, 'Upload timed out — try a smaller file or check the server.');
+    }
     throw new ApiClientError(0, 'Cannot reach API — is it running?');
+  } finally {
+    clearTimeout(timer);
   }
   const text = await res.text();
-  const data = text ? JSON.parse(text) : undefined;
+  let data: any;
+  try {
+    data = text ? JSON.parse(text) : undefined;
+  } catch {
+    throw new ApiClientError(res.status, `Server returned an invalid response (HTTP ${res.status}).`);
+  }
   if (!res.ok) throw new ApiClientError(res.status, (data && data.error) || `HTTP ${res.status}`);
   return data as MediaAsset;
 }

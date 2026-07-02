@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import Anthropic from '@anthropic-ai/sdk';
 import type { CampaignConcept } from '@contentbuilder/shared';
-import { config, aiDraftConfigured } from '../config';
+import { aiDraftConfigured } from '../config';
+import { aiMessage, premiumModel, textOf } from './ai';
 import { recordUsage } from './usage';
 
 interface PlanContext {
@@ -62,7 +62,6 @@ export async function planCampaign(ctx: PlanContext): Promise<CampaignConcept[]>
   if (!aiDraftConfigured()) return [];
   const count = Math.max(1, Math.min(ctx.count || 5, MAX_CONCEPTS));
   const p = ctx.profile ?? {};
-  const client = new Anthropic({ apiKey: config.ai.apiKey });
   const prompt =
     `Plan a themed Instagram content series of ${count} posts.\n\n` +
     `Campaign brief: ${ctx.brief}\n` +
@@ -78,10 +77,12 @@ export async function planCampaign(ctx: PlanContext): Promise<CampaignConcept[]>
     `— 2–4 sentences of real, on-brand copy that a designer could lay out onto slides (this is the actual post copy, not a description of it).\n\n` +
     `Return STRICT JSON only: [{"title": "...", "angle": "...", "paragraph": "..."}, ...]`;
 
-  const model = config.ai.modelSmall ?? config.ai.model!;
-  const resp = await client.messages.create({
+  // Premium tier: the series arc is the creative heart of a campaign — the
+  // concepts it produces get amplified through N drafts downstream.
+  const model = premiumModel();
+  const resp = await aiMessage({
     model,
-    max_tokens: 2000,
+    max_tokens: 6000, // roomy: Fable-family thinking bills against max_tokens
     messages: [{ role: 'user', content: prompt }],
   });
   await recordUsage({
@@ -91,6 +92,5 @@ export async function planCampaign(ctx: PlanContext): Promise<CampaignConcept[]>
     outputTokens: resp.usage?.output_tokens,
   });
 
-  const part = resp.content.find((c) => c.type === 'text');
-  return parseConcepts(part && 'text' in part ? part.text : '', count, randomUUID);
+  return parseConcepts(textOf(resp), count, randomUUID);
 }

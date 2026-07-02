@@ -17,12 +17,19 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "fonts": "node scripts/copy-fonts.mjs",
-    "seed": "npm run seed --workspace apps/api"
+    "seed": "npm run seed --workspace apps/api",
+    "lint": "eslint ."
   },
   "devDependencies": {
+    "@types/supertest": "^7.2.0",
     "concurrently": "^9.1.0",
+    "eslint": "^10.6.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-unused-imports": "^4.4.1",
     "mongodb-memory-server": "^11.2.0",
+    "supertest": "^7.2.2",
     "typescript": "^5.6.3",
+    "typescript-eslint": "^8.62.1",
     "vitest": "^2.1.9"
   },
   "engines": {

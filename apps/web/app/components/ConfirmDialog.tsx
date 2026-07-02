@@ -51,7 +51,7 @@ export default function ConfirmHost() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [pending]);
 
   function settle(v: boolean) {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import type { Block, BlockType, LayoutType, MediaAsset, Slide } from '@contentbuilder/shared';
@@ -112,8 +112,11 @@ export default function ProjectEditorPage() {
   }, [id]);
 
   // Debounced autosave whenever title/slides/settings change (skips initial load).
+  // Suspended while Polish runs: a stale autosave landing mid-polish would
+  // overwrite the server-side fixes with pre-polish slides (lost update). When
+  // `polishing` flips back to false this effect re-runs and flushes any edits.
   useEffect(() => {
-    if (!detail) return;
+    if (!detail || polishing) return;
     const snapshot = JSON.stringify({ title, slides, settings });
     if (snapshot === savedSnapshot.current) return;
     setSaveState('saving');
@@ -128,7 +131,7 @@ export default function ProjectEditorPage() {
       }
     }, 700);
     return () => clearTimeout(t);
-  }, [title, slides, settings, detail, id]);
+  }, [title, slides, settings, detail, id, polishing]);
 
   // Clear the shared selection when switching slides.
   useEffect(() => {
@@ -609,20 +612,17 @@ export default function ProjectEditorPage() {
                   no image
                 </span>
               )}
-              <ScaledSlide format={detail.format} displayWidth={detail.format === '1080x1920' ? 104 : 168}>
-                <SlideRenderer
-                  slide={s}
-                  brandKit={kit}
-                  format={detail.format}
-                  image={resolveSlideImage(s, media)}
-                  imageLayout={resolveImageLayout(s, media)}
-                  theme={s.overrides?.theme ?? theme}
-                  slideIndex={i}
-                  slideTotal={slides.length}
-                  showCounter={showCounter}
-                  onOverflow={(o) => markOverflow(s.id, o)}
-                />
-              </ScaledSlide>
+              <RailThumb
+                slide={s}
+                kit={kit}
+                format={detail.format}
+                media={media}
+                theme={theme}
+                index={i}
+                total={slides.length}
+                showCounter={showCounter}
+                onOverflowById={markOverflow}
+              />
               <div className="thumb-meta">
                 <span>
                   {i + 1}. {s.layoutType}
@@ -796,6 +796,52 @@ export default function ProjectEditorPage() {
     </div>
   );
 }
+
+/**
+ * One rail thumbnail, memoized: rendering a slide runs the full layout +
+ * text-fit machinery, so re-running ALL of them on every keystroke makes the
+ * editor visibly laggy past ~10 slides. Props are stable by construction
+ * (`mutateSlide` preserves the identity of untouched slides; `kit` is memoized;
+ * `onOverflowById` is a useCallback), so only the edited slide re-renders.
+ */
+const RailThumb = memo(function RailThumb({
+  slide,
+  kit,
+  format,
+  media,
+  theme,
+  index,
+  total,
+  showCounter,
+  onOverflowById,
+}: {
+  slide: Slide;
+  kit: RenderBrandKit;
+  format: ProjectDetail['format'];
+  media: MediaAsset[];
+  theme: ThemePreset;
+  index: number;
+  total: number;
+  showCounter: boolean;
+  onOverflowById: (slideId: string, over: boolean) => void;
+}) {
+  return (
+    <ScaledSlide format={format} displayWidth={format === '1080x1920' ? 104 : 168}>
+      <SlideRenderer
+        slide={slide}
+        brandKit={kit}
+        format={format}
+        image={resolveSlideImage(slide, media)}
+        imageLayout={resolveImageLayout(slide, media)}
+        theme={slide.overrides?.theme ?? theme}
+        slideIndex={index}
+        slideTotal={total}
+        showCounter={showCounter}
+        onOverflow={(o) => onOverflowById(slide.id, o)}
+      />
+    </ScaledSlide>
+  );
+});
 
 /** Parse a free-text hashtag field into a clean, deduped list of #tags. */
 function parseTags(s: string): string[] {

@@ -1,4 +1,3 @@
-import Anthropic from '@anthropic-ai/sdk';
 import {
   FORMAT_DIMENSIONS,
   safeAreaFor,
@@ -8,8 +7,8 @@ import {
   type ThemePreset,
 } from '@contentbuilder/shared';
 import { config, aiVisionConfigured } from '../config';
+import { aiMessage, textOf } from './ai';
 import { getBrowser } from './browser';
-import { getStorage } from '../storage';
 import { recordUsage } from './usage';
 
 const THEMES: ThemePreset[] = ['editorial', 'bold', 'minimal', 'soft'];
@@ -72,37 +71,59 @@ async function shootSlide(
   return { overflow: Boolean(overflow), base64: Buffer.from(shot).toString('base64') };
 }
 
-function parseJson(raw: string): Record<string, unknown> | null {
-  try {
-    const s = raw.indexOf('{');
-    const e = raw.lastIndexOf('}');
-    if (s < 0 || e < 0) return null;
-    return JSON.parse(raw.slice(s, e + 1));
-  } catch {
-    return null;
-  }
+/** Coerce one model-returned verdict object into a validated VisionCritique. */
+export function parseCritiqueVerdict(raw: unknown): VisionCritique | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const json = raw as Record<string, unknown>;
+  const theme = THEMES.includes(json.theme as ThemePreset) ? (json.theme as ThemePreset) : undefined;
+  const imageTreatment = TREATMENTS.includes(json.imageTreatment as (typeof TREATMENTS)[number])
+    ? (json.imageTreatment as (typeof TREATMENTS)[number])
+    : undefined;
+  return {
+    contrastPoor: Boolean(json.contrastPoor),
+    crowded: Boolean(json.crowded),
+    unbalanced: Boolean(json.unbalanced),
+    theme,
+    imageTreatment,
+  };
 }
 
-/** Ask a vision model to judge legibility/composition of a rendered slide. */
-async function visionCritique(base64: string, current: ThemePreset): Promise<VisionCritique | null> {
-  if (!aiVisionConfigured()) return null;
+/**
+ * Judge ALL slides of a post in ONE multi-image vision call. Besides being ~N×
+ * cheaper than per-slide calls, seeing the whole set lets the model judge what
+ * per-slide critique structurally can't: cross-slide consistency (a slide whose
+ * theme breaks the set's rhythm gets flagged relative to its siblings).
+ * Returns one verdict per input slide (null = no judgement for that slide).
+ */
+async function visionCritiqueBatch(
+  shots: Array<{ base64: string; theme: ThemePreset }>,
+): Promise<Array<VisionCritique | null>> {
+  if (!aiVisionConfigured() || shots.length === 0) return shots.map(() => null);
   try {
-    const client = new Anthropic({ apiKey: config.ai.apiKey });
     const model = config.ai.modelLarge ?? config.ai.model!;
     const prompt =
-      `This is a finished social slide (current theme: ${current}). Judge it as a designer for LEGIBILITY and COMPOSITION only — not the wording.\n\n` +
-      `Return STRICT JSON only: {"contrastPoor": bool (text hard to read against its background), "crowded": bool (elements cramped/too dense), "unbalanced": bool (weighting/whitespace off), ` +
+      `These are the ${shots.length} slides of ONE social post, in order (current themes: ${shots
+        .map((s, i) => `#${i + 1}=${s.theme}`)
+        .join(', ')}). Judge each as a designer for LEGIBILITY and COMPOSITION only — not the wording — ` +
+      `AND judge the set as a whole: a slide that visibly breaks the set's consistency counts as "unbalanced".\n\n` +
+      `Return STRICT JSON only — an array with EXACTLY ${shots.length} elements, one per slide in order:\n` +
+      `[{"contrastPoor": bool (text hard to read against its background), "crowded": bool (elements cramped/too dense), ` +
+      `"unbalanced": bool (weighting/whitespace off, or inconsistent with the rest of the set), ` +
       `"theme": one of ${JSON.stringify(THEMES)} or null (a theme that would read better, else null), ` +
-      `"imageTreatment": one of ${JSON.stringify(TREATMENTS)} or null (only if a photo is hurting legibility), "note": string}`;
-    const resp = await client.messages.create({
+      `"imageTreatment": one of ${JSON.stringify(TREATMENTS)} or null (only if a photo is hurting legibility), "note": string}, ...]`;
+    const resp = await aiMessage({
       model,
-      max_tokens: 300,
+      // Roomy: scales with slide count; Fable-family thinking bills against it.
+      max_tokens: Math.min(1500 + shots.length * 400, 6000),
       messages: [
         {
           role: 'user',
           content: [
-            { type: 'image', source: { type: 'base64', media_type: 'image/png', data: base64 } },
-            { type: 'text', text: prompt },
+            ...shots.map((s) => ({
+              type: 'image' as const,
+              source: { type: 'base64' as const, media_type: 'image/png' as const, data: s.base64 },
+            })),
+            { type: 'text' as const, text: prompt },
           ],
         },
       ],
@@ -113,22 +134,15 @@ async function visionCritique(base64: string, current: ThemePreset): Promise<Vis
       inputTokens: resp.usage?.input_tokens,
       outputTokens: resp.usage?.output_tokens,
     });
-    const part = resp.content.find((c) => c.type === 'text');
-    const json = parseJson(part && 'text' in part ? part.text : '') ?? {};
-    const theme = THEMES.includes(json.theme as ThemePreset) ? (json.theme as ThemePreset) : undefined;
-    const imageTreatment = TREATMENTS.includes(json.imageTreatment as (typeof TREATMENTS)[number])
-      ? (json.imageTreatment as (typeof TREATMENTS)[number])
-      : undefined;
-    return {
-      contrastPoor: Boolean(json.contrastPoor),
-      crowded: Boolean(json.crowded),
-      unbalanced: Boolean(json.unbalanced),
-      theme,
-      imageTreatment,
-    };
+    const raw = textOf(resp);
+    const s = raw.indexOf('[');
+    const e = raw.lastIndexOf(']');
+    const arr = s >= 0 && e > s ? (JSON.parse(raw.slice(s, e + 1)) as unknown[]) : [];
+    if (!Array.isArray(arr)) return shots.map(() => null);
+    return shots.map((_, i) => parseCritiqueVerdict(arr[i]));
   } catch (err) {
     console.warn('[critique] vision call failed:', err instanceof Error ? err.message : err);
-    return null;
+    return shots.map(() => null);
   }
 }
 
@@ -220,17 +234,30 @@ export async function critiqueProject(project: {
 
   try {
     await page.setViewport({ width, height, deviceScaleFactor: 1 });
+
+    // Phase 1: render every slide once (ground-truth overflow + a PNG each).
+    const shots: Array<{ index: number; overflow: boolean; base64: string }> = [];
     for (let i = 0; i < slides.length; i++) {
+      const shot = await shootSlide(page, base, projectId, slides[i]!.id).catch(() => null);
+      if (shot) shots.push({ index: i, ...shot });
+    }
+
+    // Phase 2: ONE multi-image vision call for the whole set (cheaper than
+    // per-slide calls, and the model can judge cross-slide consistency).
+    const verdicts = await visionCritiqueBatch(
+      shots.map((s) => ({ base64: s.base64, theme: slides[s.index]!.overrides?.theme ?? 'editorial' })),
+    );
+
+    // Phase 3: apply bounded fixes per slide.
+    for (let k = 0; k < shots.length; k++) {
+      const { index: i, overflow } = shots[k]!;
       const slide = slides[i]!;
-      const shot = await shootSlide(page, base, projectId, slide.id).catch(() => null);
-      if (!shot) continue;
-      const critique = await visionCritique(shot.base64, slide.overrides?.theme ?? 'editorial');
       const prevOverrides = JSON.parse(JSON.stringify(slide.overrides ?? null));
-      const { issues, applied } = applyFixes(slide, shot.overflow, critique, type, format);
+      const { issues, applied } = applyFixes(slide, overflow, verdicts[k] ?? null, type, format);
       if (issues.length || applied.length) {
         reports.push({ slideId: slide.id, order: slide.order ?? i, issues, applied });
       }
-      if (applied.length) changed.push({ index: i, prevOverflow: shot.overflow, prevOverrides });
+      if (applied.length) changed.push({ index: i, prevOverflow: overflow, prevOverrides });
     }
 
     if (changed.length === 0) return reports;

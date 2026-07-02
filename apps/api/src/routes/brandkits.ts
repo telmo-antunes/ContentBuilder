@@ -6,10 +6,11 @@ import {
   DEFAULT_RENDER_BODY,
 } from '@contentbuilder/shared';
 import { BusinessModel, BrandKitModel } from '../models';
-import { ApiError, asyncHandler, parseBody, requireObjectId } from '../lib/http';
+import { ApiError, asyncHandler, parseBody, publicErrMessage, requireObjectId } from '../lib/http';
 import { extractBrand } from '../lib/analyze';
 import { generateBusinessBackgrounds } from '../lib/backgrounds';
 import { assignRolesAndVibe, brandColorQuality } from '../lib/vision';
+import { assertPublicHttpUrl } from '../lib/urlGuard';
 
 const hex = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Expected a #rrggbb color');
 const bundledFont = z
@@ -56,6 +57,8 @@ businessBrandKitRouter.post(
     if (!url) {
       throw new ApiError(400, 'This business has no website URL — use “Enter manually” instead.');
     }
+    // The server is about to drive a browser at this URL — refuse private targets.
+    await assertPublicHttpUrl(url, 'Website URL');
 
     // Capture + assess up to twice: a degraded first frame (grey/monochrome, or a
     // half-loaded hero) is retried rather than silently shipped as a kit. Keep the
@@ -85,7 +88,7 @@ businessBrandKitRouter.post(
     if (!best) {
       throw new ApiError(
         502,
-        `Could not analyze ${url}: ${lastErr instanceof Error ? lastErr.message : 'load failed'}. You can enter the kit manually instead.`,
+        `Could not analyze ${url}: ${publicErrMessage(lastErr, 'load failed')}. You can enter the kit manually instead.`,
       );
     }
     const { extraction, roles } = best;

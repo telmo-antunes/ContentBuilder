@@ -14,7 +14,13 @@ export default async function RenderPage({
   const { projectId, slideId } = searchParams;
   if (!projectId) return <div data-render-error>missing projectId</div>;
 
-  const res = await fetch(api(`/projects/${projectId}`), { cache: 'no-store' });
+  // Server-side fetch straight to the API. When the opt-in APP_PASSWORD gate is
+  // on, attach the shared credentials (this runs on the server; never shipped
+  // to the client bundle).
+  const headers: Record<string, string> = process.env.APP_PASSWORD
+    ? { Authorization: `Basic ${Buffer.from(`:${process.env.APP_PASSWORD}`).toString('base64')}` }
+    : {};
+  const res = await fetch(api(`/projects/${projectId}`), { cache: 'no-store', headers });
   if (!res.ok) return <div data-render-error>project not found</div>;
   const project = (await res.json()) as ProjectDetail;
 

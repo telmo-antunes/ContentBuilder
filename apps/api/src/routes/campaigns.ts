@@ -9,7 +9,7 @@ import {
   type Format,
 } from '@contentbuilder/shared';
 import { CampaignModel, BusinessModel, BrandKitModel, ProjectModel } from '../models';
-import { ApiError, asyncHandler, parseBody, requireObjectId } from '../lib/http';
+import { ApiError, asyncHandler, parseBody, publicErrMessage, requireObjectId } from '../lib/http';
 import { planCampaign } from '../lib/campaign';
 import { draftSlidesFromParagraph } from '../lib/draft';
 import { normalizeSlides, finalizeDraftedProject } from './projects';
@@ -72,7 +72,7 @@ businessCampaignRouter.post(
         goal: body.goal,
       });
     } catch (err) {
-      throw new ApiError(502, `Campaign planning failed: ${err instanceof Error ? err.message : 'AI error'}.`);
+      throw new ApiError(502, `Campaign planning failed: ${publicErrMessage(err, 'AI error')}.`);
     }
     if (!concepts.length) throw new ApiError(502, 'The plan came back empty — try rephrasing the brief.');
 
@@ -94,7 +94,7 @@ businessCampaignRouter.get(
   '/',
   asyncHandler(async (req, res) => {
     const id = businessId(req);
-    const docs = await CampaignModel.find({ businessId: id }).sort({ createdAt: -1 }).lean();
+    const docs = await CampaignModel.find({ businessId: id }).sort({ createdAt: -1 }).limit(200).lean();
     res.json(docs.map((c) => ({ ...c, _id: String(c._id) })));
   }),
 );
@@ -166,7 +166,7 @@ campaignRouter.post(
       slides = await draftSlidesFromParagraph(concept.paragraph, type, format, 'designer');
     } catch (err) {
       await ProjectModel.findByIdAndDelete(project.get('_id')).catch(() => {});
-      throw new ApiError(502, `Draft failed: ${err instanceof Error ? err.message : 'AI error'}.`);
+      throw new ApiError(502, `Draft failed: ${publicErrMessage(err, 'AI error')}.`);
     }
     if (!slides.length) {
       await ProjectModel.findByIdAndDelete(project.get('_id')).catch(() => {});
@@ -175,12 +175,15 @@ campaignRouter.post(
 
     project.set('slides', normalizeSlides(slides));
     await project.save();
-    await finalizeDraftedProject(project);
 
-    // Link the concept → project so the overview shows it as drafted.
+    // Link the concept → project BEFORE the best-effort polish/caption pass:
+    // if the process dies mid-finalize, the link already exists, so a retry
+    // returns this project instead of drafting an orphaned duplicate.
     concept.projectId = project.get('_id');
     campaign.markModified('concepts');
     await campaign.save();
+
+    await finalizeDraftedProject(project);
 
     res.status(201).json(project.toJSON());
   }),

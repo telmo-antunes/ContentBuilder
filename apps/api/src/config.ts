@@ -32,9 +32,14 @@ export const config = {
     apiKey: optional('ANTHROPIC_API_KEY'),
     model: optional('ANTHROPIC_MODEL'),
     modelSmall: optional('ANTHROPIC_MODEL_SMALL'),
-    /** Stronger model for Free-mode spatial layout; falls back to model/modelSmall. */
+    /** Model for Free-CANVAS mode + judgment calls; falls back to modelSmall/model. */
     modelLarge: optional('ANTHROPIC_MODEL_FREE'),
   },
+  /**
+   * Opt-in shared password. When set it gates BOTH the web UI (Basic auth in
+   * apps/web/middleware.ts) and this API (see app.ts). Unset = open (local dev).
+   */
+  appPassword: optional('APP_PASSWORD'),
 };
 
 /** AI is "configured" only when a key AND the relevant model are present. */
@@ -65,4 +70,12 @@ export function logConfigStatus(): void {
   console.log(
     `[config] storage=${config.storage.provider} · ai: vision=${aiVisionConfigured()} draft=${aiDraftConfigured()} free=${aiFreeConfigured()}`,
   );
+  // Print the EFFECTIVE model per touchpoint so the cost/quality policy is
+  // visible and intentional (an unset slot silently falls down the stack).
+  if (config.ai.apiKey) {
+    const judgment = config.ai.modelLarge ?? config.ai.modelSmall ?? config.ai.model ?? '—';
+    console.log(
+      `[config] models: vision/critique=${config.ai.modelLarge ?? config.ai.model ?? '—'} · drafts=${config.ai.modelSmall ?? '—'} · free/captions/campaigns=${judgment}`,
+    );
+  }
 }
