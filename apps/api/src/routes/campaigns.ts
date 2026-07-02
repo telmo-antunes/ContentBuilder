@@ -9,7 +9,7 @@ import {
   type Format,
 } from '@contentbuilder/shared';
 import { CampaignModel, BusinessModel, BrandKitModel, ProjectModel } from '../models';
-import { ApiError, asyncHandler, parseBody, requireObjectId } from '../lib/http';
+import { ApiError, asyncHandler, parseBody, publicErrMessage, requireObjectId } from '../lib/http';
 import { planCampaign } from '../lib/campaign';
 import { draftSlidesFromParagraph } from '../lib/draft';
 import { normalizeSlides, finalizeDraftedProject } from './projects';
@@ -72,7 +72,7 @@ businessCampaignRouter.post(
         goal: body.goal,
       });
     } catch (err) {
-      throw new ApiError(502, `Campaign planning failed: ${err instanceof Error ? err.message : 'AI error'}.`);
+      throw new ApiError(502, `Campaign planning failed: ${publicErrMessage(err, 'AI error')}.`);
     }
     if (!concepts.length) throw new ApiError(502, 'The plan came back empty — try rephrasing the brief.');
 
@@ -166,7 +166,7 @@ campaignRouter.post(
       slides = await draftSlidesFromParagraph(concept.paragraph, type, format, 'designer');
     } catch (err) {
       await ProjectModel.findByIdAndDelete(project.get('_id')).catch(() => {});
-      throw new ApiError(502, `Draft failed: ${err instanceof Error ? err.message : 'AI error'}.`);
+      throw new ApiError(502, `Draft failed: ${publicErrMessage(err, 'AI error')}.`);
     }
     if (!slides.length) {
       await ProjectModel.findByIdAndDelete(project.get('_id')).catch(() => {});

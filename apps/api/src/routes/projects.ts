@@ -5,7 +5,7 @@ import { ZipArchive } from 'archiver';
 import { z } from 'zod';
 import { MAX_DRAFT_PARAGRAPH_CHARS, defaultThemeForCategory } from '@contentbuilder/shared';
 import { ProjectModel, BusinessModel, BrandKitModel, MediaAssetModel } from '../models';
-import { ApiError, asyncHandler, parseBody, requireObjectId } from '../lib/http';
+import { ApiError, asyncHandler, parseBody, publicErrMessage, requireObjectId } from '../lib/http';
 import { createProjectSchema, updateProjectSchema, type SlideInput } from '../lib/validation';
 import { renderSlidesToPng, slugify } from '../lib/exporter';
 import { draftSlidesFromParagraph } from '../lib/draft';
@@ -243,7 +243,7 @@ projectsRouter.post(
     } catch (err) {
       throw new ApiError(
         502,
-        `Draft failed: ${err instanceof Error ? err.message : 'AI error'}. You can build manually instead.`,
+        `Draft failed: ${publicErrMessage(err, 'AI error')}. You can build manually instead.`,
       );
     }
     if (slides.length === 0) {
@@ -272,7 +272,7 @@ projectsRouter.post(
     } catch (err) {
       throw new ApiError(
         502,
-        `Polish failed: ${err instanceof Error ? err.message : 'render error'}. Is the web server running?`,
+        `Polish failed: ${publicErrMessage(err, 'render error')}. Is the web server running?`,
       );
     }
     res.json({ project: project.toJSON(), report });
@@ -294,7 +294,7 @@ projectsRouter.post(
     try {
       caption = await buildCaption(project);
     } catch (err) {
-      throw new ApiError(502, `Caption failed: ${err instanceof Error ? err.message : 'AI error'}.`);
+      throw new ApiError(502, `Caption failed: ${publicErrMessage(err, 'AI error')}.`);
     }
     project.set('caption', caption);
     await project.save();

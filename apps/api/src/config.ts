@@ -32,9 +32,14 @@ export const config = {
     apiKey: optional('ANTHROPIC_API_KEY'),
     model: optional('ANTHROPIC_MODEL'),
     modelSmall: optional('ANTHROPIC_MODEL_SMALL'),
-    /** Stronger model for Free-mode spatial layout; falls back to model/modelSmall. */
+    /** Model for Free-CANVAS mode + judgment calls; falls back to modelSmall/model. */
     modelLarge: optional('ANTHROPIC_MODEL_FREE'),
   },
+  /**
+   * Opt-in shared password. When set it gates BOTH the web UI (Basic auth in
+   * apps/web/middleware.ts) and this API (see app.ts). Unset = open (local dev).
+   */
+  appPassword: optional('APP_PASSWORD'),
 };
 
 /** AI is "configured" only when a key AND the relevant model are present. */

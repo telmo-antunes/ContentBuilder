@@ -8,6 +8,7 @@ import { Vibrant } from 'node-vibrant/node';
 import { mapToBundledFont } from '@contentbuilder/shared';
 import type { StoredMedia } from '@contentbuilder/shared';
 import { getBrowser } from './browser';
+import { assertPublicHttpUrl } from './urlGuard';
 import { getStorage } from '../storage';
 
 export interface PaletteColor {
@@ -366,6 +367,8 @@ async function downloadLogo(
   businessId: string,
 ): Promise<StoredMedia | undefined> {
   try {
+    // The logo URL comes from the analyzed page's DOM — same SSRF rules apply.
+    await assertPublicHttpUrl(logoUrl, 'Logo URL');
     const res = await fetch(logoUrl, { signal: AbortSignal.timeout(15000) });
     if (!res.ok) return undefined;
     const ct = (res.headers.get('content-type') ?? '').split(';')[0]!.trim();

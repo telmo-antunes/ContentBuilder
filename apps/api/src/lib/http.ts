@@ -50,7 +50,19 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
     res.status(400).json({ error: 'Validation failed', details: err.flatten() });
     return;
   }
-  const message = err instanceof Error ? err.message : 'Internal server error';
+  // Unexpected errors: full detail to the server log, generic message to the
+  // client (raw messages can leak paths, hostnames, and library internals).
   console.error('[api] unhandled error:', err);
-  res.status(500).json({ error: message });
+  res.status(500).json({ error: 'Internal server error' });
+}
+
+/**
+ * A short, single-line, safe-to-show summary of an upstream error for embedding
+ * in intentional ApiError messages (e.g. "Draft failed: …"). Multi-line or long
+ * messages (stacks, dumps) collapse to a generic phrase.
+ */
+export function publicErrMessage(err: unknown, fallback = 'unexpected error'): string {
+  if (!(err instanceof Error) || !err.message) return fallback;
+  const line = err.message.split('\n')[0]!.trim();
+  return line.length > 0 && line.length <= 140 ? line : fallback;
 }
