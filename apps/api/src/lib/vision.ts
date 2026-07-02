@@ -1,5 +1,6 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { config, aiVisionConfigured } from '../config';
+import { aiMessage, textOf } from './ai';
+import { recordUsage } from './usage';
 import type { PaletteColor, DomRoles, Extraction } from './analyze';
 
 /** Homepage copy harvested during extraction, fed to the voice pass. */
@@ -181,7 +182,6 @@ async function readTypeAndVibe(
 ): Promise<{ styleDescriptor: string; typePersonality?: TypePersonality; voice?: string }> {
   if (!aiVisionConfigured()) return { styleDescriptor: '' };
   try {
-    const client = new Anthropic({ apiKey: config.ai.apiKey });
     const words = copyBlock(copy);
     const prompt =
       `Look at this brand's homepage. Judge it by what you SEE — especially the HEADLINE typography and overall mood.\n\n` +
@@ -191,9 +191,11 @@ async function readTypeAndVibe(
       `Return STRICT JSON only, no prose:\n` +
       `{"typePersonality": one of ${JSON.stringify(PERSONALITIES)}, "styleDescriptor": "one vivid sentence capturing the brand's visual identity — mood, contrast, era, feel", "voice": "one or two sentences describing how the brand TALKS — register (formal/casual), person (we/you/I), energy, and any signature words; e.g. 'Confident, plain-spoken B2B that addresses operators directly and avoids hype'"}\n\n` +
       `typePersonality guide (base it on the headlines): high-contrast/elegant serif → "elegant-serif"; traditional book serif → "classic-serif"; magazine serif → "editorial-serif"; heavy CONDENSED / tall all-caps → "bold-condensed"; poster/ultra-bold display → "impact-display"; clean geometric sans → "geometric-sans"; technical modern grotesque → "modern-grotesque"; warm humanist sans → "humanist-sans"; soft rounded sans → "friendly-rounded"; plain neutral UI sans → "clean-neutral".`;
-    const resp = await client.messages.create({
+    // Roomy cap: on Fable-family models thinking is always on and counts
+    // against max_tokens — a tight cap would truncate before the JSON.
+    const resp = await aiMessage({
       model: visionModel(),
-      max_tokens: 600,
+      max_tokens: 3000,
       messages: [
         {
           role: 'user',
@@ -204,8 +206,13 @@ async function readTypeAndVibe(
         },
       ],
     });
-    const part = resp.content.find((c) => c.type === 'text');
-    const json = parseJson(part && 'text' in part ? part.text : '') ?? {};
+    await recordUsage({
+      feature: 'vision:type-vibe',
+      model: visionModel(),
+      inputTokens: resp.usage?.input_tokens,
+      outputTokens: resp.usage?.output_tokens,
+    });
+    const json = parseJson(textOf(resp)) ?? {};
     const tp = PERSONALITIES.includes(json.typePersonality as TypePersonality) ? (json.typePersonality as TypePersonality) : undefined;
     const desc = typeof json.styleDescriptor === 'string' ? json.styleDescriptor.trim().slice(0, 200) : '';
     const voice = typeof json.voice === 'string' ? json.voice.trim().slice(0, 240) : '';
@@ -248,7 +255,6 @@ export async function assignRolesAndVibe(
 
   const hexes = palette.map((p) => p.hex);
   try {
-    const client = new Anthropic({ apiKey: config.ai.apiKey });
     const words = copyBlock(copy);
     const prompt =
       `These colors were pixel-sampled from the attached homepage screenshot:\n${hexes.join(', ')}\n\n` +
@@ -257,9 +263,9 @@ export async function assignRolesAndVibe(
       `(background = dominant surface; text = reads clearly on background; primary = main brand color; accent = highlight; secondary = supporting). ` +
       `Also judge the HEADLINE typePersonality (one of ${JSON.stringify(PERSONALITIES)}), write one vivid styleDescriptor sentence, and one/two sentences of "voice" (how the brand talks — register, person, energy).\n\n` +
       `STRICT JSON only: {"primary":"#hex","secondary":"#hex","accent":"#hex","background":"#hex","text":"#hex","typePersonality":"...","styleDescriptor":"...","voice":"..."}`;
-    const resp = await client.messages.create({
+    const resp = await aiMessage({
       model: visionModel(),
-      max_tokens: 600,
+      max_tokens: 3000, // roomy: Fable-family thinking bills against max_tokens
       messages: [
         {
           role: 'user',
@@ -270,8 +276,13 @@ export async function assignRolesAndVibe(
         },
       ],
     });
-    const textPart = resp.content.find((c) => c.type === 'text');
-    const json = parseJson(textPart && 'text' in textPart ? textPart.text : '');
+    await recordUsage({
+      feature: 'vision:roles',
+      model: visionModel(),
+      inputTokens: resp.usage?.input_tokens,
+      outputTokens: resp.usage?.output_tokens,
+    });
+    const json = parseJson(textOf(resp));
     if (!json) return heuristic;
 
     const colors = { ...heuristic.colors };

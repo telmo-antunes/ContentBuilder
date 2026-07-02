@@ -1,4 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk';
+import type Anthropic from '@anthropic-ai/sdk';
 import {
   BLOCK_TYPES,
   DESIGNER_LAYOUT_TYPES,
@@ -10,6 +10,7 @@ import {
 } from '@contentbuilder/shared';
 import { config } from '../config';
 import { SettingModel } from '../models';
+import { aiMessage, textOf } from './ai';
 import { recordUsage } from './usage';
 import { slideSchema, type SlideInput } from './validation';
 
@@ -88,7 +89,9 @@ RULES:
 export const PROMPT_DEFAULTS = {
   designerSystem: DESIGNER_SYSTEM,
   freeSystem: FREE_SYSTEM_TEMPLATE,
-  freeMaxTokens: 8000,
+  // Roomy: on Fable-family models thinking is always on and bills against
+  // max_tokens, so the cap must cover reasoning + the full JSON layout.
+  freeMaxTokens: 16000,
 };
 
 /** Substitute {{token}} placeholders. */
@@ -184,7 +187,6 @@ export async function draftSlidesFromParagraph(
   format: Format,
   mode: DraftMode = 'designer',
 ): Promise<SlideInput[]> {
-  const client = new Anthropic({ apiKey: config.ai.apiKey });
   const settings = await loadAiSettings();
   const userMsg =
     `Asset type: ${type} (${format}).\n` +
@@ -196,16 +198,14 @@ export async function draftSlidesFromParagraph(
   const run = async (params: Anthropic.MessageCreateParamsNonStreaming, m: DraftMode): Promise<SlideInput[]> => {
     let last: SlideInput[] = [];
     for (let attempt = 1; attempt <= 2; attempt++) {
-      const resp = await client.messages.create(params);
+      const resp = await aiMessage(params);
       await recordUsage({
         feature: `draft:${m}`,
         model: params.model,
         inputTokens: resp.usage?.input_tokens,
         outputTokens: resp.usage?.output_tokens,
       });
-      const textPart = resp.content.find((c) => c.type === 'text');
-      const raw = textPart && 'text' in textPart ? textPart.text : '';
-      last = extractSlides(raw, m);
+      last = extractSlides(textOf(resp), m);
       if (last.some((s) => (s.blocks?.length ?? 0) > 0)) return last;
     }
     return last;
@@ -218,7 +218,10 @@ export async function draftSlidesFromParagraph(
     const model = pick(settings.freeModel, config.ai.modelLarge ?? config.ai.modelSmall ?? config.ai.model!);
     const params: Anthropic.MessageCreateParamsNonStreaming = {
       model,
-      max_tokens: settings.freeMaxTokens && settings.freeMaxTokens > 0 ? settings.freeMaxTokens : 8000,
+      max_tokens:
+        settings.freeMaxTokens && settings.freeMaxTokens > 0
+          ? settings.freeMaxTokens
+          : PROMPT_DEFAULTS.freeMaxTokens,
       system: freeSystem(type, format, settings.freeSystem),
       messages: [{ role: 'user', content: userMsg }],
     };

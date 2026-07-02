@@ -1,4 +1,3 @@
-import Anthropic from '@anthropic-ai/sdk';
 import {
   FORMAT_DIMENSIONS,
   safeAreaFor,
@@ -8,6 +7,7 @@ import {
   type ThemePreset,
 } from '@contentbuilder/shared';
 import { config, aiVisionConfigured } from '../config';
+import { aiMessage, textOf } from './ai';
 import { getBrowser } from './browser';
 import { getStorage } from '../storage';
 import { recordUsage } from './usage';
@@ -87,16 +87,15 @@ function parseJson(raw: string): Record<string, unknown> | null {
 async function visionCritique(base64: string, current: ThemePreset): Promise<VisionCritique | null> {
   if (!aiVisionConfigured()) return null;
   try {
-    const client = new Anthropic({ apiKey: config.ai.apiKey });
     const model = config.ai.modelLarge ?? config.ai.model!;
     const prompt =
       `This is a finished social slide (current theme: ${current}). Judge it as a designer for LEGIBILITY and COMPOSITION only — not the wording.\n\n` +
       `Return STRICT JSON only: {"contrastPoor": bool (text hard to read against its background), "crowded": bool (elements cramped/too dense), "unbalanced": bool (weighting/whitespace off), ` +
       `"theme": one of ${JSON.stringify(THEMES)} or null (a theme that would read better, else null), ` +
       `"imageTreatment": one of ${JSON.stringify(TREATMENTS)} or null (only if a photo is hurting legibility), "note": string}`;
-    const resp = await client.messages.create({
+    const resp = await aiMessage({
       model,
-      max_tokens: 300,
+      max_tokens: 2000, // roomy: Fable-family thinking bills against max_tokens
       messages: [
         {
           role: 'user',
@@ -113,8 +112,7 @@ async function visionCritique(base64: string, current: ThemePreset): Promise<Vis
       inputTokens: resp.usage?.input_tokens,
       outputTokens: resp.usage?.output_tokens,
     });
-    const part = resp.content.find((c) => c.type === 'text');
-    const json = parseJson(part && 'text' in part ? part.text : '') ?? {};
+    const json = parseJson(textOf(resp)) ?? {};
     const theme = THEMES.includes(json.theme as ThemePreset) ? (json.theme as ThemePreset) : undefined;
     const imageTreatment = TREATMENTS.includes(json.imageTreatment as (typeof TREATMENTS)[number])
       ? (json.imageTreatment as (typeof TREATMENTS)[number])

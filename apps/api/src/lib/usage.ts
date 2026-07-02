@@ -6,9 +6,10 @@ import { Usage } from '../models/Usage';
  * These are estimates for the cost dashboard, not billing-grade figures.
  */
 const PRICES: Array<{ match: RegExp; in: number; out: number }> = [
+  { match: /fable|mythos/i, in: 10, out: 50 },
   { match: /haiku/i, in: 1, out: 5 },
   { match: /sonnet/i, in: 3, out: 15 },
-  { match: /opus/i, in: 15, out: 75 },
+  { match: /opus/i, in: 5, out: 25 },
 ];
 const DEFAULT_PRICE = { in: 3, out: 15 };
 

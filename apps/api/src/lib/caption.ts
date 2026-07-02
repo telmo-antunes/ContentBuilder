@@ -1,5 +1,5 @@
-import Anthropic from '@anthropic-ai/sdk';
-import { config, aiDraftConfigured } from '../config';
+import { aiDraftConfigured } from '../config';
+import { aiMessage, premiumModel, textOf } from './ai';
 import { recordUsage } from './usage';
 
 export interface GeneratedCaption {
@@ -57,7 +57,9 @@ export function cleanHashtag(raw: string): string | null {
 /**
  * Write a social caption + hashtags for a post, IN THE BRAND'S VOICE. This is new
  * copy *about* the post (a caption is expected to be freshly written) — it never
- * rewrites the on-slide text, which is fed in only as grounding. Cheap model.
+ * rewrites the on-slide text, which is fed in only as grounding. Runs on the
+ * premium tier when configured: voice is the whole point of a caption, and it's
+ * a small once-per-post call.
  */
 export async function generateCaption(ctx: CaptionContext): Promise<GeneratedCaption> {
   if (!aiDraftConfigured()) return { text: '', hashtags: [] };
@@ -65,7 +67,6 @@ export async function generateCaption(ctx: CaptionContext): Promise<GeneratedCap
   if (!copy.trim()) return { text: '', hashtags: [] };
 
   const p = ctx.profile ?? {};
-  const client = new Anthropic({ apiKey: config.ai.apiKey });
   const prompt =
     `Write an Instagram caption for this post, then suggest hashtags.\n\n` +
     (ctx.voice ? `Brand voice (match it exactly): ${ctx.voice}\n` : '') +
@@ -80,10 +81,10 @@ export async function generateCaption(ctx: CaptionContext): Promise<GeneratedCap
     `Then 5–8 relevant, specific hashtags (no generic #love/#instagood filler).\n\n` +
     `Return STRICT JSON only: {"caption": "the caption text", "hashtags": ["#tag", ...]}`;
 
-  const model = config.ai.modelSmall ?? config.ai.model!;
-  const resp = await client.messages.create({
+  const model = premiumModel();
+  const resp = await aiMessage({
     model,
-    max_tokens: 700,
+    max_tokens: 2500, // roomy: Fable-family thinking bills against max_tokens
     messages: [{ role: 'user', content: prompt }],
   });
   await recordUsage({
@@ -93,8 +94,7 @@ export async function generateCaption(ctx: CaptionContext): Promise<GeneratedCap
     outputTokens: resp.usage?.output_tokens,
   });
 
-  const part = resp.content.find((c) => c.type === 'text');
-  const json = parseJson(part && 'text' in part ? part.text : '') ?? {};
+  const json = parseJson(textOf(resp)) ?? {};
   const text = typeof json.caption === 'string' ? json.caption.trim().slice(0, 2200) : '';
   const hashtags = Array.isArray(json.hashtags)
     ? [...new Set(json.hashtags.map((h) => cleanHashtag(String(h))).filter((h): h is string => Boolean(h)))].slice(0, 12)
