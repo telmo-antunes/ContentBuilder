@@ -20,6 +20,8 @@ export interface BusinessSummary extends Business {
   hasDraftKit: boolean;
   hasProfile: boolean;
   projectCount: number;
+  /** The approved kit's identity, for showing the brand on list cards. */
+  kit?: { colors: BrandKit['colors']; logoUrl?: string };
 }
 
 /** Business detail also carries its project summaries. */
@@ -196,6 +198,30 @@ export const createCampaign = (
 /** Draft one campaign concept into a real project (returns the created/linked project). */
 export const draftConcept = (campaignId: string, conceptId: string) =>
   request<Project>(`/campaigns/${campaignId}/concepts/${conceptId}/draft`, { method: 'POST' });
+
+/** Edit a concept's title/angle/paragraph. Returns the updated campaign. */
+export const editConcept = (
+  campaignId: string,
+  conceptId: string,
+  data: { title?: string; angle?: string; paragraph?: string },
+) =>
+  request<Campaign>(`/campaigns/${campaignId}/concepts/${conceptId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+
+/** Move a concept up (-1) or down (+1) in the series order. */
+export const moveConcept = (campaignId: string, conceptId: string, dir: -1 | 1) =>
+  request<Campaign>(`/campaigns/${campaignId}/concepts/${conceptId}/move`, {
+    method: 'POST',
+    body: JSON.stringify({ dir }),
+  });
+
+/** Regenerate ONE undrafted concept with a fresh angle. */
+export const regenerateConcept = (campaignId: string, conceptId: string) =>
+  request<Campaign>(`/campaigns/${campaignId}/concepts/${conceptId}/regenerate`, {
+    method: 'POST',
+  });
 
 export const deleteCampaign = (id: string) =>
   request<{ ok: boolean }>(`/campaigns/${id}`, { method: 'DELETE' });

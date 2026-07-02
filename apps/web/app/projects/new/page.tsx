@@ -22,6 +22,7 @@ import {
   getHealth,
   type BusinessSummary,
 } from '../../lib/api';
+import { useStagedProgress, DRAFT_STAGES } from '../../components/useStagedProgress';
 import { rankedTemplates, SHORTHAND_PLACEHOLDER, type StarterTemplate } from '../../lib/templates';
 
 type Mode = 'empty' | 'shorthand' | 'draft';
@@ -44,6 +45,7 @@ function NewProjectForm() {
   const [type, setType] = useState<AssetType>('carousel');
   const [format, setFormat] = useState<Format>('1080x1080');
   const [mode, setMode] = useState<Mode>('empty');
+  const draftLabel = useStagedProgress(busy && mode === 'draft', DRAFT_STAGES);
   const [shorthand, setShorthand] = useState('');
   const [paragraph, setParagraph] = useState('');
   const [aiDraft, setAiDraft] = useState(false);
@@ -369,7 +371,7 @@ function NewProjectForm() {
           <button className="btn primary" type="submit" disabled={!canSubmit || busy}>
             {busy
               ? mode === 'draft'
-                ? 'Drafting…'
+                ? draftLabel ?? 'Drafting…'
                 : 'Creating…'
               : mode === 'shorthand'
                 ? `Create ${parsed.slides.length} slide${parsed.slides.length === 1 ? '' : 's'}`

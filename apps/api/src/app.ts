@@ -100,7 +100,7 @@ export function createApp() {
     const WINDOW_MS = 5 * 60 * 1000;
     const MAX = 30;
     const hits = new Map<string, number[]>();
-    const EXPENSIVE = /(\/analyze|\/draft|\/critique|\/caption|\/export|\/backgrounds(\/ai)?|\/campaigns)$/;
+    const EXPENSIVE = /(\/analyze|\/draft|\/critique|\/caption|\/export|\/backgrounds(\/ai)?|\/campaigns|\/regenerate)$/;
     app.use((req: Request, res: Response, next) => {
       if (req.method !== 'POST' || !EXPENSIVE.test(req.path)) return next();
       const now = Date.now();

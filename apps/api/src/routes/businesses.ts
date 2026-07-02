@@ -30,25 +30,36 @@ const updateSchema = z.object({
 /** Attach kit-status + project-count summaries used by the list/detail UI. */
 async function enrich(businesses: Array<Record<string, any>>) {
   const ids = businesses.map((b) => b._id);
-  const [approvedIds, draftIds, counts] = await Promise.all([
-    BrandKitModel.distinct('businessId', { businessId: { $in: ids }, status: 'approved' }),
+  const [approvedKits, draftIds, counts] = await Promise.all([
+    BrandKitModel.find({ businessId: { $in: ids }, status: 'approved' })
+      .select('businessId colors logo createdAt')
+      .sort({ createdAt: -1 })
+      .lean(),
     BrandKitModel.distinct('businessId', { businessId: { $in: ids }, status: 'draft' }),
     ProjectModel.aggregate([
       { $match: { businessId: { $in: ids } } },
       { $group: { _id: '$businessId', n: { $sum: 1 } } },
     ]),
   ]);
-  const approved = new Set(approvedIds.map(String));
+  // Latest approved kit per business (sorted desc, first wins) — the list UI
+  // shows each brand's identity (palette strip + logo), not just a status chip.
+  const kitByBiz = new Map<string, Record<string, any>>();
+  for (const k of approvedKits) {
+    const key = String(k.businessId);
+    if (!kitByBiz.has(key)) kitByBiz.set(key, k);
+  }
   const draft = new Set(draftIds.map(String));
   const countByBiz = new Map(counts.map((c: { _id: unknown; n: number }) => [String(c._id), c.n]));
   return businesses.map((b) => {
     const id = String(b._id);
+    const kit = kitByBiz.get(id);
     return {
       ...(b as Record<string, unknown>),
-      hasApprovedKit: approved.has(id),
+      hasApprovedKit: Boolean(kit),
       hasDraftKit: draft.has(id),
       hasProfile: Boolean(b.profile?.category),
       projectCount: countByBiz.get(id) ?? 0,
+      kit: kit ? { colors: kit.colors, logoUrl: kit.logo?.url } : undefined,
     };
   });
 }
@@ -85,7 +96,7 @@ businessesRouter.get(
     if (!doc) throw new ApiError(404, 'Business not found');
     const [enriched] = await enrich([doc]);
     const projects = await ProjectModel.find({ businessId: id })
-      .select('title type format status slides updatedAt')
+      .select('title type format status slides settings updatedAt')
       .sort({ updatedAt: -1 })
       .lean();
     res.json({ ...enriched, projects });

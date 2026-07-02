@@ -9,7 +9,38 @@ import {
   deleteBusiness,
   type BusinessSummary,
 } from './lib/api';
+import { formatDate } from './lib/format';
 import { confirm } from './components/ConfirmDialog';
+import { OverflowMenu } from './components/OverflowMenu';
+
+/** The brand's identity at a glance: logo chip + the five role colors. */
+function BrandStrip({ kit, name }: { kit: NonNullable<BusinessSummary['kit']>; name: string }) {
+  const roles = ['background', 'secondary', 'primary', 'accent', 'text'] as const;
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+      {kit.logoUrl && (
+        <img
+          src={kit.logoUrl}
+          alt={`${name} logo`}
+          style={{
+            width: 26,
+            height: 26,
+            objectFit: 'contain',
+            borderRadius: 6,
+            background: kit.colors.background,
+            padding: 3,
+            border: '1px solid rgba(128,128,128,0.25)',
+          }}
+        />
+      )}
+      <span style={{ display: 'inline-flex', borderRadius: 5, overflow: 'hidden', border: '1px solid rgba(128,128,128,0.25)' }}>
+        {roles.map((r) => (
+          <span key={r} title={`${r}: ${kit.colors[r]}`} style={{ width: 14, height: 18, background: kit.colors[r] }} />
+        ))}
+      </span>
+    </span>
+  );
+}
 
 export default function BusinessesPage() {
   const [businesses, setBusinesses] = useState<BusinessSummary[] | null>(null);
@@ -194,13 +225,12 @@ function BusinessRow({
     );
   }
 
-  const created = new Date(biz.createdAt).toLocaleDateString();
-
   return (
     <div className="item">
       <div className="grow">
-        <div className="title">
+        <div className="title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Link href={`/businesses/${biz._id}`}>{biz.name}</Link>
+          {biz.kit && <BrandStrip kit={biz.kit} name={biz.name} />}
         </div>
         <div className="sub">
           {biz.websiteUrl ? (
@@ -210,7 +240,7 @@ function BusinessRow({
           ) : (
             'No website'
           )}{' '}
-          · added {created}
+          · added {formatDate(biz.createdAt)}
         </div>
         <div className="badges">
           {biz.hasApprovedKit ? (
@@ -233,12 +263,12 @@ function BusinessRow({
         <Link className="btn sm" href={`/businesses/${biz._id}/brand-kit`}>
           Brand kit
         </Link>
-        <button className="btn sm" onClick={() => setEditing(true)} disabled={busy}>
-          Edit
-        </button>
-        <button className="btn danger sm" onClick={remove} disabled={busy}>
-          {busy ? '…' : 'Delete'}
-        </button>
+        <OverflowMenu
+          items={[
+            { label: 'Edit details', onClick: () => setEditing(true), disabled: busy },
+            { label: busy ? 'Deleting…' : 'Delete business', onClick: () => void remove(), danger: true, disabled: busy },
+          ]}
+        />
       </div>
     </div>
   );

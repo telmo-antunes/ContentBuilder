@@ -1,11 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { FORMAT_LABELS, type Campaign } from '@contentbuilder/shared';
+import { FORMAT_LABELS, type Campaign, type MediaAsset } from '@contentbuilder/shared';
 import {
   getBusiness,
+  getBrandKit,
+  listMedia,
   deleteProject,
   createProject,
   listCampaigns,
@@ -13,23 +15,37 @@ import {
 } from '../../lib/api';
 import ProfileCard from '../../components/ProfileCard';
 import { confirm } from '../../components/ConfirmDialog';
+import { OverflowMenu } from '../../components/OverflowMenu';
+import { ProjectThumb, type ProjectThumbData } from '../../components/ProjectThumb';
+import { toRenderKit } from '../../../lib/render/projectRender';
 
 export default function BusinessDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [biz, setBiz] = useState<BusinessDetail | null>(null);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [kitRaw, setKitRaw] = useState<Awaited<ReturnType<typeof getBrandKit>>['approved']>(null);
+  const [media, setMedia] = useState<MediaAsset[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     setError(null);
     try {
-      const [b, c] = await Promise.all([getBusiness(id), listCampaigns(id).catch(() => [])]);
+      const [b, c, k, m] = await Promise.all([
+        getBusiness(id),
+        listCampaigns(id).catch(() => []),
+        getBrandKit(id).catch(() => ({ draft: null, approved: null })),
+        listMedia(id).catch(() => []),
+      ]);
       setBiz(b);
       setCampaigns(c);
+      setKitRaw(k.approved);
+      setMedia(m);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
   }, [id]);
+
+  const renderKit = useMemo(() => (kitRaw ? toRenderKit(kitRaw) : null), [kitRaw]);
 
   useEffect(() => {
     void reload();
@@ -193,9 +209,20 @@ export default function BusinessDetailPage() {
           </div>
 
           {biz.projects.length === 0 ? (
-            <div className="empty" style={{ marginTop: 12 }}>
+            <div className="empty" style={{ marginTop: 12, textAlign: 'center', padding: '28px 16px' }}>
               {biz.hasApprovedKit ? (
-                'No projects yet. Create your first project to start building slides.'
+                <>
+                  <p style={{ margin: '0 0 6px', fontSize: 16 }}>
+                    <strong>Nothing here yet — let&rsquo;s change that.</strong>
+                  </p>
+                  <p className="muted" style={{ margin: '0 0 14px' }}>
+                    Paste a paragraph and AI arranges it into on-brand slides, polishes the layout,
+                    and writes the caption.
+                  </p>
+                  <Link className="btn primary" href={`/projects/new?businessId=${biz._id}`}>
+                    ✦ Draft your first post
+                  </Link>
+                </>
               ) : (
                 <>
                   No projects yet.{' '}
@@ -207,7 +234,10 @@ export default function BusinessDetailPage() {
           ) : (
             <div className="list" style={{ marginTop: 12 }}>
               {biz.projects.map((p) => (
-                <div className="item" key={p._id}>
+                <div className="item" key={p._id} style={{ alignItems: 'center', gap: 14 }}>
+                  <Link href={`/projects/${p._id}`} aria-label={`Open ${p.title}`}>
+                    <ProjectThumb project={p as ProjectThumbData} kit={renderKit} media={media} />
+                  </Link>
                   <div className="grow">
                     <div className="title">
                       <Link href={`/projects/${p._id}`}>{p.title}</Link>
@@ -216,19 +246,21 @@ export default function BusinessDetailPage() {
                       <span className="badge accent">{p.type}</span>
                       <span className="badge">{FORMAT_LABELS[p.format]}</span>
                       <span className="badge">{p.slides.length} slide{p.slides.length === 1 ? '' : 's'}</span>
-                      <span className={`badge ${p.status === 'rendered' ? 'ok' : ''}`}>{p.status}</span>
+                      <span className={`badge ${p.status === 'rendered' ? 'ok' : ''}`}>
+                        {p.status === 'rendered' ? 'exported' : 'draft'}
+                      </span>
                     </div>
                   </div>
                   <div className="row" style={{ flexWrap: 'nowrap' }}>
                     <Link className="btn sm" href={`/projects/${p._id}`}>
                       Open editor
                     </Link>
-                    <button className="btn sm" onClick={() => duplicateProject(p)} title="Duplicate this project">
-                      Duplicate
-                    </button>
-                    <button className="btn danger sm" onClick={() => removeProject(p._id, p.title)}>
-                      Delete
-                    </button>
+                    <OverflowMenu
+                      items={[
+                        { label: 'Duplicate', onClick: () => void duplicateProject(p) },
+                        { label: 'Delete project', onClick: () => void removeProject(p._id, p.title), danger: true },
+                      ]}
+                    />
                   </div>
                 </div>
               ))}
