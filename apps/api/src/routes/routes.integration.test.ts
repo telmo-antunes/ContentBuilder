@@ -10,6 +10,16 @@ import request from 'supertest';
 import mongoose from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 
+// The AI-gated routes check aiDraftConfigured() BEFORE reaching our mocks, and
+// config reads the env at import time — so stub the env before any import runs
+// (CI has no real key; the boundaries themselves are mocked below).
+vi.hoisted(() => {
+  process.env.ANTHROPIC_API_KEY = 'test-key';
+  process.env.ANTHROPIC_MODEL = 'claude-test';
+  process.env.ANTHROPIC_MODEL_SMALL = 'claude-test';
+  delete process.env.APP_PASSWORD; // auth must be off for these tests
+});
+
 // ── Mock every expensive boundary ─────────────────────────────────────────────
 vi.mock('../lib/draft', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
