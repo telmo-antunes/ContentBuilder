@@ -112,8 +112,11 @@ export default function ProjectEditorPage() {
   }, [id]);
 
   // Debounced autosave whenever title/slides/settings change (skips initial load).
+  // Suspended while Polish runs: a stale autosave landing mid-polish would
+  // overwrite the server-side fixes with pre-polish slides (lost update). When
+  // `polishing` flips back to false this effect re-runs and flushes any edits.
   useEffect(() => {
-    if (!detail) return;
+    if (!detail || polishing) return;
     const snapshot = JSON.stringify({ title, slides, settings });
     if (snapshot === savedSnapshot.current) return;
     setSaveState('saving');
@@ -128,7 +131,7 @@ export default function ProjectEditorPage() {
       }
     }, 700);
     return () => clearTimeout(t);
-  }, [title, slides, settings, detail, id]);
+  }, [title, slides, settings, detail, id, polishing]);
 
   // Clear the shared selection when switching slides.
   useEffect(() => {

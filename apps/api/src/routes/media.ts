@@ -32,7 +32,7 @@ mediaRouter.get(
   '/',
   asyncHandler(async (req, res) => {
     const businessId = requireObjectId((req.params as Record<string, string>).id, 'Business');
-    const docs = await MediaAssetModel.find({ businessId }).sort({ createdAt: -1 }).lean();
+    const docs = await MediaAssetModel.find({ businessId }).sort({ createdAt: -1 }).limit(500).lean();
     res.json(docs);
   }),
 );

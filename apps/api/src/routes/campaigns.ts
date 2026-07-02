@@ -94,7 +94,7 @@ businessCampaignRouter.get(
   '/',
   asyncHandler(async (req, res) => {
     const id = businessId(req);
-    const docs = await CampaignModel.find({ businessId: id }).sort({ createdAt: -1 }).lean();
+    const docs = await CampaignModel.find({ businessId: id }).sort({ createdAt: -1 }).limit(200).lean();
     res.json(docs.map((c) => ({ ...c, _id: String(c._id) })));
   }),
 );
@@ -175,12 +175,15 @@ campaignRouter.post(
 
     project.set('slides', normalizeSlides(slides));
     await project.save();
-    await finalizeDraftedProject(project);
 
-    // Link the concept → project so the overview shows it as drafted.
+    // Link the concept → project BEFORE the best-effort polish/caption pass:
+    // if the process dies mid-finalize, the link already exists, so a retry
+    // returns this project instead of drafting an orphaned duplicate.
     concept.projectId = project.get('_id');
     campaign.markModified('concepts');
     await campaign.save();
+
+    await finalizeDraftedProject(project);
 
     res.status(201).json(project.toJSON());
   }),

@@ -57,7 +57,7 @@ async function enrich(businesses: Array<Record<string, any>>) {
 businessesRouter.get(
   '/',
   asyncHandler(async (_req, res) => {
-    const docs = await BusinessModel.find().sort({ createdAt: -1 }).lean();
+    const docs = await BusinessModel.find().sort({ createdAt: -1 }).limit(200).lean();
     res.json(await enrich(docs));
   }),
 );

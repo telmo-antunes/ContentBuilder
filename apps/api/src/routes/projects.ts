@@ -39,6 +39,44 @@ async function approvedKitFor(businessId: string) {
 }
 
 /**
+ * Strip media references that don't belong to this business. A syntactically
+ * valid ObjectId isn't enough — without this check a slide can point at another
+ * business's asset (ghost reference at best, data-leak-by-render at worst).
+ */
+async function scrubForeignMedia(
+  slides: ReturnType<typeof normalizeSlides>,
+  businessId: string,
+): Promise<void> {
+  const ids = new Set<string>();
+  for (const s of slides) {
+    if (s.mediaAssetId) ids.add(String(s.mediaAssetId));
+    const o = s.overrides as Record<string, any> | undefined;
+    if (o?.backgroundMediaAssetId && Types.ObjectId.isValid(o.backgroundMediaAssetId)) {
+      ids.add(String(o.backgroundMediaAssetId));
+    }
+    for (const obj of o?.imageObjects ?? []) {
+      if (obj?.mediaAssetId && Types.ObjectId.isValid(obj.mediaAssetId)) ids.add(String(obj.mediaAssetId));
+    }
+  }
+  if (ids.size === 0) return;
+  const owned = new Set(
+    (await MediaAssetModel.find({ _id: { $in: [...ids] }, businessId }).select('_id').lean()).map((m) =>
+      String(m._id),
+    ),
+  );
+  for (const s of slides) {
+    if (s.mediaAssetId && !owned.has(String(s.mediaAssetId))) s.mediaAssetId = undefined;
+    const o = s.overrides as Record<string, any> | undefined;
+    if (o?.backgroundMediaAssetId && !owned.has(String(o.backgroundMediaAssetId))) {
+      delete o.backgroundMediaAssetId;
+    }
+    for (const obj of o?.imageObjects ?? []) {
+      if (obj?.mediaAssetId && !owned.has(String(obj.mediaAssetId))) obj.mediaAssetId = undefined;
+    }
+  }
+}
+
+/**
  * Finish a freshly-drafted project (slides already set + saved): best-effort layout
  * polish then caption, in that order so the caption reflects the polished slides.
  * Never throws — a web-down / AI-off environment still yields a usable draft.
@@ -96,13 +134,15 @@ projectsRouter.post(
     const kit = await approvedKitFor(body.businessId);
     if (!kit) throw new ApiError(400, 'This business has no approved brand kit yet. Approve a kit first.');
 
+    const initialSlides = body.slides ? normalizeSlides(body.slides) : [];
+    await scrubForeignMedia(initialSlides, body.businessId);
     const created = await ProjectModel.create({
       businessId: body.businessId,
       title: body.title,
       type: body.type,
       format: body.format,
       status: 'draft',
-      slides: body.slides ? normalizeSlides(body.slides) : [],
+      slides: initialSlides,
       settings: {
         // Default the theme from the business profile (profile → visual default).
         theme: body.settings?.theme ?? defaultThemeForCategory((business as any).profile?.category),
@@ -119,7 +159,7 @@ projectsRouter.get(
   asyncHandler(async (req, res) => {
     const businessId = typeof req.query.businessId === 'string' ? req.query.businessId : undefined;
     const filter = businessId && Types.ObjectId.isValid(businessId) ? { businessId } : {};
-    const docs = await ProjectModel.find(filter).sort({ updatedAt: -1 }).lean();
+    const docs = await ProjectModel.find(filter).sort({ updatedAt: -1 }).limit(500).lean();
     res.json(docs);
   }),
 );
@@ -133,7 +173,7 @@ projectsRouter.get(
     if (!project) throw new ApiError(404, 'Project not found');
     const [brandKit, media] = await Promise.all([
       approvedKitFor(String(project.businessId)),
-      MediaAssetModel.find({ businessId: project.businessId }).sort({ createdAt: -1 }).lean(),
+      MediaAssetModel.find({ businessId: project.businessId }).sort({ createdAt: -1 }).limit(500).lean(),
     ]);
     res.json({ ...project, _id: String(project._id), brandKit, media });
   }),
@@ -150,7 +190,11 @@ projectsRouter.patch(
 
     if (body.title !== undefined) project.set('title', body.title);
     if (body.status !== undefined) project.set('status', body.status);
-    if (body.slides !== undefined) project.set('slides', normalizeSlides(body.slides));
+    if (body.slides !== undefined) {
+      const normalized = normalizeSlides(body.slides);
+      await scrubForeignMedia(normalized, String(project.get('businessId')));
+      project.set('slides', normalized);
+    }
     if (body.caption !== undefined) project.set('caption', body.caption);
     if (body.settings !== undefined) {
       project.set('settings', { ...(project.get('settings') ?? {}), ...body.settings });

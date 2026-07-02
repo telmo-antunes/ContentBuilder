@@ -65,4 +65,12 @@ export function logConfigStatus(): void {
   console.log(
     `[config] storage=${config.storage.provider} · ai: vision=${aiVisionConfigured()} draft=${aiDraftConfigured()} free=${aiFreeConfigured()}`,
   );
+  // Print the EFFECTIVE model per touchpoint so the cost/quality policy is
+  // visible and intentional (an unset slot silently falls down the stack).
+  if (config.ai.apiKey) {
+    const judgment = config.ai.modelLarge ?? config.ai.modelSmall ?? config.ai.model ?? '—';
+    console.log(
+      `[config] models: vision/critique=${config.ai.modelLarge ?? config.ai.model ?? '—'} · drafts=${config.ai.modelSmall ?? '—'} · free/captions/campaigns=${judgment}`,
+    );
+  }
 }
