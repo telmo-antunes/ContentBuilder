@@ -91,6 +91,11 @@ export const getHealth = () => request<HealthResponse>('/health');
 export interface AiSettings {
   designerModel: string;
   freeModel: string;
+  visionModel: string;
+  critiqueModel: string;
+  captionModel: string;
+  campaignModel: string;
+  backgroundModel: string;
   designerSystem: string;
   freeSystem: string;
   freeMaxTokens: number | null;

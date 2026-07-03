@@ -222,7 +222,13 @@
       "Bash(python3 -c \"import sys,json;d=json.load\\(sys.stdin\\);print\\('mergeState:',d.get\\('mergeStateStatus'\\)\\);print\\('checks:',d.get\\('statusCheckRollup'\\)\\)\")",
       "Bash(sed -n '1,20p' .github/workflows/*.yml)",
       "Bash(git rebase *)",
-      "Bash(git stash *)"
+      "Bash(git stash *)",
+      "Bash(python3 -)",
+      "Bash(sed -n '/aiDraftConfigured\\(\\)\\) return shuffled/,/const picked/p' apps/api/src/lib/aiBackground.ts)",
+      "Bash(npx eslint *)",
+      "Bash(npx vitest *)",
+      "Bash(curl -s http://localhost:4000/settings)",
+      "Bash(curl -s -X PUT http://localhost:4000/settings -H 'Content-Type: application/json' -d '{\"designerModel\":\"\",\"freeModel\":\"\",\"designerSystem\":\"\",\"freeSystem\":\"\",\"freeMaxTokens\":null}' -o /dev/null -w 'cleared stale overrides: HTTP %{http_code}\\\\n')"
     ]
   }
 }

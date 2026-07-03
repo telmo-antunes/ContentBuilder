@@ -1,5 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
+import mongoose from 'mongoose';
 import { config } from '../config';
+import { SettingModel } from '../models';
 
 /**
  * Central Anthropic call helper. One place for model-family quirks so the
@@ -25,6 +27,44 @@ export function isFableFamily(model: string): boolean {
 /** The premium tier for once-per-asset judgment calls; falls back down the stack. */
 export function premiumModel(): string {
   return config.ai.modelLarge ?? config.ai.modelSmall ?? config.ai.model!;
+}
+
+/** Every non-draft AI touchpoint, each individually overridable from Settings. */
+export type AiFeature = 'vision' | 'critique' | 'caption' | 'campaign' | 'background';
+
+const OVERRIDE_FIELD: Record<AiFeature, string> = {
+  vision: 'visionModel',
+  critique: 'critiqueModel',
+  caption: 'captionModel',
+  campaign: 'campaignModel',
+  background: 'backgroundModel',
+};
+
+const ENV_DEFAULT: Record<AiFeature, () => string> = {
+  vision: () => config.ai.modelLarge ?? config.ai.model!,
+  critique: () => config.ai.modelLarge ?? config.ai.model!,
+  caption: premiumModel,
+  campaign: premiumModel,
+  background: () => config.ai.modelSmall ?? config.ai.model!,
+};
+
+/**
+ * Resolve the model for a touchpoint: the AI Settings override wins, else the
+ * env-var tier for that feature. (The two DRAFT paths resolve their own
+ * overrides in draft.ts — together that makes every AI call user-controllable.)
+ * Skips the DB when disconnected (unit tests) so nothing buffers or hangs.
+ */
+export async function modelFor(feature: AiFeature): Promise<string> {
+  if (mongoose.connection.readyState === 1) {
+    try {
+      const doc = await SettingModel.findOne({ key: 'ai' }).lean<Record<string, unknown>>();
+      const override = doc?.[OVERRIDE_FIELD[feature]];
+      if (typeof override === 'string' && override.trim()) return override.trim();
+    } catch {
+      /* settings unavailable → env default */
+    }
+  }
+  return ENV_DEFAULT[feature]();
 }
 
 export function aiClient(): Anthropic {

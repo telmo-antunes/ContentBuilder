@@ -1,5 +1,5 @@
 import { aiDraftConfigured } from '../config';
-import { aiMessage, premiumModel, textOf } from './ai';
+import { aiMessage, modelFor, textOf } from './ai';
 import { recordUsage } from './usage';
 
 export interface GeneratedCaption {
@@ -81,7 +81,7 @@ export async function generateCaption(ctx: CaptionContext): Promise<GeneratedCap
     `Then 5–8 relevant, specific hashtags (no generic #love/#instagood filler).\n\n` +
     `Return STRICT JSON only: {"caption": "the caption text", "hashtags": ["#tag", ...]}`;
 
-  const model = premiumModel();
+  const model = await modelFor('caption');
   const resp = await aiMessage({
     model,
     max_tokens: 2500, // roomy: Fable-family thinking bills against max_tokens
