@@ -22,6 +22,7 @@ import { SlideRenderer } from '../../../../lib/render/SlideRenderer';
 import { ScaledSlide } from '../../../../lib/render/SlideFrame';
 import type { RenderBrandKit } from '../../../../lib/render/types';
 import { confirm } from '../../../components/ConfirmDialog';
+import { useStagedProgress, ANALYZE_STAGES } from '../../../components/useStagedProgress';
 
 type ColorRoleKey = 'primary' | 'secondary' | 'accent' | 'background' | 'text';
 const ROLES: Array<[ColorRoleKey, string]> = [
@@ -41,6 +42,7 @@ export default function BrandKitPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const analyzeLabel = useStagedProgress(busy === 'analyze', ANALYZE_STAGES);
 
   const reload = useCallback(async () => {
     setError(null);
@@ -135,7 +137,7 @@ export default function BrandKitPage() {
                     : 'No website on file'
               }
             >
-              {busy === 'analyze' ? 'Analyzing…' : 'Analyze website'}
+              {busy === 'analyze' ? analyzeLabel ?? 'Analyzing…' : 'Analyze website'}
             </button>
             <button className="btn" onClick={startManual} disabled={busy !== null}>
               {busy === 'manual' ? 'Creating…' : 'Skip extraction / enter manually'}
@@ -179,6 +181,34 @@ export default function BrandKitPage() {
       )}
     </div>
   );
+}
+
+
+/** Turn provenance codes into sentences a non-developer can read. */
+function provenanceChips(p: BrandKit['provenance'] | undefined): string[] {
+  if (!p) return [];
+  const chips: string[] = [];
+  if (p.colors === 'computed') chips.push('Colors read from the site\u2019s real styles');
+  else if (p.colors === 'sampled') chips.push('Colors sampled from a screenshot');
+  else if (p.colors === 'manual') chips.push('Colors entered manually');
+  if (typeof p.fonts === 'string' && p.fonts.startsWith('personality:')) {
+    chips.push(`Fonts matched to the headline\u2019s style (${p.fonts.split(':')[1]?.replace(/-/g, ' ')})`);
+  } else if (p.fonts === 'computed+mapped') chips.push('Fonts name-matched from the site');
+  else if (p.fonts === 'manual') chips.push('Fonts chosen manually');
+  if (p.logo === 'dom') chips.push('Logo found on the site');
+  else if (p.logo === 'none') chips.push('No logo found \u2014 upload one');
+  return chips;
+}
+
+/** Strip Next.js's internal font tokens ("__Playfair_Display_eea437" \u2192 "Playfair Display"). */
+function cleanFontName(raw: string): string {
+  return raw
+    .split(',')[0]!
+    .replace(/^__/, '')
+    .replace(/_[0-9a-f]{6}$/i, '')
+    .replace(/_/g, ' ')
+    .replace(/["']/g, '')
+    .trim();
 }
 
 function KitEditor({
@@ -283,10 +313,11 @@ function KitEditor({
           <span className="dot" /> {isDraft ? 'Draft — review & approve' : 'Approved'}
         </span>
         <span className="prov">
-          <span className="badge">colors: {kit.provenance?.colors}</span>
-          <span className="badge">fonts: {kit.provenance?.fonts}</span>
-          <span className="badge accent">roles: {kit.provenance?.roles}</span>
-          <span className="badge">logo: {kit.provenance?.logo}</span>
+          {provenanceChips(kit.provenance).map((chip) => (
+            <span key={chip} className="badge">
+              {chip}
+            </span>
+          ))}
         </span>
       </div>
 
@@ -371,7 +402,7 @@ function KitEditor({
           <div className="section-label">Fonts (bundled)</div>
           <div className="grid-2">
             <div className="field" style={{ margin: 0 }}>
-              <label>Heading{kit.fonts.detected?.heading ? ` · detected: ${kit.fonts.detected.heading}` : ''}</label>
+              <label>Heading{kit.fonts.detected?.heading ? ` · site uses ${cleanFontName(kit.fonts.detected.heading)}` : ''}</label>
               <select value={heading} onChange={(e) => setHeading(e.target.value)}>
                 {BUNDLED_FONT_FAMILIES.map((f) => (
                   <option key={f} value={f}>
@@ -381,7 +412,7 @@ function KitEditor({
               </select>
             </div>
             <div className="field" style={{ margin: 0 }}>
-              <label>Body{kit.fonts.detected?.body ? ` · detected: ${kit.fonts.detected.body}` : ''}</label>
+              <label>Body{kit.fonts.detected?.body ? ` · site uses ${cleanFontName(kit.fonts.detected.body)}` : ''}</label>
               <select value={body} onChange={(e) => setBody(e.target.value)}>
                 {BUNDLED_FONT_FAMILIES.map((f) => (
                   <option key={f} value={f}>

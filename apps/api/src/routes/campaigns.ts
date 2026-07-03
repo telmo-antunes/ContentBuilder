@@ -122,6 +122,100 @@ campaignRouter.delete(
   }),
 );
 
+/** Load a campaign + locate one concept by id, or throw. */
+async function campaignConcept(campaignId: string | undefined, conceptId: string | undefined) {
+  const id = requireObjectId(campaignId, 'Campaign');
+  const campaign = await CampaignModel.findById(id);
+  if (!campaign) throw new ApiError(404, 'Campaign not found');
+  const concepts = campaign.get('concepts') as Array<Record<string, any>>;
+  const index = concepts.findIndex((c) => c.id === conceptId);
+  if (index === -1) throw new ApiError(404, 'Concept not found');
+  return { campaign, concepts, concept: concepts[index]!, index };
+}
+
+const editConceptSchema = z.object({
+  title: z.string().trim().min(1).max(120).optional(),
+  angle: z.string().trim().max(200).optional(),
+  paragraph: z.string().trim().min(1).max(2000).optional(),
+});
+
+// Edit a concept's copy before (or after) drafting it.
+campaignRouter.patch(
+  '/:campaignId/concepts/:conceptId',
+  asyncHandler(async (req, res) => {
+    const body = parseBody(editConceptSchema, req.body);
+    const { campaign, concept } = await campaignConcept(req.params.campaignId, req.params.conceptId);
+    if (body.title !== undefined) concept.title = body.title;
+    if (body.angle !== undefined) concept.angle = body.angle;
+    if (body.paragraph !== undefined) concept.paragraph = body.paragraph;
+    campaign.markModified('concepts');
+    await campaign.save();
+    res.json(campaign.toJSON());
+  }),
+);
+
+// Move a concept up/down in the series order.
+campaignRouter.post(
+  '/:campaignId/concepts/:conceptId/move',
+  asyncHandler(async (req, res) => {
+    const dir = req.body?.dir === -1 ? -1 : 1;
+    const { campaign, concepts, index } = await campaignConcept(
+      req.params.campaignId,
+      req.params.conceptId,
+    );
+    const target = index + dir;
+    if (target >= 0 && target < concepts.length) {
+      [concepts[index], concepts[target]] = [concepts[target]!, concepts[index]!];
+      campaign.markModified('concepts');
+      await campaign.save();
+    }
+    res.json(campaign.toJSON());
+  }),
+);
+
+// Regenerate ONE concept (only while undrafted) — replans a single slot with the
+// campaign brief, explicitly avoiding the other concepts' angles.
+campaignRouter.post(
+  '/:campaignId/concepts/:conceptId/regenerate',
+  asyncHandler(async (req, res) => {
+    if (!aiDraftConfigured()) {
+      throw new ApiError(400, 'Campaign planning needs ANTHROPIC_API_KEY + ANTHROPIC_MODEL_SMALL.');
+    }
+    const { campaign, concepts, concept, index } = await campaignConcept(
+      req.params.campaignId,
+      req.params.conceptId,
+    );
+    if (concept.projectId) {
+      throw new ApiError(400, 'This concept is already drafted — edit the project instead.');
+    }
+    const business = await BusinessModel.findById(campaign.get('businessId')).lean();
+    const kit = await approvedKitFor(String(campaign.get('businessId')));
+    const others = concepts.filter((_, i) => i !== index).map((c) => `"${c.title}"`);
+    let replacements;
+    try {
+      replacements = await planCampaign({
+        brief:
+          `${campaign.get('brief')}\n\nGenerate ONE replacement for post #${index + 1} of the series ` +
+          `(previously "${concept.title}" — take a DIFFERENT angle). It must not duplicate the other posts: ${others.join(', ')}.`,
+        count: 1,
+        businessName: (business as any)?.name,
+        voice: (kit as any)?.voice,
+        styleDescriptor: (kit as any)?.styleDescriptor,
+        profile: (business as any)?.profile,
+        goal: campaign.get('goal'),
+      });
+    } catch (err) {
+      throw new ApiError(502, `Regenerate failed: ${publicErrMessage(err, 'AI error')}.`);
+    }
+    if (!replacements.length) throw new ApiError(502, 'The regenerate came back empty — try again.');
+    // Keep the slot's id so the UI row identity is stable.
+    concepts[index] = { ...replacements[0]!, id: concept.id };
+    campaign.markModified('concepts');
+    await campaign.save();
+    res.json(campaign.toJSON());
+  }),
+);
+
 // Draft one concept into a real Project on demand (the expensive step).
 campaignRouter.post(
   '/:campaignId/concepts/:conceptId/draft',

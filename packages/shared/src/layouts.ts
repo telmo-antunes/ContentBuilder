@@ -50,6 +50,20 @@ export function layoutWantsImage(layout: LayoutType): boolean {
   return LAYOUTS_REQUIRING_IMAGE.includes(layout);
 }
 
+/** Human-facing names (the enum values are code identifiers, not UI copy). */
+export const LAYOUT_LABELS: Record<LayoutType, string> = {
+  Cover: 'Cover',
+  BackgroundImage: 'Background image',
+  CenteredHero: 'Featured image',
+  TextOnly: 'Text',
+  SplitImageText: 'Split image + text',
+  Statement: 'Statement',
+  Checklist: 'Checklist',
+  Quote: 'Quote',
+  CTA: 'Call to action',
+  FreePosition: 'Free canvas',
+};
+
 /** Short descriptions surfaced in the editor's layout dropdown. */
 export const LAYOUT_DESCRIPTIONS: Record<LayoutType, string> = {
   Cover: 'Title slide — title/subtitle stack with logo, optional subtle background image.',

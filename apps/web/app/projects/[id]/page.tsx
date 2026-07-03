@@ -11,6 +11,7 @@ import {
   LAYOUT_DESCRIPTIONS,
   isFreeLayout,
   FORMAT_LABELS,
+  LAYOUT_LABELS,
   MAX_SLIDES_PER_PROJECT,
   THEME_PRESETS,
   dimensionsFor,
@@ -43,6 +44,7 @@ import { SlideRenderer } from '../../../lib/render/SlideRenderer';
 import { ScaledSlide } from '../../../lib/render/SlideFrame';
 import { FreeCanvasOverlay } from './FreeCanvasOverlay';
 import { confirm } from '../../components/ConfirmDialog';
+import { useStagedProgress, POLISH_STAGES } from '../../components/useStagedProgress';
 import { toRenderKit, resolveSlideImage, resolveImageLayout } from '../../../lib/render/projectRender';
 import type { RenderBrandKit } from '../../../lib/render/types';
 
@@ -183,6 +185,9 @@ export default function ProjectEditorPage() {
   // visible (never clipped). Measured from the stage; capped so it doesn't get huge.
   const previewStageRef = useRef<HTMLDivElement>(null);
   const [previewWidth, setPreviewWidth] = useState(440);
+  // Preview zoom: 'fit' scales to the column; 0.5/1 are true pixel scales
+  // (scrollable) for detail work on the 1080px canvas.
+  const [zoom, setZoom] = useState<'fit' | 0.5 | 1>('fit');
   useEffect(() => {
     const el = previewStageRef.current;
     if (!el) return;
@@ -364,6 +369,8 @@ export default function ProjectEditorPage() {
 
   // Ask the server to self-critique the rendered slides and auto-apply bounded
   // fixes (overflow, contrast, crowding). Applied through the undo path.
+  const polishLabel = useStagedProgress(polishing, POLISH_STAGES);
+
   const polish = async () => {
     if (slides.length === 0 || polishing) return;
     setPolishing(true);
@@ -528,7 +535,7 @@ export default function ProjectEditorPage() {
             disabled={polishing || slides.length === 0}
             title="Auto-fix layout issues (overflow, contrast, crowding)"
           >
-            {polishing ? 'Polishing…' : '✦ Polish'}
+            {polishing ? polishLabel ?? 'Polishing…' : '✦ Polish'}
           </button>
           <button
             className="btn sm"
@@ -625,7 +632,7 @@ export default function ProjectEditorPage() {
               />
               <div className="thumb-meta">
                 <span>
-                  {i + 1}. {s.layoutType}
+                  {i + 1}. {LAYOUT_LABELS[s.layoutType]}
                 </span>
                 <span style={{ display: 'flex', gap: 2 }}>
                   <button
@@ -683,16 +690,33 @@ export default function ProjectEditorPage() {
 
         {/* Preview */}
         <div>
-          <div className="preview-stage" ref={previewStageRef}>
+          <div className="row" style={{ justifyContent: 'flex-end', gap: 4, marginBottom: 6 }}>
+            {([['fit', 'Fit'], [0.5, '50%'], [1, '100%']] as const).map(([value, label]) => (
+              <button
+                key={String(value)}
+                className={`btn sm ${zoom === value ? 'primary' : 'ghost'}`}
+                style={{ padding: '2px 10px', fontSize: 12 }}
+                onClick={() => setZoom(value)}
+                title={value === 'fit' ? 'Scale to fit the column' : `View at ${label} of export size`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div
+            className="preview-stage"
+            ref={previewStageRef}
+            style={zoom === 'fit' ? undefined : { overflow: 'auto', maxHeight: '72vh' }}
+          >
             <ScaledSlide
               format={detail.format}
-              displayWidth={previewWidth}
+              displayWidth={zoom === 'fit' ? previewWidth : dimensionsFor(detail.format).width * zoom}
               overlay={
                 isFreeLayout(selected.layoutType) ? (
                   <FreeCanvasOverlay
                     key={selected.id}
                     slide={selected}
-                    scale={previewWidth / dimensionsFor(detail.format).width}
+                    scale={(zoom === 'fit' ? previewWidth : dimensionsFor(detail.format).width * zoom) / dimensionsFor(detail.format).width}
                     onChange={(fn) => mutateSlide(selected.id, fn)}
                     selected={selTarget}
                     onSelect={setSelTarget}
@@ -721,21 +745,24 @@ export default function ProjectEditorPage() {
             </div>
           )}
 
-          <CaptionPanel projectId={id} initial={detail.caption} hasSlides={slides.length > 0} />
         </div>
 
-        {/* Inspector */}
-        <SlideInspector
-          key={selected.id}
-          slide={selected}
-          detail={detail}
-          media={media}
-          onChange={(fn) => mutateSlide(selected.id, fn)}
-          onDelete={() => deleteSlide(selected.id)}
-          onUploaded={(asset) => setMedia((m) => [asset, ...m])}
-          selectedTarget={selTarget}
-          onSelectTarget={setSelTarget}
-        />
+        {/* Inspector + caption: the caption is half the deliverable — it lives
+            beside the slide controls, not below the fold. */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
+          <SlideInspector
+            key={selected.id}
+            slide={selected}
+            detail={detail}
+            media={media}
+            onChange={(fn) => mutateSlide(selected.id, fn)}
+            onDelete={() => deleteSlide(selected.id)}
+            onUploaded={(asset) => setMedia((m) => [asset, ...m])}
+            selectedTarget={selTarget}
+            onSelectTarget={setSelTarget}
+          />
+          <CaptionPanel projectId={id} initial={detail.caption} hasSlides={slides.length > 0} />
+        </div>
       </div>
 
       {showCheck && (
