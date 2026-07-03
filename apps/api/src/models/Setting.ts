@@ -13,6 +13,12 @@ const settingSchema = new Schema(
     key: { type: String, default: 'ai', unique: true },
     designerModel: { type: String, default: '' },
     freeModel: { type: String, default: '' },
+    // Per-touchpoint overrides for every non-draft AI call (see lib/ai.ts modelFor).
+    visionModel: { type: String, default: '' },
+    critiqueModel: { type: String, default: '' },
+    captionModel: { type: String, default: '' },
+    campaignModel: { type: String, default: '' },
+    backgroundModel: { type: String, default: '' },
     designerSystem: { type: String, default: '' },
     freeSystem: { type: String, default: '' },
     freeMaxTokens: { type: Number, required: false },

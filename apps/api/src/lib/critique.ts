@@ -7,7 +7,7 @@ import {
   type ThemePreset,
 } from '@contentbuilder/shared';
 import { config, aiVisionConfigured } from '../config';
-import { aiMessage, textOf } from './ai';
+import { aiMessage, modelFor, textOf } from './ai';
 import { getBrowser } from './browser';
 import { recordUsage } from './usage';
 
@@ -100,7 +100,7 @@ async function visionCritiqueBatch(
 ): Promise<Array<VisionCritique | null>> {
   if (!aiVisionConfigured() || shots.length === 0) return shots.map(() => null);
   try {
-    const model = config.ai.modelLarge ?? config.ai.model!;
+    const model = await modelFor('critique');
     const prompt =
       `These are the ${shots.length} slides of ONE social post, in order (current themes: ${shots
         .map((s, i) => `#${i + 1}=${s.theme}`)

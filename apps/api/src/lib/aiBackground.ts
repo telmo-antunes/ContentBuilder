@@ -1,7 +1,8 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { categoryLabel, renderMotif, MOTIF_CATALOG, type BgColors } from '@contentbuilder/shared';
 import type { BusinessCategory } from '@contentbuilder/shared';
-import { config, aiDraftConfigured } from '../config';
+import { aiDraftConfigured } from '../config';
+import { aiMessage, modelFor, textOf } from './ai';
+import { recordUsage } from './usage';
 
 export interface AiBgOptions {
   category?: BusinessCategory;
@@ -52,14 +53,19 @@ async function rankMotifs(colors: BgColors, opts: AiBgOptions): Promise<string[]
       `Palette dominant: ${colors.background} with ${colors.primary}/${colors.accent} accents.\n\n` +
       `Menu:\n${menu}\n\n` +
       `Rank the FOUR that best fit this brand, best first. Return STRICT JSON only: {"motifs":["id","id","id","id"]}`;
-    const client = new Anthropic({ apiKey: config.ai.apiKey });
-    const resp = await client.messages.create({
-      model: config.ai.modelSmall!, // cheap — it's a menu pick, not SVG generation
+    const model = await modelFor('background'); // cheap tier by default — it's a menu pick
+    const resp = await aiMessage({
+      model,
       max_tokens: 120,
       messages: [{ role: 'user', content: prompt }],
     });
-    const part = resp.content.find((c) => c.type === 'text');
-    const raw = part && 'text' in part ? part.text : '';
+    await recordUsage({
+      feature: 'background-pick',
+      model,
+      inputTokens: resp.usage?.input_tokens,
+      outputTokens: resp.usage?.output_tokens,
+    });
+    const raw = textOf(resp);
     const json = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1));
     const picked = Array.isArray(json.motifs) ? json.motifs.filter((m: unknown) => IDS.includes(m as string)) : [];
     return picked.length ? [...new Set([...picked, ...shuffled()])] : shuffled();

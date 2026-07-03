@@ -1,5 +1,5 @@
-import { config, aiVisionConfigured } from '../config';
-import { aiMessage, textOf } from './ai';
+import { aiVisionConfigured } from '../config';
+import { aiMessage, modelFor, textOf } from './ai';
 import { recordUsage } from './usage';
 import type { PaletteColor, DomRoles, Extraction } from './analyze';
 
@@ -143,10 +143,6 @@ export function snapToPalette(hex: string, palette: string[]): string | null {
   return best?.hex ?? null;
 }
 
-/** The stronger model when configured — brand identity is once-per-business, so spend on it. */
-function visionModel(): string {
-  return config.ai.modelLarge ?? config.ai.model!;
-}
 function parseJson(raw: string): Record<string, unknown> | null {
   try {
     const s = raw.indexOf('{');
@@ -193,8 +189,9 @@ async function readTypeAndVibe(
       `typePersonality guide (base it on the headlines): high-contrast/elegant serif → "elegant-serif"; traditional book serif → "classic-serif"; magazine serif → "editorial-serif"; heavy CONDENSED / tall all-caps → "bold-condensed"; poster/ultra-bold display → "impact-display"; clean geometric sans → "geometric-sans"; technical modern grotesque → "modern-grotesque"; warm humanist sans → "humanist-sans"; soft rounded sans → "friendly-rounded"; plain neutral UI sans → "clean-neutral".`;
     // Roomy cap: on Fable-family models thinking is always on and counts
     // against max_tokens — a tight cap would truncate before the JSON.
+    const model = await modelFor('vision');
     const resp = await aiMessage({
-      model: visionModel(),
+      model,
       max_tokens: 3000,
       messages: [
         {
@@ -208,7 +205,7 @@ async function readTypeAndVibe(
     });
     await recordUsage({
       feature: 'vision:type-vibe',
-      model: visionModel(),
+      model,
       inputTokens: resp.usage?.input_tokens,
       outputTokens: resp.usage?.output_tokens,
     });
@@ -263,8 +260,9 @@ export async function assignRolesAndVibe(
       `(background = dominant surface; text = reads clearly on background; primary = main brand color; accent = highlight; secondary = supporting). ` +
       `Also judge the HEADLINE typePersonality (one of ${JSON.stringify(PERSONALITIES)}), write one vivid styleDescriptor sentence, and one/two sentences of "voice" (how the brand talks — register, person, energy).\n\n` +
       `STRICT JSON only: {"primary":"#hex","secondary":"#hex","accent":"#hex","background":"#hex","text":"#hex","typePersonality":"...","styleDescriptor":"...","voice":"..."}`;
+    const model = await modelFor('vision');
     const resp = await aiMessage({
-      model: visionModel(),
+      model,
       max_tokens: 3000, // roomy: Fable-family thinking bills against max_tokens
       messages: [
         {
@@ -278,7 +276,7 @@ export async function assignRolesAndVibe(
     });
     await recordUsage({
       feature: 'vision:roles',
-      model: visionModel(),
+      model,
       inputTokens: resp.usage?.input_tokens,
       outputTokens: resp.usage?.output_tokens,
     });

@@ -62,29 +62,48 @@ export default function SettingsPage() {
       <p className="muted" style={{ marginBottom: 6 }}><Link href="/">← Businesses</Link></p>
       <h1 style={{ fontFamily: "'Montserrat', sans-serif", marginBottom: 4 }}>AI Settings</h1>
       <p className="muted" style={{ marginTop: 0 }}>
-        Tune the draft models and system prompts without touching code. Leave a field blank to use
-        the built-in default. Changes apply to the next draft.
+        Every AI touchpoint's model is overridable here, plus the draft system prompts. Leave a
+        field blank to use the environment/built-in default. Changes apply to the next generation.
       </p>
 
       {error && <div className="error-box" style={{ fontSize: 13 }}>{error}</div>}
 
       <div className="panel" style={{ marginTop: 14 }}>
-        <div className="section-label" style={{ marginTop: 0 }}>Models</div>
+        <div className="section-label" style={{ marginTop: 0 }}>Models — every AI touchpoint</div>
         <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
-          Override per mode. Blank = use the environment default. Current env —
-          Designer: <code>{data.envModels.modelSmall || '—'}</code>,
-          {' '}Free: <code>{data.envModels.modelLarge || data.envModels.modelSmall || data.envModels.model || '—'}</code>.
+          Each field overrides ONE touchpoint. Blank = the environment default shown as the
+          placeholder. Changes apply to the next generation — no restart needed.
         </p>
-        <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
-          <div style={{ flex: 1, minWidth: 240 }}>
-            <label style={labelStyle}>Designer model</label>
-            <input value={form.designerModel} placeholder={data.envModels.modelSmall || 'env default'} onChange={(e) => set({ designerModel: e.target.value })} />
-          </div>
-          <div style={{ flex: 1, minWidth: 240 }}>
-            <label style={labelStyle}>Free model</label>
-            <input value={form.freeModel} placeholder={data.envModels.modelLarge || data.envModels.modelSmall || 'env default'} onChange={(e) => set({ freeModel: e.target.value })} />
-          </div>
-        </div>
+        {(() => {
+          const env = data.envModels;
+          const visionDefault = env.modelLarge || env.model || 'env default';
+          const judgmentDefault = env.modelLarge || env.modelSmall || env.model || 'env default';
+          const smallDefault = env.modelSmall || env.model || 'env default';
+          const fields: Array<{ key: keyof AiSettings; label: string; hint: string; ph: string }> = [
+            { key: 'designerModel', label: 'Draft — Designer', hint: 'arranges copy into preset layouts', ph: smallDefault },
+            { key: 'freeModel', label: 'Draft — Free canvas', hint: 'positions blocks freely (hardest task)', ph: judgmentDefault },
+            { key: 'visionModel', label: 'Brand analysis', hint: 'reads colors, type & voice from the site', ph: visionDefault },
+            { key: 'critiqueModel', label: 'Layout critique', hint: 'reviews rendered slides (Polish)', ph: visionDefault },
+            { key: 'captionModel', label: 'Captions', hint: 'writes the post caption in the brand voice', ph: judgmentDefault },
+            { key: 'campaignModel', label: 'Campaign planning', hint: 'turns a brief into a post series', ph: judgmentDefault },
+            { key: 'backgroundModel', label: 'Background picker', hint: 'ranks motifs from the vetted menu', ph: smallDefault },
+          ];
+          return (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 12 }}>
+              {fields.map((f) => (
+                <div key={f.key}>
+                  <label style={labelStyle}>{f.label}</label>
+                  <input
+                    value={form[f.key] as string}
+                    placeholder={f.ph}
+                    onChange={(e) => set({ [f.key]: e.target.value } as Partial<AiSettings>)}
+                  />
+                  <div className="muted" style={{ fontSize: 11, marginTop: 3 }}>{f.hint}</div>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
       </div>
 
       {usage && (

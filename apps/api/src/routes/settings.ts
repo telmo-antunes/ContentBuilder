@@ -8,6 +8,11 @@ import { config } from '../config';
 const settingsSchema = z.object({
   designerModel: z.string().max(120).optional(),
   freeModel: z.string().max(120).optional(),
+  visionModel: z.string().max(120).optional(),
+  critiqueModel: z.string().max(120).optional(),
+  captionModel: z.string().max(120).optional(),
+  campaignModel: z.string().max(120).optional(),
+  backgroundModel: z.string().max(120).optional(),
   designerSystem: z.string().max(20000).optional(),
   freeSystem: z.string().max(20000).optional(),
   freeMaxTokens: z.number().int().min(256).max(16000).nullable().optional(),
@@ -25,6 +30,11 @@ settingsRouter.get(
       settings: {
         designerModel: (doc?.designerModel as string) ?? '',
         freeModel: (doc?.freeModel as string) ?? '',
+        visionModel: (doc?.visionModel as string) ?? '',
+        critiqueModel: (doc?.critiqueModel as string) ?? '',
+        captionModel: (doc?.captionModel as string) ?? '',
+        campaignModel: (doc?.campaignModel as string) ?? '',
+        backgroundModel: (doc?.backgroundModel as string) ?? '',
         designerSystem: (doc?.designerSystem as string) ?? '',
         freeSystem: (doc?.freeSystem as string) ?? '',
         freeMaxTokens: (doc?.freeMaxTokens as number) ?? null,

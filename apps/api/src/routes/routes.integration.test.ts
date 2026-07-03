@@ -17,6 +17,7 @@ vi.hoisted(() => {
   process.env.ANTHROPIC_API_KEY = 'test-key';
   process.env.ANTHROPIC_MODEL = 'claude-test';
   process.env.ANTHROPIC_MODEL_SMALL = 'claude-test';
+  process.env.ANTHROPIC_MODEL_FREE = 'claude-test'; // else a local .env value leaks in
   delete process.env.APP_PASSWORD; // auth must be off for these tests
 });
 
@@ -59,7 +60,8 @@ vi.mock('../lib/backgrounds', () => ({
 }));
 
 import { createApp } from '../app';
-import { BusinessModel, BrandKitModel, MediaAssetModel, ProjectModel } from '../models';
+import { modelFor } from '../lib/ai';
+import { BusinessModel, BrandKitModel, MediaAssetModel, ProjectModel, SettingModel } from '../models';
 
 let mongod: MongoMemoryServer;
 const app = () => createApp();
@@ -245,6 +247,24 @@ describe('campaigns', () => {
     expect(second.status).toBe(200);
     expect(second.body._id).toBe(first.body._id);
     expect(await ProjectModel.countDocuments()).toBe(1);
+  });
+});
+
+// ── Per-touchpoint model overrides ────────────────────────────────────────────
+describe('modelFor', () => {
+  it('falls back to the env tier when no override is stored', async () => {
+    expect(await modelFor('caption')).toBe('claude-test'); // from the stubbed env
+  });
+
+  it('prefers the Settings override for its touchpoint only', async () => {
+    await SettingModel.create({ key: 'ai', captionModel: 'claude-caption-override' });
+    expect(await modelFor('caption')).toBe('claude-caption-override');
+    expect(await modelFor('campaign')).toBe('claude-test'); // untouched touchpoint
+
+    // Settings PUT persists the override fields too.
+    const res = await request(app()).put('/settings').send({ visionModel: 'claude-vision-override' });
+    expect(res.status).toBe(200);
+    expect(await modelFor('vision')).toBe('claude-vision-override');
   });
 });
 

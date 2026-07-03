@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { CampaignConcept } from '@contentbuilder/shared';
 import { aiDraftConfigured } from '../config';
-import { aiMessage, premiumModel, textOf } from './ai';
+import { aiMessage, modelFor, textOf } from './ai';
 import { recordUsage } from './usage';
 
 interface PlanContext {
@@ -79,7 +79,7 @@ export async function planCampaign(ctx: PlanContext): Promise<CampaignConcept[]>
 
   // Premium tier: the series arc is the creative heart of a campaign — the
   // concepts it produces get amplified through N drafts downstream.
-  const model = premiumModel();
+  const model = await modelFor('campaign');
   const resp = await aiMessage({
     model,
     max_tokens: 6000, // roomy: Fable-family thinking bills against max_tokens
