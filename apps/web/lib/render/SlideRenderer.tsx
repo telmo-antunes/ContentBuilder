@@ -1,7 +1,9 @@
 'use client';
 
+import { useEffect } from 'react';
 import type { Block, Format, LayoutType, ThemePreset } from '@contentbuilder/shared';
 import type { ImageLayoutConfig, LayoutImage, RenderBrandKit } from './types';
+import { ensureGoogleFonts } from './fontLoader';
 import { LAYOUT_REGISTRY } from './layouts';
 import { SlideFrame } from './SlideFrame';
 import { RenderProvider } from './RenderContext';
@@ -40,6 +42,14 @@ export function SlideRenderer({
   slideTotal?: number;
   showCounter?: boolean;
 }) {
+  // Kits whose render fonts aren't bundled (real site fonts) load from Google
+  // Fonts on demand — every render site (editor, thumbs, export) goes through
+  // this component, so this one hook covers them all.
+  const { heading, body } = brandKit.fonts.render;
+  useEffect(() => {
+    ensureGoogleFonts([heading, body]);
+  }, [heading, body]);
+
   const Layout = LAYOUT_REGISTRY[slide.layoutType] ?? LAYOUT_REGISTRY.TextOnly;
   const insets = safeInsets(format);
   const counter =

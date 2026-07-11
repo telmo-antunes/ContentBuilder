@@ -11,11 +11,12 @@ import { extractBrand } from '../lib/analyze';
 import { generateBusinessBackgrounds } from '../lib/backgrounds';
 import { assignRolesAndVibe, brandColorQuality } from '../lib/vision';
 import { assertPublicHttpUrl } from '../lib/urlGuard';
+import { googleFontAvailable, resolveRenderFonts } from '../lib/fonts';
 
 const hex = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Expected a #rrggbb color');
-const bundledFont = z
-  .string()
-  .refine((f) => BUNDLED_FONT_FAMILIES.includes(f), 'Render font must be a bundled font');
+// Any family name is accepted at the schema level; non-bundled ones are verified
+// against Google Fonts in the handler (async, so it can't live in a zod refine).
+const renderFont = z.string().min(1).max(80);
 
 const patchKitSchema = z.object({
   colors: z
@@ -28,7 +29,7 @@ const patchKitSchema = z.object({
       palette: z.array(hex).optional(),
     })
     .optional(),
-  fonts: z.object({ render: z.object({ heading: bundledFont, body: bundledFont }) }).optional(),
+  fonts: z.object({ render: z.object({ heading: renderFont, body: renderFont }) }).optional(),
   logo: z.object({ sourceUrl: z.string().optional(), key: z.string(), url: z.string() }).optional(),
   logoTreatment: z.enum(['original', 'mono']).optional(),
   styleDescriptor: z.string().max(200).optional(),
@@ -94,21 +95,32 @@ businessBrandKitRouter.post(
     const { extraction, roles } = best;
     const lowQuality = !brandColorQuality(roles.colors).ok;
 
+    // Prefer the site's REAL fonts when they're on Google Fonts — the brand keeps
+    // its actual typography instead of a bundled lookalike. Falls back to the
+    // personality/name-mapped bundled faces when not available (or offline).
+    const resolvedFonts = await resolveRenderFonts(
+      extraction.detectedFonts,
+      roles.fonts ?? extraction.renderFonts,
+    );
+
     // One pending draft at a time; keep approved kits as history.
     await BrandKitModel.deleteMany({ businessId: id, status: 'draft' });
     const kit = await BrandKitModel.create({
       businessId: id,
       colors: roles.colors,
-      // Prefer fonts chosen from the headline's *visual personality* (serif vs
-      // condensed vs geometric); fall back to name-matching the detected font.
-      fonts: { detected: extraction.detectedFonts, render: roles.fonts ?? extraction.renderFonts },
+      // Site's real font (Google Fonts) > personality-mapped bundled > name-matched.
+      fonts: { detected: extraction.detectedFonts, render: resolvedFonts.render },
       logo: extraction.logo,
       styleDescriptor: roles.styleDescriptor,
       voice: roles.voice ?? '',
       homepageScreenshot: extraction.screenshot,
       provenance: {
         colors: extraction.colorProvenance,
-        fonts: roles.fonts ? `personality:${roles.typePersonality}` : 'computed+mapped',
+        fonts: resolvedFonts.usesSiteFont
+          ? 'site:google-fonts'
+          : roles.fonts
+            ? `personality:${roles.typePersonality}`
+            : 'computed+mapped',
         roles: roles.provenance,
         logo: extraction.logo ? 'dom' : 'none',
       },
@@ -200,6 +212,16 @@ brandKitRouter.patch(
       });
     }
     if (body.fonts?.render) {
+      // Non-bundled families must exist on Google Fonts, or the renderer could
+      // never load them and every slide would silently fall back to sans-serif.
+      for (const family of [body.fonts.render.heading, body.fonts.render.body]) {
+        if (!BUNDLED_FONT_FAMILIES.includes(family) && !(await googleFontAvailable(family))) {
+          throw new ApiError(
+            400,
+            `"${family}" is not a bundled font and couldn't be found on Google Fonts.`,
+          );
+        }
+      }
       kit.set('fonts.render.heading', body.fonts.render.heading);
       kit.set('fonts.render.body', body.fonts.render.body);
     }
