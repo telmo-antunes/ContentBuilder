@@ -16,6 +16,7 @@ import {
   regenerateBackgrounds,
   generateAiBackground,
   deleteMedia,
+  regenerateTemplatePack,
   type BusinessDetail,
 } from '../../../lib/api';
 import { SlideRenderer } from '../../../../lib/render/SlideRenderer';
@@ -532,6 +533,8 @@ function KitEditor({
 
       <BrandBackgrounds businessId={businessId} colors={colors} colorsValid={colorsValid} setError={setError} styleDescriptor={styleDescriptor} businessName={businessName} />
 
+      <BrandCompositions kit={kit} renderKit={renderKit} setError={setError} />
+
       {/* Actions */}
       <div className="row" style={{ marginTop: 18, justifyContent: 'space-between' }}>
         <div className="row">
@@ -561,6 +564,110 @@ function KitEditor({
         </p>
       )}
     </>
+  );
+}
+
+/** Sample copy poured into composition skeletons so the previews read as designs. */
+const SAMPLE_COPY: Record<string, { text: string; items?: string[] }> = {
+  eyebrow: { text: 'THE EYEBROW' },
+  title: { text: 'Headline goes here' },
+  subtitle: { text: 'A supporting subtitle' },
+  paragraph: { text: 'Body copy flows here with a sentence of supporting detail.' },
+  quote: { text: 'A short customer quote sits right here.' },
+  attribution: { text: '— A happy customer' },
+  date: { text: 'JUL 12' },
+  price: { text: '$49' },
+  list: { text: '', items: ['First point', 'Second point', 'Third point'] },
+  caption: { text: 'A small caption' },
+  cta: { text: 'Book now' },
+  footer: { text: 'yourbrand.com' },
+  handle: { text: '@yourbrand' },
+};
+
+/**
+ * The brand's signature compositions (G1): 6 AI-designed FreePosition skeletons,
+ * previewed with sample copy. Free-canvas drafts start from these, so this is
+ * what makes the brand's posts structurally its own.
+ */
+function BrandCompositions({
+  kit,
+  renderKit,
+  setError,
+}: {
+  kit: BrandKit;
+  renderKit: RenderBrandKit;
+  setError: (s: string | null) => void;
+}) {
+  const [pack, setPack] = useState(kit.templatePack ?? []);
+  const [busy, setBusy] = useState(false);
+
+  const regen = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const fresh = await regenerateTemplatePack(kit._id);
+      setPack(fresh.templatePack ?? []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="panel" style={{ marginTop: 14 }}>
+      <div className="section-label" style={{ marginTop: 0 }}>Brand compositions</div>
+      <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
+        Six signature layouts designed for THIS brand&rsquo;s character — free-canvas drafts build on
+        them, so your posts differ from other brands structurally, not just in color. Shown with
+        sample copy.
+      </p>
+      {pack.length > 0 ? (
+        <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
+          {pack.map((t, i) => (
+            <div key={`${t.name}-${i}`} style={{ textAlign: 'center' }}>
+              <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
+                <ScaledSlide format="1080x1350" displayWidth={128}>
+                  <SlideRenderer
+                    slide={{
+                      layoutType: 'FreePosition',
+                      blocks: t.blocks.map((b) => ({
+                        type: b.type,
+                        text: SAMPLE_COPY[b.type]?.text ?? 'Sample',
+                        items: SAMPLE_COPY[b.type]?.items,
+                        frame: b.frame,
+                        z: b.z,
+                      })),
+                    }}
+                    brandKit={renderKit}
+                    format="1080x1350"
+                    image={null}
+                    imageLayout={{
+                      imageFrame: t.imageFrame,
+                      background: t.imageBackground,
+                      decorations: t.decorations,
+                    }}
+                    forExport
+                  />
+                </ScaledSlide>
+              </div>
+              <div className="muted" style={{ fontSize: 11, marginTop: 5, maxWidth: 128 }}>
+                {t.name}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="muted" style={{ fontSize: 12 }}>
+          None yet — they&rsquo;re designed automatically when you approve the kit, or generate them now.
+        </p>
+      )}
+      <div className="row" style={{ marginTop: 12 }}>
+        <button className="btn sm" onClick={regen} disabled={busy}>
+          {busy ? 'Designing…' : pack.length ? '↻ Redesign pack' : '✦ Design pack'}
+        </button>
+      </div>
+    </div>
   );
 }
 

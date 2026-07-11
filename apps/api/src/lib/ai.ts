@@ -30,7 +30,7 @@ export function premiumModel(): string {
 }
 
 /** Every non-draft AI touchpoint, each individually overridable from Settings. */
-export type AiFeature = 'vision' | 'critique' | 'caption' | 'campaign' | 'background';
+export type AiFeature = 'vision' | 'critique' | 'caption' | 'campaign' | 'background' | 'templates';
 
 const OVERRIDE_FIELD: Record<AiFeature, string> = {
   vision: 'visionModel',
@@ -38,6 +38,7 @@ const OVERRIDE_FIELD: Record<AiFeature, string> = {
   caption: 'captionModel',
   campaign: 'campaignModel',
   background: 'backgroundModel',
+  templates: 'templatesModel',
 };
 
 const ENV_DEFAULT: Record<AiFeature, () => string> = {
@@ -46,6 +47,8 @@ const ENV_DEFAULT: Record<AiFeature, () => string> = {
   caption: premiumModel,
   campaign: premiumModel,
   background: () => config.ai.modelSmall ?? config.ai.model!,
+  // Composition design is spatial-JSON work like free drafts → judgment tier.
+  templates: premiumModel,
 };
 
 /**

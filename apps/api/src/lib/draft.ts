@@ -186,6 +186,7 @@ export async function draftSlidesFromParagraph(
   type: AssetType,
   format: Format,
   mode: DraftMode = 'designer',
+  brandContext?: { pack?: string },
 ): Promise<SlideInput[]> {
   const settings = await loadAiSettings();
   const userMsg =
@@ -216,13 +217,18 @@ export async function draftSlidesFromParagraph(
     // then the Sonnet-class draft model; the small vision model (Haiku) is the last
     // resort because it's unreliable at strict fractional-coordinate JSON.
     const model = pick(settings.freeModel, config.ai.modelLarge ?? config.ai.modelSmall ?? config.ai.model!);
+    // The brand's signature compositions (G1): the draft starts from THIS brand's
+    // structural language instead of generic layout instincts.
+    const packSection = brandContext?.pack
+      ? `\n\nBRAND COMPOSITIONS — this brand's signature composition skeletons. For each slide, pick the skeleton whose "purpose" fits the content (cover for openers, list for bullet content, cta for closers, …) and ADAPT its frames to the actual copy — resize/nudge as the text requires, but keep its structural character. Deviate only when no skeleton suits the content:\n${brandContext.pack}`
+      : '';
     const params: Anthropic.MessageCreateParamsNonStreaming = {
       model,
       max_tokens:
         settings.freeMaxTokens && settings.freeMaxTokens > 0
           ? settings.freeMaxTokens
           : PROMPT_DEFAULTS.freeMaxTokens,
-      system: freeSystem(type, format, settings.freeSystem),
+      system: freeSystem(type, format, settings.freeSystem) + packSection,
       messages: [{ role: 'user', content: userMsg }],
     };
     // Adaptive thinking + high effort sharpen spatial reasoning, but small models

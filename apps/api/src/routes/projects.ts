@@ -9,6 +9,7 @@ import { ApiError, asyncHandler, parseBody, publicErrMessage, requireObjectId } 
 import { createProjectSchema, updateProjectSchema, type SlideInput } from '../lib/validation';
 import { renderSlidesToPng, slugify } from '../lib/exporter';
 import { draftSlidesFromParagraph } from '../lib/draft';
+import { brandPackContext } from '../lib/templates';
 import { generateCaption, type GeneratedCaption } from '../lib/caption';
 import { critiqueProject } from '../lib/critique';
 import { aiDraftConfigured, aiFreeConfigured } from '../config';
@@ -239,6 +240,7 @@ projectsRouter.post(
         project.get('type'),
         project.get('format'),
         mode,
+        await brandPackContext(String(project.get('businessId'))),
       );
     } catch (err) {
       throw new ApiError(
