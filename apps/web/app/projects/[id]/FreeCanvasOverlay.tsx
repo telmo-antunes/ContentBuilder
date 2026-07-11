@@ -2,7 +2,7 @@
 
 import { useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import type { Slide } from '@contentbuilder/shared';
-import { BLOCK_LABELS } from '@contentbuilder/shared';
+import { BLOCK_LABELS, isListBlock } from '@contentbuilder/shared';
 
 type Frame = { x: number; y: number; w: number; h: number };
 type Corner = 'nw' | 'ne' | 'sw' | 'se';
@@ -56,6 +56,9 @@ export function FreeCanvasOverlay({
   const rootRef = useRef<HTMLDivElement>(null);
   const setSelected = onSelect;
   const [drag, setDrag] = useState<DragState>(null);
+  // Inline text editing (double-click a text frame). Escape cancels; blur commits.
+  const [editing, setEditing] = useState<string | null>(null);
+  const cancelEdit = useRef(false);
   const [live, setLive] = useState<{ id: string; frame: Frame } | null>(null);
   const [guides, setGuides] = useState<{ x: number[]; y: number[] }>({ x: [], y: [] });
   // Snap candidates (canvas edges/centers + the other elements' edges/centers),
@@ -179,6 +182,25 @@ export function FreeCanvasOverlay({
     setDrag({ kind: 'resize', id: t.id, anchorX, anchorY });
   };
 
+  /** Commit inline-edited text back to the block (lists: one item per line). */
+  const commitText = (id: string, value: string) => {
+    const i = blockIndex(id);
+    const block = slide.blocks[i];
+    if (!block) return;
+    const current = isListBlock(block.type) ? (block.items ?? []).join('\n') : block.text;
+    if (value === current) return; // no-op edits shouldn't pollute undo history
+    onChange((s) => ({
+      ...s,
+      blocks: s.blocks.map((b, bi) =>
+        bi === i
+          ? isListBlock(b.type)
+            ? { ...b, items: value.split('\n') }
+            : { ...b, text: value }
+          : b,
+      ),
+    }));
+  };
+
   const setZ = (id: string, toFront: boolean) => {
     const i = blockIndex(id);
     const zs = slide.blocks.map((b, k) => b.z ?? k);
@@ -215,6 +237,12 @@ export function FreeCanvasOverlay({
           <div
             key={t.id}
             onPointerDown={(e) => startMove(e, t)}
+            onDoubleClick={() => {
+              if (t.isImage) return;
+              setSelected(t.id);
+              setEditing(t.id);
+            }}
+            title={t.isImage ? undefined : 'Double-click to edit text'}
             style={{
               position: 'absolute',
               left: `${f.x * 100}%`,
@@ -263,6 +291,47 @@ export function FreeCanvasOverlay({
                   </>
                 )}
               </div>
+            )}
+            {editing === t.id && !t.isImage && (
+              <textarea
+                autoFocus
+                defaultValue={(() => {
+                  const b = slide.blocks[blockIndex(t.id)];
+                  return b ? (isListBlock(b.type) ? (b.items ?? []).join('\n') : b.text) : '';
+                })()}
+                onFocus={(e) => e.currentTarget.select()}
+                onPointerDown={(e) => e.stopPropagation()}
+                onDoubleClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => {
+                  e.stopPropagation(); // keep Cmd+Z etc. from firing the canvas shortcuts mid-edit
+                  if (e.key === 'Escape') {
+                    cancelEdit.current = true;
+                    e.currentTarget.blur();
+                  } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                    e.currentTarget.blur();
+                  }
+                }}
+                onBlur={(e) => {
+                  if (!cancelEdit.current) commitText(t.id, e.currentTarget.value);
+                  cancelEdit.current = false;
+                  setEditing(null);
+                }}
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  resize: 'none',
+                  boxSizing: 'border-box',
+                  background: 'rgba(8,10,16,0.88)',
+                  color: '#f4f4f6',
+                  border: `${1.5 * px}px solid rgba(${rgb},0.95)`,
+                  outline: 'none',
+                  padding: `${8 * px}px`,
+                  fontFamily: 'inherit',
+                  fontSize: 15 * px,
+                  lineHeight: 1.4,
+                  zIndex: 70,
+                }}
+              />
             )}
             {isSel &&
               (['nw', 'ne', 'sw', 'se'] as Corner[]).map((c) => (

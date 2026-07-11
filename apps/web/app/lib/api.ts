@@ -97,6 +97,7 @@ export interface AiSettings {
   campaignModel: string;
   backgroundModel: string;
   templatesModel: string;
+  alternativesModel: string;
   designerSystem: string;
   freeSystem: string;
   freeMaxTokens: number | null;
@@ -183,6 +184,12 @@ export interface CritiqueReportItem {
 /** Self-critique the rendered slides and auto-apply bounded layout fixes. */
 export const polishProject = (id: string) =>
   request<{ project: Project; report: CritiqueReportItem[] }>(`/projects/${id}/critique`, {
+    method: 'POST',
+  });
+
+/** 3 AI-proposed layout alternatives for one slide (same copy, new structure). */
+export const getSlideAlternatives = (projectId: string, slideId: string) =>
+  request<{ alternatives: Slide[] }>(`/projects/${projectId}/slides/${slideId}/alternatives`, {
     method: 'POST',
   });
 

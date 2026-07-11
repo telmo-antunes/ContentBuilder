@@ -39,6 +39,7 @@ import {
   updateProject,
   uploadMedia,
   generateProjectCaption,
+  getSlideAlternatives,
   polishProject,
   type ProjectDetail,
 } from '../../lib/api';
@@ -910,6 +911,7 @@ export default function ProjectEditorPage() {
             selectedTarget={selTarget}
             onSelectTarget={setSelTarget}
             onConvertToCanvas={convertToCanvas}
+            kit={kit}
           />
           <CaptionPanel projectId={id} initial={detail.caption} hasSlides={slides.length > 0} />
         </div>
@@ -1353,6 +1355,7 @@ function SlideInspector({
   selectedTarget,
   onSelectTarget,
   onConvertToCanvas,
+  kit,
 }: {
   slide: Slide;
   detail: ProjectDetail;
@@ -1363,6 +1366,7 @@ function SlideInspector({
   selectedTarget: string | null;
   onSelectTarget: (id: string | null) => void;
   onConvertToCanvas: () => void;
+  kit: RenderBrandKit;
 }) {
   const wantsImage =
     layoutWantsImage(slide.layoutType) || isFreeLayout(slide.layoutType) || slide.imageNeed === 'upload';
@@ -1418,11 +1422,98 @@ function SlideInspector({
         <BlockList blocks={slide.blocks} onChange={setBlocks} selectedTarget={selectedTarget} onSelectTarget={onSelectTarget} />
       </Section>
 
+      <Section title="Alternatives">
+        <AlternativesSection slide={slide} detail={detail} media={media} kit={kit} onChange={onChange} />
+      </Section>
+
       <div className="insp-danger">
         <button className="btn danger sm" onClick={onDelete}>
           Delete this {detail.type === 'story' ? 'frame' : 'slide'}
         </button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Per-slide layout alternatives (G6): one AI call proposes 3 structures for the
+ * SAME copy (the server merges structure onto the original blocks, so the text
+ * can't drift). Applying is a normal undoable slide mutation.
+ */
+function AlternativesSection({
+  slide,
+  detail,
+  media,
+  kit,
+  onChange,
+}: {
+  slide: Slide;
+  detail: ProjectDetail;
+  media: MediaAsset[];
+  kit: RenderBrandKit;
+  onChange: (fn: (s: Slide) => Slide) => void;
+}) {
+  const [alts, setAlts] = useState<Slide[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchAlts = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await getSlideAlternatives(detail._id, slide.id);
+      setAlts(r.alternatives);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const apply = (alt: Slide) =>
+    onChange((s) => ({
+      ...s,
+      layoutType: alt.layoutType,
+      blocks: alt.blocks,
+      imageNeed: alt.imageNeed,
+      overrides: alt.overrides,
+    }));
+
+  return (
+    <div>
+      {alts && alts.length > 0 && (
+        <div className="row" style={{ gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
+          {alts.map((alt, i) => (
+            <button
+              key={i}
+              onClick={() => apply(alt)}
+              title="Apply this layout (undoable)"
+              style={{ padding: 0, border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', cursor: 'pointer', background: 'none' }}
+            >
+              <ScaledSlide format={detail.format} displayWidth={92}>
+                <SlideRenderer
+                  slide={alt}
+                  brandKit={kit}
+                  format={detail.format}
+                  image={resolveSlideImage(alt, media)}
+                  imageLayout={resolveImageLayout(alt, media)}
+                  theme={alt.overrides?.theme}
+                  forExport
+                />
+              </ScaledSlide>
+            </button>
+          ))}
+        </div>
+      )}
+      {error && (
+        <p className="muted" style={{ fontSize: 12, color: 'var(--danger)' }}>{error}</p>
+      )}
+      <button className="btn sm" onClick={fetchAlts} disabled={busy}>
+        {busy ? 'Designing…' : alts ? '↻ New alternatives' : '✦ Suggest 3 layouts'}
+      </button>
+      <p className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+        Same copy, different structure — click one to apply it (undo brings the old layout back).
+      </p>
     </div>
   );
 }
