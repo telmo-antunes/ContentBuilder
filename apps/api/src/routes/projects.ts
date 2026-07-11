@@ -4,7 +4,7 @@ import { Types } from 'mongoose';
 import { ZipArchive } from 'archiver';
 import { z } from 'zod';
 import { MAX_DRAFT_PARAGRAPH_CHARS, defaultThemeForCategory } from '@contentbuilder/shared';
-import { ProjectModel, BusinessModel, BrandKitModel, MediaAssetModel } from '../models';
+import { ProjectModel, ProjectVersionModel, BusinessModel, BrandKitModel, MediaAssetModel } from '../models';
 import { ApiError, asyncHandler, parseBody, publicErrMessage, requireObjectId } from '../lib/http';
 import { createProjectSchema, slideSchema, updateProjectSchema, type SlideInput } from '../lib/validation';
 import { renderSlidesToPng, slugify } from '../lib/exporter';
@@ -253,6 +253,8 @@ projectsRouter.post(
       throw new ApiError(502, 'The draft came back empty — try rephrasing, or build manually.');
     }
 
+    // A draft replaces everything — keep what was there recoverable.
+    if (project.get('slides')?.length) await saveVersion(project, 'Before AI draft').catch(() => {});
     project.set('slides', normalizeSlides(slides));
     await project.save(); // persist so the critique's /render pass can see the slides
     // Best-effort: polish the layout, then caption from the polished slides.
@@ -290,6 +292,77 @@ projectsRouter.post(
   }),
 );
 
+// ── Version history (G9) ────────────────────────────────────────────────────
+
+const MAX_VERSIONS = 20;
+
+/** Snapshot the project's current slides; keep at most MAX_VERSIONS per project. */
+async function saveVersion(project: { get(k: string): any }, label: string): Promise<void> {
+  const projectId = project.get('_id');
+  await ProjectVersionModel.create({ projectId, label, slides: project.get('slides') ?? [] });
+  const excess = await ProjectVersionModel.find({ projectId })
+    .sort({ createdAt: -1 })
+    .skip(MAX_VERSIONS)
+    .select('_id')
+    .lean();
+  if (excess.length) {
+    await ProjectVersionModel.deleteMany({ _id: { $in: excess.map((v) => v._id) } });
+  }
+}
+
+projectsRouter.get(
+  '/:id/versions',
+  asyncHandler(async (req, res) => {
+    const id = requireObjectId(req.params.id, 'Project');
+    const versions = await ProjectVersionModel.find({ projectId: id })
+      .sort({ createdAt: -1 })
+      .lean();
+    res.json({
+      versions: versions.map((v) => ({
+        _id: String(v._id),
+        label: v.label,
+        createdAt: v.createdAt,
+        slideCount: (v.slides ?? []).length,
+      })),
+    });
+  }),
+);
+
+// Manual snapshot ("Save version").
+projectsRouter.post(
+  '/:id/versions',
+  asyncHandler(async (req, res) => {
+    const id = requireObjectId(req.params.id, 'Project');
+    const body = parseBody(z.object({ label: z.string().trim().max(80).optional() }), req.body ?? {});
+    const project = await ProjectModel.findById(id);
+    if (!project) throw new ApiError(404, 'Project not found');
+    await saveVersion(project, body.label || 'Manual save');
+    res.status(201).json({ ok: true });
+  }),
+);
+
+// Restore a snapshot. The current state is snapshotted first, so a restore is
+// itself always reversible.
+projectsRouter.post(
+  '/:id/versions/:versionId/restore',
+  asyncHandler(async (req, res) => {
+    const id = requireObjectId(req.params.id, 'Project');
+    const versionId = requireObjectId(req.params.versionId, 'Version');
+    const project = await ProjectModel.findById(id);
+    if (!project) throw new ApiError(404, 'Project not found');
+    const version = await ProjectVersionModel.findOne({ _id: versionId, projectId: id }).lean();
+    if (!version) throw new ApiError(404, 'Version not found');
+    await saveVersion(project, 'Before restore');
+    const restored = ((version as Record<string, any>).slides ?? [])
+      .map((s: unknown) => slideSchema.safeParse(s))
+      .filter((r: { success: boolean }) => r.success)
+      .map((r: { data: SlideInput }) => r.data);
+    project.set('slides', normalizeSlides(restored));
+    await project.save();
+    res.json(project.toJSON());
+  }),
+);
+
 // Self-critique the rendered slides and auto-apply bounded fixes ("Polish layout").
 projectsRouter.post(
   '/:id/critique',
@@ -298,6 +371,7 @@ projectsRouter.post(
     const project = await ProjectModel.findById(id);
     if (!project) throw new ApiError(404, 'Project not found');
     if (!project.get('slides')?.length) throw new ApiError(400, 'Project has no slides to polish.');
+    await saveVersion(project, 'Before polish').catch(() => {});
     let report;
     try {
       report = await critiqueProject(project);
@@ -350,6 +424,8 @@ projectsRouter.post(
 
     project.set('status', 'rendered');
     await project.save();
+    // What was shipped should always be recoverable.
+    await saveVersion(project, 'Exported').catch(() => {});
 
     const filename = `${slugify(project.get('title'))}.zip`;
     res.setHeader('Content-Type', 'application/zip');

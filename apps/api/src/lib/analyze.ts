@@ -45,6 +45,8 @@ export interface Extraction {
   downscaledBase64: string;
   /** Homepage copy, harvested for brand-voice inference (never rendered as-is). */
   copy: { headline: string; tagline: string; description: string; sample: string };
+  /** The site's largest content photos (candidates for the media library). */
+  siteImages: Array<{ src: string; width: number; height: number }>;
 }
 
 /** Raw weighted color candidates harvested from computed styles (browser-side). */
@@ -218,6 +220,35 @@ export async function extractBrand(url: string, businessId: string): Promise<Ext
       };
     });
 
+    // ── Content images (for the media library) ──────────────────────────────
+    // The brand's real photos beat stock: collect the biggest content images
+    // (skipping chrome — logos, icons, header/nav/footer imagery) as candidates.
+    // NOTE: as above, no named arrow/function consts inside this callback.
+    const siteImages = await page.evaluate(() => {
+      const seen = new Set<string>();
+      const out: Array<{ src: string; width: number; height: number; score: number }> = [];
+      const imgs = Array.from(document.images);
+      for (let i = 0; i < imgs.length; i++) {
+        const img = imgs[i];
+        if (!img) continue;
+        const src = img.currentSrc || img.src || '';
+        if (!/^https?:/.test(src) || seen.has(src)) continue;
+        const w = img.naturalWidth;
+        const h = img.naturalHeight;
+        if (w < 500 || h < 350) continue; // thumbnails/icons
+        const ratio = w / h;
+        if (ratio > 3.5 || ratio < 0.3) continue; // banners/sprites
+        if (/logo|icon|sprite|favicon|avatar|badge/i.test(src)) continue;
+        if (img.closest('header, nav, footer')) continue;
+        const r = img.getBoundingClientRect();
+        seen.add(src);
+        // Prominence: rendered area × intrinsic resolution.
+        out.push({ src, width: w, height: h, score: Math.max(r.width * r.height, 1) * Math.sqrt(w * h) });
+      }
+      out.sort((a, b) => b.score - a.score);
+      return out.slice(0, 6).map((x) => ({ src: x.src, width: x.width, height: x.height }));
+    });
+
     // ── Colors (computed styles) ─────────────────────────────────────────────
     // Read the *actual* colors the site paints — element backgrounds, text,
     // button/CTA backgrounds, link/nav text — each weighted by the visible area
@@ -356,6 +387,7 @@ export async function extractBrand(url: string, businessId: string): Promise<Ext
       screenshot,
       downscaledBase64,
       copy,
+      siteImages,
     };
   } finally {
     await page.close().catch(() => {});
