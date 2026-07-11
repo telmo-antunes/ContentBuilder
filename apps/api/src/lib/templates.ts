@@ -93,20 +93,19 @@ export function extractTemplates(raw: string): BrandTemplate[] {
       // a BLOCK instead of a decoration — move it over rather than dropping the
       // whole template.
       if (Array.isArray(it.blocks)) {
-        const misplaced = it.blocks.filter(
-          (b) => b && typeof b === 'object' && DECOR_KINDS.has((b as { type?: string }).type ?? ''),
-        ) as Array<{ type: string; frame?: unknown; z?: number }>;
+        let blocks = it.blocks as Array<{ type?: string; frame?: unknown; z?: number } | null>;
+        const isChrome = (b: (typeof blocks)[number]) =>
+          Boolean(b && typeof b === 'object' && DECOR_KINDS.has(b.type ?? ''));
+        const misplaced = blocks.filter(isChrome) as Array<{ type: string; frame?: unknown; z?: number }>;
         if (misplaced.length) {
           it.decorations = [
             ...(Array.isArray(it.decorations) ? it.decorations : []),
             ...misplaced.map((b) => ({ kind: b.type, frame: b.frame, z: b.z })),
           ].slice(0, 8);
-          it.blocks = it.blocks.filter(
-            (b) => !(b && typeof b === 'object' && DECOR_KINDS.has((b as { type?: string }).type ?? '')),
-          );
+          blocks = blocks.filter((b) => !isChrome(b));
         }
         // Over-long arrays are trimmed, not fatal — a 7-block skeleton is still a design.
-        if (it.blocks.length > 6) it.blocks = it.blocks.slice(0, 6);
+        it.blocks = blocks.slice(0, 6);
       }
       if (Array.isArray(it.blocks)) {
         it.blocks.forEach((b, i) => {
