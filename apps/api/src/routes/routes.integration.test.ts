@@ -158,6 +158,37 @@ describe('projects', () => {
     expect(patched.body.slides.map((s: any) => s.order)).toEqual([0, 1]);
   });
 
+  it('version history: snapshot, restore, and the safety re-snapshot', async () => {
+    const biz = await seedBusiness();
+    await seedApprovedKit(String(biz._id));
+    const created = await request(app())
+      .post('/projects')
+      .send({ businessId: String(biz._id), title: 'V', type: 'carousel', format: '1080x1080' });
+    const pid = created.body._id;
+    await request(app())
+      .patch(`/projects/${pid}`)
+      .send({ slides: [{ layoutType: 'TextOnly', blocks: [{ type: 'title', text: 'ORIGINAL' }], imageNeed: 'none' }] });
+
+    const saved = await request(app()).post(`/projects/${pid}/versions`).send({ label: 'checkpoint' });
+    expect(saved.status).toBe(201);
+
+    await request(app())
+      .patch(`/projects/${pid}`)
+      .send({ slides: [{ layoutType: 'TextOnly', blocks: [{ type: 'title', text: 'CHANGED' }], imageNeed: 'none' }] });
+
+    const list = await request(app()).get(`/projects/${pid}/versions`);
+    const checkpoint = list.body.versions.find((v: any) => v.label === 'checkpoint');
+    expect(checkpoint).toBeTruthy();
+
+    const restored = await request(app()).post(`/projects/${pid}/versions/${checkpoint._id}/restore`);
+    expect(restored.status).toBe(200);
+    expect(restored.body.slides[0].blocks[0].text).toBe('ORIGINAL');
+
+    // The pre-restore state must itself be recoverable.
+    const after = await request(app()).get(`/projects/${pid}/versions`);
+    expect(after.body.versions[0].label).toBe('Before restore');
+  });
+
   it("scrubs media references that belong to ANOTHER business", async () => {
     const biz = await seedBusiness();
     await seedApprovedKit(String(biz._id));

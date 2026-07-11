@@ -40,8 +40,12 @@ import {
   uploadMedia,
   generateProjectCaption,
   getSlideAlternatives,
+  listProjectVersions,
+  saveProjectVersion,
+  restoreProjectVersion,
   polishProject,
   type ProjectDetail,
+  type ProjectVersion,
 } from '../../lib/api';
 import { api } from '../../lib/config';
 import { SlideRenderer } from '../../../lib/render/SlideRenderer';
@@ -92,6 +96,7 @@ export default function ProjectEditorPage() {
   const [exported, setExported] = useState(false);
   const [polishing, setPolishing] = useState(false);
   const [showCheck, setShowCheck] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
   const [previewIdx, setPreviewIdx] = useState<number | null>(null);
@@ -681,6 +686,13 @@ export default function ProjectEditorPage() {
           </button>
           <button
             className="btn sm"
+            onClick={() => setShowHistory(true)}
+            title="Version snapshots — saved before AI drafts, polish, restores and on every export"
+          >
+            ⏱ History
+          </button>
+          <button
+            className="btn sm"
             onClick={() => void polish()}
             disabled={polishing || slides.length === 0}
             title="Auto-fix layout issues (overflow, contrast, crowding)"
@@ -916,6 +928,19 @@ export default function ProjectEditorPage() {
           <CaptionPanel projectId={id} initial={detail.caption} hasSlides={slides.length > 0} />
         </div>
       </div>
+
+      {showHistory && (
+        <HistoryModal
+          projectId={id}
+          onClose={() => setShowHistory(false)}
+          onRestored={(restored) => {
+            snapshot();
+            setSlides(restored);
+            setSelectedId(restored[0]?.id ?? null);
+            setShowHistory(false);
+          }}
+        />
+      )}
 
       {showCheck && (
         <div className="modal-overlay" onClick={() => setShowCheck(false)}>
@@ -1436,6 +1461,106 @@ function SlideInspector({
 }
 
 /**
+ * Version history (G9): snapshots saved automatically before AI drafts, polish
+ * and restores, on every export, and manually. Restoring snapshots the current
+ * state first, so nothing is ever lost — and the restore itself is undoable.
+ */
+function HistoryModal({
+  projectId,
+  onClose,
+  onRestored,
+}: {
+  projectId: string;
+  onClose: () => void;
+  onRestored: (slides: Slide[]) => void;
+}) {
+  const [versions, setVersions] = useState<ProjectVersion[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const r = await listProjectVersions(projectId);
+      setVersions(r.versions);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }, [projectId]);
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const saveNow = async () => {
+    setBusy('save');
+    setError(null);
+    try {
+      await saveProjectVersion(projectId);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const restore = async (versionId: string) => {
+    setBusy(versionId);
+    setError(null);
+    try {
+      const project = await restoreProjectVersion(projectId, versionId);
+      onRestored(project.slides);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" role="dialog" aria-modal="true" aria-label="Version history" onClick={(e) => e.stopPropagation()}>
+        <h2 style={{ marginTop: 0 }}>Version history</h2>
+        <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
+          Snapshots are saved before AI drafts, polish and restores, and on every export. Restoring
+          keeps the current state as its own snapshot — nothing is ever lost.
+        </p>
+        {error && <p style={{ color: 'var(--danger)', fontSize: 13 }}>{error}</p>}
+        {versions === null ? (
+          <p className="muted">Loading…</p>
+        ) : versions.length === 0 ? (
+          <p className="muted">No snapshots yet — export, run an AI action, or save one now.</p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: '46vh', overflowY: 'auto' }}>
+            {versions.map((v) => (
+              <div
+                key={v._id}
+                className="row"
+                style={{ justifyContent: 'space-between', alignItems: 'center', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px' }}
+              >
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>{v.label}</div>
+                  <div className="muted" style={{ fontSize: 12 }}>
+                    {new Date(v.createdAt).toLocaleString()} · {v.slideCount} {v.slideCount === 1 ? 'slide' : 'slides'}
+                  </div>
+                </div>
+                <button className="btn sm" onClick={() => restore(v._id)} disabled={busy !== null}>
+                  {busy === v._id ? 'Restoring…' : 'Restore'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="row" style={{ marginTop: 14, justifyContent: 'space-between' }}>
+          <button className="btn sm" onClick={saveNow} disabled={busy !== null}>
+            {busy === 'save' ? 'Saving…' : '+ Save current version'}
+          </button>
+          <button className="btn" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
  * Per-slide layout alternatives (G6): one AI call proposes 3 structures for the
  * SAME copy (the server merges structure onto the original blocks, so the text
  * can't drift). Applying is a normal undoable slide mutation.
@@ -1676,8 +1801,10 @@ function ImageControls({
   const [err, setErr] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const current = media.find((m) => m._id === slide.mediaAssetId) ?? null;
-  // Keep generated brand backgrounds and user uploads independent in the picker.
-  const uploads = media.filter((m) => m.type !== 'generated');
+  // Keep generated brand backgrounds, harvested site photos and user uploads
+  // independent in the picker.
+  const sitePhotos = media.filter((m) => m.label === 'From your website');
+  const uploads = media.filter((m) => m.type !== 'generated' && m.label !== 'From your website');
   const brandBgs = media.filter((m) => m.type === 'generated');
 
   const setOverride = (patch: Partial<SlideOverrides>) =>
@@ -1873,6 +2000,7 @@ function ImageControls({
               </div>
               {[
                 { label: 'Brand backgrounds', items: brandBgs },
+                { label: 'From your website', items: sitePhotos },
                 { label: 'Your uploads', items: uploads },
               ].map((group) =>
                 group.items.length > 0 ? (
@@ -2049,6 +2177,7 @@ function ImageControls({
       />
 
       {[
+        { label: 'From your website', items: sitePhotos },
         { label: 'Your uploads', items: uploads },
         { label: 'Brand backgrounds', items: brandBgs },
       ].map((group) =>

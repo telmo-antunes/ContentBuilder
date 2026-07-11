@@ -13,6 +13,7 @@ import { assignRolesAndVibe, brandColorQuality } from '../lib/vision';
 import { assertPublicHttpUrl } from '../lib/urlGuard';
 import { googleFontAvailable, resolveRenderFonts } from '../lib/fonts';
 import { generateTemplatePack, type TemplateBrandFacts } from '../lib/templates';
+import { harvestSiteImages } from '../lib/harvest';
 
 /** Brand facts the composition designer needs, from a kit doc + business profile. */
 function templateFacts(kit: { get(k: string): any }, profile: Record<string, any>): TemplateBrandFacts {
@@ -139,9 +140,17 @@ businessBrandKitRouter.post(
       },
       status: 'draft',
     });
+    // Pull the site's real photos into the media library (best-effort).
+    let harvested = 0;
+    try {
+      harvested = await harvestSiteImages(id, extraction.siteImages);
+    } catch (err) {
+      console.error('[harvest] site image harvest failed:', err);
+    }
+
     // Flag a still-degraded capture so the editor can nudge "re-analyze or adjust"
     // instead of the user silently approving a weak (e.g. monochrome) kit.
-    res.status(201).json({ ...kit.toJSON(), lowQuality });
+    res.status(201).json({ ...kit.toJSON(), lowQuality, harvested });
   }),
 );
 

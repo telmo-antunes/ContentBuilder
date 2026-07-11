@@ -187,6 +187,24 @@ export const polishProject = (id: string) =>
     method: 'POST',
   });
 
+// ── Version history ─────────────────────────────────────────────────────────
+export interface ProjectVersion {
+  _id: string;
+  label: string;
+  createdAt: string;
+  slideCount: number;
+}
+export const listProjectVersions = (id: string) =>
+  request<{ versions: ProjectVersion[] }>(`/projects/${id}/versions`);
+export const saveProjectVersion = (id: string, label?: string) =>
+  request<{ ok: boolean }>(`/projects/${id}/versions`, {
+    method: 'POST',
+    body: JSON.stringify({ label }),
+  });
+/** Restore a snapshot (the current state is snapshotted first). Returns the project. */
+export const restoreProjectVersion = (id: string, versionId: string) =>
+  request<Project>(`/projects/${id}/versions/${versionId}/restore`, { method: 'POST' });
+
 /** 3 AI-proposed layout alternatives for one slide (same copy, new structure). */
 export const getSlideAlternatives = (projectId: string, slideId: string) =>
   request<{ alternatives: Slide[] }>(`/projects/${projectId}/slides/${slideId}/alternatives`, {
