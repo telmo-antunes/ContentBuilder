@@ -1,5 +1,6 @@
 'use client';
 
+import { useRef } from 'react';
 import type { LayoutProps } from '../types';
 import { FitStack } from '../blocks';
 import { ImageSlot, rgba, safeInsets, surface } from '../primitives';
@@ -33,7 +34,16 @@ export default function FreePosition({ brandKit, blocks, image, imageLayout, for
     .map((b, i) => ({ b, i }))
     .sort((a, c) => (a.b.z ?? a.i) - (c.b.z ?? c.i));
 
-  let overflowed = false;
+  // Aggregate per-block overflow — and report BOTH transitions. (The old
+  // report-true-only version left the editor's warning stale after a fix, and
+  // would have kept the frame auto-grow loop from terminating.)
+  const overflowMap = useRef(new Map<number, boolean>());
+  const liveIdx = new Set(ordered.map(({ i }) => i));
+  for (const k of overflowMap.current.keys()) if (!liveIdx.has(k)) overflowMap.current.delete(k);
+  const reportOverflow = (i: number, o: boolean) => {
+    overflowMap.current.set(i, o);
+    onOverflow?.([...overflowMap.current.values()].some(Boolean));
+  };
 
   return (
     <div style={{ position: 'absolute', inset: 0, background: surface(brandKit, theme) }}>
@@ -82,6 +92,8 @@ export default function FreePosition({ brandKit, blocks, image, imageLayout, for
         return (
           <div
             key={i}
+            // The editor's frame auto-grow measures this box against its content.
+            data-frame-idx={i}
             style={{
               position: 'absolute',
               left: `${f.x * 100}%`,
@@ -99,12 +111,7 @@ export default function FreePosition({ brandKit, blocks, image, imageLayout, for
               bg={bg}
               align="start"
               justify="start"
-              onOverflow={(o) => {
-                if (o && !overflowed) {
-                  overflowed = true;
-                  onOverflow?.(true);
-                }
-              }}
+              onOverflow={(o) => reportOverflow(i, o)}
             />
           </div>
         );

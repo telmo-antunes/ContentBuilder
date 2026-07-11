@@ -15,6 +15,7 @@ import {
   MAX_SLIDES_PER_PROJECT,
   THEME_PRESETS,
   dimensionsFor,
+  safeAreaFor,
   isListBlock,
   layoutWantsImage,
   SPLIT_PLACEMENTS,
@@ -200,6 +201,59 @@ export default function ProjectEditorPage() {
   }, [detail?.format]);
   const selected = slides.find((s) => s.id === selectedId) ?? slides[0] ?? null;
 
+  // Fool-proof free canvas: when the selected free slide's text no longer fits
+  // its frame (AI frames are tight; a few extra characters used to mean an
+  // overflow warning), grow the overflowing blocks' frames just enough to fit,
+  // clamped to the safe area. Measures the real render via data-frame-idx and
+  // goes through mutateSlide, so it's visible and undoable. Terminates because
+  // it only mutates when a frame actually changes.
+  useEffect(() => {
+    if (!detail || !selected || !isFreeLayout(selected.layoutType)) return;
+    const raf = requestAnimationFrame(() => {
+      const stage = previewStageRef.current;
+      if (!stage) return;
+      const { height } = dimensionsFor(detail.format);
+      const safe = safeAreaFor(detail.type);
+      const yMax = 1 - (safe.bottomReserve / height || safe.padding / height);
+      const grows = new Map<number, number>();
+      stage.querySelectorAll<HTMLElement>('[data-frame-idx]').forEach((wrapper) => {
+        const container = wrapper.firstElementChild as HTMLElement | null;
+        const content = container?.firstElementChild as HTMLElement | null;
+        if (!container || !content) return;
+        const idx = Number(wrapper.dataset.frameIdx);
+        // Case 1 — hard overflow: even the legibility floor doesn't fit.
+        if (content.scrollHeight > container.clientHeight + 1) {
+          grows.set(idx, content.scrollHeight / Math.max(container.clientHeight, 1));
+          return;
+        }
+        // Case 2 — crush: the text "fits" only because the fitter forced it far
+        // below its designed size and the box is essentially full. Unreadable
+        // text is as broken as clipped text — grow toward a readable scale.
+        // (--fit-scale is written by the fitter itself, so this reads its
+        // actual verdict rather than re-deriving it from font pixels.)
+        const fitScale = parseFloat(container.style.getPropertyValue('--fit-scale') || '1');
+        if (fitScale < 0.5 && content.scrollHeight > container.clientHeight * 0.85) {
+          grows.set(idx, Math.min(0.75 / fitScale, 2.5));
+        }
+      });
+      if (grows.size === 0) return;
+      let changed = false;
+      const nextBlocks = selected.blocks.map((b, i) => {
+        const ratio = grows.get(i);
+        if (!ratio || !b.frame) return b;
+        const maxH = Math.max(yMax - b.frame.y, b.frame.h);
+        const h = Math.min(+(b.frame.h * ratio * 1.06).toFixed(4), maxH);
+        if (h <= b.frame.h + 0.004) return b;
+        changed = true;
+        return { ...b, frame: { ...b.frame, h } };
+      });
+      if (changed) mutateSlide(selected.id, (s) => ({ ...s, blocks: nextBlocks }));
+    });
+    return () => cancelAnimationFrame(raf);
+    // mutateSlide is recreated per render; the guards above make re-runs cheap.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [overflowIds, selected, detail]);
+
   const markOverflow = useCallback((slideId: string, over: boolean) => {
     setOverflowIds((prev) => {
       const has = prev.has(slideId);
@@ -360,6 +414,22 @@ export default function ProjectEditorPage() {
     const overflowing = slides.filter((s) => overflowIds.has(s.id));
     return { missingImage, overflowing, count: missingImage.length + overflowing.length };
   }, [slides, overflowIds]);
+
+  // Fool-proofing: an image layout with no image exports as an empty brand
+  // panel. One click restyles those slides to a text-first layout that looks
+  // intentional (undoable like any edit).
+  const restyleImagelessSlides = () => {
+    const ids = new Set(issues.missingImage.map((s) => s.id));
+    if (ids.size === 0) return;
+    snapshot();
+    setSlides((prev) =>
+      prev.map((s) => {
+        if (!ids.has(s.id)) return s;
+        const layoutType = s.layoutType === 'BackgroundImage' ? ('Statement' as const) : ('TextOnly' as const);
+        return { ...s, layoutType, imageNeed: 'none' as const };
+      }),
+    );
+  };
 
   const onExport = () => {
     if (slides.length === 0) return;
@@ -780,7 +850,10 @@ export default function ProjectEditorPage() {
                   {issues.missingImage.length === 1
                     ? '1 slide uses an image layout but has no image'
                     : `${issues.missingImage.length} slides use an image layout but have no image`}{' '}
-                  — they&apos;ll export as a plain brand panel.
+                  — they&apos;ll export as a plain brand panel.{' '}
+                  <button className="btn sm ghost" style={{ marginLeft: 4 }} onClick={restyleImagelessSlides}>
+                    Restyle {issues.missingImage.length === 1 ? 'it' : 'them'} as text slides
+                  </button>
                 </span>
               </div>
             )}

@@ -20,7 +20,7 @@ export function blockHasContent(block: Block): boolean {
  * to this size to keep the whole post visible — fully showing the copy wins over
  * holding each block at its design minimum and clipping the overflow.
  */
-const HARD_MIN_PX = 13;
+export const HARD_MIN_PX = 13;
 
 function fontSizeCss(style: BlockStyle): string {
   // Lower bound is the hard floor (not the design min), so a long stack can shrink
@@ -42,13 +42,17 @@ function baseTextStyle(style: BlockStyle, kit: RenderBrandKit, bg: string): CSSP
     color: resolveColor(style.color, kit, bg),
     margin: 0,
     maxWidth: '100%',
-    // Allow wrapping (including breaking an over-long word) so text can never
-    // paint past the column's horizontal edge — the auto-fit still shrinks the
-    // type first, so normal copy keeps whole words; only a word genuinely wider
-    // than the column breaks, which beats clipping it. `anywhere` (not
-    // `break-word`) also shrinks the min-content width, so measurement and paint
-    // agree and the fitter doesn't get fooled by a swapped-in wider font.
-    overflowWrap: 'anywhere',
+    // Wrapping policy differs by role — this is what stops mid-word butchery:
+    // · HEADINGS: `overflowWrap: normal` means an over-long word does NOT break —
+    //   it widens scrollWidth, the fitter detects it, and SHRINKS the type until
+    //   the word fits on one line. Headlines never split mid-word. `text-wrap:
+    //   balance` evens the lines so a wrap never strands one orphan word.
+    // · BODY: shrinking body copy below readability to save a long URL is worse
+    //   than wrapping it — `break-word` breaks only a word wider than the whole
+    //   column, and `hyphens: auto` adds a hyphen when the dictionary allows.
+    ...(style.role === 'heading'
+      ? { overflowWrap: 'normal' as const, textWrap: 'balance' as CSSProperties['textWrap'] }
+      : { overflowWrap: 'break-word' as const, hyphens: 'auto' as const }),
     wordBreak: 'normal',
   };
 }
@@ -247,7 +251,13 @@ export function FitStack({
   footer,
 }: FitStackProps) {
   const scale = typeScale(format);
-  const present = blocks.filter(blockHasContent);
+  // Keep each block's ORIGINAL index: the editor (frame auto-grow) and the
+  // canvas conversion measure rendered blocks by `data-block-idx`, which must
+  // address slide.blocks[i], not the filtered render list.
+  const presentWithIdx = blocks
+    .map((b, i) => [b, i] as const)
+    .filter(([b]) => blockHasContent(b));
+  const present = presentWithIdx.map(([b]) => b);
   const styles = present.map((b) => scale[b.type]);
   const floor = computeFloor(styles);
 
@@ -278,8 +288,10 @@ export function FitStack({
         }}
       >
         {header}
-        {present.map((b, i) => (
-          <BlockView key={i} block={b} style={scale[b.type]} kit={brandKit} bg={bg} />
+        {presentWithIdx.map(([b, origIdx], i) => (
+          <div key={i} data-block-idx={origIdx} style={{ width: '100%', maxWidth: '100%' }}>
+            <BlockView block={b} style={scale[b.type]} kit={brandKit} bg={bg} />
+          </div>
         ))}
         {footer}
       </div>
