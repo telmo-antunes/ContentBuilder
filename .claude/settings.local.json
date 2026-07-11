@@ -228,7 +228,14 @@
       "Bash(npx eslint *)",
       "Bash(npx vitest *)",
       "Bash(curl -s http://localhost:4000/settings)",
-      "Bash(curl -s -X PUT http://localhost:4000/settings -H 'Content-Type: application/json' -d '{\"designerModel\":\"\",\"freeModel\":\"\",\"designerSystem\":\"\",\"freeSystem\":\"\",\"freeMaxTokens\":null}' -o /dev/null -w 'cleared stale overrides: HTTP %{http_code}\\\\n')"
+      "Bash(curl -s -X PUT http://localhost:4000/settings -H 'Content-Type: application/json' -d '{\"designerModel\":\"\",\"freeModel\":\"\",\"designerSystem\":\"\",\"freeSystem\":\"\",\"freeMaxTokens\":null}' -o /dev/null -w 'cleared stale overrides: HTTP %{http_code}\\\\n')",
+      "Bash(curl -s \"http://localhost:4000/projects/6a52ae194d1c162db1bc46a9\")",
+      "Bash(curl -s -X POST \"http://localhost:4000/projects/6a52ae194d1c162db1bc46a9/export\" -o g2-export.zip)",
+      "Bash(unzip -o -q g2-export.zip -d g2-export)",
+      "Bash(sips -Z 540 g2-export/07.png --out g2-slide7-small.png)",
+      "Bash(curl -s -o /dev/null -w \"render page → %{http_code}\\\\n\" \"http://localhost:3000/render?projectId=6a52ae194d1c162db1bc46a9&slideId=bgtest-1\")",
+      "Bash(curl -s \"http://localhost:3000/render?projectId=6a52ae194d1c162db1bc46a9&slideId=bgtest-1\")",
+      "Bash(kill 39541)"
     ]
   }
 }

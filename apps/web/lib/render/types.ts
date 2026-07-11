@@ -9,6 +9,7 @@ import type {
   ImageAspect,
   ImageSizePreset,
   ImageFit,
+  SlideDecoration,
 } from '@contentbuilder/shared';
 
 /** The brand-kit fields the renderer actually needs (a full BrandKit satisfies this). */
@@ -47,6 +48,8 @@ export interface ImageLayoutConfig {
   backgroundUrl?: string;
   /** FreePosition: additional positioned image elements (resolved to URLs). */
   objects?: ResolvedImageObject[];
+  /** FreePosition: brand chrome (logo, rules, scrims) painted as data. */
+  decorations?: SlideDecoration[];
 }
 
 /** An image object resolved for rendering (media id → url). */

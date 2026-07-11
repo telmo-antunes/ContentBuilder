@@ -72,6 +72,18 @@ export const slideSchema = z.object({
           }),
         )
         .optional(),
+      decorations: z
+        .array(
+          z.object({
+            kind: z.enum(['logo', 'rule', 'divider', 'scrim']),
+            frame: frameSchema,
+            z: z.number().optional(),
+            direction: z.enum(['to-top', 'to-bottom', 'to-left', 'to-right']).optional(),
+            opacity: z.number().min(0).max(1).optional(),
+          }),
+        )
+        .max(12)
+        .optional(),
     })
     .optional(),
 });

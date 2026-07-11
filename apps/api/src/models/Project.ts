@@ -77,6 +77,25 @@ const slideSchema = new Schema(
             ],
             default: undefined,
           },
+          decorations: {
+            type: [
+              new Schema(
+                {
+                  kind: { type: String, enum: ['logo', 'rule', 'divider', 'scrim'], required: true },
+                  frame: { type: frameSchema, required: true },
+                  z: { type: Number, required: false },
+                  direction: {
+                    type: String,
+                    enum: ['to-top', 'to-bottom', 'to-left', 'to-right'],
+                    required: false,
+                  },
+                  opacity: { type: Number, required: false },
+                },
+                { _id: false },
+              ),
+            ],
+            default: undefined,
+          },
         },
         { _id: false },
       ),

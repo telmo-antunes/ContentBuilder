@@ -31,6 +31,8 @@ import {
   type ImageSizePreset,
   type ThemePreset,
   type Caption,
+  type BlockFrame,
+  type SlideDecoration,
 } from '@contentbuilder/shared';
 import {
   getProject,
@@ -337,6 +339,83 @@ export default function ProjectEditorPage() {
   const mutateSlide = (slideId: string, fn: (s: Slide) => Slide) => {
     snapshot();
     setSlides((prev) => prev.map((s) => (s.id === slideId ? fn(s) : s)));
+  };
+
+  // ── Lossless preset → free-canvas conversion ────────────────────────────
+  // Measures the slide as it is CURRENTLY rendered (block wrappers, image slot,
+  // brand chrome — all tagged with data attributes by the renderer) and rebuilds
+  // the identical picture as FreePosition data. Nothing moves; everything
+  // becomes draggable. Undoable like any other slide mutation.
+  const convertToCanvas = () => {
+    if (!detail || !selected || isFreeLayout(selected.layoutType)) return;
+    const root = previewStageRef.current?.querySelector<HTMLElement>('[data-slide-root]');
+    if (!root) return;
+    const rootRect = root.getBoundingClientRect();
+    if (rootRect.width < 2 || rootRect.height < 2) return;
+
+    const frac = (r: DOMRect): BlockFrame => {
+      const x = Math.min(Math.max((r.left - rootRect.left) / rootRect.width, 0), 0.98);
+      const y = Math.min(Math.max((r.top - rootRect.top) / rootRect.height, 0), 0.98);
+      return {
+        x: +x.toFixed(4),
+        y: +y.toFixed(4),
+        w: +Math.max(0.02, Math.min(r.width / rootRect.width, 1 - x)).toFixed(4),
+        h: +Math.max(0.015, Math.min(r.height / rootRect.height, 1 - y)).toFixed(4),
+      };
+    };
+
+    // Text blocks, addressed by their original slide.blocks index.
+    const frames = new Map<number, BlockFrame>();
+    root.querySelectorAll<HTMLElement>('[data-block-idx]').forEach((el) => {
+      frames.set(Number(el.dataset.blockIdx), frac(el.getBoundingClientRect()));
+    });
+
+    // Brand chrome (logo / accent rule / scrim) → decoration data.
+    const decorations: SlideDecoration[] = [];
+    root.querySelectorAll<HTMLElement>('[data-decor]').forEach((el) => {
+      const kind = el.dataset.decor;
+      if (kind !== 'logo' && kind !== 'rule' && kind !== 'divider' && kind !== 'scrim') return;
+      const dir = el.dataset.decorDirection;
+      decorations.push({
+        kind,
+        frame: frac(el.getBoundingClientRect()),
+        z: kind === 'scrim' ? 1 : 2,
+        // Preset scrims are near-opaque at the dark edge; carry that over so the
+        // converted slide keeps the same legibility.
+        ...(kind === 'scrim' ? { opacity: 0.96 } : {}),
+        ...(kind === 'scrim' && (dir === 'to-top' || dir === 'to-bottom' || dir === 'to-left' || dir === 'to-right')
+          ? { direction: dir }
+          : {}),
+      });
+    });
+
+    // The slide image (or its "Add image" placeholder — the region survives the
+    // conversion either way): full-bleed reads as the canvas background; anything
+    // smaller becomes a positioned image region. Measure the CLIPPING container
+    // (the <img> itself can be inflated by a crop zoom transform).
+    let imageFrame: BlockFrame | undefined;
+    let imageBackground = false;
+    const slot = root.querySelector<HTMLElement>('[data-image-slot]');
+    if (slot) {
+      const f = frac((slot.parentElement ?? slot).getBoundingClientRect());
+      if (f.w > 0.94 && f.h > 0.94) imageBackground = true;
+      else imageFrame = f;
+    }
+
+    mutateSlide(selected.id, (s) => ({
+      ...s,
+      layoutType: 'FreePosition' as LayoutType,
+      blocks: s.blocks.map((b, i) => {
+        const frame = frames.get(i);
+        return frame ? { ...b, frame, z: 10 + i } : b;
+      }),
+      overrides: {
+        ...s.overrides,
+        ...(imageFrame ? { imageFrame } : {}),
+        ...(imageBackground ? { imageBackground: true } : {}),
+        ...(decorations.length ? { decorations } : {}),
+      },
+    }));
   };
 
   const reindex = (arr: Slide[]) => arr.map((s, i) => ({ ...s, order: i }));
@@ -830,6 +909,7 @@ export default function ProjectEditorPage() {
             onUploaded={(asset) => setMedia((m) => [asset, ...m])}
             selectedTarget={selTarget}
             onSelectTarget={setSelTarget}
+            onConvertToCanvas={convertToCanvas}
           />
           <CaptionPanel projectId={id} initial={detail.caption} hasSlides={slides.length > 0} />
         </div>
@@ -1272,6 +1352,7 @@ function SlideInspector({
   onUploaded,
   selectedTarget,
   onSelectTarget,
+  onConvertToCanvas,
 }: {
   slide: Slide;
   detail: ProjectDetail;
@@ -1281,6 +1362,7 @@ function SlideInspector({
   onUploaded: (asset: MediaAsset) => void;
   selectedTarget: string | null;
   onSelectTarget: (id: string | null) => void;
+  onConvertToCanvas: () => void;
 }) {
   const wantsImage =
     layoutWantsImage(slide.layoutType) || isFreeLayout(slide.layoutType) || slide.imageNeed === 'upload';
@@ -1300,13 +1382,23 @@ function SlideInspector({
         {isFreeLayout(slide.layoutType) ? (
           <div className="hint-box">Free canvas — drag blocks in the preview</div>
         ) : (
-          <select value={slide.layoutType} onChange={(e) => setLayout(e.target.value as LayoutType)}>
-            {SELECTABLE_LAYOUT_TYPES.map((l) => (
-              <option key={l} value={l}>
-                {l}
-              </option>
-            ))}
-          </select>
+          <>
+            <select value={slide.layoutType} onChange={(e) => setLayout(e.target.value as LayoutType)}>
+              {SELECTABLE_LAYOUT_TYPES.map((l) => (
+                <option key={l} value={l}>
+                  {l}
+                </option>
+              ))}
+            </select>
+            <button
+              className="btn sm"
+              style={{ marginTop: 8, width: '100%' }}
+              onClick={onConvertToCanvas}
+              title="Everything stays exactly where it is — then you can drag any element freely"
+            >
+              ⇢ Convert to free canvas
+            </button>
+          </>
         )}
         <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
           {LAYOUT_DESCRIPTIONS[slide.layoutType]}{' '}
