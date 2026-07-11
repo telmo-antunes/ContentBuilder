@@ -49,6 +49,13 @@ const brandKitSchema = new Schema(
       logo: { type: String, default: 'dom' },
     },
     status: { type: String, enum: ['draft', 'approved'], default: 'draft', index: true },
+    /**
+     * AI-designed signature compositions for THIS brand (FreePosition skeletons:
+     * frames + decorations, no copy). Shape is validated by zod at generation
+     * time (templates.ts) — Mixed here so the composition vocabulary can evolve
+     * without a migration.
+     */
+    templatePack: { type: [Schema.Types.Mixed], default: undefined },
     createdAt: { type: Date, default: () => new Date() },
   },
   baseSchemaOptions,

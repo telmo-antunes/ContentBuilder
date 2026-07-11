@@ -12,6 +12,19 @@ import { generateBusinessBackgrounds } from '../lib/backgrounds';
 import { assignRolesAndVibe, brandColorQuality } from '../lib/vision';
 import { assertPublicHttpUrl } from '../lib/urlGuard';
 import { googleFontAvailable, resolveRenderFonts } from '../lib/fonts';
+import { generateTemplatePack, type TemplateBrandFacts } from '../lib/templates';
+
+/** Brand facts the composition designer needs, from a kit doc + business profile. */
+function templateFacts(kit: { get(k: string): any }, profile: Record<string, any>): TemplateBrandFacts {
+  return {
+    styleDescriptor: kit.get('styleDescriptor') || undefined,
+    voice: kit.get('voice') || undefined,
+    category: profile.category,
+    tone: profile.tone,
+    hasLogo: Boolean(kit.get('logo')?.url),
+    headingFont: kit.get('fonts')?.render?.heading,
+  };
+}
 
 const hex = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Expected a #rrggbb color');
 // Any family name is accepted at the schema level; non-bundled ones are verified
@@ -190,6 +203,23 @@ brandKitRouter.get(
   }),
 );
 
+// (Re)design the brand's signature composition pack on demand.
+brandKitRouter.post(
+  '/:kitId/templates',
+  asyncHandler(async (req, res) => {
+    const kitId = requireObjectId(req.params.kitId, 'Brand kit');
+    const kit = await BrandKitModel.findById(kitId);
+    if (!kit) throw new ApiError(404, 'Brand kit not found');
+    const biz = await BusinessModel.findById(kit.get('businessId')).lean();
+    const profile = (biz as Record<string, any> | null)?.profile ?? {};
+    const pack = await generateTemplatePack(templateFacts(kit, profile));
+    if (!pack.length) throw new ApiError(502, 'Template generation returned nothing usable — try again.');
+    kit.set('templatePack', pack);
+    await kit.save();
+    res.json(kit.toJSON());
+  }),
+);
+
 // Edit fields and/or approve (status: 'approved' flips it live for projects).
 brandKitRouter.patch(
   '/:kitId',
@@ -234,11 +264,12 @@ brandKitRouter.patch(
     await kit.save();
 
     // On approval, (re)generate the brand backgrounds so the business has 3
-    // ready-to-use post/story backgrounds. Best-effort — never block approval.
+    // ready-to-use post/story backgrounds, and design the brand's signature
+    // composition pack. Both best-effort — never block approval.
     if (body.status === 'approved') {
+      const biz = await BusinessModel.findById(kit.get('businessId')).lean();
+      const profile = (biz as Record<string, any> | null)?.profile ?? {};
       try {
-        const biz = await BusinessModel.findById(kit.get('businessId')).lean();
-        const profile = (biz as Record<string, any> | null)?.profile ?? {};
         await generateBusinessBackgrounds(String(kit.get('businessId')), kit.get('colors'), {
           category: profile.category,
           tone: profile.tone,
@@ -246,6 +277,17 @@ brandKitRouter.patch(
         });
       } catch (err) {
         console.error('[backgrounds] generation on approval failed:', err);
+      }
+      if (!kit.get('templatePack')?.length) {
+        try {
+          const pack = await generateTemplatePack(templateFacts(kit, profile));
+          if (pack.length) {
+            kit.set('templatePack', pack);
+            await kit.save();
+          }
+        } catch (err) {
+          console.error('[templates] pack generation on approval failed:', err);
+        }
       }
     }
 

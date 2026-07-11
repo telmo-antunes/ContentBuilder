@@ -1,4 +1,4 @@
-import type { Block, BlockFrame } from './blocks';
+import type { Block, BlockFrame, BlockType } from './blocks';
 import type { LayoutType } from './layouts';
 import type { AssetType, Format } from './formats';
 import type { BusinessProfile, BusinessGoal } from './profile';
@@ -61,7 +61,20 @@ export interface BrandKit {
   homepageScreenshot?: StoredMedia;
   provenance: BrandProvenance;
   status: BrandKitStatus;
+  /** AI-designed signature compositions (FreePosition skeletons, no copy). */
+  templatePack?: BrandTemplateSkeleton[];
   createdAt: string;
+}
+
+/** One brand composition skeleton — a FreePosition layout without copy. */
+export interface BrandTemplateSkeleton {
+  name: string;
+  purpose: 'cover' | 'content' | 'list' | 'quote' | 'image-feature' | 'cta';
+  imageNeed: ImageNeed;
+  blocks: Array<{ type: BlockType; frame: BlockFrame; z?: number }>;
+  decorations?: SlideDecoration[];
+  imageFrame?: BlockFrame;
+  imageBackground?: boolean;
 }
 
 export interface MediaAsset {
