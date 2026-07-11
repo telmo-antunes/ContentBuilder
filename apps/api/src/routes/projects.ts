@@ -6,10 +6,11 @@ import { z } from 'zod';
 import { MAX_DRAFT_PARAGRAPH_CHARS, defaultThemeForCategory } from '@contentbuilder/shared';
 import { ProjectModel, BusinessModel, BrandKitModel, MediaAssetModel } from '../models';
 import { ApiError, asyncHandler, parseBody, publicErrMessage, requireObjectId } from '../lib/http';
-import { createProjectSchema, updateProjectSchema, type SlideInput } from '../lib/validation';
+import { createProjectSchema, slideSchema, updateProjectSchema, type SlideInput } from '../lib/validation';
 import { renderSlidesToPng, slugify } from '../lib/exporter';
 import { draftSlidesFromParagraph } from '../lib/draft';
 import { brandPackContext } from '../lib/templates';
+import { generateSlideAlternatives } from '../lib/alternatives';
 import { generateCaption, type GeneratedCaption } from '../lib/caption';
 import { critiqueProject } from '../lib/critique';
 import { aiDraftConfigured, aiFreeConfigured } from '../config';
@@ -257,6 +258,35 @@ projectsRouter.post(
     // Best-effort: polish the layout, then caption from the polished slides.
     await finalizeDraftedProject(project);
     res.json(project.toJSON());
+  }),
+);
+
+// Propose 3 layout alternatives for ONE slide (same copy, new structure).
+// Returns candidates only — nothing is saved until the user applies one.
+projectsRouter.post(
+  '/:id/slides/:slideId/alternatives',
+  asyncHandler(async (req, res) => {
+    const id = requireObjectId(req.params.id, 'Project');
+    const project = await ProjectModel.findById(id).lean();
+    if (!project) throw new ApiError(404, 'Project not found');
+    const slides = (project as Record<string, any>).slides as Array<Record<string, any>>;
+    const slide = slides.find((s) => s.id === req.params.slideId);
+    if (!slide) throw new ApiError(404, 'Slide not found');
+    const parsed = slideSchema.safeParse(slide);
+    if (!parsed.success) throw new ApiError(422, 'Slide is not in a valid state.');
+    let alternatives: SlideInput[];
+    try {
+      alternatives = await generateSlideAlternatives(
+        parsed.data,
+        (project as Record<string, any>).type,
+        (project as Record<string, any>).format,
+        (await brandPackContext(String((project as Record<string, any>).businessId)))?.pack,
+      );
+    } catch (err) {
+      throw new ApiError(502, `Alternatives failed: ${publicErrMessage(err, 'AI error')}.`);
+    }
+    if (!alternatives.length) throw new ApiError(502, 'No usable alternatives came back — try again.');
+    res.json({ alternatives });
   }),
 );
 

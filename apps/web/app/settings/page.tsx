@@ -88,6 +88,7 @@ export default function SettingsPage() {
             { key: 'campaignModel', label: 'Campaign planning', hint: 'turns a brief into a post series', ph: judgmentDefault },
             { key: 'backgroundModel', label: 'Background picker', hint: 'ranks motifs from the vetted menu', ph: smallDefault },
             { key: 'templatesModel', label: 'Brand compositions', hint: 'designs the brand’s signature layout pack', ph: judgmentDefault },
+            { key: 'alternativesModel', label: 'Slide alternatives', hint: 'proposes 3 layout variants of a slide', ph: judgmentDefault },
           ];
           return (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 12 }}>

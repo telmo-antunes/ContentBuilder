@@ -20,6 +20,7 @@ const settingSchema = new Schema(
     campaignModel: { type: String, default: '' },
     backgroundModel: { type: String, default: '' },
     templatesModel: { type: String, default: '' },
+    alternativesModel: { type: String, default: '' },
     designerSystem: { type: String, default: '' },
     freeSystem: { type: String, default: '' },
     freeMaxTokens: { type: Number, required: false },
