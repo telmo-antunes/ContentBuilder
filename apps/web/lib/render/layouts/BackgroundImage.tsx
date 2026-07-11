@@ -16,6 +16,8 @@ export default function BackgroundImage({ brandKit, blocks, image, format, onOve
       <div style={{ position: 'absolute', inset: 0, background: rgba(brandKit.colors.secondary, 0.22), mixBlendMode: 'multiply' }} />
       {/* Bottom-heavy scrim so text at the bottom reads against the brand bg color. */}
       <div
+        data-decor="scrim"
+        data-decor-direction="to-top"
         style={{
           position: 'absolute',
           inset: 0,

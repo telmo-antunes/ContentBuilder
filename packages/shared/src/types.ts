@@ -135,6 +135,25 @@ export interface SlideOverrides {
   backgroundMediaAssetId?: string;
   /** FreePosition: additional positioned image elements, each with its own media. */
   imageObjects?: ImageObject[];
+  /** FreePosition: brand chrome (logo, accent rule, divider, scrim) as positioned data. */
+  decorations?: SlideDecoration[];
+}
+
+export type DecorationKind = 'logo' | 'rule' | 'divider' | 'scrim';
+
+/**
+ * A non-text, non-image slide element on the free canvas. Preset layouts draw
+ * this chrome themselves; representing it as data is what lets any preset slide
+ * convert to a free canvas without losing its logo/rules/scrims.
+ */
+export interface SlideDecoration {
+  kind: DecorationKind;
+  frame: BlockFrame;
+  z?: number;
+  /** scrim: which way the gradient fades (dark edge → transparent). */
+  direction?: 'to-top' | 'to-bottom' | 'to-left' | 'to-right';
+  /** scrim: peak opacity of the dark edge (default 0.55). */
+  opacity?: number;
 }
 
 export interface Slide {

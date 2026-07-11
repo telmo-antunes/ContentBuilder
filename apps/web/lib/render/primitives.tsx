@@ -71,6 +71,8 @@ export function AccentRule({
   const w = rule === 'block' ? Math.min(width, 52) : width;
   return (
     <div
+      // Canvas conversion measures preset-layout chrome by this marker.
+      data-decor="rule"
       style={{
         width: w,
         height: h,
@@ -108,6 +110,7 @@ export function ImageSlot({
       <img
         src={image.url}
         alt=""
+        data-image-slot=""
         style={{
           position: 'absolute',
           inset: 0,
@@ -162,9 +165,9 @@ function ImagePlaceholder({ kit, style }: { kit: RenderBrandKit; style?: CSSProp
       `linear-gradient(140deg, ${mix(kit.colors.background, kit.colors.primary, 0.42)}, ${mix(kit.colors.background, kit.colors.secondary, 0.62)})`,
     ...style,
   };
-  if (forExport) return <div style={base} />;
+  if (forExport) return <div data-image-slot="" style={base} />;
   return (
-    <div style={{ ...base, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div data-image-slot="" style={{ ...base, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div
         style={{
           display: 'flex',
@@ -210,6 +213,7 @@ export function LogoMark({
     <img
       src={kit.logo.url}
       alt=""
+      data-decor="logo"
       style={{ height, width: 'auto', maxWidth: '55%', objectFit: 'contain', display: 'block', filter, ...style }}
     />
   );
