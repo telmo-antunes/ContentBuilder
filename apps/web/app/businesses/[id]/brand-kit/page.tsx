@@ -191,7 +191,8 @@ function provenanceChips(p: BrandKit['provenance'] | undefined): string[] {
   if (p.colors === 'computed') chips.push('Colors read from the site\u2019s real styles');
   else if (p.colors === 'sampled') chips.push('Colors sampled from a screenshot');
   else if (p.colors === 'manual') chips.push('Colors entered manually');
-  if (typeof p.fonts === 'string' && p.fonts.startsWith('personality:')) {
+  if (p.fonts === 'site:google-fonts') chips.push('Real site fonts, served via Google Fonts');
+  else if (typeof p.fonts === 'string' && p.fonts.startsWith('personality:')) {
     chips.push(`Fonts matched to the headline\u2019s style (${p.fonts.split(':')[1]?.replace(/-/g, ' ')})`);
   } else if (p.fonts === 'computed+mapped') chips.push('Fonts name-matched from the site');
   else if (p.fonts === 'manual') chips.push('Fonts chosen manually');
@@ -209,6 +210,56 @@ function cleanFontName(raw: string): string {
     .replace(/_/g, ' ')
     .replace(/["']/g, '')
     .trim();
+}
+
+/** Platform defaults, not brand choices — no point offering these as a "site font". */
+const GENERIC_FONTS = new Set([
+  'arial', 'helvetica', 'helvetica neue', 'times', 'times new roman', 'georgia',
+  'verdana', 'tahoma', 'trebuchet ms', 'segoe ui', 'system-ui', '-apple-system',
+  'blinkmacsystemfont', 'sans-serif', 'serif', 'monospace', 'ui-sans-serif', 'ui-serif',
+]);
+
+/**
+ * Bundled families plus, when the analyzed site uses a real (non-generic,
+ * non-bundled) font, that font as a "site font — via Google Fonts" option. The
+ * server verifies GF availability on save, so a typo'd/unavailable family is
+ * rejected with a clear error rather than silently falling back to sans.
+ */
+function FontSelect({
+  label,
+  value,
+  detected,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  detected?: string;
+  onChange: (f: string) => void;
+}) {
+  const site = detected ? cleanFontName(detected) : '';
+  const siteOption = site && !BUNDLED_FONT_FAMILIES.includes(site) && !GENERIC_FONTS.has(site.toLowerCase()) ? site : '';
+  // A kit saved with a site font keeps it selectable even if detection changed.
+  const extra = [...new Set([siteOption, value].filter((f) => f && !BUNDLED_FONT_FAMILIES.includes(f)))];
+  return (
+    <div className="field" style={{ margin: 0 }}>
+      <label>
+        {label}
+        {site ? ` · site uses ${site}` : ''}
+      </label>
+      <select value={value} onChange={(e) => onChange(e.target.value)}>
+        {extra.map((f) => (
+          <option key={f} value={f}>
+            {f} — site font (Google Fonts)
+          </option>
+        ))}
+        {BUNDLED_FONT_FAMILIES.map((f) => (
+          <option key={f} value={f}>
+            {f}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
 }
 
 function KitEditor({
@@ -399,28 +450,20 @@ function KitEditor({
             </>
           )}
 
-          <div className="section-label">Fonts (bundled)</div>
+          <div className="section-label">Fonts</div>
           <div className="grid-2">
-            <div className="field" style={{ margin: 0 }}>
-              <label>Heading{kit.fonts.detected?.heading ? ` · site uses ${cleanFontName(kit.fonts.detected.heading)}` : ''}</label>
-              <select value={heading} onChange={(e) => setHeading(e.target.value)}>
-                {BUNDLED_FONT_FAMILIES.map((f) => (
-                  <option key={f} value={f}>
-                    {f}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field" style={{ margin: 0 }}>
-              <label>Body{kit.fonts.detected?.body ? ` · site uses ${cleanFontName(kit.fonts.detected.body)}` : ''}</label>
-              <select value={body} onChange={(e) => setBody(e.target.value)}>
-                {BUNDLED_FONT_FAMILIES.map((f) => (
-                  <option key={f} value={f}>
-                    {f}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <FontSelect
+              label="Heading"
+              value={heading}
+              detected={kit.fonts.detected?.heading}
+              onChange={setHeading}
+            />
+            <FontSelect
+              label="Body"
+              value={body}
+              detected={kit.fonts.detected?.body}
+              onChange={setBody}
+            />
           </div>
 
           <div className="section-label">Logo</div>
