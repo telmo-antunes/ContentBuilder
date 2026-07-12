@@ -176,6 +176,8 @@ export interface Slide {
   blocks: Block[];
   imageNeed: ImageNeed;
   mediaAssetId?: string;
+  /** Stock-search phrase chosen by the AI art director (drives the stock picker). */
+  imageQuery?: string;
   overrides?: SlideOverrides;
 }
 

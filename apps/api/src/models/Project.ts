@@ -28,6 +28,8 @@ const slideSchema = new Schema(
     blocks: { type: [blockSchema], default: [] },
     imageNeed: { type: String, enum: ['none', 'upload'], default: 'none' },
     mediaAssetId: { type: Schema.Types.ObjectId, ref: 'MediaAsset' },
+    /** The stock-search phrase the AI art director chose (prefills the editor's stock picker). */
+    imageQuery: { type: String, required: false },
     overrides: {
       type: new Schema(
         {

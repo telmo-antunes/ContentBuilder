@@ -33,6 +33,7 @@ export function normalizeSlides(slides: SlideInput[]) {
     imageNeed: s.imageNeed ?? 'none',
     mediaAssetId:
       s.mediaAssetId && Types.ObjectId.isValid(s.mediaAssetId) ? s.mediaAssetId : undefined,
+    imageQuery: s.imageQuery,
     overrides: s.overrides,
   }));
 }
