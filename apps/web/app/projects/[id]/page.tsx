@@ -40,6 +40,7 @@ import {
   updateProject,
   uploadMedia,
   generateProjectCaption,
+  getShareInfo,
   getSlideAlternatives,
   searchStockPhotos,
   storeStockPhoto,
@@ -101,6 +102,8 @@ export default function ProjectEditorPage() {
   const [polishing, setPolishing] = useState(false);
   const [showCheck, setShowCheck] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [shareInfo, setShareInfo] = useState<{ url: string; onLan: boolean } | null>(null);
+  const [shareCopied, setShareCopied] = useState(false);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
   const [previewIdx, setPreviewIdx] = useState<number | null>(null);
@@ -595,6 +598,10 @@ export default function ProjectEditorPage() {
       URL.revokeObjectURL(url);
       setExported(true);
       setTimeout(() => setExported(false), 2500);
+      // Offer the phone hand-off for the freshly exported set (best-effort).
+      getShareInfo(id)
+        .then((info) => setShareInfo({ url: info.url, onLan: info.onLan }))
+        .catch(() => {});
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -932,6 +939,41 @@ export default function ProjectEditorPage() {
           <CaptionPanel projectId={id} initial={detail.caption} hasSlides={slides.length > 0} />
         </div>
       </div>
+
+      {shareInfo && (
+        <div className="modal-overlay" onClick={() => setShareInfo(null)}>
+          <div className="modal" role="dialog" aria-modal="true" aria-label="Send to phone" onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ marginTop: 0 }}>📲 Post from your phone</h2>
+            <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
+              Open this link on your phone{shareInfo.onLan ? ' (same Wi-Fi as this computer)' : ''} —
+              it shows the exported slides with a one-tap <strong>Share to Instagram</strong> button
+              and copies the caption for you. No Instagram integration needed.
+            </p>
+            <div
+              className="row"
+              style={{ gap: 8, alignItems: 'center', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px' }}
+            >
+              <code style={{ fontSize: 14, flex: 1, wordBreak: 'break-all' }}>{shareInfo.url}</code>
+              <button
+                className="btn sm"
+                onClick={() => {
+                  void navigator.clipboard?.writeText(shareInfo.url);
+                  setShareCopied(true);
+                  setTimeout(() => setShareCopied(false), 1500);
+                }}
+              >
+                {shareCopied ? 'Copied ✓' : 'Copy link'}
+              </button>
+            </div>
+            <p className="muted" style={{ fontSize: 12, marginBottom: 0 }}>
+              Tip: message or AirDrop the link to yourself, or type it in your phone&rsquo;s browser.
+            </p>
+            <div className="row" style={{ marginTop: 12, justifyContent: 'flex-end' }}>
+              <button className="btn" onClick={() => setShareInfo(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showHistory && (
         <HistoryModal

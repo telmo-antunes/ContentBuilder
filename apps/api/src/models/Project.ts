@@ -116,6 +116,8 @@ const projectSchema = new Schema(
     type: { type: String, enum: ['carousel', 'story'], required: true },
     format: { type: String, required: true },
     slides: { type: [slideSchema], default: [] },
+    /** URLs of the last export's PNGs (drives the send-to-phone share page). */
+    renders: { type: [String], default: undefined },
     /** The social caption + hashtags for this post, generated in the brand voice. */
     caption: {
       type: new Schema(

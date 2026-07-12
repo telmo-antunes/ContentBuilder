@@ -209,6 +209,10 @@ export const storeStockPhoto = (businessId: string, c: StockCandidate) =>
     body: JSON.stringify({ full: c.full, width: c.width, height: c.height }),
   });
 
+/** LAN address a phone on the same Wi-Fi can open (send-to-phone hand-off). */
+export const getShareInfo = (id: string) =>
+  request<{ url: string; onLan: boolean; hasRenders: number }>(`/projects/${id}/share-info`);
+
 // ── Version history ─────────────────────────────────────────────────────────
 export interface ProjectVersion {
   _id: string;

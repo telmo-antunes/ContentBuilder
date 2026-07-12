@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { networkInterfaces } from 'node:os';
 import { Router } from 'express';
 import { Types } from 'mongoose';
 import { ZipArchive } from 'archiver';
@@ -14,7 +15,7 @@ import { generateSlideAlternatives } from '../lib/alternatives';
 import { resolveDraftImages } from '../lib/stock';
 import { generateCaption, type GeneratedCaption } from '../lib/caption';
 import { critiqueProject } from '../lib/critique';
-import { aiDraftConfigured, aiFreeConfigured } from '../config';
+import { aiDraftConfigured, aiFreeConfigured, config } from '../config';
 
 const draftSchema = z.object({
   paragraph: z.string().trim().min(1, 'Paragraph is required').max(MAX_DRAFT_PARAGRAPH_CHARS),
@@ -373,6 +374,33 @@ projectsRouter.post(
   }),
 );
 
+// Share hand-off: the LAN address a phone on the same network can open.
+projectsRouter.get(
+  '/:id/share-info',
+  asyncHandler(async (req, res) => {
+    const id = requireObjectId(req.params.id, 'Project');
+    const project = await ProjectModel.findById(id).lean();
+    if (!project) throw new ApiError(404, 'Project not found');
+    const nets = networkInterfaces();
+    let lan = '';
+    for (const list of Object.values(nets)) {
+      for (const n of list ?? []) {
+        if (n.family === 'IPv4' && !n.internal) {
+          lan = n.address;
+          break;
+        }
+      }
+      if (lan) break;
+    }
+    const port = new URL(config.webUrl).port || '3000';
+    res.json({
+      url: lan ? `http://${lan}:${port}/share/${id}` : `${config.webUrl}/share/${id}`,
+      onLan: Boolean(lan),
+      hasRenders: ((project as Record<string, unknown>).renders as string[] | undefined)?.length ?? 0,
+    });
+  }),
+);
+
 // Self-critique the rendered slides and auto-apply bounded fixes ("Polish layout").
 projectsRouter.post(
   '/:id/critique',
@@ -441,6 +469,7 @@ projectsRouter.post(
     }
 
     project.set('status', 'rendered');
+    project.set('renders', rendered.map((r) => r.url));
     await project.save();
     // What was shipped should always be recoverable.
     await saveVersion(project, 'Exported').catch(() => {});
