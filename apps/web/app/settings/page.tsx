@@ -91,21 +91,56 @@ export default function SettingsPage() {
             { key: 'alternativesModel', label: 'Slide alternatives', hint: 'proposes 3 layout variants of a slide', ph: judgmentDefault },
           ];
           return (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 12 }}>
-              {fields.map((f) => (
-                <div key={f.key}>
-                  <label style={labelStyle}>{f.label}</label>
-                  <input
-                    value={form[f.key] as string}
-                    placeholder={f.ph}
-                    onChange={(e) => set({ [f.key]: e.target.value } as Partial<AiSettings>)}
-                  />
-                  <div className="muted" style={{ fontSize: 11, marginTop: 3 }}>{f.hint}</div>
-                </div>
-              ))}
-            </div>
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 12 }}>
+                {fields.map((f) => (
+                  <div key={f.key}>
+                    <label style={labelStyle}>
+                      {f.label}
+                      {(form[f.key] as string).trim() !== '' && (
+                        <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: 'var(--accent, #f5b657)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                          override active
+                        </span>
+                      )}
+                    </label>
+                    <input
+                      value={form[f.key] as string}
+                      placeholder={f.ph}
+                      onChange={(e) => set({ [f.key]: e.target.value } as Partial<AiSettings>)}
+                    />
+                    <div className="muted" style={{ fontSize: 11, marginTop: 3 }}>{f.hint}</div>
+                  </div>
+                ))}
+              </div>
+              {fields.some((f) => (form[f.key] as string).trim() !== '') && (
+                <button
+                  className="btn sm ghost"
+                  style={{ marginTop: 10 }}
+                  onClick={() =>
+                    set(Object.fromEntries(fields.map((f) => [f.key, ''])) as Partial<AiSettings>)
+                  }
+                >
+                  Clear all model overrides (use env policy)
+                </button>
+              )}
+            </>
           );
         })()}
+      </div>
+
+      <div className="panel" style={{ marginTop: 14 }}>
+        <div className="section-label" style={{ marginTop: 0 }}>Stock photos (Pexels)</div>
+        {data.stock?.configured ? (
+          <p className="muted" style={{ fontSize: 13, margin: 0 }}>
+            ✓ Configured — AI drafts place fitting stock photos automatically on image slides.
+          </p>
+        ) : (
+          <p className="muted" style={{ fontSize: 13, margin: 0 }}>
+            Not configured — drafts leave image placeholders. Get a free key at{' '}
+            <a href="https://www.pexels.com/api/" target="_blank" rel="noreferrer">pexels.com/api</a>{' '}
+            and add <code>PEXELS_API_KEY=…</code> to <code>.env</code> (restart the API).
+          </p>
+        )}
       </div>
 
       {usage && (
@@ -178,6 +213,21 @@ export default function SettingsPage() {
             onChange={(e) => set({ freeMaxTokens: e.target.value === '' ? null : Number(e.target.value) })}
           />
         </div>
+      </div>
+
+      <div className="panel" style={{ marginTop: 14 }}>
+        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="section-label" style={{ marginTop: 0 }}>Brand compositions prompt</div>
+          <div className="row" style={{ gap: 6 }}>
+            <button className="btn sm ghost" onClick={() => set({ templatesSystem: data.defaults.templatesSystem })}>Load default</button>
+            <button className="btn sm ghost" onClick={() => set({ templatesSystem: '' })}>Clear (use default)</button>
+          </div>
+        </div>
+        <textarea style={taStyle} value={form.templatesSystem} placeholder="(blank → built-in default — click “Load default” to edit it)" onChange={(e) => set({ templatesSystem: e.target.value })} />
+        <p className="muted" style={{ fontSize: 11, marginTop: 6 }}>
+          Saving an UNEDITED copy of a default prompt is stored as blank on purpose — otherwise it
+          would freeze the prompt at today&rsquo;s version and silently miss future improvements.
+        </p>
       </div>
 
       <div className="row" style={{ marginTop: 16, gap: 10, alignItems: 'center' }}>

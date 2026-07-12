@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { BLOCK_TYPES } from '@contentbuilder/shared';
-import { BrandKitModel } from '../models';
+import { BrandKitModel, SettingModel } from '../models';
 import { aiMessage, modelFor, textOf } from './ai';
 import { recordUsage } from './usage';
 import { repairFrame } from './draft';
@@ -146,10 +146,18 @@ export async function generateTemplatePack(facts: TemplateBrandFacts): Promise<B
     facts.headingFont && `Heading typeface: ${facts.headingFont}`,
   ].filter(Boolean);
   const model = await modelFor('templates');
+  // Prompt override from the AI Settings page (blank → the code default).
+  let system = TEMPLATES_SYSTEM;
+  try {
+    const doc = await SettingModel.findOne({ key: 'ai' }).lean<{ templatesSystem?: string }>();
+    if (doc?.templatesSystem?.trim()) system = doc.templatesSystem;
+  } catch {
+    /* settings unavailable → default prompt */
+  }
   const resp = await aiMessage({
     model,
     max_tokens: 12000,
-    system: [{ type: 'text', text: TEMPLATES_SYSTEM, cache_control: { type: 'ephemeral' } }],
+    system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
     messages: [
       {
         role: 'user',

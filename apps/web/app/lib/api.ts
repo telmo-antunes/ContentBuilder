@@ -100,12 +100,14 @@ export interface AiSettings {
   alternativesModel: string;
   designerSystem: string;
   freeSystem: string;
+  templatesSystem: string;
   freeMaxTokens: number | null;
 }
 export interface SettingsResponse {
   settings: AiSettings;
-  defaults: { designerSystem: string; freeSystem: string; freeMaxTokens: number };
+  defaults: { designerSystem: string; freeSystem: string; templatesSystem: string; freeMaxTokens: number };
   envModels: { model: string; modelSmall: string; modelLarge: string };
+  stock?: { configured: boolean };
 }
 export const getSettings = () => request<SettingsResponse>('/settings');
 export const updateSettings = (s: Partial<AiSettings>) =>
