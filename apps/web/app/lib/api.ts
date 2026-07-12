@@ -189,6 +189,26 @@ export const polishProject = (id: string) =>
     method: 'POST',
   });
 
+// ── Stock photos ────────────────────────────────────────────────────────────
+export interface StockCandidate {
+  thumb: string;
+  full: string;
+  width: number;
+  height: number;
+  alt: string;
+  photographer: string;
+}
+export const searchStockPhotos = (businessId: string, query: string, orientation: string) =>
+  request<{ candidates: StockCandidate[] }>(
+    `/businesses/${businessId}/media/stock/search?query=${encodeURIComponent(query)}&orientation=${orientation}`,
+  );
+/** Download the picked candidate into the library; returns the new MediaAsset. */
+export const storeStockPhoto = (businessId: string, c: StockCandidate) =>
+  request<MediaAsset>(`/businesses/${businessId}/media/stock`, {
+    method: 'POST',
+    body: JSON.stringify({ full: c.full, width: c.width, height: c.height }),
+  });
+
 // ── Version history ─────────────────────────────────────────────────────────
 export interface ProjectVersion {
   _id: string;

@@ -41,6 +41,9 @@ import {
   uploadMedia,
   generateProjectCaption,
   getSlideAlternatives,
+  searchStockPhotos,
+  storeStockPhoto,
+  type StockCandidate,
   listProjectVersions,
   saveProjectVersion,
   restoreProjectVersion,
@@ -1803,6 +1806,99 @@ const ASPECT_LABELS: Record<ImageAspect, string> = {
 };
 const SIZE_LABELS: Record<ImageSizePreset, string> = { sm: 'Small', md: 'Medium', lg: 'Large' };
 
+/**
+ * Photo curation: search Pexels and pick the RIGHT photo instead of accepting
+ * the draft's first hit. Prefilled with the AI art director's imageQuery when
+ * the slide has one; picking stores the photo in the library and attaches it.
+ */
+function StockPhotoFinder({
+  businessId,
+  format,
+  initialQuery,
+  onPicked,
+}: {
+  businessId: string;
+  format: Format;
+  initialQuery: string;
+  onPicked: (asset: MediaAsset) => void;
+}) {
+  const [query, setQuery] = useState(initialQuery);
+  const [candidates, setCandidates] = useState<StockCandidate[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [picking, setPicking] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const dims = dimensionsFor(format);
+  const orientation = dims.height > dims.width ? 'portrait' : dims.width > dims.height ? 'landscape' : 'square';
+
+  const search = async () => {
+    if (!query.trim()) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await searchStockPhotos(businessId, query.trim(), orientation);
+      setCandidates(r.candidates);
+      if (r.candidates.length === 0) setErr('No photos found — try different words.');
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const pick = async (c: StockCandidate) => {
+    setPicking(c.full);
+    setErr(null);
+    try {
+      const asset = await storeStockPhoto(businessId, c);
+      onPicked(asset);
+      setCandidates(null); // picked — collapse the grid
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setPicking(null);
+    }
+  };
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      <p className="muted" style={{ fontSize: 12, margin: '0 0 6px' }}>Find a stock photo (Pexels)</p>
+      <div className="row" style={{ gap: 6 }}>
+        <input
+          value={query}
+          placeholder="e.g. ceramic coating closeup"
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              void search();
+            }
+          }}
+          style={{ flex: 1 }}
+        />
+        <button className="btn sm" onClick={() => void search()} disabled={busy || !query.trim()}>
+          {busy ? 'Searching…' : 'Search'}
+        </button>
+      </div>
+      {err && <p className="muted" style={{ fontSize: 12, color: 'var(--danger)', marginTop: 6 }}>{err}</p>}
+      {candidates && candidates.length > 0 && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+          {candidates.map((c) => (
+            <button
+              key={c.full}
+              onClick={() => void pick(c)}
+              disabled={picking !== null}
+              title={`${c.alt || 'Photo'} — by ${c.photographer} on Pexels`}
+              style={{ padding: 0, border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', cursor: 'pointer', background: 'none', opacity: picking && picking !== c.full ? 0.5 : 1 }}
+            >
+              <img src={c.thumb} alt={c.alt} style={{ width: 86, height: 86, objectFit: 'cover', display: 'block' }} />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ImageControls({
   slide,
   format,
@@ -2199,6 +2295,16 @@ function ImageControls({
         accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
         style={{ display: 'none' }}
         onChange={(e) => onPick(e.target.files?.[0])}
+      />
+
+      <StockPhotoFinder
+        businessId={businessId}
+        format={format}
+        initialQuery={slide.imageQuery ?? ''}
+        onPicked={(asset) => {
+          onUploaded(asset);
+          attachImage(asset._id);
+        }}
       />
 
       {[

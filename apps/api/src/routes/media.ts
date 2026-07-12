@@ -4,9 +4,11 @@ import multer from 'multer';
 import { imageSize } from 'image-size';
 import { BusinessModel, MediaAssetModel, BrandKitModel } from '../models';
 import { getStorage } from '../storage';
-import { ApiError, asyncHandler, requireObjectId } from '../lib/http';
+import { z as zStock } from 'zod';
+import { ApiError, asyncHandler, parseBody, requireObjectId } from '../lib/http';
 import { generateBusinessBackgrounds } from '../lib/backgrounds';
 import { generateAiBackground } from '../lib/aiBackground';
+import { searchStockPhotos, stockConfigured, storeStockPhoto } from '../lib/stock';
 
 /** Business-scoped media uploads. Mounted at /businesses/:id/media. */
 export const mediaRouter = Router({ mergeParams: true });
@@ -198,5 +200,43 @@ mediaRouter.post(
       height,
     });
     res.status(201).json(asset.toJSON());
+  }),
+);
+
+// ── Stock photos (Pexels) ─────────────────────────────────────────────────────
+// Search candidates for the editor's picker (nothing stored), then store the
+// user's pick into the library. Both are no-ops without PEXELS_API_KEY.
+
+mediaRouter.get(
+  '/stock/search',
+  asyncHandler(async (req, res) => {
+    requireObjectId((req.params as Record<string, string>).id, 'Business');
+    if (!stockConfigured()) {
+      throw new ApiError(400, 'Stock photos need PEXELS_API_KEY in .env (free at pexels.com/api).');
+    }
+    const query = String(req.query.query ?? '').slice(0, 80);
+    const orientation = (['portrait', 'landscape', 'square'] as const).find(
+      (o) => o === req.query.orientation,
+    ) ?? 'portrait';
+    if (!query.trim()) throw new ApiError(400, 'Provide a search query.');
+    res.json({ candidates: await searchStockPhotos(query, orientation) });
+  }),
+);
+
+mediaRouter.post(
+  '/stock',
+  asyncHandler(async (req, res) => {
+    const businessId = requireObjectId((req.params as Record<string, string>).id, 'Business');
+    const body = parseBody(
+      zStock.object({
+        full: zStock.string().url().max(500),
+        width: zStock.number().int().positive(),
+        height: zStock.number().int().positive(),
+      }),
+      req.body,
+    );
+    const asset = await storeStockPhoto(businessId, body);
+    if (!asset) throw new ApiError(502, 'Could not download that photo — try another.');
+    res.status(201).json(asset);
   }),
 );

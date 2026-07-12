@@ -46,8 +46,8 @@ export const slideSchema = z.object({
   blocks: z.array(blockSchema).default([]),
   imageNeed: z.enum(['none', 'upload']).default('none'),
   mediaAssetId: z.string().nullable().optional(),
-  /** Transient (AI drafts only): stock-photo search phrase; resolved to a real
-   *  mediaAssetId server-side and never persisted. */
+  /** Stock-photo search phrase (AI-chosen or user-edited); the draft pipeline
+   *  resolves it to media, and the editor's stock picker prefills from it. */
   imageQuery: z.string().max(80).optional(),
   overrides: z
     .object({
