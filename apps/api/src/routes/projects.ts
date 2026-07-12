@@ -428,8 +428,16 @@ projectsRouter.post(
     if (!project.get('slides')?.length) throw new ApiError(400, 'Project has no slides to export');
 
     // Render everything BEFORE we start streaming, so a render error still
-    // surfaces as a clean JSON 500 rather than a half-written zip.
-    const rendered = await renderSlidesToPng(project.toJSON() as never);
+    // surfaces as a clean JSON error rather than a half-written zip.
+    let rendered;
+    try {
+      rendered = await renderSlidesToPng(project.toJSON() as never);
+    } catch (err) {
+      throw new ApiError(
+        502,
+        `Export render failed: ${publicErrMessage(err, 'render error')}. Is the web server running?`,
+      );
+    }
 
     project.set('status', 'rendered');
     await project.save();

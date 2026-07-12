@@ -37,13 +37,39 @@ export async function renderSlidesToPng(project: ExportableProject): Promise<Ren
   let next = 0;
 
   const worker = async () => {
-    const page = await browser.newPage();
+    let page = await browser.newPage();
     try {
       await page.setViewport({ width, height, deviceScaleFactor: 1 });
       for (let i = next++; i < ordered.length; i = next++) {
         const slide = ordered[i]!;
         const url = `${base}/render?projectId=${project._id}&slideId=${encodeURIComponent(slide.id)}`;
-        await page.goto(url, { waitUntil: 'load', timeout: 45000 });
+
+        // The render page fetches its data CLIENT-side — 'load' fires before the
+        // slide exists, so wait for the actual mount. A reused page's connection
+        // pool occasionally goes stale (fetch hangs, page stuck on the shell);
+        // ONE retry on a brand-new page reliably clears it.
+        let mounted = false;
+        for (let attempt = 1; attempt <= 2 && !mounted; attempt++) {
+          await page.goto(url, { waitUntil: 'load', timeout: 45000 });
+          try {
+            await page.waitForSelector('[data-slide-root]', { timeout: attempt === 1 ? 20000 : 30000 });
+            mounted = true;
+          } catch {
+            if (attempt === 2) {
+              // Surface what the page ACTUALLY shows — beats a bare timeout.
+              const shown = await page
+                .evaluate(() => {
+                  const doc = (globalThis as { document?: any }).document;
+                  return String(doc?.body?.innerText ?? '').slice(0, 160);
+                })
+                .catch(() => '');
+              throw new Error(`slide ${slide.id} never mounted — page shows: "${shown || '(blank)'}"`);
+            }
+            await page.close().catch(() => {});
+            page = await browser.newPage();
+            await page.setViewport({ width, height, deviceScaleFactor: 1 });
+          }
+        }
 
         // Wait for bundled fonts + all images, else we capture fallback fonts or
         // half-loaded images. (Runs in the browser; use globalThis to avoid

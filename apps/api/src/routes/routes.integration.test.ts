@@ -282,6 +282,24 @@ describe('campaigns', () => {
 });
 
 // ── Per-touchpoint model overrides ────────────────────────────────────────────
+describe('settings prompt footgun guard', () => {
+  it('stores an UNEDITED default prompt as blank, but keeps a real edit', async () => {
+    const defaults = (await request(app()).get('/settings')).body.defaults;
+
+    await request(app()).put('/settings').send({ designerSystem: defaults.designerSystem });
+    let s = (await request(app()).get('/settings')).body.settings;
+    expect(s.designerSystem).toBe('');
+
+    await request(app())
+      .put('/settings')
+      .send({ designerSystem: `${defaults.designerSystem}\nCUSTOM RULE` });
+    s = (await request(app()).get('/settings')).body.settings;
+    expect(s.designerSystem).toContain('CUSTOM RULE');
+
+    await request(app()).put('/settings').send({ designerSystem: '' }); // reset
+  });
+});
+
 describe('modelFor', () => {
   it('falls back to the env tier when no override is stored', async () => {
     expect(await modelFor('caption')).toBe('claude-test'); // from the stubbed env

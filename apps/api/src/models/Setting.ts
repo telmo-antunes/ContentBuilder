@@ -22,6 +22,7 @@ const settingSchema = new Schema(
     templatesModel: { type: String, default: '' },
     alternativesModel: { type: String, default: '' },
     designerSystem: { type: String, default: '' },
+    templatesSystem: { type: String, default: '' },
     freeSystem: { type: String, default: '' },
     freeMaxTokens: { type: Number, required: false },
     updatedAt: { type: Date, default: () => new Date() },
