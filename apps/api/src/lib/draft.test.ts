@@ -103,3 +103,20 @@ describe('extractSlides (designer mode)', () => {
     expect(slideSchema.safeParse(slides[0]).success).toBe(true);
   });
 });
+
+describe('extractSlides (art direction)', () => {
+  it('preserves imageQuery so the stock resolver can act on it', () => {
+    const raw = JSON.stringify([
+      {
+        order: 0,
+        layoutType: 'BackgroundImage',
+        imageNeed: 'upload',
+        imageQuery: 'ceramic coating closeup',
+        blocks: [{ type: 'title', text: 'Hello' }],
+      },
+    ]);
+    const slides = extractSlides(raw, 'designer');
+    expect(slides).toHaveLength(1);
+    expect(slides[0]!.imageQuery).toBe('ceramic coating closeup');
+  });
+});

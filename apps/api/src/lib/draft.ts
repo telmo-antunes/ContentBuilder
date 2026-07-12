@@ -40,17 +40,22 @@ const pick = (override: string | undefined, fallback: string): string =>
 const THEMES = 'editorial, bold, minimal, soft';
 const TREATMENTS = 'none, tint, duotone';
 
-const DESIGNER_SYSTEM = `You are an art director turning a user's paragraph into an ordered set of Instagram slides.
+const DESIGNER_SYSTEM = `You are an art director turning a user's paragraph into an ordered set of Instagram slides. The user brings the WORDS; you bring the visual judgment — imagery, layout rhythm, mood.
 
 Output ONLY a JSON array (no prose, no markdown fences). Each element:
-{ "order": number, "layoutType": <one of: ${DESIGNER_LAYOUT_TYPES.join(', ')}>, "blocks": [{ "type": <one of: ${BLOCK_TYPES.join(', ')}>, "text": string, "items"?: string[] }], "imageNeed": "none" | "upload", "overrides"?: { "theme"?: <one of: ${THEMES}>, "imageTreatment"?: <one of: ${TREATMENTS}>, "focalPoint"?: { "x": number, "y": number } } }
+{ "order": number, "layoutType": <one of: ${DESIGNER_LAYOUT_TYPES.join(', ')}>, "blocks": [{ "type": <one of: ${BLOCK_TYPES.join(', ')}>, "text": string, "items"?: string[] }], "imageNeed": "none" | "upload", "imageQuery"?: string, "overrides"?: { "theme"?: <one of: ${THEMES}>, "imageTreatment"?: <one of: ${TREATMENTS}>, "focalPoint"?: { "x": number, "y": number } } }
 
-Rules:
+ART DIRECTION — you decide where imagery belongs; do not wait for the user to mention photos:
+- The OPENING slide should stop the scroll: a BackgroundImage cover (full-bleed photo + short title) is often the strongest opener — use it whenever the first slide's copy is short enough to sit on a photo.
+- Feature/benefit/product moments suit CenteredHero (one framed visual) or SplitImageText (image beside copy). Dense copy, lists, quotes and closers suit Statement/TextOnly/Checklist/Quote/CTA.
+- Aim for visual rhythm across the set: at least one image slide in most posts, but never force one onto copy that can't share the space.
+- For EVERY slide with "imageNeed": "upload", also set "imageQuery": a concrete 2–4 word stock-photo search phrase grounded in the business context (e.g. "ceramic coating closeup", "barista pouring latte"). Describe a photographable SCENE, not an abstraction.
+- On image slides, choose an "overrides.imageTreatment" that aids legibility ("tint"/"duotone" for photos behind text, "none" otherwise) and a sensible "overrides.focalPoint" (x,y in 0..1, default {x:0.5,y:0.5}).
+
+RULES:
 - Use ONLY the listed layoutType and block type values. Never invent values.
-- Map intent: the first slide is usually Cover; "background image" → BackgroundImage; "featured/centered/product image" → CenteredHero; "image beside text" → SplitImageText; a closing call-to-action → CTA; a customer quote → Quote; text with no image → TextOnly.
-- Set "imageNeed" to "upload" when the layout needs an image (BackgroundImage, CenteredHero, SplitImageText) or the user mentions a photo/image; otherwise "none".
-- Compose for style: pick a coherent "overrides.theme" that suits the brand mood and keep it consistent across slides. On image slides, choose an "overrides.imageTreatment" that aids legibility ("tint"/"duotone" for busy photos behind text, "none" otherwise) and a sensible "overrides.focalPoint" (x,y in 0..1, default {x:0.5,y:0.5}).
-- Insert the user's text VERBATIM. NEVER invent, rewrite, translate, summarize, or embellish copy. Prefer leaving a block out over inventing filler.
+- Pick a coherent "overrides.theme" that suits the brand mood and keep it consistent across slides.
+- Insert the user's text VERBATIM. NEVER invent, rewrite, translate, summarize, or embellish copy. Prefer leaving a block out over inventing filler. ("imageQuery" is a search phrase, not copy — it never appears on the slide.)
 - For a list, put the items in "items" (array of strings) and set "text" to "".
 - At most ${MAX_SLIDES_PER_PROJECT} slides.`;
 
@@ -63,13 +68,14 @@ export const FREE_SYSTEM_TEMPLATE = `You are a senior graphic designer composing
 CANVAS: {{width}}×{{height}}px. All positions are FRACTIONS of the canvas (0..1). A "frame" is { "x": left, "y": top, "w": width, "h": height }. Each text block also takes a "z" (higher = painted in front).
 
 OUTPUT: ONLY a JSON array (no prose, no markdown fences). Each element:
-{ "order": number, "layoutType": "FreePosition", "imageNeed": "none" | "upload", "blocks": [{ "type": <one of: {{blockTypes}}>, "text": string, "items"?: string[], "frame": { "x": number, "y": number, "w": number, "h": number }, "z": number }], "overrides"?: { "imageFrame": { "x": number, "y": number, "w": number, "h": number } } }
+{ "order": number, "layoutType": "FreePosition", "imageNeed": "none" | "upload", "imageQuery"?: string, "blocks": [{ "type": <one of: {{blockTypes}}>, "text": string, "items"?: string[], "frame": { "x": number, "y": number, "w": number, "h": number }, "z": number }], "overrides"?: { "imageFrame": { "x": number, "y": number, "w": number, "h": number } } }
 
-IMAGES (important):
-- If a slide should feature a visual — the copy says "image", "photo", "screenshot", "centered image", "product", or describes something to show — set "imageNeed": "upload" and reserve a GENEROUS region in "overrides.imageFrame". The user drops their image into that region. There is NO image block; the image IS the imageFrame.
-- Give the image real presence: a feature/screenshot region is typically 0.45–0.75 of the canvas. Place the text in the area the image does NOT occupy (above, below, or beside it). Text frames must NOT overlap the imageFrame.
-- For a FULL-BLEED background photo (the copy says "background image", "full-bleed", or the whole slide should be a photo with text over it), set "imageNeed": "upload" and "overrides": { "imageBackground": true } INSTEAD of an imageFrame, then place the text over it with room to breathe. Use this sparingly — it suits covers and closers.
-- A slide with no visual: "imageNeed": "none", and omit "overrides".
+IMAGES — you are the art director; decide where imagery belongs, don't wait for the user to mention photos:
+- The OPENING slide should stop the scroll: a full-bleed photo with short copy over it ("imageNeed": "upload", "overrides": { "imageBackground": true }) is often the strongest opener. Full-bleed also suits closers.
+- To FEATURE a visual (product, screenshot, scene), set "imageNeed": "upload" and reserve a GENEROUS region in "overrides.imageFrame" (typically 0.45–0.75 of the canvas). Place the text where the image is NOT (above, below, beside). Text frames must NOT overlap the imageFrame. There is NO image block; the image IS the imageFrame.
+- For EVERY slide with "imageNeed": "upload", also set "imageQuery": a concrete 2–4 word stock-photo search phrase grounded in the business (a photographable SCENE, e.g. "ceramic coating closeup"). It never appears on the slide.
+- Aim for visual rhythm: most posts want at least one image slide, but dense-copy slides are fine without.
+- A slide with no visual: "imageNeed": "none".
 
 COMPOSITION — make each slide visually distinct from the others:
 - Vary the anchor across the set: some top-weighted, some bottom-weighted, some asymmetric (copy hugging one side). Do NOT reuse the same x/y for the same block type on every slide.
@@ -228,7 +234,12 @@ export async function draftSlidesFromParagraph(
         settings.freeMaxTokens && settings.freeMaxTokens > 0
           ? settings.freeMaxTokens
           : PROMPT_DEFAULTS.freeMaxTokens,
-      system: freeSystem(type, format, settings.freeSystem) + packSection,
+      // Static instructions cached (the retry + every draft in a session reuse
+      // them); the per-brand pack rides behind the cache boundary.
+      system: [
+        { type: 'text', text: freeSystem(type, format, settings.freeSystem), cache_control: { type: 'ephemeral' } },
+        ...(packSection ? [{ type: 'text' as const, text: packSection }] : []),
+      ],
       messages: [{ role: 'user', content: userMsg }],
     };
     // Adaptive thinking + high effort sharpen spatial reasoning, but small models
@@ -244,7 +255,13 @@ export async function draftSlidesFromParagraph(
     {
       model: pick(settings.designerModel, config.ai.modelSmall!),
       max_tokens: 3000,
-      system: pick(settings.designerSystem, DESIGNER_SYSTEM),
+      system: [
+        {
+          type: 'text',
+          text: pick(settings.designerSystem, DESIGNER_SYSTEM),
+          cache_control: { type: 'ephemeral' },
+        },
+      ],
       messages: [{ role: 'user', content: userMsg }],
     },
     'designer',

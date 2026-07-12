@@ -12,6 +12,7 @@ import { CampaignModel, BusinessModel, BrandKitModel, ProjectModel } from '../mo
 import { ApiError, asyncHandler, parseBody, publicErrMessage, requireObjectId } from '../lib/http';
 import { planCampaign } from '../lib/campaign';
 import { draftSlidesFromParagraph } from '../lib/draft';
+import { resolveDraftImages } from '../lib/stock';
 import { normalizeSlides, finalizeDraftedProject } from './projects';
 import { aiDraftConfigured } from '../config';
 
@@ -265,6 +266,13 @@ campaignRouter.post(
     if (!slides.length) {
       await ProjectModel.findByIdAndDelete(project.get('_id')).catch(() => {});
       throw new ApiError(502, 'The draft came back empty — edit the concept and retry.');
+    }
+
+    // Art direction pass: place stock photos where the AI marked imagery (best-effort).
+    try {
+      await resolveDraftImages(businessIdStr, slides, format);
+    } catch (err) {
+      console.error('[campaign] stock image resolution failed:', err);
     }
 
     project.set('slides', normalizeSlides(slides));

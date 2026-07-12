@@ -46,6 +46,9 @@ export const slideSchema = z.object({
   blocks: z.array(blockSchema).default([]),
   imageNeed: z.enum(['none', 'upload']).default('none'),
   mediaAssetId: z.string().nullable().optional(),
+  /** Transient (AI drafts only): stock-photo search phrase; resolved to a real
+   *  mediaAssetId server-side and never persisted. */
+  imageQuery: z.string().max(80).optional(),
   overrides: z
     .object({
       focalPoint: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) }).optional(),
