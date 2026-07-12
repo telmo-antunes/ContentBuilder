@@ -11,6 +11,7 @@ import { renderSlidesToPng, slugify } from '../lib/exporter';
 import { draftSlidesFromParagraph } from '../lib/draft';
 import { brandPackContext } from '../lib/templates';
 import { generateSlideAlternatives } from '../lib/alternatives';
+import { resolveDraftImages } from '../lib/stock';
 import { generateCaption, type GeneratedCaption } from '../lib/caption';
 import { critiqueProject } from '../lib/critique';
 import { aiDraftConfigured, aiFreeConfigured } from '../config';
@@ -251,6 +252,14 @@ projectsRouter.post(
     }
     if (slides.length === 0) {
       throw new ApiError(502, 'The draft came back empty — try rephrasing, or build manually.');
+    }
+
+    // Art direction pass: place stock photos on the slides the AI marked for
+    // imagery (best-effort — no key / no hit just leaves the placeholder).
+    try {
+      await resolveDraftImages(String(project.get('businessId')), slides, project.get('format'));
+    } catch (err) {
+      console.error('[draft] stock image resolution failed:', err);
     }
 
     // A draft replaces everything — keep what was there recoverable.

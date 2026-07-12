@@ -1804,7 +1804,10 @@ function ImageControls({
   // Keep generated brand backgrounds, harvested site photos and user uploads
   // independent in the picker.
   const sitePhotos = media.filter((m) => m.label === 'From your website');
-  const uploads = media.filter((m) => m.type !== 'generated' && m.label !== 'From your website');
+  const stockPhotos = media.filter((m) => m.label === 'Stock photo');
+  const uploads = media.filter(
+    (m) => m.type !== 'generated' && m.label !== 'From your website' && m.label !== 'Stock photo',
+  );
   const brandBgs = media.filter((m) => m.type === 'generated');
 
   const setOverride = (patch: Partial<SlideOverrides>) =>
@@ -2001,6 +2004,7 @@ function ImageControls({
               {[
                 { label: 'Brand backgrounds', items: brandBgs },
                 { label: 'From your website', items: sitePhotos },
+                { label: 'Stock photos', items: stockPhotos },
                 { label: 'Your uploads', items: uploads },
               ].map((group) =>
                 group.items.length > 0 ? (
@@ -2178,6 +2182,7 @@ function ImageControls({
 
       {[
         { label: 'From your website', items: sitePhotos },
+        { label: 'Stock photos', items: stockPhotos },
         { label: 'Your uploads', items: uploads },
         { label: 'Brand backgrounds', items: brandBgs },
       ].map((group) =>

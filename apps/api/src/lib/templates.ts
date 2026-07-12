@@ -149,7 +149,7 @@ export async function generateTemplatePack(facts: TemplateBrandFacts): Promise<B
   const resp = await aiMessage({
     model,
     max_tokens: 12000,
-    system: TEMPLATES_SYSTEM,
+    system: [{ type: 'text', text: TEMPLATES_SYSTEM, cache_control: { type: 'ephemeral' } }],
     messages: [
       {
         role: 'user',

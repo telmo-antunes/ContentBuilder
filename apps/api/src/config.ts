@@ -35,6 +35,10 @@ export const config = {
     /** Model for Free-CANVAS mode + judgment calls; falls back to modelSmall/model. */
     modelLarge: optional('ANTHROPIC_MODEL_FREE'),
   },
+  stock: {
+    /** Pexels API key (free at pexels.com/api). Unset = AI drafts leave image placeholders. */
+    pexelsKey: optional('PEXELS_API_KEY'),
+  },
   /**
    * Opt-in shared password. When set it gates BOTH the web UI (Basic auth in
    * apps/web/middleware.ts) and this API (see app.ts). Unset = open (local dev).
@@ -68,7 +72,7 @@ export function logConfigStatus(): void {
     if (!config.ai.model) warn('ANTHROPIC_MODEL is not set — brand vision falls back to heuristic colors.');
   }
   console.log(
-    `[config] storage=${config.storage.provider} · ai: vision=${aiVisionConfigured()} draft=${aiDraftConfigured()} free=${aiFreeConfigured()}`,
+    `[config] storage=${config.storage.provider} · ai: vision=${aiVisionConfigured()} draft=${aiDraftConfigured()} free=${aiFreeConfigured()} · stock=${Boolean(config.stock.pexelsKey)}`,
   );
   // Print the EFFECTIVE model per touchpoint so the cost/quality policy is
   // visible and intentional (an unset slot silently falls down the stack).

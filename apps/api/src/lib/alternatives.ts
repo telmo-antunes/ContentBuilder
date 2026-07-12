@@ -65,9 +65,8 @@ Rules:
 - Choose layouts that suit the given blocks (a quote block suits Quote; a list suits Checklist; a slide with an image suits image layouts).`;
 }
 
-function freeSystem(pack?: string): string {
-  return (
-    `You are an art director proposing composition ALTERNATIVES for one free-canvas Instagram slide (1080-base canvas, positions as fractions 0..1). The copy is fixed; only the structure changes.
+function freeSystem(): string {
+  return `You are an art director proposing composition ALTERNATIVES for one free-canvas Instagram slide (1080-base canvas, positions as fractions 0..1). The copy is fixed; only the structure changes.
 
 Output ONLY a JSON array of exactly 3 elements (no prose, no fences). Each element:
 { "blocks": [{ "frame": { "x", "y", "w", "h" }, "z": number }], "imageFrame"?: {...}, "imageBackground"?: boolean }
@@ -76,11 +75,7 @@ Rules:
 - "blocks" must have EXACTLY as many entries as the current slide, in the SAME order — entry i re-positions block i.
 - Each alternative must be a genuinely different composition (different anchoring/asymmetry/scale), not a nudge.
 - Keep frames inside x,y ∈ [0.07, 0.93]; text frames must not overlap each other or the imageFrame.
-- If the current slide has an image, each alternative must place it (imageFrame or imageBackground: true).` +
-    (pack
-      ? `\n\nBRAND COMPOSITIONS — this brand's signature skeletons; let them inspire the alternatives' structure:\n${pack}`
-      : '')
-  );
+- If the current slide has an image, each alternative must place it (imageFrame or imageBackground: true).`;
 }
 
 /** Merge a validated variant onto the original slide — copy stays untouched. */
@@ -142,7 +137,13 @@ export async function generateSlideAlternatives(
   const resp = await aiMessage({
     model,
     max_tokens: 6000,
-    system: free ? freeSystem(brandPack) : designerSystem(),
+    // Static instructions cached; the per-brand pack rides behind the boundary.
+    system: [
+      { type: 'text' as const, text: free ? freeSystem() : designerSystem(), cache_control: { type: 'ephemeral' as const } },
+      ...(free && brandPack
+        ? [{ type: 'text' as const, text: `\nBRAND COMPOSITIONS — this brand's signature skeletons; let them inspire the alternatives' structure:\n${brandPack}` }]
+        : []),
+    ],
     messages: [
       {
         role: 'user',
