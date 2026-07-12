@@ -8,3 +8,4 @@ export * from './profile';
 export * from './theme';
 export * from './backgrounds';
 export * from './schemas';
+export * from './intents';

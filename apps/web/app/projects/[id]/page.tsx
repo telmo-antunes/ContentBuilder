@@ -18,6 +18,7 @@ import {
   safeAreaFor,
   isListBlock,
   layoutWantsImage,
+  suggestLayoutForBlocks,
   SPLIT_PLACEMENTS,
   IMAGE_ASPECTS,
   IMAGE_SIZES,
@@ -1427,6 +1428,26 @@ function SlideInspector({
             >
               ⇢ Convert to free canvas
             </button>
+            {(() => {
+              // Rule-based nudge (zero AI): when the slide's CONTENT clearly
+              // suits a different layout, say so — with a one-click apply.
+              const suggestion = suggestLayoutForBlocks(
+                slide.blocks,
+                slide.layoutType,
+                Boolean(slide.mediaAssetId) || slide.imageNeed === 'upload',
+              );
+              if (!suggestion) return null;
+              return (
+                <div className="hint-box" style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 12 }}>
+                    Suggested: <strong>{LAYOUT_LABELS[suggestion.layoutType]}</strong> — {suggestion.reason}
+                  </span>
+                  <button type="button" className="btn sm" onClick={() => setLayout(suggestion.layoutType)}>
+                    Apply
+                  </button>
+                </div>
+              );
+            })()}
           </>
         )}
         <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>

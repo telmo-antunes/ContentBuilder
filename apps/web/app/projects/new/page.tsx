@@ -12,6 +12,8 @@ import {
   BLOCK_TYPES,
   SHORTHAND_LAYOUT_HINTS,
   MAX_DRAFT_PARAGRAPH_CHARS,
+  LAYOUT_LABELS,
+  CONTENT_INTENTS,
   defaultFormatFor,
   parseShorthand,
 } from '@contentbuilder/shared';
@@ -25,7 +27,7 @@ import {
 import { useStagedProgress, DRAFT_STAGES } from '../../components/useStagedProgress';
 import { rankedTemplates, SHORTHAND_PLACEHOLDER, type StarterTemplate } from '../../lib/templates';
 
-type Mode = 'empty' | 'shorthand' | 'draft';
+type Mode = 'empty' | 'guided' | 'shorthand' | 'draft';
 
 const DRAFT_EXAMPLE =
   "Cover: eyebrow 'LIMITED OFFER', title 'Ceramic Coating Weekend', subtitle '20% off all packages', date 'This Sat–Sun only'. " +
@@ -45,6 +47,7 @@ function NewProjectForm() {
   const [type, setType] = useState<AssetType>('carousel');
   const [format, setFormat] = useState<Format>('1080x1080');
   const [mode, setMode] = useState<Mode>('empty');
+  const [intentKey, setIntentKey] = useState('');
   const draftLabel = useStagedProgress(busy && mode === 'draft', DRAFT_STAGES);
   const [shorthand, setShorthand] = useState('');
   const [paragraph, setParagraph] = useState('');
@@ -101,6 +104,7 @@ function NewProjectForm() {
   const canSubmit =
     Boolean(businessId && title.trim() && format) &&
     (mode === 'empty' ||
+      (mode === 'guided' && Boolean(intentKey)) ||
       (mode === 'shorthand' && parsed.slides.length > 0) ||
       (mode === 'draft' && paragraph.trim().length > 0 && !paragraphTooLong));
 
@@ -123,7 +127,18 @@ function NewProjectForm() {
                 blocks: s.blocks,
                 imageNeed: s.imageNeed,
               }))
-            : undefined,
+            : mode === 'guided'
+              ? CONTENT_INTENTS.find((i) => i.key === intentKey)?.slides.map((plan, i) => ({
+                  order: i,
+                  layoutType: plan.layoutType,
+                  blocks: plan.blocks.map((t) => ({
+                    type: t,
+                    text: '',
+                    ...(t === 'list' ? { items: ['', '', ''] } : {}),
+                  })),
+                  imageNeed: plan.imageNeed ?? 'none',
+                }))
+              : undefined,
       });
 
       let notice = '';
@@ -259,6 +274,13 @@ function NewProjectForm() {
             </button>
             <button
               type="button"
+              className={`btn sm ${mode === 'guided' ? 'primary' : ''}`}
+              onClick={() => setMode('guided')}
+            >
+              Guided
+            </button>
+            <button
+              type="button"
               className={`btn sm ${mode === 'shorthand' ? 'primary' : ''}`}
               onClick={() => setMode('shorthand')}
             >
@@ -275,8 +297,10 @@ function NewProjectForm() {
             )}
             <span className="muted" style={{ fontSize: 12 }}>
               {mode === 'draft'
-                ? 'One Haiku call — arranges your copy, never writes new copy.'
-                : 'Shorthand is parsed locally — no AI, no tokens.'}
+                ? 'One AI call — arranges your copy (and picks imagery), never writes new copy.'
+                : mode === 'guided'
+                  ? 'Pick what you\u2019re sharing — layouts chosen for you, no AI.'
+                  : 'Shorthand is parsed locally — no AI, no tokens.'}
             </span>
           </div>
           {aiDraft && selectedBiz && !profileReady && (
@@ -284,6 +308,52 @@ function NewProjectForm() {
               ✦ AI draft is locked until you{' '}
               <Link href={`/businesses/${selectedBiz._id}`}>complete {selectedBiz.name}&apos;s profile</Link>.
             </p>
+          )}
+
+          {mode === 'guided' && (
+            <div>
+              <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                {CONTENT_INTENTS.map((i) => (
+                  <button
+                    key={i.key}
+                    type="button"
+                    className={`btn sm ${intentKey === i.key ? 'primary' : ''}`}
+                    onClick={() => setIntentKey(i.key)}
+                    title={i.description}
+                  >
+                    {i.label}
+                  </button>
+                ))}
+              </div>
+              {(() => {
+                const intent = CONTENT_INTENTS.find((i) => i.key === intentKey);
+                if (!intent) {
+                  return (
+                    <p className="muted" style={{ fontSize: 13, marginTop: 10 }}>
+                      What do you want to share? Each choice scaffolds a professionally arranged set
+                      of slides — you just fill in the words.
+                    </p>
+                  );
+                }
+                return (
+                  <div style={{ marginTop: 12 }}>
+                    <p className="muted" style={{ fontSize: 13, margin: '0 0 8px' }}>{intent.description}</p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {intent.slides.map((plan, i) => (
+                        <div key={i} className="row" style={{ gap: 8, alignItems: 'baseline' }}>
+                          <span className="muted" style={{ fontSize: 12, width: 18 }}>{i + 1}.</span>
+                          <strong style={{ fontSize: 13 }}>{LAYOUT_LABELS[plan.layoutType]}</strong>
+                          <span className="muted" style={{ fontSize: 12 }}>
+                            {plan.blocks.map((b) => BLOCK_LABELS[b]).join(' · ')}
+                            {plan.imageNeed === 'upload' ? ' · needs a photo' : ''}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
           )}
 
           {mode === 'shorthand' && (
