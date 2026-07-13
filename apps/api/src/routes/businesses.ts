@@ -96,7 +96,7 @@ businessesRouter.get(
     if (!doc) throw new ApiError(404, 'Business not found');
     const [enriched] = await enrich([doc]);
     const projects = await ProjectModel.find({ businessId: id })
-      .select('title type format status slides settings updatedAt')
+      .select('title type format status slides settings updatedAt campaignId')
       .sort({ updatedAt: -1 })
       .lean();
     res.json({ ...enriched, projects });

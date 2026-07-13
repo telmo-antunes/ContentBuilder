@@ -26,7 +26,7 @@ export interface BusinessSummary extends Business {
 
 /** Business detail also carries its project summaries. */
 export interface BusinessDetail extends BusinessSummary {
-  projects: Array<Pick<Project, '_id' | 'title' | 'type' | 'format' | 'status' | 'slides' | 'updatedAt'>>;
+  projects: Array<Pick<Project, '_id' | 'title' | 'type' | 'format' | 'status' | 'slides' | 'updatedAt' | 'campaignId'>>;
 }
 
 /** Project fetched for the editor — bundled with its approved kit + business media. */
