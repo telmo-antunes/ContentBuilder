@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { FORMAT_LABELS, type Campaign, type MediaAsset } from '@contentbuilder/shared';
+import type { Campaign, MediaAsset } from '@contentbuilder/shared';
 import {
   getBusiness,
   getBrandKit,
@@ -26,6 +26,8 @@ export default function BusinessDetailPage() {
   const [kitRaw, setKitRaw] = useState<Awaited<ReturnType<typeof getBrandKit>>['approved']>(null);
   const [media, setMedia] = useState<MediaAsset[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [typeFilter, setTypeFilter] = useState<'all' | 'carousel' | 'story'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'rendered' | 'draft'>('all');
 
   const reload = useCallback(async () => {
     setError(null);
@@ -46,6 +48,22 @@ export default function BusinessDetailPage() {
   }, [id]);
 
   const renderKit = useMemo(() => (kitRaw ? toRenderKit(kitRaw) : null), [kitRaw]);
+
+  const campaignName = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const c of campaigns) m.set(c._id, c.name);
+    return m;
+  }, [campaigns]);
+
+  const visibleProjects = useMemo(() => {
+    const list = (biz?.projects ?? []).filter(
+      (p) =>
+        (typeFilter === 'all' || p.type === typeFilter) &&
+        (statusFilter === 'all' || (statusFilter === 'rendered' ? p.status === 'rendered' : p.status !== 'rendered')),
+    );
+    // Newest work first (the API already sorts, but filtering shouldn't rely on it).
+    return [...list].sort((a, b) => String(b.updatedAt ?? '').localeCompare(String(a.updatedAt ?? '')));
+  }, [biz, typeFilter, statusFilter]);
 
   useEffect(() => {
     void reload();
@@ -195,17 +213,46 @@ export default function BusinessDetailPage() {
             </>
           )}
 
-          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 8, flexWrap: 'wrap', gap: 10 }}>
             <h2 style={{ margin: 0 }}>Projects ({biz.projects.length})</h2>
-            {biz.hasApprovedKit ? (
-              <Link className="btn primary sm" href={`/projects/new?businessId=${biz._id}`}>
-                + New project
-              </Link>
-            ) : (
-              <button className="btn sm" disabled title="Approve a brand kit first">
-                + New project
-              </button>
-            )}
+            <div className="row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+              {biz.projects.length > 3 && (
+                <>
+                  {(
+                    [
+                      ['all', 'All'],
+                      ['carousel', 'Carousels'],
+                      ['story', 'Stories'],
+                    ] as const
+                  ).map(([v, label]) => (
+                    <button key={v} className={`btn sm ${typeFilter === v ? 'primary' : 'ghost'}`} onClick={() => setTypeFilter(v)}>
+                      {label}
+                    </button>
+                  ))}
+                  <span className="muted" aria-hidden="true">·</span>
+                  {(
+                    [
+                      ['all', 'Any status'],
+                      ['rendered', 'Exported'],
+                      ['draft', 'Drafts'],
+                    ] as const
+                  ).map(([v, label]) => (
+                    <button key={v} className={`btn sm ${statusFilter === v ? 'primary' : 'ghost'}`} onClick={() => setStatusFilter(v)}>
+                      {label}
+                    </button>
+                  ))}
+                </>
+              )}
+              {biz.hasApprovedKit ? (
+                <Link className="btn primary sm" href={`/projects/new?businessId=${biz._id}`}>
+                  + New project
+                </Link>
+              ) : (
+                <button className="btn sm" disabled title="Approve a brand kit first">
+                  + New project
+                </button>
+              )}
+            </div>
           </div>
 
           {biz.projects.length === 0 ? (
@@ -232,39 +279,45 @@ export default function BusinessDetailPage() {
               )}
             </div>
           ) : (
-            <div className="list" style={{ marginTop: 12 }}>
-              {biz.projects.map((p) => (
-                <div className="item" key={p._id} style={{ alignItems: 'center', gap: 14 }}>
-                  <Link href={`/projects/${p._id}`} aria-label={`Open ${p.title}`}>
-                    <ProjectThumb project={p as ProjectThumbData} kit={renderKit} media={media} />
-                  </Link>
-                  <div className="grow">
-                    <div className="title">
-                      <Link href={`/projects/${p._id}`}>{p.title}</Link>
-                    </div>
-                    <div className="badges">
-                      <span className="badge accent">{p.type}</span>
-                      <span className="badge">{FORMAT_LABELS[p.format]}</span>
-                      <span className="badge">{p.slides.length} slide{p.slides.length === 1 ? '' : 's'}</span>
-                      <span className={`badge ${p.status === 'rendered' ? 'ok' : ''}`}>
-                        {p.status === 'rendered' ? 'exported' : 'draft'}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="row" style={{ flexWrap: 'nowrap' }}>
-                    <Link className="btn sm" href={`/projects/${p._id}`}>
-                      Open editor
+            <>
+              {visibleProjects.length === 0 && (
+                <p className="muted" style={{ marginTop: 12 }}>No projects match these filters.</p>
+              )}
+              <div className="project-grid" style={{ marginTop: 12 }}>
+                {visibleProjects.map((p) => (
+                  <div className="project-card" key={p._id}>
+                    <Link href={`/projects/${p._id}`} aria-label={`Open ${p.title}`} className="project-card-thumb">
+                      <ProjectThumb project={p as ProjectThumbData} kit={renderKit} media={media} width={200} />
                     </Link>
-                    <OverflowMenu
-                      items={[
-                        { label: 'Duplicate', onClick: () => void duplicateProject(p) },
-                        { label: 'Delete project', onClick: () => void removeProject(p._id, p.title), danger: true },
-                      ]}
-                    />
+                    <div className="project-card-menu">
+                      <OverflowMenu
+                        items={[
+                          { label: 'Duplicate', onClick: () => void duplicateProject(p) },
+                          { label: 'Delete project', onClick: () => void removeProject(p._id, p.title), danger: true },
+                        ]}
+                      />
+                    </div>
+                    <div className="project-card-body">
+                      <Link href={`/projects/${p._id}`} className="project-card-title">
+                        {p.title}
+                      </Link>
+                      <div className="badges" style={{ marginTop: 4 }}>
+                        <span className="badge accent">{p.type === 'story' ? 'story' : 'carousel'}</span>
+                        <span className="badge">{p.slides.length} slide{p.slides.length === 1 ? '' : 's'}</span>
+                        <span className={`badge ${p.status === 'rendered' ? 'ok' : ''}`}>
+                          {p.status === 'rendered' ? 'exported' : 'draft'}
+                        </span>
+                        {p.campaignId && campaignName.get(String(p.campaignId)) && (
+                          <Link href={`/campaigns/${p.campaignId}`} className="badge" title="Part of a campaign">
+                            ✦ {campaignName.get(String(p.campaignId))}
+                          </Link>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            </>
           )}
         </>
       )}
