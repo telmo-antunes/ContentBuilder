@@ -102,6 +102,7 @@ export default function ProjectEditorPage() {
   const [polishing, setPolishing] = useState(false);
   const [showCheck, setShowCheck] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showDisplay, setShowDisplay] = useState(false);
   const [shareInfo, setShareInfo] = useState<{ url: string; onLan: boolean } | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
   const [canUndo, setCanUndo] = useState(false);
@@ -646,62 +647,79 @@ export default function ProjectEditorPage() {
             onChange={(e) => setTitle(e.target.value)}
             style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Montserrat', sans-serif", width: '100%', maxWidth: 520 }}
           />
-          <div className="muted" style={{ fontSize: 13, marginTop: 4, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <span>
-              {detail.type} · {FORMAT_LABELS[detail.format]} · <SaveBadge state={saveState} onRetry={retrySave} />
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span>· Theme</span>
-              <select
-                value={theme}
-                onChange={(e) => setSettings((s) => ({ ...s, theme: e.target.value as ThemePreset }))}
-                style={{ width: 'auto', padding: '3px 8px', fontSize: 12 }}
-                aria-label="Theme preset"
-              >
-                {THEME_PRESETS.map((t) => (
-                  <option key={t.value} value={t.value}>
-                    {t.label}
-                  </option>
-                ))}
-              </select>
-              {themeDiverges && (
-                <button
-                  className="btn sm ghost"
-                  style={{ padding: '2px 8px' }}
-                  onClick={applyThemeToAll}
-                  title="Some slides override the theme. Clear those overrides so every slide uses this theme."
-                >
-                  Apply to all
-                </button>
-              )}
-            </span>
-            {detail.type === 'carousel' && (
-              <label style={{ display: 'flex', alignItems: 'center', gap: 5, margin: 0, cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={Boolean(settings.slideCounter)}
-                  onChange={(e) => setSettings((s) => ({ ...s, slideCounter: e.target.checked }))}
-                  style={{ width: 'auto' }}
-                />
-                Slide numbers
-              </label>
-            )}
+          <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
+            {detail.type} · {FORMAT_LABELS[detail.format]} · <SaveBadge state={saveState} onRetry={retrySave} />
           </div>
         </div>
         <div className="editor-actions">
-          <button className="btn sm" onClick={undo} disabled={!canUndo} title="Undo (⌘/Ctrl+Z)">
-            ↶ Undo
+          {/* Quiet icon cluster: frequent-but-secondary actions stay small. */}
+          <button className="btn sm icon-only" onClick={undo} disabled={!canUndo} title="Undo (⌘/Ctrl+Z)" aria-label="Undo">
+            ↶
           </button>
-          <button className="btn sm" onClick={redo} disabled={!canRedo} title="Redo (⌘/Ctrl+Shift+Z)">
-            ↷ Redo
+          <button className="btn sm icon-only" onClick={redo} disabled={!canRedo} title="Redo (⌘/Ctrl+Shift+Z)" aria-label="Redo">
+            ↷
           </button>
           <button
-            className="btn sm"
+            className="btn sm icon-only"
             onClick={() => setShowHistory(true)}
-            title="Version snapshots — saved before AI drafts, polish, restores and on every export"
+            title="Version history — snapshots before AI actions and on every export"
+            aria-label="Version history"
           >
-            ⏱ History
+            ⏱
           </button>
+          <div style={{ position: 'relative' }}>
+            <button
+              className={`btn sm icon-only ${showDisplay ? 'primary' : ''}`}
+              onClick={() => setShowDisplay((v) => !v)}
+              title="Display settings — theme & slide numbers"
+              aria-label="Display settings"
+              aria-expanded={showDisplay}
+            >
+              ⚙
+            </button>
+            {showDisplay && (
+              <>
+                {/* Click-away backdrop — the popover closes like a menu. */}
+                <div style={{ position: 'fixed', inset: 0, zIndex: 299 }} onClick={() => setShowDisplay(false)} />
+                <div className="popover" role="dialog" aria-label="Display settings">
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Theme</label>
+                <div className="row" style={{ gap: 6, alignItems: 'center' }}>
+                  <select
+                    value={theme}
+                    onChange={(e) => setSettings((s) => ({ ...s, theme: e.target.value as ThemePreset }))}
+                    aria-label="Theme preset"
+                  >
+                    {THEME_PRESETS.map((t) => (
+                      <option key={t.value} value={t.value}>
+                        {t.label}
+                      </option>
+                    ))}
+                  </select>
+                  {themeDiverges && (
+                    <button
+                      className="btn sm ghost"
+                      onClick={applyThemeToAll}
+                      title="Some slides override the theme. Clear those overrides so every slide uses this theme."
+                    >
+                      Apply to all
+                    </button>
+                  )}
+                </div>
+                {detail.type === 'carousel' && (
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '10px 0 0', cursor: 'pointer', fontSize: 13 }}>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(settings.slideCounter)}
+                      onChange={(e) => setSettings((s) => ({ ...s, slideCounter: e.target.checked }))}
+                      style={{ width: 'auto' }}
+                    />
+                    Slide numbers ("1 / N")
+                  </label>
+                )}
+                </div>
+              </>
+            )}
+          </div>
           <button
             className="btn sm"
             onClick={() => void polish()}
@@ -807,7 +825,7 @@ export default function ProjectEditorPage() {
                 <span>
                   {i + 1}. {LAYOUT_LABELS[s.layoutType]}
                 </span>
-                <span style={{ display: 'flex', gap: 2 }}>
+                <span className="thumb-actions">
                   <button
                     className="icon-btn"
                     style={{ width: 24, height: 24 }}
@@ -1167,10 +1185,9 @@ function CaptionPanel({
   const chips = parseTags(tags);
 
   return (
-    <div className="card" style={{ marginTop: 16 }}>
-      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-        <strong>Caption</strong>
-        <div className="row" style={{ gap: 6 }}>
+    <div className="panel inspector-panel" style={{ marginTop: 0 }}>
+      <Section title="Caption">
+      <div className="row" style={{ justifyContent: 'flex-end', alignItems: 'center', gap: 6 }}>
           <button
             className="btn sm ghost"
             onClick={regenerate}
@@ -1182,7 +1199,6 @@ function CaptionPanel({
           <button className="btn sm" onClick={copyAll} disabled={!text && !tags.trim()}>
             {copied ? 'Copied ✓' : 'Copy'}
           </button>
-        </div>
       </div>
       {err && (
         <div className="error-box" style={{ marginTop: 8 }}>
@@ -1219,6 +1235,7 @@ function CaptionPanel({
           ))}
         </div>
       )}
+      </Section>
     </div>
   );
 }
@@ -1513,7 +1530,7 @@ function SlideInspector({
         <BlockList blocks={slide.blocks} onChange={setBlocks} selectedTarget={selectedTarget} onSelectTarget={onSelectTarget} />
       </Section>
 
-      <Section title="Alternatives">
+      <Section title="Alternatives" defaultOpen={false}>
         <AlternativesSection slide={slide} detail={detail} media={media} kit={kit} onChange={onChange} />
       </Section>
 
@@ -1941,6 +1958,82 @@ function StockPhotoFinder({
   );
 }
 
+/**
+ * The media library, one click away instead of permanently stacked: a modal
+ * with tabbed groups (website / stock / uploads / backgrounds) and roomy
+ * thumbnails. Pick → onPick(assetId) → closes.
+ */
+function MediaLibraryModal({
+  media,
+  selectedId,
+  onPick,
+  onClose,
+}: {
+  media: MediaAsset[];
+  selectedId?: string;
+  onPick: (assetId: string) => void;
+  onClose: () => void;
+}) {
+  const groups = [
+    { key: 'site', label: 'From your website', items: media.filter((m) => m.label === 'From your website') },
+    { key: 'stock', label: 'Stock photos', items: media.filter((m) => m.label === 'Stock photo') },
+    {
+      key: 'uploads',
+      label: 'Your uploads',
+      items: media.filter((m) => m.type !== 'generated' && m.label !== 'From your website' && m.label !== 'Stock photo'),
+    },
+    { key: 'bg', label: 'Brand backgrounds', items: media.filter((m) => m.type === 'generated') },
+  ].filter((g) => g.items.length > 0);
+  const [tab, setTab] = useState(groups[0]?.key ?? 'uploads');
+  const active = groups.find((g) => g.key === tab) ?? groups[0];
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" role="dialog" aria-modal="true" aria-label="Media library" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 620 }}>
+        <h2 style={{ marginTop: 0, marginBottom: 10 }}>Media library</h2>
+        {groups.length === 0 ? (
+          <p className="muted">No media yet — upload an image or search stock photos first.</p>
+        ) : (
+          <>
+            <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+              {groups.map((g) => (
+                <button key={g.key} className={`btn sm ${tab === g.key ? 'primary' : 'ghost'}`} onClick={() => setTab(g.key)}>
+                  {g.label} ({g.items.length})
+                </button>
+              ))}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))', gap: 8, maxHeight: '48vh', overflowY: 'auto' }}>
+              {active?.items.map((m) => (
+                <button
+                  key={m._id}
+                  onClick={() => {
+                    onPick(m._id);
+                    onClose();
+                  }}
+                  title={m.label ?? 'Use this image'}
+                  style={{
+                    padding: 0,
+                    border: `2px solid ${selectedId === m._id ? 'var(--accent)' : 'var(--border)'}`,
+                    borderRadius: 8,
+                    background: 'none',
+                    cursor: 'pointer',
+                    lineHeight: 0,
+                  }}
+                >
+                  <img src={m.url} alt="" style={{ width: '100%', aspectRatio: '4 / 5', objectFit: 'cover', borderRadius: 6, display: 'block' }} />
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+        <div className="row" style={{ marginTop: 12, justifyContent: 'flex-end' }}>
+          <button className="btn" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ImageControls({
   slide,
   format,
@@ -1958,16 +2051,9 @@ function ImageControls({
 }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [showLibrary, setShowLibrary] = useState<'attach' | 'background' | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const current = media.find((m) => m._id === slide.mediaAssetId) ?? null;
-  // Keep generated brand backgrounds, harvested site photos and user uploads
-  // independent in the picker.
-  const sitePhotos = media.filter((m) => m.label === 'From your website');
-  const stockPhotos = media.filter((m) => m.label === 'Stock photo');
-  const uploads = media.filter(
-    (m) => m.type !== 'generated' && m.label !== 'From your website' && m.label !== 'Stock photo',
-  );
-  const brandBgs = media.filter((m) => m.type === 'generated');
 
   const setOverride = (patch: Partial<SlideOverrides>) =>
     onChange((s) => ({ ...s, overrides: { ...s.overrides, ...patch } }));
@@ -2067,71 +2153,81 @@ function ImageControls({
 
       {current ? (
         <>
-          <FocalPicker
-            url={current.url}
-            focal={slide.overrides?.focalPoint}
-            onSet={setFocal}
-          />
-          <div className="row" style={{ justifyContent: 'space-between', marginTop: 4 }}>
-            <span className="muted" style={{ fontSize: 11 }}>
-              Drag to set the focal point — kept in view when cropped. (focal{' '}
-              {Math.round((slide.overrides?.focalPoint?.x ?? 0.5) * 100)}% ·{' '}
-              {Math.round((slide.overrides?.focalPoint?.y ?? 0.5) * 100)}%)
-            </span>
-            <button className="icon-btn" title="Reset focal point to center" onClick={() => setFocal(0.5, 0.5)} style={{ width: 'auto', padding: '0 8px' }}>
-              ⟲
-            </button>
-          </div>
-          <div className="row" style={{ alignItems: 'center', gap: 8, marginTop: 6 }}>
-            <span className="muted" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>Zoom (crop)</span>
-            <input
-              type="range"
-              min={1}
-              max={3}
-              step={0.05}
-              value={slide.overrides?.imageZoom ?? 1}
-              onChange={(e) => setOverride({ imageZoom: Number(e.target.value) })}
-              style={{ flex: 1, width: 'auto', padding: 0 }}
-              aria-label="Image zoom"
-            />
-            <span className="muted" style={{ fontSize: 11, width: 32, textAlign: 'right' }}>
-              {(slide.overrides?.imageZoom ?? 1).toFixed(1)}×
-            </span>
-          </div>
-          <div style={{ marginTop: 8 }}>
-            <span className="muted" style={{ fontSize: 11 }}>Cohesion</span>
-            <div className="row" style={{ gap: 4, marginTop: 4 }}>
-              {(['none', 'tint', 'duotone'] as ImageTreatment[]).map((t) => (
-                <button
-                  key={t}
-                  className={`btn sm ${treatment === t ? 'primary' : 'ghost'}`}
-                  onClick={() => setTreatment(t)}
-                >
-                  {t === 'none' ? 'Original' : t === 'tint' ? 'Brand tint' : 'Duotone'}
+          {/* Compact crop row: the picker no longer dwarfs the actual canvas. */}
+          <div style={{ display: 'grid', gridTemplateColumns: '168px 1fr', gap: 10, alignItems: 'start' }}>
+            <div>
+              <FocalPicker
+                url={current.url}
+                focal={slide.overrides?.focalPoint}
+                onSet={setFocal}
+              />
+              <div className="row" style={{ justifyContent: 'space-between', marginTop: 3 }}>
+                <span className="muted" style={{ fontSize: 10 }}>
+                  focal {Math.round((slide.overrides?.focalPoint?.x ?? 0.5) * 100)}% ·{' '}
+                  {Math.round((slide.overrides?.focalPoint?.y ?? 0.5) * 100)}%
+                </span>
+                <button className="icon-btn" title="Reset focal point to center" onClick={() => setFocal(0.5, 0.5)} style={{ width: 'auto', padding: '0 6px', height: 18, fontSize: 11 }}>
+                  ⟲
                 </button>
-              ))}
+              </div>
             </div>
-          </div>
-          <div className="row" style={{ marginTop: 8 }}>
-            <button className="btn sm" onClick={() => fileRef.current?.click()} disabled={busy}>
-              Replace
-            </button>
-            <button
-              className="btn sm ghost"
-              onClick={async () => {
-                if (await confirm({ message: 'Remove this image from the slide?', confirmText: 'Remove', destructive: true }))
-                  onChange((s) => ({ ...s, mediaAssetId: undefined }));
-              }}
-            >
-              Remove
-            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
+              <span className="muted" style={{ fontSize: 11 }}>Drag the photo to set its focal point — kept in view when cropped.</span>
+              <div className="row" style={{ alignItems: 'center', gap: 8 }}>
+                <span className="muted" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>Zoom</span>
+                <input
+                  type="range"
+                  min={1}
+                  max={3}
+                  step={0.05}
+                  value={slide.overrides?.imageZoom ?? 1}
+                  onChange={(e) => setOverride({ imageZoom: Number(e.target.value) })}
+                  style={{ flex: 1, width: 'auto', padding: 0 }}
+                  aria-label="Image zoom"
+                />
+                <span className="muted" style={{ fontSize: 11, width: 32, textAlign: 'right' }}>
+                  {(slide.overrides?.imageZoom ?? 1).toFixed(1)}×
+                </span>
+              </div>
+              <div className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
+                {(['none', 'tint', 'duotone'] as ImageTreatment[]).map((t) => (
+                  <button
+                    key={t}
+                    className={`btn sm ${treatment === t ? 'primary' : 'ghost'}`}
+                    onClick={() => setTreatment(t)}
+                  >
+                    {t === 'none' ? 'Original' : t === 'tint' ? 'Brand tint' : 'Duotone'}
+                  </button>
+                ))}
+              </div>
+              <div className="row" style={{ gap: 6 }}>
+                <button className="btn sm" onClick={() => setShowLibrary('attach')}>
+                  Library…
+                </button>
+                <button className="btn sm ghost" onClick={() => fileRef.current?.click()} disabled={busy}>
+                  Upload
+                </button>
+                <button
+                  className="btn sm ghost"
+                  onClick={async () => {
+                    if (await confirm({ message: 'Remove this image from the slide?', confirmText: 'Remove', destructive: true }))
+                      onChange((s) => ({ ...s, mediaAssetId: undefined }));
+                  }}
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
           </div>
         </>
       ) : (
         <div className="empty" style={{ padding: 16 }}>
           {busy ? 'Uploading…' : 'No image attached.'}
-          <div style={{ marginTop: 10 }}>
-            <button className="btn sm primary" onClick={() => fileRef.current?.click()} disabled={busy}>
+          <div className="row" style={{ marginTop: 10, justifyContent: 'center', gap: 8 }}>
+            <button className="btn sm primary" onClick={() => setShowLibrary('attach')}>
+              Choose from library
+            </button>
+            <button className="btn sm" onClick={() => fileRef.current?.click()} disabled={busy}>
               Upload image
             </button>
           </div>
@@ -2156,42 +2252,13 @@ function ImageControls({
                     Remove
                   </button>
                 )}
-                <button className="btn sm" onClick={() => bgFileRef.current?.click()} disabled={busy} style={{ marginLeft: 'auto' }}>
+                <button className="btn sm" onClick={() => setShowLibrary('background')} style={{ marginLeft: 'auto' }}>
+                  Library…
+                </button>
+                <button className="btn sm ghost" onClick={() => bgFileRef.current?.click()} disabled={busy}>
                   Upload
                 </button>
               </div>
-              {[
-                { label: 'Brand backgrounds', items: brandBgs },
-                { label: 'From your website', items: sitePhotos },
-                { label: 'Stock photos', items: stockPhotos },
-                { label: 'Your uploads', items: uploads },
-              ].map((group) =>
-                group.items.length > 0 ? (
-                  <div key={group.label} style={{ marginTop: 6 }}>
-                    <span className="muted" style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.4 }}>{group.label}</span>
-                    <div style={{ display: 'flex', gap: 6, overflowX: 'auto', marginTop: 3, paddingBottom: 2 }}>
-                      {group.items.map((m) => (
-                        <button
-                          key={m._id}
-                          onClick={() => setBackground(m._id)}
-                          title={m.label ?? 'Use as background'}
-                          style={{
-                            flex: '0 0 auto',
-                            padding: 0,
-                            border: `2px solid ${bgAssetId === m._id ? 'var(--accent)' : 'var(--border)'}`,
-                            borderRadius: 6,
-                            background: 'none',
-                            cursor: 'pointer',
-                            lineHeight: 0,
-                          }}
-                        >
-                          <img src={m.url} alt="" style={{ width: 40, height: 50, objectFit: 'cover', borderRadius: 4, display: 'block' }} />
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ) : null,
-              )}
               <input
                 ref={bgFileRef}
                 type="file"
@@ -2349,36 +2416,13 @@ function ImageControls({
         }}
       />
 
-      {[
-        { label: 'From your website', items: sitePhotos },
-        { label: 'Stock photos', items: stockPhotos },
-        { label: 'Your uploads', items: uploads },
-        { label: 'Brand backgrounds', items: brandBgs },
-      ].map((group) =>
-        group.items.length > 0 ? (
-          <div key={group.label}>
-            <p className="muted" style={{ fontSize: 12, margin: '10px 0 6px' }}>{group.label}</p>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {group.items.slice(0, 8).map((m) => (
-                <img
-                  key={m._id}
-                  src={m.url}
-                  alt={m.label ?? ''}
-                  title={m.label ?? ''}
-                  onClick={() => attachImage(m._id)}
-                  style={{
-                    width: 46,
-                    height: 46,
-                    objectFit: 'cover',
-                    borderRadius: 6,
-                    cursor: 'pointer',
-                    border: m._id === slide.mediaAssetId ? '2px solid var(--accent)' : '2px solid transparent',
-                  }}
-                />
-              ))}
-            </div>
-          </div>
-        ) : null,
+      {showLibrary && (
+        <MediaLibraryModal
+          media={media}
+          selectedId={showLibrary === 'background' ? bgAssetId ?? undefined : slide.mediaAssetId}
+          onPick={(id) => (showLibrary === 'background' ? setBackground(id) : attachImage(id))}
+          onClose={() => setShowLibrary(null)}
+        />
       )}
     </div>
   );
