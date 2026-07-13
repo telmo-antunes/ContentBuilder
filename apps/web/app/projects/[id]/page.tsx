@@ -57,6 +57,7 @@ import { SlideRenderer } from '../../../lib/render/SlideRenderer';
 import { ScaledSlide } from '../../../lib/render/SlideFrame';
 import { FreeCanvasOverlay } from './FreeCanvasOverlay';
 import { confirm } from '../../components/ConfirmDialog';
+import { toast } from '../../components/Toast';
 import { useStagedProgress, POLISH_STAGES } from '../../components/useStagedProgress';
 import { toRenderKit, resolveSlideImage, resolveImageLayout } from '../../../lib/render/projectRender';
 import type { RenderBrandKit } from '../../../lib/render/types';
@@ -598,6 +599,7 @@ export default function ProjectEditorPage() {
       a.remove();
       URL.revokeObjectURL(url);
       setExported(true);
+      toast(`Exported ${slides.length} slide${slides.length === 1 ? '' : 's'} — ZIP downloaded`);
       setTimeout(() => setExported(false), 2500);
       // Offer the phone hand-off for the freshly exported set (best-effort).
       getShareInfo(id)
@@ -1002,6 +1004,7 @@ export default function ProjectEditorPage() {
             setSlides(restored);
             setSelectedId(restored[0]?.id ?? null);
             setShowHistory(false);
+            toast('Version restored — undo brings the previous state back');
           }}
         />
       )}
@@ -1911,6 +1914,7 @@ function StockPhotoFinder({
       const asset = await storeStockPhoto(businessId, c);
       onPicked(asset);
       setCandidates(null); // picked — collapse the grid
+      toast('Photo added to the slide and your library');
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     } finally {

@@ -23,6 +23,7 @@ import { SlideRenderer } from '../../../../lib/render/SlideRenderer';
 import { ScaledSlide } from '../../../../lib/render/SlideFrame';
 import type { RenderBrandKit } from '../../../../lib/render/types';
 import { confirm } from '../../../components/ConfirmDialog';
+import { toast } from '../../../components/Toast';
 import { useStagedProgress, ANALYZE_STAGES } from '../../../components/useStagedProgress';
 
 type ColorRoleKey = 'primary' | 'secondary' | 'accent' | 'background' | 'text';
@@ -335,8 +336,13 @@ function KitEditor({
         voice,
         status: approve ? 'approved' : 'draft',
       });
-      if (approve) onApproved();
-      else setBusy(null);
+      if (approve) {
+        toast('Brand kit approved — backgrounds & compositions are being designed');
+        onApproved();
+      } else {
+        toast('Brand kit saved');
+        setBusy(null);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setBusy(null);
@@ -628,6 +634,7 @@ function BrandCompositions({
     try {
       const fresh = await regenerateTemplatePack(kit._id);
       setPack(fresh.templatePack ?? []);
+      toast(`Composition pack redesigned — ${(fresh.templatePack ?? []).length} layouts`);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { getSettings, updateSettings, getUsage, type AiSettings, type SettingsResponse, type UsageSummary } from '../lib/api';
+import { toast } from '../components/Toast';
 
 const usd = (n: number) => `$${n.toFixed(n < 1 ? 4 : 2)}`;
 const compact = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
@@ -37,6 +38,7 @@ export default function SettingsPage() {
     try {
       await updateSettings(form);
       setSave('saved');
+      toast('Settings saved');
       setTimeout(() => setSave('idle'), 1500);
     } catch (e) {
       setSave('error');
@@ -279,7 +281,6 @@ export default function SettingsPage() {
         <button className="btn primary" onClick={onSave} disabled={save === 'saving'}>
           {save === 'saving' ? 'Saving…' : 'Save settings'}
         </button>
-        {save === 'saved' && <span className="muted">Saved ✓</span>}
         {save === 'error' && <span style={{ color: 'var(--danger)' }}>Save failed</span>}
       </div>
     </div>
