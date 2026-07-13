@@ -200,8 +200,8 @@ function NewProjectForm() {
       </p>
       <h1>New project</h1>
       <p className="muted">
-        Pick a business with an approved brand kit, choose carousel or story and a compatible format,
-        then start empty or paste shorthand. The project opens in the editor.
+        Pick a business with an approved brand kit, choose the format, then pick how to start:
+        guided structure, shorthand, or an AI draft. The project opens in the editor.
       </p>
 
       {error && <div className="error-box">{error}</div>}
@@ -331,7 +331,11 @@ function NewProjectForm() {
                   return (
                     <p className="muted" style={{ fontSize: 13, marginTop: 10 }}>
                       What do you want to share? Each choice scaffolds a professionally arranged set
-                      of slides — you just fill in the words.
+                      of slides — you just fill in the words. (Prefer ready-written examples?{' '}
+                      <button type="button" className="btn sm ghost" style={{ padding: '1px 8px' }} onClick={() => setMode('shorthand')}>
+                        Browse starter templates
+                      </button>
+                      )
                     </p>
                   );
                 }
@@ -457,6 +461,8 @@ function NewProjectForm() {
         </div>
       </form>
 
+      {mode === 'shorthand' && (
+      <>
       <h2>Starter templates</h2>
       <p className="muted" style={{ marginTop: 0 }}>
         {selectedBiz?.profile
@@ -486,6 +492,8 @@ function NewProjectForm() {
           </div>
         ))}
       </div>
+      </>
+      )}
     </div>
   );
 }

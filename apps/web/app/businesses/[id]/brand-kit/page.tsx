@@ -357,6 +357,7 @@ function KitEditor({
   };
 
   const isDraft = kit.status === 'draft';
+  const [tab, setTab] = useState<'identity' | 'backgrounds' | 'compositions'>('identity');
 
   return (
     <>
@@ -373,7 +374,21 @@ function KitEditor({
         </span>
       </div>
 
-      <div className="kit-cols">
+      <div className="row" style={{ gap: 6, marginBottom: 14 }}>
+        {(
+          [
+            ['identity', 'Identity'],
+            ['backgrounds', 'Backgrounds'],
+            ['compositions', 'Compositions'],
+          ] as const
+        ).map(([v, label]) => (
+          <button key={v} className={`btn sm ${tab === v ? 'primary' : 'ghost'}`} onClick={() => setTab(v)}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <div className="kit-cols" style={tab === 'identity' ? undefined : { display: 'none' }}>
         {/* Left: screenshot + live preview */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {kit.homepageScreenshot?.url && (
@@ -531,12 +546,18 @@ function KitEditor({
         </div>
       </div>
 
-      <BrandBackgrounds businessId={businessId} colors={colors} colorsValid={colorsValid} setError={setError} styleDescriptor={styleDescriptor} businessName={businessName} />
+      {/* Keep the hidden tabs MOUNTED (display:none) so per-tab state and
+          in-flight generations survive switching. */}
+      <div style={tab === 'backgrounds' ? undefined : { display: 'none' }}>
+        <BrandBackgrounds businessId={businessId} colors={colors} colorsValid={colorsValid} setError={setError} styleDescriptor={styleDescriptor} businessName={businessName} />
+      </div>
 
-      <BrandCompositions kit={kit} renderKit={renderKit} setError={setError} />
+      <div style={tab === 'compositions' ? undefined : { display: 'none' }}>
+        <BrandCompositions kit={kit} renderKit={renderKit} setError={setError} />
+      </div>
 
-      {/* Actions */}
-      <div className="row" style={{ marginTop: 18, justifyContent: 'space-between' }}>
+      {/* Actions — sticky so Approve/Save never scrolls out of reach. */}
+      <div className="row kit-actions" style={{ marginTop: 18, justifyContent: 'space-between' }}>
         <div className="row">
           <button className="btn primary" onClick={() => save(true)} disabled={busy !== null || !colorsValid}>
             {busy === 'save' ? 'Saving…' : isDraft ? 'Approve brand kit' : 'Save changes'}
