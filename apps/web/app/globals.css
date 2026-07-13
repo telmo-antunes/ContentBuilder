@@ -1121,3 +1121,45 @@ input[type='color'] {
   border: 1px solid var(--border);
   display: block;
 }
+
+/* ── Editor cleanup (UI-A) ─────────────────────────────────────────────────── */
+
+/* Rail: move/duplicate controls appear on hover or selection — the rail reads
+   as a clean filmstrip otherwise. */
+.thumb .thumb-actions {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.thumb:hover .thumb-actions,
+.thumb.selected .thumb-actions,
+.thumb:focus-within .thumb-actions {
+  opacity: 1;
+}
+@media (hover: none) {
+  .thumb .thumb-actions {
+    opacity: 1; /* touch devices can't hover */
+  }
+}
+
+/* Small anchored popover (editor display settings). */
+.popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 300;
+  min-width: 240px;
+  padding: 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+/* Icon-only small buttons keep a square hit target. */
+.btn.icon-only {
+  padding: 4px 0;
+  width: 30px;
+  text-align: center;
+}
