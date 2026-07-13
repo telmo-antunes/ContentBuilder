@@ -79,40 +79,63 @@ export default function SettingsPage() {
           const visionDefault = env.modelLarge || env.model || 'env default';
           const judgmentDefault = env.modelLarge || env.modelSmall || env.model || 'env default';
           const smallDefault = env.modelSmall || env.model || 'env default';
-          const fields: Array<{ key: keyof AiSettings; label: string; hint: string; ph: string }> = [
-            { key: 'designerModel', label: 'Draft — Designer', hint: 'arranges copy into preset layouts', ph: smallDefault },
-            { key: 'freeModel', label: 'Draft — Free canvas', hint: 'positions blocks freely (hardest task)', ph: judgmentDefault },
-            { key: 'visionModel', label: 'Brand analysis', hint: 'reads colors, type & voice from the site', ph: visionDefault },
-            { key: 'critiqueModel', label: 'Layout critique', hint: 'reviews rendered slides (Polish)', ph: visionDefault },
-            { key: 'captionModel', label: 'Captions', hint: 'writes the post caption in the brand voice', ph: judgmentDefault },
-            { key: 'campaignModel', label: 'Campaign planning', hint: 'turns a brief into a post series', ph: judgmentDefault },
-            { key: 'backgroundModel', label: 'Background picker', hint: 'ranks motifs from the vetted menu', ph: smallDefault },
-            { key: 'templatesModel', label: 'Brand compositions', hint: 'designs the brand’s signature layout pack', ph: judgmentDefault },
-            { key: 'alternativesModel', label: 'Slide alternatives', hint: 'proposes 3 layout variants of a slide', ph: judgmentDefault },
-            { key: 'photoFitModel', label: 'Photo fit', hint: 'picks the stock photo that matches the copy', ph: visionDefault },
+          const groups: Array<{ name: string; fields: Array<{ key: keyof AiSettings; label: string; hint: string; ph: string }> }> = [
+            {
+              name: 'Drafting',
+              fields: [
+                { key: 'designerModel', label: 'Draft — Designer', hint: 'arranges copy into preset layouts', ph: smallDefault },
+                { key: 'freeModel', label: 'Draft — Free canvas', hint: 'positions blocks freely (hardest task)', ph: judgmentDefault },
+              ],
+            },
+            {
+              name: 'Analysis & imagery',
+              fields: [
+                { key: 'visionModel', label: 'Brand analysis', hint: 'reads colors, type & voice from the site', ph: visionDefault },
+                { key: 'critiqueModel', label: 'Layout critique', hint: 'reviews rendered slides (Polish)', ph: visionDefault },
+                { key: 'photoFitModel', label: 'Photo fit', hint: 'picks the stock photo that matches the copy', ph: visionDefault },
+                { key: 'backgroundModel', label: 'Background picker', hint: 'ranks motifs from the vetted menu', ph: smallDefault },
+              ],
+            },
+            {
+              name: 'Content & series',
+              fields: [
+                { key: 'captionModel', label: 'Captions', hint: 'writes the post caption in the brand voice', ph: judgmentDefault },
+                { key: 'campaignModel', label: 'Campaign planning', hint: 'turns a brief into a post series', ph: judgmentDefault },
+                { key: 'templatesModel', label: 'Brand compositions', hint: 'designs the brand’s signature layout pack', ph: judgmentDefault },
+                { key: 'alternativesModel', label: 'Slide alternatives', hint: 'proposes 3 layout variants of a slide', ph: judgmentDefault },
+              ],
+            },
           ];
+          const fields = groups.flatMap((g) => g.fields);
           return (
             <>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 12 }}>
-                {fields.map((f) => (
-                  <div key={f.key}>
-                    <label style={labelStyle}>
-                      {f.label}
-                      {(form[f.key] as string).trim() !== '' && (
-                        <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: 'var(--accent, #f5b657)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                          override active
-                        </span>
-                      )}
-                    </label>
-                    <input
-                      value={form[f.key] as string}
-                      placeholder={f.ph}
-                      onChange={(e) => set({ [f.key]: e.target.value } as Partial<AiSettings>)}
-                    />
-                    <div className="muted" style={{ fontSize: 11, marginTop: 3 }}>{f.hint}</div>
+              {groups.map((g) => (
+                <div key={g.name} style={{ marginTop: 12 }}>
+                  <div className="muted" style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
+                    {g.name}
                   </div>
-                ))}
-              </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 12 }}>
+                    {g.fields.map((f) => (
+                      <div key={f.key}>
+                        <label style={labelStyle}>
+                          {f.label}
+                          {(form[f.key] as string).trim() !== '' && (
+                            <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: 'var(--accent, #f5b657)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                              override active
+                            </span>
+                          )}
+                        </label>
+                        <input
+                          value={form[f.key] as string}
+                          placeholder={f.ph}
+                          onChange={(e) => set({ [f.key]: e.target.value } as Partial<AiSettings>)}
+                        />
+                        <div className="muted" style={{ fontSize: 11, marginTop: 3 }}>{f.hint}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
               {fields.some((f) => (form[f.key] as string).trim() !== '') && (
                 <button
                   className="btn sm ghost"
@@ -182,20 +205,34 @@ export default function SettingsPage() {
         </div>
       )}
 
-      <div className="panel" style={{ marginTop: 14 }}>
-        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-          <div className="section-label" style={{ marginTop: 0 }}>Designer system prompt</div>
+      <details className="panel prompt-details" style={{ marginTop: 14 }} open={Boolean(form.designerSystem.trim())}>
+        <summary className="section-label" style={{ marginTop: 0, cursor: 'pointer' }}>
+          Designer system prompt
+          {form.designerSystem.trim() !== '' && (
+            <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, color: 'var(--accent, #f5b657)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              override active
+            </span>
+          )}
+        </summary>
+        <div className="row" style={{ justifyContent: 'flex-end', alignItems: 'center' }}>
           <div className="row" style={{ gap: 6 }}>
             <button className="btn sm ghost" onClick={() => set({ designerSystem: data.defaults.designerSystem })}>Load default</button>
             <button className="btn sm ghost" onClick={() => set({ designerSystem: '' })}>Clear (use default)</button>
           </div>
         </div>
         <textarea style={taStyle} value={form.designerSystem} placeholder="(blank → built-in default — click “Load default” to edit it)" onChange={(e) => set({ designerSystem: e.target.value })} />
-      </div>
+      </details>
 
-      <div className="panel" style={{ marginTop: 14 }}>
-        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-          <div className="section-label" style={{ marginTop: 0 }}>Free system prompt (template)</div>
+      <details className="panel prompt-details" style={{ marginTop: 14 }} open={Boolean(form.freeSystem.trim())}>
+        <summary className="section-label" style={{ marginTop: 0, cursor: 'pointer' }}>
+          Free system prompt (template)
+          {form.freeSystem.trim() !== '' && (
+            <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, color: 'var(--accent, #f5b657)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              override active
+            </span>
+          )}
+        </summary>
+        <div className="row" style={{ justifyContent: 'flex-end', alignItems: 'center' }}>
           <div className="row" style={{ gap: 6 }}>
             <button className="btn sm ghost" onClick={() => set({ freeSystem: data.defaults.freeSystem })}>Load default</button>
             <button className="btn sm ghost" onClick={() => set({ freeSystem: '' })}>Clear (use default)</button>
@@ -214,11 +251,18 @@ export default function SettingsPage() {
             onChange={(e) => set({ freeMaxTokens: e.target.value === '' ? null : Number(e.target.value) })}
           />
         </div>
-      </div>
+      </details>
 
-      <div className="panel" style={{ marginTop: 14 }}>
-        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-          <div className="section-label" style={{ marginTop: 0 }}>Brand compositions prompt</div>
+      <details className="panel prompt-details" style={{ marginTop: 14 }} open={Boolean(form.templatesSystem.trim())}>
+        <summary className="section-label" style={{ marginTop: 0, cursor: 'pointer' }}>
+          Brand compositions prompt
+          {form.templatesSystem.trim() !== '' && (
+            <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, color: 'var(--accent, #f5b657)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              override active
+            </span>
+          )}
+        </summary>
+        <div className="row" style={{ justifyContent: 'flex-end', alignItems: 'center' }}>
           <div className="row" style={{ gap: 6 }}>
             <button className="btn sm ghost" onClick={() => set({ templatesSystem: data.defaults.templatesSystem })}>Load default</button>
             <button className="btn sm ghost" onClick={() => set({ templatesSystem: '' })}>Clear (use default)</button>
@@ -229,7 +273,7 @@ export default function SettingsPage() {
           Saving an UNEDITED copy of a default prompt is stored as blank on purpose — otherwise it
           would freeze the prompt at today&rsquo;s version and silently miss future improvements.
         </p>
-      </div>
+      </details>
 
       <div className="row" style={{ marginTop: 16, gap: 10, alignItems: 'center' }}>
         <button className="btn primary" onClick={onSave} disabled={save === 'saving'}>

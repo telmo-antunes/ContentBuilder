@@ -1217,3 +1217,12 @@ input[type='color'] {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* Brand-kit approve bar stays reachable on the long identity tab. */
+.kit-actions {
+  position: sticky;
+  bottom: 0;
+  padding: 12px 0;
+  background: linear-gradient(to top, var(--bg) 70%, transparent);
+  z-index: 20;
+}
