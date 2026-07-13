@@ -3,6 +3,8 @@ import { FORMAT_DIMENSIONS, type Format } from '@contentbuilder/shared';
 import { config } from '../config';
 import { MediaAssetModel } from '../models';
 import { getStorage } from '../storage';
+import { aiMessage, modelFor, textOf } from './ai';
+import { recordUsage } from './usage';
 import type { SlideInput } from './validation';
 
 /**
@@ -76,26 +78,61 @@ export async function searchStockPhotos(
   }
 }
 
-/** Search Pexels; returns the top photo or null. Never throws. */
-async function searchStockPhoto(
-  query: string,
-  orientation: 'portrait' | 'landscape' | 'square',
-): Promise<PexelsPhoto | null> {
-  const key = config.stock.pexelsKey;
-  if (!key || !query.trim()) return null;
+/**
+ * Parse the photo-fit judge's response into a 0-based candidate index.
+ * Lenient (finds a "pick" number or the first bare integer); null when the
+ * response is unusable — the caller falls back to candidate 0.
+ */
+export function parsePickIndex(raw: string, count: number): number | null {
+  const pick = raw.match(/"pick"\s*:\s*(\d+)/)?.[1] ?? raw.match(/\b(\d+)\b/)?.[1];
+  if (!pick) return null;
+  const idx = Number(pick) - 1; // the judge speaks 1-based
+  return idx >= 0 && idx < count ? idx : null;
+}
+
+/**
+ * The photo-fit judge (G-curation): ONE vision call looks at the candidate
+ * thumbnails next to the slide's copy and picks the best match — subject,
+ * quality, and composition fit for how the image will be used. Falls back to
+ * candidate 0 on any failure (exactly the old first-hit behaviour).
+ */
+export async function pickBestCandidate(
+  candidates: StockCandidate[],
+  context: { copy: string; usage: string; query: string },
+): Promise<number> {
+  if (candidates.length < 2 || !config.ai.apiKey) return 0;
   try {
-    const url =
-      `https://api.pexels.com/v1/search?query=${encodeURIComponent(query.trim())}` +
-      `&per_page=3&orientation=${orientation}`;
-    const res = await fetch(url, {
-      headers: { Authorization: key },
-      signal: AbortSignal.timeout(10000),
+    const model = await modelFor('photofit');
+    const resp = await aiMessage({
+      model,
+      max_tokens: 300,
+      system:
+        'You are an art director choosing ONE stock photo for a social-media slide. Judge each numbered candidate on: subject match to the copy, professional photo quality, and composition fit for the stated usage (a full-bleed background needs calm negative space where text stays legible; a framed feature image should be a clear, well-composed subject). Output ONLY JSON: { "pick": <candidate number> }.',
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text' as const,
+              text: `Slide copy: """${context.copy.slice(0, 400)}"""\nUsage: ${context.usage}\nSearch query: "${context.query}"\n\nCandidates:`,
+            },
+            ...candidates.flatMap((c, i) => [
+              { type: 'text' as const, text: `Candidate ${i + 1}${c.alt ? ` — ${c.alt.slice(0, 80)}` : ''}:` },
+              { type: 'image' as const, source: { type: 'url' as const, url: c.thumb } },
+            ]),
+          ],
+        },
+      ],
     });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { photos?: PexelsPhoto[] };
-    return data.photos?.[0] ?? null;
+    await recordUsage({
+      feature: 'photofit',
+      model,
+      inputTokens: resp.usage?.input_tokens,
+      outputTokens: resp.usage?.output_tokens,
+    });
+    return parsePickIndex(textOf(resp), candidates.length) ?? 0;
   } catch {
-    return null;
+    return 0;
   }
 }
 
@@ -131,11 +168,28 @@ export async function storeStockPhoto(
   }
 }
 
+/** How the slide will use its image — the judge weighs composition differently. */
+function usageFor(slide: SlideInput): string {
+  const bg = slide.layoutType === 'BackgroundImage' || slide.overrides?.imageBackground;
+  return bg
+    ? 'full-bleed background behind text (needs calm negative space for legibility)'
+    : 'framed feature image beside/above the copy (needs a clear, well-composed subject)';
+}
+
+/** The slide's visible copy, for the photo-fit judge. */
+function copyOf(slide: SlideInput): string {
+  return (slide.blocks ?? [])
+    .map((b) => b.text || (b.items ?? []).join(' · '))
+    .filter(Boolean)
+    .join(' — ');
+}
+
 /**
  * Give a fresh AI draft its imagery: every image slide that carries an
  * `imageQuery` (and no media yet) gets a Pexels photo placed as its
- * mediaAssetId. Mutates `slides` in place; returns how many were placed.
- * Without a key this is a no-op (placeholders remain, exactly as before).
+ * mediaAssetId — chosen by the photo-fit judge from the top candidates, not
+ * blindly the first hit. Mutates `slides` in place; returns how many were
+ * placed. Without a key this is a no-op (placeholders remain).
  */
 export async function resolveDraftImages(
   businessId: string,
@@ -148,46 +202,18 @@ export async function resolveDraftImages(
   let placed = 0;
   for (const s of slides) {
     if (s.imageNeed !== 'upload' || s.mediaAssetId || !s.imageQuery) continue;
-    const id = await addStockPhoto(businessId, s.imageQuery, orientation);
-    if (id) {
-      s.mediaAssetId = id;
+    const candidates = await searchStockPhotos(s.imageQuery, orientation, 4);
+    if (candidates.length === 0) continue;
+    const idx = await pickBestCandidate(candidates, {
+      copy: copyOf(s),
+      usage: usageFor(s),
+      query: s.imageQuery,
+    });
+    const asset = await storeStockPhoto(businessId, candidates[idx] ?? candidates[0]!);
+    if (asset?._id) {
+      s.mediaAssetId = String(asset._id);
       placed++;
     }
   }
   return placed;
-}
-
-/**
- * Search + download + store one stock photo into the business's library.
- * Returns the created MediaAsset id, or null (best-effort).
- */
-export async function addStockPhoto(
-  businessId: string,
-  query: string,
-  orientation: 'portrait' | 'landscape' | 'square',
-): Promise<string | null> {
-  const photo = await searchStockPhoto(query, orientation);
-  const src = photo?.src.large2x ?? photo?.src.large ?? photo?.src.original;
-  if (!photo || !src) return null;
-  try {
-    const res = await fetch(src, { signal: AbortSignal.timeout(20000) });
-    if (!res.ok) return null;
-    const buf = Buffer.from(await res.arrayBuffer());
-    if (buf.length === 0 || buf.length > MAX_BYTES) return null;
-    const stored = await getStorage().save(`stock/${businessId}/${randomUUID()}.jpg`, buf, {
-      contentType: 'image/jpeg',
-    });
-    const asset = await MediaAssetModel.create({
-      businessId,
-      type: 'upload',
-      label: STOCK_PHOTO_LABEL,
-      key: stored.key,
-      url: stored.url,
-      width: photo.width,
-      height: photo.height,
-    });
-    return String(asset._id);
-  } catch {
-    return null;
-  }
 }
