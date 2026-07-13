@@ -98,6 +98,7 @@ export interface AiSettings {
   backgroundModel: string;
   templatesModel: string;
   alternativesModel: string;
+  photoFitModel: string;
   designerSystem: string;
   freeSystem: string;
   templatesSystem: string;

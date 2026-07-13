@@ -21,6 +21,7 @@ const settingSchema = new Schema(
     backgroundModel: { type: String, default: '' },
     templatesModel: { type: String, default: '' },
     alternativesModel: { type: String, default: '' },
+    photoFitModel: { type: String, default: '' },
     designerSystem: { type: String, default: '' },
     templatesSystem: { type: String, default: '' },
     freeSystem: { type: String, default: '' },
