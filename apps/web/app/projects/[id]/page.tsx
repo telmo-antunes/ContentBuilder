@@ -105,7 +105,6 @@ export default function ProjectEditorPage() {
   const [showHistory, setShowHistory] = useState(false);
   const [showDisplay, setShowDisplay] = useState(false);
   const [shareInfo, setShareInfo] = useState<{ url: string; onLan: boolean } | null>(null);
-  const [shareCopied, setShareCopied] = useState(false);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
   const [previewIdx, setPreviewIdx] = useState<number | null>(null);
@@ -739,6 +738,19 @@ export default function ProjectEditorPage() {
             ▶ Preview
           </button>
           <button
+            className="btn sm icon-only"
+            onClick={() =>
+              void getShareInfo(id)
+                .then((info) => setShareInfo({ url: info.url, onLan: info.onLan }))
+                .catch((e) => toast(e instanceof Error ? e.message : String(e)))
+            }
+            disabled={slides.length === 0}
+            title="Share a link — interactive preview, or post from your phone"
+            aria-label="Share"
+          >
+            🔗
+          </button>
+          <button
             className="btn primary sm"
             onClick={onExport}
             disabled={exporting || slides.length === 0}
@@ -962,33 +974,26 @@ export default function ProjectEditorPage() {
 
       {shareInfo && (
         <div className="modal-overlay" onClick={() => setShareInfo(null)}>
-          <div className="modal" role="dialog" aria-modal="true" aria-label="Send to phone" onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ marginTop: 0 }}>📲 Post from your phone</h2>
+          <div className="modal" role="dialog" aria-modal="true" aria-label="Share" onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ marginTop: 0 }}>Share this post</h2>
+
+            {/* Interactive preview — works right now, no export needed. */}
+            <div className="section-label" style={{ marginTop: 0 }}>Interactive preview</div>
             <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
-              Open this link on your phone{shareInfo.onLan ? ' (same Wi-Fi as this computer)' : ''} —
-              it shows the exported slides with a one-tap <strong>Share to Instagram</strong> button
-              and copies the caption for you. No Instagram integration needed.
+              A live, swipeable link — whoever opens it experiences the {detail.type === 'story' ? 'story' : 'carousel'} exactly
+              as it&rsquo;ll appear, with the caption. Works before you export.
             </p>
-            <div
-              className="row"
-              style={{ gap: 8, alignItems: 'center', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px' }}
-            >
-              <code style={{ fontSize: 14, flex: 1, wordBreak: 'break-all' }}>{shareInfo.url}</code>
-              <button
-                className="btn sm"
-                onClick={() => {
-                  void navigator.clipboard?.writeText(shareInfo.url);
-                  setShareCopied(true);
-                  setTimeout(() => setShareCopied(false), 1500);
-                }}
-              >
-                {shareCopied ? 'Copied ✓' : 'Copy link'}
-              </button>
-            </div>
-            <p className="muted" style={{ fontSize: 12, marginBottom: 0 }}>
-              Tip: message or AirDrop the link to yourself, or type it in your phone&rsquo;s browser.
+            <ShareLinkRow url={shareInfo.url.replace('/share/', '/preview/')} onCopy={() => toast('Preview link copied')} />
+
+            {/* Post-from-phone — needs an export first. */}
+            <div className="section-label" style={{ marginTop: 16 }}>📲 Post from your phone</div>
+            <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
+              Open on your phone{shareInfo.onLan ? ' (same Wi-Fi)' : ''} for a one-tap <strong>Share to Instagram</strong>
+              {' '}with the caption copied. Needs an export first.
             </p>
-            <div className="row" style={{ marginTop: 12, justifyContent: 'flex-end' }}>
+            <ShareLinkRow url={shareInfo.url} onCopy={() => toast('Phone link copied')} />
+
+            <div className="row" style={{ marginTop: 14, justifyContent: 'flex-end' }}>
               <button className="btn" onClick={() => setShareInfo(null)}>Close</button>
             </div>
           </div>
@@ -1342,6 +1347,30 @@ function PreviewOverlay({
       </button>
       <button className="preview-close" onClick={onClose} aria-label="Close preview">
         ✕
+      </button>
+    </div>
+  );
+}
+
+/** A read-only URL with a copy button — used in the Share modal. */
+function ShareLinkRow({ url, onCopy }: { url: string; onCopy: () => void }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div
+      className="row"
+      style={{ gap: 8, alignItems: 'center', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px' }}
+    >
+      <code style={{ fontSize: 13, flex: 1, wordBreak: 'break-all' }}>{url}</code>
+      <button
+        className="btn sm"
+        onClick={() => {
+          void navigator.clipboard?.writeText(url);
+          setCopied(true);
+          onCopy();
+          setTimeout(() => setCopied(false), 1500);
+        }}
+      >
+        {copied ? 'Copied ✓' : 'Copy'}
       </button>
     </div>
   );
