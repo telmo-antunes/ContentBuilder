@@ -2,16 +2,11 @@ import { z } from 'zod';
 import {
   BLOCK_TYPES,
   MOTIF_CATALOG,
-  renderMotif,
-  type BgColors,
   type BrandLayout,
   type Format,
   type LayoutLibrary,
 } from '@contentbuilder/shared';
-import { BrandKitModel, MediaAssetModel, SettingModel } from '../models';
-import { getStorage } from '../storage';
-import { aiMessage, modelFor, textOf } from './ai';
-import { recordUsage } from './usage';
+import { BrandKitModel } from '../models';
 import { repairFrame } from './draft';
 
 /**
@@ -63,26 +58,6 @@ export const templateSchema = z.object({
 
 export type BrandTemplate = z.infer<typeof templateSchema>;
 
-/** Package-path schema: a layout may carry its matched background motif. */
-const layoutSchema = templateSchema.extend({ backgroundMotif: z.string().optional() });
-
-export const TEMPLATES_SYSTEM = `You are an art director designing a brand's SIGNATURE Instagram compositions — the structural identity that makes this brand's posts recognizable before you read a word.
-
-CANVAS: 1080×1350 portrait. All positions are FRACTIONS of the canvas (0..1); a "frame" is { "x": left, "y": top, "w": width, "h": height }. Keep every frame inside x in [0.08, 0.92], y in [0.07, 0.93].
-
-OUTPUT: ONLY a JSON array of ${TEMPLATE_COUNT} composition skeletons (no prose, no markdown fences). Each element:
-{ "name": string (2-4 words), "purpose": one of "cover" | "content" | "list" | "quote" | "image-feature" | "cta", "imageNeed": "none" | "upload", "blocks": [{ "type": one of ${BLOCK_TYPES.join(', ')}, "frame": {...}, "z": number }], "decorations"?: [{ "kind": "logo" | "rule" | "divider" | "scrim", "frame": {...}, "z": number, "direction"?: "to-top" | "to-bottom" | "to-left" | "to-right", "opacity"?: number }], "imageFrame"?: {...}, "imageBackground"?: boolean }
-
-RULES:
-- NO copy anywhere — these are skeletons; text is poured in later.
-- Exactly one of each purpose: cover, content, list, quote, image-feature, cta.
-- Design for THIS brand's character (given below): a luxury serif brand might use generous whitespace, asymmetric columns and hairline dividers; a bold industrial brand might use edge-to-edge stacked type and thick rules. Commit to a recognizable structural language and keep it coherent across all ${TEMPLATE_COUNT}.
-- Vary anchoring across the set (top-weighted, bottom-weighted, side-hugging) — but make it feel like ONE designer's system, not six random layouts.
-- "list" must include a "list" block with a tall frame (h ≥ 0.35). "quote" uses a "quote" block. "cta" includes a "cta" block near the bottom.
-- Include the brand's logo as a decoration where it belongs in this system (skip if the brand has no logo). Use "rule"/"divider" decorations as the system's connective tissue. Use a "scrim" ONLY on image-heavy templates ("image-feature" with imageBackground, or cover if it uses a background photo).
-- "image-feature": either a generous "imageFrame" (0.45–0.7 of the canvas) with text in the remaining space, or "imageBackground": true with a scrim and overlaid text. Text frames must not overlap the imageFrame or each other.
-- Blocks: an eyebrow is short (h ~0.04–0.06); a title is the hero (h up to 0.3); paragraphs sit in tighter columns; frames never overlap.`;
-
 const DECOR_KINDS = new Set(['logo', 'rule', 'divider', 'scrim']);
 const MOTIF_IDS = new Set(MOTIF_CATALOG.map((m) => m.id));
 
@@ -126,29 +101,6 @@ export function sanitizeSkeleton(item: unknown): void {
   it.backgroundMotif = typeof bg === 'string' && MOTIF_IDS.has(bg) ? bg : undefined;
 }
 
-/** Parse + validate the model's pack; frames are repaired, invalid entries dropped. */
-export function extractTemplates(raw: string): BrandTemplate[] {
-  const start = raw.indexOf('[');
-  const end = raw.lastIndexOf(']');
-  if (start === -1 || end === -1) throw new Error('model did not return a JSON array');
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw.slice(start, end + 1));
-  } catch {
-    throw new Error('model returned invalid JSON');
-  }
-  if (!Array.isArray(parsed)) throw new Error('model did not return a JSON array');
-
-  const valid: BrandTemplate[] = [];
-  for (const item of parsed) {
-    sanitizeSkeleton(item);
-    const result = templateSchema.safeParse(item);
-    if (result.success) valid.push(result.data);
-    if (valid.length >= TEMPLATE_COUNT) break;
-  }
-  return valid;
-}
-
 export interface TemplateBrandFacts {
   styleDescriptor?: string;
   voice?: string;
@@ -157,55 +109,6 @@ export interface TemplateBrandFacts {
   tone?: string | string[];
   hasLogo: boolean;
   headingFont?: string;
-}
-
-/** Normalize the profile tone (string | string[]) → a flat string[] for renderMotif. */
-function toneList(tone: string | string[] | undefined): string[] | undefined {
-  if (Array.isArray(tone)) return tone.length ? tone : undefined;
-  return tone ? [tone] : undefined;
-}
-/** Human-readable tone for a prompt line. */
-function toneText(tone: string | string[] | undefined): string {
-  return Array.isArray(tone) ? tone.join(', ') : (tone ?? '');
-}
-
-/** One premium-tier call → the brand's composition pack (empty array on a dud response). */
-export async function generateTemplatePack(facts: TemplateBrandFacts): Promise<BrandTemplate[]> {
-  const lines = [
-    facts.styleDescriptor && `Visual character: ${facts.styleDescriptor}`,
-    facts.voice && `Brand voice: ${facts.voice}`,
-    facts.category && `Business category: ${facts.category}`,
-    facts.tone && `Tone: ${toneText(facts.tone)}`,
-    `Logo available: ${facts.hasLogo ? 'yes' : 'no'}`,
-    facts.headingFont && `Heading typeface: ${facts.headingFont}`,
-  ].filter(Boolean);
-  const model = await modelFor('templates');
-  // Prompt override from the AI Settings page (blank → the code default).
-  let system = TEMPLATES_SYSTEM;
-  try {
-    const doc = await SettingModel.findOne({ key: 'ai' }).lean<{ templatesSystem?: string }>();
-    if (doc?.templatesSystem?.trim()) system = doc.templatesSystem;
-  } catch {
-    /* settings unavailable → default prompt */
-  }
-  const resp = await aiMessage({
-    model,
-    max_tokens: 12000,
-    system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
-    messages: [
-      {
-        role: 'user',
-        content: `Design this brand's signature composition pack.\n\n${lines.join('\n')}`,
-      },
-    ],
-  });
-  await recordUsage({
-    feature: 'templates',
-    model,
-    inputTokens: resp.usage?.input_tokens,
-    outputTokens: resp.usage?.output_tokens,
-  });
-  return extractTemplates(textOf(resp));
 }
 
 export const STORY_PURPOSES = ['cover', 'content', 'quote', 'cta'] as const;
@@ -235,138 +138,6 @@ RULES:
 - Include the logo as a decoration where the system wants it (skip if none). Rules/dividers are the connective tissue. "scrim" ONLY over photos (imageBackground layouts).
 - "image-feature" (post): generous "imageFrame" (0.45–0.7) with text in the remaining space, OR "imageBackground": true + scrim. Frames never overlap.
 - Blocks: eyebrow short (h ~0.04–0.06 post, ~0.03–0.045 story); title is the hero; paragraphs in tighter columns.`;
-
-/** Parse + validate the package response: { direction, post[], story[] }. */
-export function extractPackage(raw: string): { direction?: string; post: BrandTemplate[]; story: BrandTemplate[] } {
-  const start = raw.indexOf('{');
-  const end = raw.lastIndexOf('}');
-  if (start === -1 || end === -1) throw new Error('model did not return a JSON object');
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw.slice(start, end + 1));
-  } catch {
-    throw new Error('model returned invalid JSON');
-  }
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('model did not return a JSON object');
-  }
-  const obj = parsed as { direction?: unknown; post?: unknown; story?: unknown };
-  const takeSet = (arr: unknown, max: number): BrandTemplate[] => {
-    if (!Array.isArray(arr)) return [];
-    const valid: BrandTemplate[] = [];
-    for (const item of arr) {
-      sanitizeSkeleton(item);
-      const result = layoutSchema.safeParse(item);
-      if (result.success) valid.push(result.data);
-      if (valid.length >= max) break;
-    }
-    return valid;
-  };
-  const post = takeSet(obj.post, TEMPLATE_COUNT);
-  const story = takeSet(obj.story, STORY_PURPOSES.length);
-  if (post.length === 0) throw new Error('package had no usable post layouts');
-  return {
-    direction: typeof obj.direction === 'string' ? obj.direction.slice(0, 240) : undefined,
-    post,
-    story,
-  };
-}
-
-export interface PackageInputs extends TemplateBrandFacts {
-  businessId: string;
-  colors: BgColors;
-}
-
-/**
- * ONE design-director pass → the brand's complete layout system: post + story
- * skeletons AND their matched backgrounds. The AI decides the language and
- * names a motif per layout; CODE renders each motif in the brand palette and
- * stores it as a media asset (deterministic key → stable URLs on regenerate),
- * attaching backgroundMediaAssetId so applying a layout brings its background.
- */
-export async function generateBrandPackage(inp: PackageInputs): Promise<LayoutLibrary> {
-  const lines = [
-    inp.styleDescriptor && `Visual character: ${inp.styleDescriptor}`,
-    inp.voice && `Brand voice: ${inp.voice}`,
-    inp.category && `Business category: ${inp.category}`,
-    inp.tone && `Tone: ${toneText(inp.tone)}`,
-    `Logo available: ${inp.hasLogo ? 'yes' : 'no'}`,
-    inp.headingFont && `Heading typeface: ${inp.headingFont}`,
-  ].filter(Boolean);
-  const model = await modelFor('templates');
-  // Prompt override from the AI Settings page (blank → the code default).
-  let system = PACKAGE_SYSTEM;
-  try {
-    const doc = await SettingModel.findOne({ key: 'ai' }).lean<{ templatesSystem?: string }>();
-    if (doc?.templatesSystem?.trim()) system = doc.templatesSystem;
-  } catch {
-    /* settings unavailable → default prompt */
-  }
-  const resp = await aiMessage({
-    model,
-    max_tokens: 16000,
-    system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
-    messages: [
-      { role: 'user', content: `Design this brand's complete layout + background package.\n\n${lines.join('\n')}` },
-    ],
-  });
-  await recordUsage({
-    feature: 'templates',
-    model,
-    inputTokens: resp.usage?.input_tokens,
-    outputTokens: resp.usage?.output_tokens,
-  });
-  const pkg = extractPackage(textOf(resp));
-
-  // Render + store each layout's background (skip photo-backed layouts).
-  const storage = getStorage();
-  const tone = toneList(inp.tone);
-  const attach = async (layouts: BrandTemplate[], fmt: 'post' | 'story'): Promise<BrandLayout[]> => {
-    const out: BrandLayout[] = [];
-    for (let i = 0; i < layouts.length; i++) {
-      const t = layouts[i]! as BrandTemplate & { backgroundMotif?: string };
-      // zod already validated block types/purposes against the real enums — the
-      // inferred `string` just can't see through the BLOCK_TYPES cast.
-      const layout = { ...t } as BrandLayout;
-      if (t.backgroundMotif && !t.imageBackground) {
-        try {
-          const bg = renderMotif(t.backgroundMotif, inp.colors, {
-            tone,
-            seed: `${inp.businessId}:${fmt}:${t.purpose}:${i}`,
-          });
-          if (bg) {
-            const key = `backgrounds/${inp.businessId}/pkg-${fmt}-${t.purpose}-${i}.svg`;
-            const stored = await storage.save(key, Buffer.from(bg.svg, 'utf8'), { contentType: 'image/svg+xml' });
-            const asset = await MediaAssetModel.findOneAndUpdate(
-              { businessId: inp.businessId, key: stored.key },
-              {
-                businessId: inp.businessId,
-                type: 'generated',
-                label: `Brand background — ${bg.label}`,
-                key: stored.key,
-                url: stored.url,
-                width: 1080,
-                height: 1350,
-              },
-              { upsert: true, new: true, setDefaultsOnInsert: true },
-            );
-            layout.backgroundMediaAssetId = String(asset._id);
-          }
-        } catch (err) {
-          console.error('[package] background render failed (layout kept):', err);
-        }
-      }
-      out.push(layout);
-    }
-    return out;
-  };
-
-  return {
-    direction: pkg.direction,
-    post: await attach(pkg.post, 'post'),
-    story: await attach(pkg.story, 'story'),
-  };
-}
 
 /**
  * Draft-time brand context: the business's approved layout library summarized
