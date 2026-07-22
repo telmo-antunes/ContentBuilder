@@ -1263,3 +1263,70 @@ input[type='color'] {
     transform: none;
   }
 }
+
+/* ── Interactive preview page (/preview/[id]) ─────────────────────────────── */
+.preview-page {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 20px 16px 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.preview-page-head {
+  text-align: center;
+  margin-bottom: 18px;
+}
+.preview-page-head h1 {
+  font-size: 22px;
+  margin: 0 0 2px;
+}
+.preview-page-head p {
+  margin: 0;
+  font-size: 13px;
+}
+/* Clip the track and animate slide changes with the shared motion tokens. */
+.preview-stage-wrap {
+  position: relative;
+  overflow: hidden;
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  background: var(--panel-2);
+}
+.preview-track {
+  display: flex;
+  height: 100%;
+  transition: transform var(--dur-3) var(--ease-out);
+  will-change: transform;
+}
+/* Invisible half-width tap zones for click-to-advance on desktop. */
+.preview-tap {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 45%;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+.preview-tap.left {
+  left: 0;
+}
+.preview-tap.right {
+  right: 0;
+}
+.preview-caption {
+  margin-top: 22px;
+  width: 100%;
+  max-width: 460px;
+  padding: 14px 16px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.preview-foot {
+  margin-top: 26px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  opacity: 0.7;
+}
