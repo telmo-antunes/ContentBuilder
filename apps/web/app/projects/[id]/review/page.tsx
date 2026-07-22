@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { REFINE_INTENTS, type RefineIntent } from '@contentbuilder/shared';
-import { getProject, refineProjectSlide, type ProjectDetail } from '../../../lib/api';
+import { getProject, refineProjectSlide, getShareInfo, type ProjectDetail } from '../../../lib/api';
+import { api } from '../../../lib/config';
 import { SlideRenderer } from '../../../../lib/render/SlideRenderer';
 import { ScaledSlide } from '../../../../lib/render/SlideFrame';
 import { toRenderKit, resolveSlideImage, resolveImageLayout } from '../../../../lib/render/projectRender';
@@ -19,6 +20,7 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -47,6 +49,39 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
     },
     [projectId],
   );
+
+  const exportZip = useCallback(async () => {
+    setExporting(true);
+    try {
+      const res = await fetch(api(`/projects/${projectId}/export`), { method: 'POST' });
+      if (!res.ok) throw new Error(`Export failed (HTTP ${res.status})`);
+      const blob = await res.blob();
+      const name = (res.headers.get('Content-Disposition') ?? '').match(/filename="?([^"]+)"?/)?.[1] ?? 'project.zip';
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast('ZIP downloaded', 'ok');
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Export failed', 'error');
+    } finally {
+      setExporting(false);
+    }
+  }, [projectId]);
+
+  const share = useCallback(async () => {
+    try {
+      const info = await getShareInfo(projectId);
+      await navigator.clipboard.writeText(info.url);
+      toast('Interactive preview link copied', 'ok');
+    } catch {
+      toast('Could not get a share link', 'error');
+    }
+  }, [projectId]);
 
   if (error) {
     return (
@@ -82,9 +117,24 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
             precise, hands-on edits.
           </p>
         </div>
-        <Link className="btn" href={`/projects/${projectId}`}>
-          Open studio editor →
-        </Link>
+        <div className="review-actions">
+          {slides.length > 0 && (
+            <>
+              <a className="btn" href={`/preview/${projectId}`} target="_blank" rel="noopener noreferrer">
+                ▶ Preview
+              </a>
+              <button className="btn" onClick={share}>
+                Share
+              </button>
+              <button className="btn primary" onClick={exportZip} disabled={exporting}>
+                {exporting ? 'Exporting…' : '⬇ Export ZIP'}
+              </button>
+            </>
+          )}
+          <Link className="btn ghost" href={`/projects/${projectId}`}>
+            Studio editor →
+          </Link>
+        </div>
       </div>
 
       {slides.length === 0 ? (
