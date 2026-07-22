@@ -336,9 +336,9 @@ export const createManualKit = (businessId: string) =>
 export const patchBrandKit = (kitId: string, data: BrandKitEdit) =>
   request<BrandKit>(`/brandkits/${kitId}`, { method: 'PATCH', body: JSON.stringify(data) });
 
-/** (Re)design the brand's signature composition pack (one premium-tier AI call). */
-export const regenerateTemplatePack = (kitId: string) =>
-  request<BrandKit>(`/brandkits/${kitId}/templates`, { method: 'POST' });
+/** (Re)design the brand's complete package — layouts + matched backgrounds (one AI call). */
+export const regenerateBrandPackage = (kitId: string) =>
+  request<BrandKit>(`/brandkits/${kitId}/package`, { method: 'POST' });
 
 export async function uploadMedia(businessId: string, file: File): Promise<MediaAsset> {
   const fd = new FormData();

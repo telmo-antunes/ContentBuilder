@@ -8,11 +8,10 @@ import {
 import { BusinessModel, BrandKitModel } from '../models';
 import { ApiError, asyncHandler, parseBody, publicErrMessage, requireObjectId } from '../lib/http';
 import { extractBrand } from '../lib/analyze';
-import { generateBusinessBackgrounds } from '../lib/backgrounds';
 import { assignRolesAndVibe, brandColorQuality } from '../lib/vision';
 import { assertPublicHttpUrl } from '../lib/urlGuard';
 import { googleFontAvailable, resolveRenderFonts } from '../lib/fonts';
-import { generateTemplatePack, type TemplateBrandFacts } from '../lib/templates';
+import { generateBrandPackage, type TemplateBrandFacts } from '../lib/templates';
 import { harvestSiteImages } from '../lib/harvest';
 
 /** Brand facts the composition designer needs, from a kit doc + business profile. */
@@ -212,18 +211,21 @@ brandKitRouter.get(
   }),
 );
 
-// (Re)design the brand's signature composition pack on demand.
+// (Re)design the brand's complete package — layouts + matched backgrounds.
 brandKitRouter.post(
-  '/:kitId/templates',
+  '/:kitId/package',
   asyncHandler(async (req, res) => {
     const kitId = requireObjectId(req.params.kitId, 'Brand kit');
     const kit = await BrandKitModel.findById(kitId);
     if (!kit) throw new ApiError(404, 'Brand kit not found');
     const biz = await BusinessModel.findById(kit.get('businessId')).lean();
     const profile = (biz as Record<string, any> | null)?.profile ?? {};
-    const pack = await generateTemplatePack(templateFacts(kit, profile));
-    if (!pack.length) throw new ApiError(502, 'Template generation returned nothing usable — try again.');
-    kit.set('templatePack', pack);
+    const library = await generateBrandPackage({
+      ...templateFacts(kit, profile),
+      businessId: String(kit.get('businessId')),
+      colors: kit.get('colors'),
+    });
+    kit.set('layoutLibrary', library);
     await kit.save();
     res.json(kit.toJSON());
   }),
@@ -278,24 +280,21 @@ brandKitRouter.patch(
     if (body.status === 'approved') {
       const biz = await BusinessModel.findById(kit.get('businessId')).lean();
       const profile = (biz as Record<string, any> | null)?.profile ?? {};
-      try {
-        await generateBusinessBackgrounds(String(kit.get('businessId')), kit.get('colors'), {
-          category: profile.category,
-          tone: profile.tone,
-          count: profile.backgroundCount,
-        });
-      } catch (err) {
-        console.error('[backgrounds] generation on approval failed:', err);
-      }
-      if (!kit.get('templatePack')?.length) {
+      // ONE package: layouts (posts + stories) and their backgrounds are
+      // designed together so they read as a single system. Best-effort — never
+      // block approval. (The standalone backgrounds regenerate endpoint still
+      // exists for topping up extras.)
+      if (!kit.get('layoutLibrary')?.post?.length) {
         try {
-          const pack = await generateTemplatePack(templateFacts(kit, profile));
-          if (pack.length) {
-            kit.set('templatePack', pack);
-            await kit.save();
-          }
+          const library = await generateBrandPackage({
+            ...templateFacts(kit, profile),
+            businessId: String(kit.get('businessId')),
+            colors: kit.get('colors'),
+          });
+          kit.set('layoutLibrary', library);
+          await kit.save();
         } catch (err) {
-          console.error('[templates] pack generation on approval failed:', err);
+          console.error('[package] generation on approval failed:', err);
         }
       }
     }

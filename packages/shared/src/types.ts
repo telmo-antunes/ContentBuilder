@@ -61,8 +61,10 @@ export interface BrandKit {
   homepageScreenshot?: StoredMedia;
   provenance: BrandProvenance;
   status: BrandKitStatus;
-  /** AI-designed signature compositions (FreePosition skeletons, no copy). */
+  /** LEGACY (pre-package): AI-designed post compositions. Superseded by layoutLibrary. */
   templatePack?: BrandTemplateSkeleton[];
+  /** The brand's OWN layout system — posts + stories, each layout with its matched background. */
+  layoutLibrary?: LayoutLibrary;
   createdAt: string;
 }
 
@@ -75,6 +77,26 @@ export interface BrandTemplateSkeleton {
   decorations?: SlideDecoration[];
   imageFrame?: BlockFrame;
   imageBackground?: boolean;
+}
+
+/**
+ * A brand layout: a composition skeleton PLUS its matched brand background
+ * (a palette-rendered motif stored as a media asset). Designed together in one
+ * pass so structure and background feel like one system, not two features.
+ */
+export interface BrandLayout extends BrandTemplateSkeleton {
+  /** The motif this layout's background was rendered from (for regenerate/swap UI). */
+  backgroundMotif?: string;
+  /** The stored background asset — lands in slide.overrides.backgroundMediaAssetId when applied. */
+  backgroundMediaAssetId?: string;
+}
+
+/** The per-business layout system, generated as ONE package on kit approval. */
+export interface LayoutLibrary {
+  /** One-line design rationale from the director pass (shown in the kit UI). */
+  direction?: string;
+  post: BrandLayout[];
+  story: BrandLayout[];
 }
 
 export interface MediaAsset {

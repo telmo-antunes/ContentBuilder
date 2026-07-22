@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { SettingModel } from '../models';
 import { asyncHandler, parseBody } from '../lib/http';
 import { PROMPT_DEFAULTS } from '../lib/draft';
-import { TEMPLATES_SYSTEM } from '../lib/templates';
+import { PACKAGE_SYSTEM } from '../lib/templates';
 import { config } from '../config';
 
 const settingsSchema = z.object({
@@ -27,7 +27,7 @@ const settingsSchema = z.object({
 const PROMPT_DEFAULT_BY_FIELD: Record<string, string> = {
   designerSystem: PROMPT_DEFAULTS.designerSystem,
   freeSystem: PROMPT_DEFAULTS.freeSystem,
-  templatesSystem: TEMPLATES_SYSTEM,
+  templatesSystem: PACKAGE_SYSTEM,
 };
 
 export const settingsRouter = Router();
@@ -55,7 +55,7 @@ settingsRouter.get(
         templatesSystem: (doc?.templatesSystem as string) ?? '',
         freeMaxTokens: (doc?.freeMaxTokens as number) ?? null,
       },
-      defaults: { ...PROMPT_DEFAULTS, templatesSystem: TEMPLATES_SYSTEM },
+      defaults: { ...PROMPT_DEFAULTS, templatesSystem: PACKAGE_SYSTEM },
       envModels: {
         model: config.ai.model ?? '',
         modelSmall: config.ai.modelSmall ?? '',

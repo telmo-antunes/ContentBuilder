@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractTemplates, packSummary, type BrandTemplate } from './templates';
+import { extractPackage, extractTemplates, packSummary, type BrandTemplate } from './templates';
 
 const skeleton = (over: Record<string, unknown> = {}) => ({
   name: 'Editorial cover',
@@ -70,5 +70,62 @@ describe('packSummary', () => {
     expect(s).toContain('"purpose":"cover"');
     expect(s).not.toContain('decorations');
     expect(s).toContain('0.12');
+  });
+});
+
+describe('extractPackage', () => {
+  const layout = (over: Record<string, unknown> = {}) => ({
+    name: 'Editorial cover',
+    purpose: 'cover',
+    imageNeed: 'none',
+    background: 'mesh',
+    blocks: [
+      { type: 'eyebrow', frame: { x: 0.1, y: 0.15, w: 0.5, h: 0.05 }, z: 10 },
+      { type: 'title', frame: { x: 0.1, y: 0.22, w: 0.8, h: 0.25 }, z: 11 },
+    ],
+    ...over,
+  });
+
+  it('parses a full package with direction, posts and stories', () => {
+    const raw = `Design:\n${JSON.stringify({
+      direction: 'Quiet editorial luxury with hairline structure.',
+      post: [layout(), layout({ purpose: 'cta', name: 'Gold close' })],
+      story: [layout({ purpose: 'content', name: 'Tall content' })],
+    })}`;
+    const pkg = extractPackage(raw);
+    expect(pkg.direction).toContain('editorial');
+    expect(pkg.post).toHaveLength(2);
+    expect(pkg.story).toHaveLength(1);
+    expect((pkg.post[0] as { backgroundMotif?: string }).backgroundMotif).toBe('mesh');
+  });
+
+  it('drops an off-menu background motif but keeps the layout', () => {
+    const raw = JSON.stringify({ post: [layout({ background: 'lava-lamp' })], story: [] });
+    const pkg = extractPackage(raw);
+    expect(pkg.post).toHaveLength(1);
+    expect((pkg.post[0] as { backgroundMotif?: string }).backgroundMotif).toBeUndefined();
+  });
+
+  it('salvages chrome-as-block inside package layouts too', () => {
+    const raw = JSON.stringify({
+      post: [
+        layout({
+          blocks: [
+            { type: 'logo', frame: { x: 0.1, y: 0.05, w: 0.2, h: 0.05 } },
+            { type: 'title', frame: { x: 0.1, y: 0.2, w: 0.8, h: 0.25 } },
+          ],
+          decorations: [],
+        }),
+      ],
+      story: [],
+    });
+    const pkg = extractPackage(raw);
+    expect(pkg.post[0]!.blocks.map((b) => b.type)).toEqual(['title']);
+    expect(pkg.post[0]!.decorations?.map((d) => d.kind)).toContain('logo');
+  });
+
+  it('throws when there are no usable post layouts', () => {
+    expect(() => extractPackage(JSON.stringify({ post: [], story: [] }))).toThrow();
+    expect(() => extractPackage('no json here')).toThrow();
   });
 });
