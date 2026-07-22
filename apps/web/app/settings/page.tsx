@@ -62,7 +62,7 @@ export default function SettingsPage() {
   return (
     <div style={{ maxWidth: 860 }}>
       <p className="muted" style={{ marginBottom: 6 }}><Link href="/">← Businesses</Link></p>
-      <h1 style={{ fontFamily: "'Montserrat', sans-serif", marginBottom: 4 }}>AI Settings</h1>
+      <h1 style={{ fontFamily: 'var(--display)', marginBottom: 4 }}>AI Settings</h1>
       <p className="muted" style={{ marginTop: 0 }}>
         Every AI touchpoint's model is overridable here, plus the draft system prompts. Leave a
         field blank to use the environment/built-in default. Changes apply to the next generation.

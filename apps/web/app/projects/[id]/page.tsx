@@ -639,15 +639,16 @@ export default function ProjectEditorPage() {
 
   return (
     <div className="editor-shell">
-      <p className="muted" style={{ marginBottom: 6 }}>
+      <p className="muted" style={{ marginBottom: 6, display: 'flex', gap: 16, alignItems: 'center' }}>
         <Link href={`/businesses/${detail.businessId}`}>← {/* business */}Back to business</Link>
+        <Link href={`/projects/${detail._id}/review`}>Review ↗</Link>
       </p>
       <div className="editor-head">
         <div style={{ flex: 1, minWidth: 0 }}>
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Montserrat', sans-serif", width: '100%', maxWidth: 520 }}
+            style={{ fontSize: 22, fontWeight: 700, fontFamily: 'var(--display)', width: '100%', maxWidth: 520 }}
           />
           <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
             {detail.type} · {FORMAT_LABELS[detail.format]} · <SaveBadge state={saveState} onRetry={retrySave} />
@@ -1417,7 +1418,7 @@ function EmptyProject({
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Montserrat', sans-serif", marginBottom: 6 }}
+        style={{ fontSize: 22, fontWeight: 700, fontFamily: 'var(--display)', marginBottom: 6 }}
       />
       <div className="muted" style={{ fontSize: 13, marginBottom: 16 }}>
         {detail.type} · {FORMAT_LABELS[detail.format]} · <SaveBadge state={saveState} />

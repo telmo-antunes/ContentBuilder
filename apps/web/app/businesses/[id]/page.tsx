@@ -286,7 +286,7 @@ export default function BusinessDetailPage() {
               <div className="project-grid" style={{ marginTop: 12 }}>
                 {visibleProjects.map((p) => (
                   <div className="project-card" key={p._id}>
-                    <Link href={`/projects/${p._id}`} aria-label={`Open ${p.title}`} className="project-card-thumb">
+                    <Link href={`/projects/${p._id}/review`} aria-label={`Open ${p.title}`} className="project-card-thumb">
                       <ProjectThumb project={p as ProjectThumbData} kit={renderKit} media={media} width={200} />
                     </Link>
                     <div className="project-card-menu">
@@ -298,7 +298,7 @@ export default function BusinessDetailPage() {
                       />
                     </div>
                     <div className="project-card-body">
-                      <Link href={`/projects/${p._id}`} className="project-card-title">
+                      <Link href={`/projects/${p._id}/review`} className="project-card-title">
                         {p.title}
                       </Link>
                       <div className="badges" style={{ marginTop: 4 }}>

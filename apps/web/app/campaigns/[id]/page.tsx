@@ -144,7 +144,7 @@ export default function CampaignPage() {
               ) : (
                 <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 14 }}>
                   {project && (
-                    <Link href={`/projects/${project._id}`} aria-label={`Open ${c.title}`}>
+                    <Link href={`/projects/${project._id}/review`} aria-label={`Open ${c.title}`}>
                       <ProjectThumb project={project as ProjectThumbData} kit={renderKit} media={media} width={84} />
                     </Link>
                   )}
@@ -159,7 +159,7 @@ export default function CampaignPage() {
                   </div>
                   <div className="row" style={{ flexShrink: 0, flexWrap: 'nowrap', gap: 6 }}>
                     {c.projectId ? (
-                      <Link className="btn sm" href={`/projects/${c.projectId}`}>
+                      <Link className="btn sm" href={`/projects/${c.projectId}/review`}>
                         Open post →
                       </Link>
                     ) : (
