@@ -4,13 +4,20 @@ import { Router } from 'express';
 import { Types } from 'mongoose';
 import { ZipArchive } from 'archiver';
 import { z } from 'zod';
-import { MAX_DRAFT_PARAGRAPH_CHARS, defaultThemeForCategory } from '@contentbuilder/shared';
+import {
+  MAX_DRAFT_PARAGRAPH_CHARS,
+  defaultThemeForCategory,
+  type BackgroundRole,
+  type Format,
+  type Slide,
+} from '@contentbuilder/shared';
 import { ProjectModel, ProjectVersionModel, BusinessModel, BrandKitModel, MediaAssetModel } from '../models';
 import { ApiError, asyncHandler, parseBody, publicErrMessage, requireObjectId } from '../lib/http';
 import { createProjectSchema, slideSchema, updateProjectSchema, type SlideInput } from '../lib/validation';
 import { renderSlidesToPng, slugify } from '../lib/exporter';
 import { draftSlidesFromParagraph } from '../lib/draft';
 import { brandPackContext } from '../lib/templates';
+import { refineSlide, isRefineIntent } from '../lib/refine';
 import { generateSlideAlternatives } from '../lib/alternatives';
 import { resolveDraftImages } from '../lib/stock';
 import { generateCaption, type GeneratedCaption } from '../lib/caption';
@@ -300,6 +307,44 @@ projectsRouter.post(
     }
     if (!alternatives.length) throw new ApiError(502, 'No usable alternatives came back — try again.');
     res.json({ alternatives });
+  }),
+);
+
+// Design-first refinement: apply a high-level INTENT to one slide as a bounded,
+// deterministic transform (no AI). Powers the review flow's intent chips.
+const refineSchema = z.object({ intent: z.string() });
+projectsRouter.post(
+  '/:id/slides/:slideId/refine',
+  asyncHandler(async (req, res) => {
+    const id = requireObjectId(req.params.id, 'Project');
+    const { intent } = parseBody(refineSchema, req.body);
+    if (!isRefineIntent(intent)) throw new ApiError(400, 'Unknown refine intent.');
+    const project = await ProjectModel.findById(id);
+    if (!project) throw new ApiError(404, 'Project not found');
+    // Mongoose subdocuments must be converted to plain objects — spreading a
+    // subdocument (as refineSlide does) would drop its data fields.
+    const slides = (project.get('slides') as Array<{ toObject?: () => SlideInput }>).map((s) =>
+      typeof s.toObject === 'function' ? s.toObject() : (s as SlideInput),
+    );
+    const idx = slides.findIndex((s) => s.id === req.params.slideId);
+    if (idx < 0) throw new ApiError(404, 'Slide not found');
+    const format = project.get('format') as Format;
+
+    // Build the role -> background-asset map from the brand's own layout library
+    // so "bolder/calmer background" can step through the authored backgrounds.
+    const ctx = await brandPackContext(String(project.get('businessId')), format);
+    const backgroundsByRole: Partial<Record<BackgroundRole, string>> = {};
+    for (const l of ctx?.layouts ?? []) {
+      if (l.backgroundRole && l.backgroundMediaAssetId) backgroundsByRole[l.backgroundRole] = l.backgroundMediaAssetId;
+    }
+
+    const result = refineSlide(slides[idx] as Slide, intent, format, { backgroundsByRole });
+    if (result.changed) {
+      slides[idx] = result.slide as SlideInput;
+      project.set('slides', normalizeSlides(slides));
+      await project.save();
+    }
+    res.json({ project: project.toJSON(), changed: result.changed, note: result.note });
   }),
 );
 
