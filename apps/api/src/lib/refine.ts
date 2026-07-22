@@ -5,6 +5,7 @@ import {
   type BlockFrame,
   type BlockType,
   type Format,
+  type RefineIntent,
   type Slide,
 } from '@contentbuilder/shared';
 import { reorderByReading } from './director/readingOrder';
@@ -14,27 +15,9 @@ import { reorderByReading } from './director/readingOrder';
  * reacts to a finished slide with a high-level intent ("bigger headline",
  * "calmer background"); each maps to a BOUNDED, DETERMINISTIC transform (clamped
  * to the safe area, copy never touched). No AI call — instant + predictable.
+ * The intent VOCABULARY lives in @contentbuilder/shared (used by the UI too).
  */
-
-export type RefineIntent =
-  | 'bigger-headline'
-  | 'fill-space'
-  | 'more-breathing-room'
-  | 'bolder-background'
-  | 'calmer-background'
-  | 'tidy';
-
-export const REFINE_INTENTS: Array<{ intent: RefineIntent; label: string; hint: string }> = [
-  { intent: 'bigger-headline', label: 'Bigger headline', hint: 'Enlarge the hero line' },
-  { intent: 'fill-space', label: 'Fill the space', hint: 'Use more of the canvas' },
-  { intent: 'more-breathing-room', label: 'More breathing room', hint: 'Add negative space' },
-  { intent: 'bolder-background', label: 'Bolder background', hint: 'Step the background up' },
-  { intent: 'calmer-background', label: 'Calmer background', hint: 'Quiet the background' },
-  { intent: 'tidy', label: 'Tidy up', hint: 'Fix spacing and order' },
-];
-
-const REFINE_INTENT_SET = new Set<string>(REFINE_INTENTS.map((r) => r.intent));
-export const isRefineIntent = (v: unknown): v is RefineIntent => typeof v === 'string' && REFINE_INTENT_SET.has(v);
+export { REFINE_INTENTS, isRefineIntent, type RefineIntent } from '@contentbuilder/shared';
 
 const HEADING: BlockType[] = ['title', 'quote', 'subtitle', 'price', 'cta', 'eyebrow'];
 

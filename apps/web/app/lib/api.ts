@@ -11,6 +11,7 @@ import type {
   Slide,
   AssetType,
   Format,
+  RefineIntent,
 } from '@contentbuilder/shared';
 import { api } from './config';
 
@@ -176,6 +177,13 @@ export const draftProject = (id: string, paragraph: string, mode: 'designer' | '
 /** (Re)generate the social caption for a project's current slides, in the brand voice. */
 export const generateProjectCaption = (id: string) =>
   request<Project>(`/projects/${id}/caption`, { method: 'POST' });
+
+/** Design-first refinement: apply a high-level intent to one slide (instant, no AI). */
+export const refineProjectSlide = (projectId: string, slideId: string, intent: RefineIntent) =>
+  request<{ project: ProjectDetail; changed: boolean; note: string }>(
+    `/projects/${projectId}/slides/${slideId}/refine`,
+    { method: 'POST', body: JSON.stringify({ intent }) },
+  );
 
 export interface CritiqueReportItem {
   slideId: string;
