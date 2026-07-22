@@ -5,6 +5,7 @@ import {
   renderMotif,
   type BgColors,
   type BrandLayout,
+  type Format,
   type LayoutLibrary,
 } from '@contentbuilder/shared';
 import { BrandKitModel, MediaAssetModel, SettingModel } from '../models';
@@ -368,17 +369,25 @@ export async function generateBrandPackage(inp: PackageInputs): Promise<LayoutLi
 }
 
 /**
- * Draft-time brand context: the business's approved kit's pack as a compact
- * summary, or undefined (draft proceeds brand-agnostic — never fails a draft).
+ * Draft-time brand context: the business's approved layout library summarized
+ * for the free-draft prompt, matched to the project FORMAT (story projects draw
+ * from the story layouts, everything else from posts). Undefined → the draft
+ * proceeds brand-agnostic (never fails a draft).
  */
-export async function brandPackContext(businessId: string): Promise<{ pack?: string } | undefined> {
+export async function brandPackContext(
+  businessId: string,
+  format?: Format,
+): Promise<{ pack?: string } | undefined> {
   try {
     const kit = await BrandKitModel.findOne({ businessId, status: 'approved' })
       .sort({ createdAt: -1 })
       .lean<{ templatePack?: BrandTemplate[]; layoutLibrary?: LayoutLibrary }>();
-    const lib = kit?.layoutLibrary?.post;
-    if (Array.isArray(lib) && lib.length) {
-      return { pack: packSummary(lib) };
+    const isStory = format === '1080x1920';
+    const lib = kit?.layoutLibrary;
+    // Prefer the format-matched set; fall back to posts if a story set is empty.
+    const chosen = (isStory ? lib?.story : lib?.post)?.length ? (isStory ? lib?.story : lib?.post) : lib?.post;
+    if (Array.isArray(chosen) && chosen.length) {
+      return { pack: packSummary(chosen) };
     }
     if (Array.isArray(kit?.templatePack) && kit.templatePack.length) {
       return { pack: packSummary(kit.templatePack) };

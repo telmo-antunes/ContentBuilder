@@ -244,7 +244,7 @@ projectsRouter.post(
         project.get('type'),
         project.get('format'),
         mode,
-        await brandPackContext(String(project.get('businessId'))),
+        await brandPackContext(String(project.get('businessId')), project.get('format')),
       );
     } catch (err) {
       throw new ApiError(
@@ -293,7 +293,7 @@ projectsRouter.post(
         parsed.data,
         (project as Record<string, any>).type,
         (project as Record<string, any>).format,
-        (await brandPackContext(String((project as Record<string, any>).businessId)))?.pack,
+        (await brandPackContext(String((project as Record<string, any>).businessId), (project as Record<string, any>).format))?.pack,
       );
     } catch (err) {
       throw new ApiError(502, `Alternatives failed: ${publicErrMessage(err, 'AI error')}.`);

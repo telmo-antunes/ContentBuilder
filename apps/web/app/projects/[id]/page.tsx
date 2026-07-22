@@ -19,6 +19,7 @@ import {
   isListBlock,
   layoutWantsImage,
   suggestLayoutForBlocks,
+  applyBrandLayout,
   SPLIT_PLACEMENTS,
   IMAGE_ASPECTS,
   IMAGE_SIZES,
@@ -1465,6 +1466,71 @@ function Section({
   );
 }
 
+/**
+ * The brand's OWN layouts (from the approved kit's package), format-matched to
+ * the project. Each tile previews THIS slide's copy poured into that layout —
+ * click to apply it (structure + decorations + its matched background), keeping
+ * your copy and image. Undoable like any slide mutation. Nothing renders when
+ * the brand has no library yet.
+ */
+function BrandLayoutPicker({
+  slide,
+  detail,
+  media,
+  kit,
+  onChange,
+}: {
+  slide: Slide;
+  detail: ProjectDetail;
+  media: MediaAsset[];
+  kit: RenderBrandKit;
+  onChange: (fn: (s: Slide) => Slide) => void;
+}) {
+  const lib = detail.brandKit?.layoutLibrary;
+  const isStory = detail.format === '1080x1920';
+  const layouts = (isStory ? lib?.story : lib?.post) ?? lib?.post ?? [];
+  if (layouts.length === 0) return null;
+  const bgUrl = (id?: string) => (id ? media.find((m) => m._id === id)?.url : undefined);
+
+  return (
+    <div style={{ marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+      <p className="muted" style={{ fontSize: 12, margin: '0 0 6px' }}>
+        Brand layouts — this brand&rsquo;s own designs; click one to apply it to this slide
+      </p>
+      <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
+        {layouts.map((t, i) => {
+          const preview = applyBrandLayout(slide, t as never);
+          return (
+            <button
+              key={`${t.name}-${i}`}
+              onClick={() => onChange((s) => applyBrandLayout(s, t as never))}
+              title={`Apply “${t.name}”`}
+              style={{ flex: '0 0 auto', padding: 0, border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', cursor: 'pointer', background: 'none' }}
+            >
+              <ScaledSlide format={detail.format} displayWidth={isStory ? 64 : 84}>
+                <SlideRenderer
+                  slide={{ layoutType: 'FreePosition', blocks: preview.blocks }}
+                  brandKit={kit}
+                  format={detail.format}
+                  image={resolveSlideImage(preview, media)}
+                  imageLayout={{
+                    imageFrame: preview.overrides?.imageFrame,
+                    background: preview.overrides?.imageBackground,
+                    decorations: preview.overrides?.decorations,
+                    backgroundUrl: bgUrl(preview.overrides?.backgroundMediaAssetId),
+                  }}
+                  theme={detail.settings?.theme}
+                  forExport
+                />
+              </ScaledSlide>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function SlideInspector({
   slide,
   detail,
@@ -1550,6 +1616,7 @@ function SlideInspector({
             See all layouts ↗
           </a>
         </p>
+        <BrandLayoutPicker slide={slide} detail={detail} media={media} kit={kit} onChange={onChange} />
       </Section>
 
       {wantsImage && (
