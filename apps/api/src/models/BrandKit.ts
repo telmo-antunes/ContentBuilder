@@ -56,6 +56,12 @@ const brandKitSchema = new Schema(
      * without a migration.
      */
     templatePack: { type: [Schema.Types.Mixed], default: undefined },
+    /**
+     * The brand's OWN layout system (posts + stories, each with its matched
+     * background asset) — generated as ONE package on approval. Mixed for the
+     * same reason as templatePack: zod validates at generation time.
+     */
+    layoutLibrary: { type: Schema.Types.Mixed, default: undefined },
     createdAt: { type: Date, default: () => new Date() },
   },
   baseSchemaOptions,

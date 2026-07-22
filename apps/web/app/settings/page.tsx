@@ -103,7 +103,7 @@ export default function SettingsPage() {
               fields: [
                 { key: 'captionModel', label: 'Captions', hint: 'writes the post caption in the brand voice', ph: judgmentDefault },
                 { key: 'campaignModel', label: 'Campaign planning', hint: 'turns a brief into a post series', ph: judgmentDefault },
-                { key: 'templatesModel', label: 'Brand compositions', hint: 'designs the brand’s signature layout pack', ph: judgmentDefault },
+                { key: 'templatesModel', label: 'Brand compositions', hint: 'designs the brand package (layouts + backgrounds)', ph: judgmentDefault },
                 { key: 'alternativesModel', label: 'Slide alternatives', hint: 'proposes 3 layout variants of a slide', ph: judgmentDefault },
               ],
             },
@@ -257,7 +257,7 @@ export default function SettingsPage() {
 
       <details className="panel prompt-details" style={{ marginTop: 14 }} open={Boolean(form.templatesSystem.trim())}>
         <summary className="section-label" style={{ marginTop: 0, cursor: 'pointer' }}>
-          Brand compositions prompt
+          Brand package prompt
           {form.templatesSystem.trim() !== '' && (
             <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, color: 'var(--accent, #f5b657)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               override active

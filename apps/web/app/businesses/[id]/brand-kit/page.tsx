@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import type { BrandKit, MediaAsset } from '@contentbuilder/shared';
+import type { BrandKit, BrandLayout, LayoutLibrary, MediaAsset } from '@contentbuilder/shared';
 import { BUNDLED_FONT_FAMILIES } from '@contentbuilder/shared';
 import {
   getBrandKit,
@@ -16,7 +16,7 @@ import {
   regenerateBackgrounds,
   generateAiBackground,
   deleteMedia,
-  regenerateTemplatePack,
+  regenerateBrandPackage,
   type BusinessDetail,
 } from '../../../lib/api';
 import { SlideRenderer } from '../../../../lib/render/SlideRenderer';
@@ -385,7 +385,7 @@ function KitEditor({
           [
             ['identity', 'Identity'],
             ['backgrounds', 'Backgrounds'],
-            ['compositions', 'Compositions'],
+            ['compositions', 'Layouts'],
           ] as const
         ).map(([v, label]) => (
           <button key={v} className={`btn sm ${tab === v ? 'primary' : 'ghost'}`} onClick={() => setTab(v)}>
@@ -559,7 +559,7 @@ function KitEditor({
       </div>
 
       <div style={tab === 'compositions' ? undefined : { display: 'none' }}>
-        <BrandCompositions kit={kit} renderKit={renderKit} setError={setError} />
+        <BrandLayoutLibrary kit={kit} renderKit={renderKit} setError={setError} />
       </div>
 
       {/* Actions — sticky so Approve/Save never scrolls out of reach. */}
@@ -612,11 +612,11 @@ const SAMPLE_COPY: Record<string, { text: string; items?: string[] }> = {
 };
 
 /**
- * The brand's signature compositions (G1): 6 AI-designed FreePosition skeletons,
- * previewed with sample copy. Free-canvas drafts start from these, so this is
- * what makes the brand's posts structurally its own.
+ * The brand's OWN layout system: post + story layouts, each designed WITH its
+ * matched background in one director pass — one package, adjustable per piece.
+ * Falls back to showing the legacy templatePack until a package is generated.
  */
-function BrandCompositions({
+function BrandLayoutLibrary({
   kit,
   renderKit,
   setError,
@@ -625,16 +625,34 @@ function BrandCompositions({
   renderKit: RenderBrandKit;
   setError: (s: string | null) => void;
 }) {
-  const [pack, setPack] = useState(kit.templatePack ?? []);
+  const [library, setLibrary] = useState<LayoutLibrary | null>(
+    kit.layoutLibrary ??
+      (kit.templatePack?.length ? { post: kit.templatePack as BrandLayout[], story: [] } : null),
+  );
+  const [tab, setTab] = useState<'post' | 'story'>('post');
   const [busy, setBusy] = useState(false);
+  // Background assets referenced by the layouts (loaded like BrandBackgrounds does).
+  const [media, setMedia] = useState<MediaAsset[]>([]);
+  const loadMedia = useCallback(async () => {
+    try {
+      setMedia(await listMedia(kit.businessId));
+    } catch {
+      /* previews just render without backgrounds */
+    }
+  }, [kit.businessId]);
+  useEffect(() => {
+    void loadMedia();
+  }, [loadMedia]);
 
   const regen = async () => {
     setBusy(true);
     setError(null);
     try {
-      const fresh = await regenerateTemplatePack(kit._id);
-      setPack(fresh.templatePack ?? []);
-      toast(`Composition pack redesigned — ${(fresh.templatePack ?? []).length} layouts`);
+      const fresh = await regenerateBrandPackage(kit._id);
+      setLibrary(fresh.layoutLibrary ?? null);
+      await loadMedia(); // new/updated background assets
+      const lib = fresh.layoutLibrary;
+      toast(`Brand package redesigned — ${lib?.post.length ?? 0} post + ${lib?.story.length ?? 0} story layouts`);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -642,20 +660,39 @@ function BrandCompositions({
     }
   };
 
+  const bgUrl = (id?: string) => (id ? media.find((m) => m._id === id)?.url : undefined);
+  const layouts = tab === 'story' ? library?.story ?? [] : library?.post ?? [];
+  const format = tab === 'story' ? ('1080x1920' as const) : ('1080x1350' as const);
+  const thumbW = tab === 'story' ? 104 : 128;
+
   return (
     <div className="panel" style={{ marginTop: 14 }}>
-      <div className="section-label" style={{ marginTop: 0 }}>Brand compositions</div>
-      <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
-        Six signature layouts designed for THIS brand&rsquo;s character — free-canvas drafts build on
-        them, so your posts differ from other brands structurally, not just in color. Shown with
-        sample copy.
+      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="section-label" style={{ marginTop: 0 }}>Layout library</div>
+        <div className="row" style={{ gap: 6 }}>
+          <button className={`btn sm ${tab === 'post' ? 'primary' : 'ghost'}`} onClick={() => setTab('post')}>
+            Posts ({library?.post.length ?? 0})
+          </button>
+          <button className={`btn sm ${tab === 'story' ? 'primary' : 'ghost'}`} onClick={() => setTab('story')}>
+            Stories ({library?.story.length ?? 0})
+          </button>
+        </div>
+      </div>
+      <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+        This brand&rsquo;s own layouts — structure and background designed together as one system,
+        from the brand&rsquo;s voice and vertical. Drafts build on them; shown with sample copy.
       </p>
-      {pack.length > 0 ? (
+      {library?.direction && (
+        <p style={{ fontSize: 13, fontStyle: 'italic', margin: '0 0 10px', color: 'var(--muted)' }}>
+          &ldquo;{library.direction}&rdquo;
+        </p>
+      )}
+      {layouts.length > 0 ? (
         <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
-          {pack.map((t, i) => (
+          {layouts.map((t, i) => (
             <div key={`${t.name}-${i}`} style={{ textAlign: 'center' }}>
               <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
-                <ScaledSlide format="1080x1350" displayWidth={128}>
+                <ScaledSlide format={format} displayWidth={thumbW}>
                   <SlideRenderer
                     slide={{
                       layoutType: 'FreePosition',
@@ -668,18 +705,19 @@ function BrandCompositions({
                       })),
                     }}
                     brandKit={renderKit}
-                    format="1080x1350"
+                    format={format}
                     image={null}
                     imageLayout={{
                       imageFrame: t.imageFrame,
                       background: t.imageBackground,
                       decorations: t.decorations,
+                      backgroundUrl: bgUrl(t.backgroundMediaAssetId),
                     }}
                     forExport
                   />
                 </ScaledSlide>
               </div>
-              <div className="muted" style={{ fontSize: 11, marginTop: 5, maxWidth: 128 }}>
+              <div className="muted" style={{ fontSize: 11, marginTop: 5, maxWidth: thumbW }}>
                 {t.name}
               </div>
             </div>
@@ -687,12 +725,14 @@ function BrandCompositions({
         </div>
       ) : (
         <p className="muted" style={{ fontSize: 12 }}>
-          None yet — they&rsquo;re designed automatically when you approve the kit, or generate them now.
+          {tab === 'story' && (library?.post.length ?? 0) > 0
+            ? 'No story layouts yet — redesign the package to add them.'
+            : 'None yet — the package is designed automatically when you approve the kit, or generate it now.'}
         </p>
       )}
       <div className="row" style={{ marginTop: 12 }}>
         <button className="btn sm" onClick={regen} disabled={busy}>
-          {busy ? 'Designing…' : pack.length ? '↻ Redesign pack' : '✦ Design pack'}
+          {busy ? 'Designing package…' : layouts.length ? '↻ Redesign package' : '✦ Design package'}
         </button>
       </div>
     </div>
