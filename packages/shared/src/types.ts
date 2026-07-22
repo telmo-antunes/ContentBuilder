@@ -63,6 +63,8 @@ export interface BrandKit {
   status: BrandKitStatus;
   /** LEGACY (pre-package): AI-designed post compositions. Superseded by layoutLibrary. */
   templatePack?: BrandTemplateSkeleton[];
+  /** The written art-direction brief the director followed (shown on the kit screen). */
+  artDirection?: ArtDirection;
   /** The brand's OWN layout system — posts + stories, each layout with its matched background. */
   layoutLibrary?: LayoutLibrary;
   createdAt: string;
@@ -80,15 +82,39 @@ export interface BrandTemplateSkeleton {
 }
 
 /**
+ * Which intensity of the brand's background SYSTEM a layout sits on. The director
+ * authors three variants per format; text-heavy layouts pick `canvas` (near
+ * silent), normal copy `texture`, short-copy heroes `statement` (boldest).
+ */
+export type BackgroundRole = 'canvas' | 'texture' | 'statement';
+
+/**
  * A brand layout: a composition skeleton PLUS its matched brand background
- * (a palette-rendered motif stored as a media asset). Designed together in one
- * pass so structure and background feel like one system, not two features.
+ * (an AI-authored or palette-rendered vector, stored as a media asset). Designed
+ * together in one pass so structure and background feel like one system.
  */
 export interface BrandLayout extends BrandTemplateSkeleton {
   /** The motif this layout's background was rendered from (for regenerate/swap UI). */
   backgroundMotif?: string;
+  /** Which background-system intensity this layout uses (director path). */
+  backgroundRole?: BackgroundRole;
   /** The stored background asset — lands in slide.overrides.backgroundMediaAssetId when applied. */
   backgroundMediaAssetId?: string;
+}
+
+/**
+ * The written art-direction brief the Brand Design Director produces from the
+ * brand evidence (incl. the homepage screenshot). It is the coherence contract
+ * every downstream call follows, and is shown to the user on the kit screen.
+ */
+export interface ArtDirection {
+  /** 120–250 words: structural voice, typographic attitude, colour deployment, signature move. */
+  brief: string;
+  /** One paragraph describing the three-intensity background system. */
+  backgroundConcept: string;
+  do: string[];
+  dont: string[];
+  createdAt?: string;
 }
 
 /** The per-business layout system, generated as ONE package on kit approval. */

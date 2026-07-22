@@ -34,6 +34,12 @@ export const config = {
     modelSmall: optional('ANTHROPIC_MODEL_SMALL'),
     /** Model for Free-CANVAS mode + judgment calls; falls back to modelSmall/model. */
     modelLarge: optional('ANTHROPIC_MODEL_FREE'),
+    /**
+     * Design-CRITICAL tier: the Brand Design Director (layouts + authored
+     * backgrounds). Recommended `claude-opus-4-8`. Falls back to modelLarge →
+     * modelSmall → model so an unset slot still designs (just cheaper).
+     */
+    modelDesign: optional('ANTHROPIC_MODEL_DESIGN'),
   },
   stock: {
     /** Pexels API key (free at pexels.com/api). Unset = AI drafts leave image placeholders. */
@@ -78,8 +84,9 @@ export function logConfigStatus(): void {
   // visible and intentional (an unset slot silently falls down the stack).
   if (config.ai.apiKey) {
     const judgment = config.ai.modelLarge ?? config.ai.modelSmall ?? config.ai.model ?? '—';
+    const design = config.ai.modelDesign ?? judgment;
     console.log(
-      `[config] models: vision/critique=${config.ai.modelLarge ?? config.ai.model ?? '—'} · drafts=${config.ai.modelSmall ?? '—'} · free/captions/campaigns=${judgment}`,
+      `[config] models: design=${design} · vision/critique=${config.ai.modelLarge ?? config.ai.model ?? '—'} · drafts=${config.ai.modelSmall ?? '—'} · free/captions/campaigns=${judgment}`,
     );
   }
 }

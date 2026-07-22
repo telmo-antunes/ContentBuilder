@@ -9,6 +9,7 @@ import { ApiError, asyncHandler, parseBody, requireObjectId } from '../lib/http'
 import { generateBusinessBackgrounds } from '../lib/backgrounds';
 import { generateAiBackground } from '../lib/aiBackground';
 import { searchStockPhotos, stockConfigured, storeStockPhoto } from '../lib/stock';
+import { sanitizeSvgUpload } from '../lib/svgSanitize';
 
 /** Business-scoped media uploads. Mounted at /businesses/:id/media. */
 export const mediaRouter = Router({ mergeParams: true });
@@ -165,10 +166,19 @@ mediaRouter.post(
 
     // Content-sniff: verify the bytes are actually a raster image of the declared
     // type (defends against a spoofed Content-Type). SVG is text/XML, so it has no
-    // raster header — skip the check for it.
+    // raster header — instead it is SANITIZED (scripts/handlers/external refs
+    // stripped) so the stored bytes are safe even if the /media URL is opened
+    // directly.
     let width = 0;
     let height = 0;
-    if (file.mimetype !== 'image/svg+xml') {
+    let uploadBuffer = file.buffer;
+    if (file.mimetype === 'image/svg+xml') {
+      const clean = sanitizeSvgUpload(file.buffer.toString('utf8'));
+      if (!clean) {
+        throw new ApiError(400, 'SVG could not be sanitized — it may be malformed or contain disallowed content.');
+      }
+      uploadBuffer = Buffer.from(clean, 'utf8');
+    } else {
       let dim: ReturnType<typeof imageSize> | null = null;
       try {
         dim = imageSize(file.buffer);
@@ -189,7 +199,7 @@ mediaRouter.post(
 
     const ext = EXT_BY_MIME[file.mimetype] ?? 'bin';
     const key = `uploads/${businessId}/${randomUUID()}.${ext}`;
-    const stored = await getStorage().save(key, file.buffer, { contentType: file.mimetype });
+    const stored = await getStorage().save(key, uploadBuffer, { contentType: file.mimetype });
 
     const asset = await MediaAssetModel.create({
       businessId,

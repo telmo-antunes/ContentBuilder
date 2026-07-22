@@ -4,6 +4,7 @@ import { SettingModel } from '../models';
 import { asyncHandler, parseBody } from '../lib/http';
 import { PROMPT_DEFAULTS } from '../lib/draft';
 import { PACKAGE_SYSTEM } from '../lib/templates';
+import { DIRECTOR_BRIEF_SYSTEM, DIRECTOR_LAYOUT_SYSTEM, DIRECTOR_BACKGROUND_SYSTEM } from '../lib/director';
 import { config } from '../config';
 
 const settingsSchema = z.object({
@@ -15,11 +16,16 @@ const settingsSchema = z.object({
   campaignModel: z.string().max(120).optional(),
   backgroundModel: z.string().max(120).optional(),
   templatesModel: z.string().max(120).optional(),
+  directorModel: z.string().max(120).optional(),
+  draftParseModel: z.string().max(120).optional(),
   alternativesModel: z.string().max(120).optional(),
   photoFitModel: z.string().max(120).optional(),
   designerSystem: z.string().max(20000).optional(),
   freeSystem: z.string().max(20000).optional(),
   templatesSystem: z.string().max(20000).optional(),
+  directorBriefSystem: z.string().max(20000).optional(),
+  directorLayoutSystem: z.string().max(20000).optional(),
+  directorBackgroundSystem: z.string().max(20000).optional(),
   freeMaxTokens: z.number().int().min(256).max(16000).nullable().optional(),
 });
 
@@ -28,6 +34,9 @@ const PROMPT_DEFAULT_BY_FIELD: Record<string, string> = {
   designerSystem: PROMPT_DEFAULTS.designerSystem,
   freeSystem: PROMPT_DEFAULTS.freeSystem,
   templatesSystem: PACKAGE_SYSTEM,
+  directorBriefSystem: DIRECTOR_BRIEF_SYSTEM,
+  directorLayoutSystem: DIRECTOR_LAYOUT_SYSTEM,
+  directorBackgroundSystem: DIRECTOR_BACKGROUND_SYSTEM,
 };
 
 export const settingsRouter = Router();
@@ -48,14 +57,25 @@ settingsRouter.get(
         campaignModel: (doc?.campaignModel as string) ?? '',
         backgroundModel: (doc?.backgroundModel as string) ?? '',
         templatesModel: (doc?.templatesModel as string) ?? '',
+        directorModel: (doc?.directorModel as string) ?? '',
+        draftParseModel: (doc?.draftParseModel as string) ?? '',
         alternativesModel: (doc?.alternativesModel as string) ?? '',
         photoFitModel: (doc?.photoFitModel as string) ?? '',
         designerSystem: (doc?.designerSystem as string) ?? '',
         freeSystem: (doc?.freeSystem as string) ?? '',
         templatesSystem: (doc?.templatesSystem as string) ?? '',
+        directorBriefSystem: (doc?.directorBriefSystem as string) ?? '',
+        directorLayoutSystem: (doc?.directorLayoutSystem as string) ?? '',
+        directorBackgroundSystem: (doc?.directorBackgroundSystem as string) ?? '',
         freeMaxTokens: (doc?.freeMaxTokens as number) ?? null,
       },
-      defaults: { ...PROMPT_DEFAULTS, templatesSystem: PACKAGE_SYSTEM },
+      defaults: {
+        ...PROMPT_DEFAULTS,
+        templatesSystem: PACKAGE_SYSTEM,
+        directorBriefSystem: DIRECTOR_BRIEF_SYSTEM,
+        directorLayoutSystem: DIRECTOR_LAYOUT_SYSTEM,
+        directorBackgroundSystem: DIRECTOR_BACKGROUND_SYSTEM,
+      },
       envModels: {
         model: config.ai.model ?? '',
         modelSmall: config.ai.modelSmall ?? '',

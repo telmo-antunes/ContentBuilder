@@ -57,6 +57,11 @@ const brandKitSchema = new Schema(
      */
     templatePack: { type: [Schema.Types.Mixed], default: undefined },
     /**
+     * The written art-direction brief the director produced (brief, background
+     * concept, do/don't). Mixed — zod validates at generation time.
+     */
+    artDirection: { type: Schema.Types.Mixed, default: undefined },
+    /**
      * The brand's OWN layout system (posts + stories, each with its matched
      * background asset) — generated as ONE package on approval. Mixed for the
      * same reason as templatePack: zod validates at generation time.

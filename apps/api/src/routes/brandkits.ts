@@ -5,13 +5,16 @@ import {
   DEFAULT_RENDER_HEADING,
   DEFAULT_RENDER_BODY,
 } from '@contentbuilder/shared';
+import sharp from 'sharp';
 import { BusinessModel, BrandKitModel } from '../models';
 import { ApiError, asyncHandler, parseBody, publicErrMessage, requireObjectId } from '../lib/http';
 import { extractBrand } from '../lib/analyze';
 import { assignRolesAndVibe, brandColorQuality } from '../lib/vision';
 import { assertPublicHttpUrl } from '../lib/urlGuard';
 import { googleFontAvailable, resolveRenderFonts } from '../lib/fonts';
-import { generateBrandPackage, type TemplateBrandFacts } from '../lib/templates';
+import { type TemplateBrandFacts } from '../lib/templates';
+import { generateBrandPackage, type DirectorInputs } from '../lib/director';
+import { getStorage } from '../storage';
 import { harvestSiteImages } from '../lib/harvest';
 
 /** Brand facts the composition designer needs, from a kit doc + business profile. */
@@ -23,6 +26,42 @@ function templateFacts(kit: { get(k: string): any }, profile: Record<string, any
     tone: profile.tone,
     hasLogo: Boolean(kit.get('logo')?.url),
     headingFont: kit.get('fonts')?.render?.heading,
+  };
+}
+
+/**
+ * Assemble the Brand Design Director's inputs from a kit doc — including the
+ * homepage screenshot (downscaled for vision), the strongest brand-fit signal,
+ * which the old composition pass never received.
+ */
+async function buildDirectorInputs(
+  kit: { get(k: string): any },
+  profile: Record<string, any>,
+  businessName?: string,
+): Promise<DirectorInputs> {
+  let screenshotBase64: string | undefined;
+  const shot = kit.get('homepageScreenshot');
+  if (shot?.key) {
+    try {
+      const buf = await getStorage().read(shot.key);
+      const small = await sharp(buf).resize(768, 768, { fit: 'inside', withoutEnlargement: true }).png().toBuffer();
+      screenshotBase64 = small.toString('base64');
+    } catch (err) {
+      console.warn('[director] homepage screenshot read failed (text-only brief):', err instanceof Error ? err.message : err);
+    }
+  }
+  return {
+    ...templateFacts(kit, profile),
+    businessId: String(kit.get('businessId')),
+    businessName,
+    colors: kit.get('colors'),
+    screenshotBase64,
+    renderKit: {
+      colors: kit.get('colors'),
+      fonts: kit.get('fonts'),
+      logo: kit.get('logo'),
+      logoTreatment: kit.get('logoTreatment'),
+    },
   };
 }
 
@@ -220,11 +259,9 @@ brandKitRouter.post(
     if (!kit) throw new ApiError(404, 'Brand kit not found');
     const biz = await BusinessModel.findById(kit.get('businessId')).lean();
     const profile = (biz as Record<string, any> | null)?.profile ?? {};
-    const library = await generateBrandPackage({
-      ...templateFacts(kit, profile),
-      businessId: String(kit.get('businessId')),
-      colors: kit.get('colors'),
-    });
+    const inputs = await buildDirectorInputs(kit, profile, (biz as Record<string, any> | null)?.name);
+    const { artDirection, library } = await generateBrandPackage(inputs);
+    kit.set('artDirection', artDirection);
     kit.set('layoutLibrary', library);
     await kit.save();
     res.json(kit.toJSON());
@@ -286,11 +323,9 @@ brandKitRouter.patch(
       // exists for topping up extras.)
       if (!kit.get('layoutLibrary')?.post?.length) {
         try {
-          const library = await generateBrandPackage({
-            ...templateFacts(kit, profile),
-            businessId: String(kit.get('businessId')),
-            colors: kit.get('colors'),
-          });
+          const inputs = await buildDirectorInputs(kit, profile, (biz as Record<string, any> | null)?.name);
+          const { artDirection, library } = await generateBrandPackage(inputs);
+          kit.set('artDirection', artDirection);
           kit.set('layoutLibrary', library);
           await kit.save();
         } catch (err) {

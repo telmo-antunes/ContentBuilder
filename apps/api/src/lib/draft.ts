@@ -1,18 +1,25 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import {
+  applyBrandLayout,
   BLOCK_TYPES,
   DESIGNER_LAYOUT_TYPES,
   FORMAT_DIMENSIONS,
   MAX_SLIDES_PER_PROJECT,
   safeAreaFor,
   type AssetType,
+  type BlockFrame,
+  type BrandLayout,
   type Format,
+  type Slide,
 } from '@contentbuilder/shared';
 import { config } from '../config';
 import { SettingModel } from '../models';
 import { aiMessage, textOf } from './ai';
 import { recordUsage } from './usage';
+import { parseParagraph, type ContentUnit } from './draftParse';
+import { reorderByReading } from './director/readingOrder';
 import { slideSchema, type SlideInput } from './validation';
+import type { BrandDraftContext } from './templates';
 
 export type DraftMode = 'designer' | 'free';
 
@@ -178,6 +185,61 @@ export function repairFrame(raw: unknown, i: number): { x: number; y: number; w:
   return { x, y, w, h };
 }
 
+/** Mirror a frame horizontally — for varied repeats of the same brand layout. */
+function mirrorFrame(f: BlockFrame): BlockFrame {
+  return { ...f, x: Math.max(0, +(1 - f.x - f.w).toFixed(4)) };
+}
+function mirrorLayout(layout: BrandLayout): BrandLayout {
+  return {
+    ...layout,
+    blocks: layout.blocks.map((b) => ({ ...b, frame: mirrorFrame(b.frame) })),
+    imageFrame: layout.imageFrame ? mirrorFrame(layout.imageFrame) : undefined,
+    decorations: layout.decorations?.map((d) => ({ ...d, frame: mirrorFrame(d.frame) })),
+  };
+}
+
+/**
+ * Library-first instantiation: pour each parsed content unit into the brand's
+ * matching composition (cycling + mirroring duplicates for variety) — deterministic
+ * and copy-preserving. Falls back to the 'content' layout for any purpose the
+ * format-matched library lacks, so no unit is ever dropped. No AI call here.
+ */
+export function instantiateFromLibrary(units: ContentUnit[], layouts: BrandLayout[]): SlideInput[] {
+  if (!layouts.length) return [];
+  const byPurpose = new Map<string, BrandLayout[]>();
+  for (const l of layouts) {
+    const arr = byPurpose.get(l.purpose) ?? [];
+    arr.push(l);
+    byPurpose.set(l.purpose, arr);
+  }
+  const fallback = byPurpose.get('content')?.[0] ?? layouts[0]!;
+  const seen = new Map<string, number>();
+  const slides: SlideInput[] = [];
+  units.forEach((unit, i) => {
+    const candidates = byPurpose.get(unit.purpose) ?? [];
+    const n = seen.get(unit.purpose) ?? 0;
+    seen.set(unit.purpose, n + 1);
+    let layout = candidates.length ? candidates[n % candidates.length]! : fallback;
+    if (n >= Math.max(1, candidates.length)) layout = mirrorLayout(layout); // vary repeats
+    const source: Slide = {
+      id: `s${i}`,
+      order: i,
+      layoutType: 'FreePosition',
+      blocks: unit.blocks.map((b) => ({ type: b.type, text: b.text, items: b.items })),
+      imageNeed: layout.imageNeed ?? 'none',
+    };
+    const applied = applyBrandLayout(source, layout, layout.backgroundMediaAssetId);
+    applied.order = i;
+    if (unit.imageQuery) applied.imageQuery = unit.imageQuery;
+    // Guard against leftover copy (e.g. an unmatched header) landing below the
+    // body it introduces: re-stack any out-of-order column into reading order.
+    applied.blocks = reorderByReading(applied.blocks);
+    const parsed = slideSchema.safeParse(applied);
+    if (parsed.success) slides.push(parsed.data);
+  });
+  return slides;
+}
+
 /**
  * The opt-in draft call: paragraph + type/format ONLY — never the brand kit
  * (layout/block selection doesn't depend on colors or fonts, so sending it just
@@ -192,7 +254,7 @@ export async function draftSlidesFromParagraph(
   type: AssetType,
   format: Format,
   mode: DraftMode = 'designer',
-  brandContext?: { pack?: string },
+  brandContext?: BrandDraftContext,
 ): Promise<SlideInput[]> {
   const settings = await loadAiSettings();
   const userMsg =
@@ -219,7 +281,20 @@ export async function draftSlidesFromParagraph(
   };
 
   if (mode === 'free') {
-    // Free layout is a harder reasoning/JSON task — prefer a dedicated large model,
+    // LIBRARY-FIRST: if the brand has its OWN compositions, parse the copy into
+    // units (cheap Haiku tier) and instantiate the brand's layouts deterministically
+    // — on-brand by construction, and far cheaper than composing from scratch. The
+    // model never touches coordinates or copy here.
+    if (brandContext?.layouts?.length) {
+      const units = await parseParagraph(paragraph, type);
+      if (units.length) {
+        const slides = instantiateFromLibrary(units, brandContext.layouts);
+        if (slides.some((s) => (s.blocks?.length ?? 0) > 0)) return slides;
+      }
+    }
+
+    // Fallback (no brand library, or parse failed): compose from scratch. Free
+    // layout is a harder reasoning/JSON task — prefer a dedicated large model,
     // then the Sonnet-class draft model; the small vision model (Haiku) is the last
     // resort because it's unreliable at strict fractional-coordinate JSON.
     const model = pick(settings.freeModel, config.ai.modelLarge ?? config.ai.modelSmall ?? config.ai.model!);

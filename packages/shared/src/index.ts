@@ -7,6 +7,7 @@ export * from './shorthand';
 export * from './profile';
 export * from './theme';
 export * from './backgrounds';
+export * from './colorContrast';
 export * from './schemas';
 export * from './intents';
 export * from './layoutApply';

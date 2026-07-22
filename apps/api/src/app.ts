@@ -13,6 +13,7 @@ import { businessBrandKitRouter, brandKitRouter } from './routes/brandkits';
 import { businessCampaignRouter, campaignRouter } from './routes/campaigns';
 import { settingsRouter } from './routes/settings';
 import { usageRouter } from './routes/usage';
+import { renderStashRouter } from './routes/renderStash';
 
 const CONTENT_TYPES: Record<string, string> = {
   '.png': 'image/png',
@@ -131,6 +132,8 @@ export function createApp() {
   app.use('/projects', projectsRouter);
   app.use('/settings', settingsRouter);
   app.use('/usage', usageRouter);
+  // Ephemeral render payloads for the design-time preview loop (read-only).
+  app.use('/render-stash', renderStashRouter);
 
   // Serve stored media through the StorageProvider (provider-agnostic).
   app.get(`${MEDIA_ROUTE}/*`, async (req: Request, res: Response) => {
@@ -149,6 +152,12 @@ export function createApp() {
       const ct = CONTENT_TYPES[extname(key).toLowerCase()] ?? 'application/octet-stream';
       res.setHeader('Content-Type', ct);
       res.setHeader('Cache-Control', 'public, max-age=3600');
+      // Defense-in-depth for SVG (stored bytes are already sanitized on ingest):
+      // if a media URL is ever opened directly as a document, sandbox it so no
+      // script/plugin can run. Harmless when the SVG is embedded via <img>.
+      if (ct === 'image/svg+xml') {
+        res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+      }
       res.send(data);
     } catch (err) {
       res.status(500).json({ error: err instanceof Error ? err.message : 'read failed' });

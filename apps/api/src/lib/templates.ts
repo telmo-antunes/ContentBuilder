@@ -24,14 +24,14 @@ import { repairFrame } from './draft';
 
 export const TEMPLATE_COUNT = 6;
 
-const frameSchema = z.object({
+export const frameSchema = z.object({
   x: z.number().min(0).max(1),
   y: z.number().min(0).max(1),
   w: z.number().min(0).max(1),
   h: z.number().min(0).max(1),
 });
 
-const templateSchema = z.object({
+export const templateSchema = z.object({
   name: z.string().min(1).max(60),
   purpose: z.enum(['cover', 'content', 'list', 'quote', 'image-feature', 'cta']),
   imageNeed: z.enum(['none', 'upload']).default('none'),
@@ -92,7 +92,7 @@ const MOTIF_IDS = new Set(MOTIF_CATALOG.map((m) => m.id));
  * frames repair, and a "background" motif id is normalized/validated (an
  * off-menu motif drops the background, never the layout).
  */
-function sanitizeSkeleton(item: unknown): void {
+export function sanitizeSkeleton(item: unknown): void {
   if (!item || typeof item !== 'object') return;
   const it = item as Record<string, unknown>;
   if (Array.isArray(it.blocks)) {
@@ -374,23 +374,33 @@ export async function generateBrandPackage(inp: PackageInputs): Promise<LayoutLi
  * from the story layouts, everything else from posts). Undefined → the draft
  * proceeds brand-agnostic (never fails a draft).
  */
+export interface BrandDraftContext {
+  /** Compact single-line pack summary for the (legacy) free-compose prompt. */
+  pack?: string;
+  /** The format-matched brand layouts, for library-first deterministic drafting. */
+  layouts?: BrandLayout[];
+  /** The art-direction brief, if the director produced one. */
+  brief?: string;
+}
+
 export async function brandPackContext(
   businessId: string,
   format?: Format,
-): Promise<{ pack?: string } | undefined> {
+): Promise<BrandDraftContext | undefined> {
   try {
     const kit = await BrandKitModel.findOne({ businessId, status: 'approved' })
       .sort({ createdAt: -1 })
-      .lean<{ templatePack?: BrandTemplate[]; layoutLibrary?: LayoutLibrary }>();
+      .lean<{ templatePack?: BrandTemplate[]; layoutLibrary?: LayoutLibrary; artDirection?: { brief?: string } }>();
     const isStory = format === '1080x1920';
     const lib = kit?.layoutLibrary;
     // Prefer the format-matched set; fall back to posts if a story set is empty.
     const chosen = (isStory ? lib?.story : lib?.post)?.length ? (isStory ? lib?.story : lib?.post) : lib?.post;
+    const brief = kit?.artDirection?.brief;
     if (Array.isArray(chosen) && chosen.length) {
-      return { pack: packSummary(chosen) };
+      return { pack: packSummary(chosen), layouts: chosen as BrandLayout[], brief };
     }
     if (Array.isArray(kit?.templatePack) && kit.templatePack.length) {
-      return { pack: packSummary(kit.templatePack) };
+      return { pack: packSummary(kit.templatePack), layouts: kit.templatePack as BrandLayout[], brief };
     }
   } catch {
     /* no kit / db hiccup → brand-agnostic draft */

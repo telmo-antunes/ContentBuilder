@@ -20,11 +20,19 @@ const settingSchema = new Schema(
     campaignModel: { type: String, default: '' },
     backgroundModel: { type: String, default: '' },
     templatesModel: { type: String, default: '' },
+    /** Brand Design Director (layouts + authored backgrounds) — the design tier. */
+    directorModel: { type: String, default: '' },
+    /** Paragraph→content-unit parse for free drafts (mechanical → cheap tier). */
+    draftParseModel: { type: String, default: '' },
     alternativesModel: { type: String, default: '' },
     photoFitModel: { type: String, default: '' },
     designerSystem: { type: String, default: '' },
     templatesSystem: { type: String, default: '' },
     freeSystem: { type: String, default: '' },
+    // Brand Design Director prompt overrides (blank → in-code default).
+    directorBriefSystem: { type: String, default: '' },
+    directorLayoutSystem: { type: String, default: '' },
+    directorBackgroundSystem: { type: String, default: '' },
     freeMaxTokens: { type: Number, required: false },
     updatedAt: { type: Date, default: () => new Date() },
   },

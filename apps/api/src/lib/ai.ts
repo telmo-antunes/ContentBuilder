@@ -24,13 +24,36 @@ export function isFableFamily(model: string): boolean {
   return /fable|mythos/i.test(model);
 }
 
+/** First non-empty candidate — the model fallback-chain primitive (pure/testable). */
+export function pickModel(...candidates: Array<string | undefined>): string | undefined {
+  return candidates.find((c) => typeof c === 'string' && c.trim() !== '')?.trim();
+}
+
 /** The premium tier for once-per-asset judgment calls; falls back down the stack. */
 export function premiumModel(): string {
   return config.ai.modelLarge ?? config.ai.modelSmall ?? config.ai.model!;
 }
 
+/**
+ * The DESIGN-critical tier: the Brand Design Director (layouts + authored
+ * backgrounds). Prefers the dedicated design model, then the judgment stack, so
+ * an unset `ANTHROPIC_MODEL_DESIGN` still designs — just on a cheaper model.
+ */
+export function designModel(): string {
+  return pickModel(config.ai.modelDesign, config.ai.modelLarge, config.ai.modelSmall, config.ai.model)!;
+}
+
 /** Every non-draft AI touchpoint, each individually overridable from Settings. */
-export type AiFeature = 'vision' | 'critique' | 'caption' | 'campaign' | 'background' | 'templates' | 'alternatives' | 'photofit';
+export type AiFeature =
+  | 'vision'
+  | 'critique'
+  | 'caption'
+  | 'campaign'
+  | 'background'
+  | 'templates'
+  | 'director'
+  | 'alternatives'
+  | 'photofit';
 
 const OVERRIDE_FIELD: Record<AiFeature, string> = {
   vision: 'visionModel',
@@ -39,6 +62,7 @@ const OVERRIDE_FIELD: Record<AiFeature, string> = {
   campaign: 'campaignModel',
   background: 'backgroundModel',
   templates: 'templatesModel',
+  director: 'directorModel',
   alternatives: 'alternativesModel',
   photofit: 'photoFitModel',
 };
@@ -49,12 +73,32 @@ const ENV_DEFAULT: Record<AiFeature, () => string> = {
   caption: premiumModel,
   campaign: premiumModel,
   background: () => config.ai.modelSmall ?? config.ai.model!,
-  // Composition design is spatial-JSON work like free drafts → judgment tier.
-  templates: premiumModel,
+  // The Brand Design Director + its legacy `templates` alias run on the design tier.
+  director: designModel,
+  templates: designModel,
   alternatives: premiumModel,
   // Judging photos against copy is a vision task → vision tier.
   photofit: () => config.ai.modelLarge ?? config.ai.model!,
 };
+
+/**
+ * Models that accept adaptive extended thinking + a high reasoning-effort knob.
+ * Haiku and Sonnet-4.x reject these params (400), so `withOpusReasoning` gates on
+ * this family and leaves everything else untouched.
+ */
+const REASONING_MODELS = /opus-4|fable|mythos|sonnet-5/i;
+
+/**
+ * Turn on adaptive thinking + high effort for a design/spatial-reasoning call —
+ * but only when the resolved model supports them. Safe to call unconditionally.
+ */
+export function withOpusReasoning<T extends Anthropic.MessageCreateParamsNonStreaming>(params: T): T {
+  if (REASONING_MODELS.test(params.model)) {
+    params.thinking = { type: 'adaptive' };
+    params.output_config = { effort: 'high' };
+  }
+  return params;
+}
 
 /**
  * Resolve the model for a touchpoint: the AI Settings override wins, else the
@@ -88,6 +132,24 @@ export async function aiMessage(
   if (resp.stop_reason === 'refusal' && isFableFamily(params.model)) {
     console.warn(`[ai] ${params.model} declined a request — retrying on ${FALLBACK_MODEL}`);
     return client.messages.create({ ...params, model: FALLBACK_MODEL });
+  }
+  return resp;
+}
+
+/**
+ * Like `aiMessage`, but STREAMED — for large authored outputs (e.g. SVG
+ * background sets at 20–30K max_tokens) where a non-streaming request risks an
+ * SDK/socket timeout. Returns the assembled final message. Same Fable-family
+ * refusal-retry semantics.
+ */
+export async function aiMessageLarge(
+  params: Anthropic.MessageCreateParamsNonStreaming,
+): Promise<Anthropic.Message> {
+  const client = aiClient();
+  const resp = await client.messages.stream(params).finalMessage();
+  if (resp.stop_reason === 'refusal' && isFableFamily(params.model)) {
+    console.warn(`[ai] ${params.model} declined a request — retrying on ${FALLBACK_MODEL}`);
+    return client.messages.stream({ ...params, model: FALLBACK_MODEL }).finalMessage();
   }
   return resp;
 }
