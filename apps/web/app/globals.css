@@ -1,28 +1,35 @@
 @import './fonts.generated.css';
 
+/* ── Atelier design language ─────────────────────────────────────────────────
+   The studio as a couture house: warm ink grounds, bone text, a single verdigris
+   accent with a brass hairline, high-contrast serif headlines over a calm
+   grotesque. Dark is the primary world; light is its paper counterpart. */
 :root {
-  --bg: #0a0c11;
-  --bg-2: #0e1117;
-  --panel: #14171e;
-  --panel-2: #1b1f28;
-  --panel-3: #222734;
-  --border: #272d39;
-  --border-strong: #343c4b;
-  --text: #eef1f6;
-  --muted: #97a1b2;
-  --faint: #8a93a4;
-  --accent: #5b8cff;
-  --accent-2: #36d6c3;
-  --accent-grad: linear-gradient(135deg, #5b8cff, #36d6c3);
-  --danger: #f1606a;
-  --ok: #34d399;
-  --warn: #f0b429;
-  --radius: 14px;
-  --radius-sm: 9px;
-  --radius-lg: 20px;
+  --bg: #17140e;
+  --bg-2: #1c180f;
+  --panel: #201c13;
+  --panel-2: #262217;
+  --panel-3: #302a1d;
+  --border: #342f22;
+  --border-strong: #47402e;
+  --text: #ece6d8;
+  --muted: #a69c86;
+  --faint: #8b8270;
+  --accent: #6aa69b;
+  --accent-2: #b79355;
+  --accent-grad: linear-gradient(140deg, #6fab9f, #4d8a7f);
+  --danger: #cf6a5e;
+  --ok: #6aa69b;
+  --warn: #c6a052;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-lg: 18px;
   --maxw: 1040px;
-  --shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 12px 32px rgba(0, 0, 0, 0.35);
-  --shadow-sm: 0 6px 18px rgba(0, 0, 0, 0.28);
+  --shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 18px 44px rgba(0, 0, 0, 0.46);
+  --shadow-sm: 0 8px 22px rgba(0, 0, 0, 0.34);
+  /* Typefaces: a high-contrast serif display, a calm grotesque body. */
+  --display: 'Playfair Display', Georgia, 'Times New Roman', serif;
+  --body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   /* Spacing scale — used to decongest layouts consistently. */
   --sp-1: 4px;
   --sp-2: 8px;
@@ -37,44 +44,44 @@
   --dur-1: 130ms;
   --dur-2: 220ms;
   --dur-3: 360ms;
-  /* Surface tints used by the chrome (theme-aware). */
-  --glow-1: rgba(91, 140, 255, 0.1);
-  --glow-2: rgba(54, 214, 195, 0.07);
-  --topbar-bg: rgba(12, 14, 19, 0.72);
+  /* Surface tints used by the chrome (theme-aware) — a whisper of warmth. */
+  --glow-1: rgba(183, 147, 85, 0.07);
+  --glow-2: rgba(106, 166, 155, 0.05);
+  --topbar-bg: rgba(23, 20, 14, 0.74);
   /* Text colors that sit on tinted badge/button surfaces (theme-aware). */
-  --on-ok: #aef0d4;
-  --on-accent: #b9cdff;
-  --on-warn: #f3d68a;
-  --on-bad: #ffc4c8;
+  --on-ok: #a9d3c9;
+  --on-accent: #aecfc7;
+  --on-warn: #e6cd94;
+  --on-bad: #f0bdb7;
 }
 
 /* ── Light theme ──────────────────────────────────────────────────────────── */
 [data-theme='light'] {
-  --bg: #eef1f6;
-  --bg-2: #ffffff;
-  --panel: #ffffff;
-  --panel-2: #f4f6fa;
-  --panel-3: #e9edf4;
-  --border: #e0e5ee;
-  --border-strong: #cbd2df;
-  --text: #161b24;
-  --muted: #586173;
-  --faint: #818b9c;
-  --accent: #355cf0;
-  --accent-2: #119e8e;
-  --accent-grad: linear-gradient(135deg, #4d7bff, #2bb6a4);
-  --danger: #e0444f;
-  --ok: #0f9d6e;
-  --warn: #c98a08;
-  --shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 0 12px 30px rgba(36, 50, 84, 0.1);
-  --shadow-sm: 0 6px 18px rgba(36, 50, 84, 0.08);
-  --glow-1: rgba(91, 140, 255, 0.12);
-  --glow-2: rgba(54, 214, 195, 0.1);
-  --topbar-bg: rgba(255, 255, 255, 0.78);
-  --on-ok: #0a7d56;
-  --on-accent: #2a51c8;
-  --on-warn: #8a5e04;
-  --on-bad: #c12f3a;
+  --bg: #efe9dd;
+  --bg-2: #f6f1e8;
+  --panel: #fbf8f1;
+  --panel-2: #f2ecdf;
+  --panel-3: #e8e0d0;
+  --border: #ddd5c3;
+  --border-strong: #c9bda5;
+  --text: #211d15;
+  --muted: #6e6655;
+  --faint: #8b8371;
+  --accent: #3e7168;
+  --accent-2: #8a6a2f;
+  --accent-grad: linear-gradient(140deg, #4a7e74, #396a60);
+  --danger: #b64a40;
+  --ok: #3e7168;
+  --warn: #937019;
+  --shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 0 14px 34px rgba(60, 45, 20, 0.1);
+  --shadow-sm: 0 8px 20px rgba(60, 45, 20, 0.08);
+  --glow-1: rgba(183, 147, 85, 0.1);
+  --glow-2: rgba(62, 113, 104, 0.06);
+  --topbar-bg: rgba(246, 241, 232, 0.82);
+  --on-ok: #2c5a51;
+  --on-accent: #2c5a51;
+  --on-warn: #6e5010;
+  --on-bad: #97392f;
 }
 
 * {
@@ -86,7 +93,7 @@ body {
   margin: 0;
   padding: 0;
   color: var(--text);
-  font-family: 'Inter', system-ui, -apple-system, Segoe UI, sans-serif;
+  font-family: var(--body);
   font-size: 15px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
@@ -158,7 +165,7 @@ a:hover {
   gap: 12px;
 }
 .brand {
-  font-family: 'Montserrat', sans-serif;
+  font-family: var(--display);
   font-weight: 800;
   letter-spacing: -0.2px;
   font-size: 17px;
@@ -254,7 +261,7 @@ a:hover {
   height: 20px;
   border-radius: 50%;
   background: var(--accent-grad);
-  color: #07121f;
+  color: #17140e;
   font-size: 12px;
   transform: translateX(0);
   transition: transform var(--dur-2) var(--ease-out);
@@ -381,14 +388,14 @@ a:hover {
 }
 
 h1 {
-  font-family: 'Montserrat', sans-serif;
+  font-family: var(--display);
   font-size: 32px;
   font-weight: 800;
   letter-spacing: -0.5px;
   margin: 0 0 8px;
 }
 h2 {
-  font-family: 'Montserrat', sans-serif;
+  font-family: var(--display);
   font-size: 19px;
   font-weight: 700;
   letter-spacing: -0.2px;
@@ -428,12 +435,12 @@ h2 {
 .btn.primary {
   background: var(--accent-grad);
   border-color: transparent;
-  color: #07121f;
+  color: #17140e;
   font-weight: 700;
-  box-shadow: 0 8px 22px rgba(91, 140, 255, 0.3);
+  box-shadow: 0 8px 22px rgba(106, 166, 155, 0.3);
 }
 .btn.primary:hover {
-  box-shadow: 0 10px 26px rgba(91, 140, 255, 0.42);
+  box-shadow: 0 10px 26px rgba(106, 166, 155, 0.42);
   filter: brightness(1.04);
 }
 
@@ -472,7 +479,7 @@ select:focus,
 textarea:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(91, 140, 255, 0.18);
+  box-shadow: 0 0 0 3px rgba(106, 166, 155, 0.18);
 }
 input::placeholder,
 textarea::placeholder {
@@ -528,7 +535,7 @@ label {
 .item .title {
   font-weight: 700;
   font-size: 16px;
-  font-family: 'Montserrat', sans-serif;
+  font-family: var(--display);
   letter-spacing: -0.2px;
 }
 .item .sub {
@@ -543,8 +550,8 @@ label {
   margin-top: 10px;
 }
 .badge.accent {
-  border-color: rgba(91, 140, 255, 0.32);
-  background: rgba(91, 140, 255, 0.12);
+  border-color: rgba(106, 166, 155, 0.32);
+  background: rgba(106, 166, 155, 0.12);
   color: var(--on-accent);
 }
 .badge.warn {
@@ -692,7 +699,7 @@ label {
 }
 .thumb.selected {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(91, 140, 255, 0.18);
+  box-shadow: 0 0 0 3px rgba(106, 166, 155, 0.18);
 }
 .thumb.dragging {
   opacity: 0.4;
@@ -730,7 +737,7 @@ label {
   justify-content: center;
   padding: 28px;
   background:
-    repeating-conic-gradient(#13161c 0% 25%, #0f1217 0% 50%) 50% / 26px 26px;
+    repeating-conic-gradient(#211c13 0% 25%, #19150d 0% 50%) 50% / 26px 26px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: inset 0 2px 30px rgba(0, 0, 0, 0.4);
@@ -745,7 +752,7 @@ label {
 /* Selected block — synced with the free-canvas selection. */
 .block-card.selected {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(91, 140, 255, 0.18);
+  box-shadow: 0 0 0 3px rgba(106, 166, 155, 0.18);
 }
 .block-card .block-head {
   display: flex;
@@ -934,8 +941,8 @@ textarea {
   letter-spacing: 0.02em;
   padding: 2px 7px;
   border-radius: 6px;
-  background: rgba(91, 140, 255, 0.92);
-  color: #06101f;
+  background: rgba(106, 166, 155, 0.92);
+  color: #17140e;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
 }
 
@@ -944,7 +951,7 @@ textarea {
   position: fixed;
   inset: 0;
   z-index: 100;
-  background: rgba(5, 7, 11, 0.66);
+  background: rgba(12, 10, 6, 0.7);
   backdrop-filter: blur(3px);
   display: flex;
   align-items: center;
@@ -983,7 +990,7 @@ textarea {
   height: 52px;
   border-radius: 50%;
   border: 1px solid var(--border-strong);
-  background: rgba(20, 23, 30, 0.8);
+  background: rgba(32, 28, 19, 0.82);
   color: var(--text);
   font-size: 26px;
   line-height: 1;
@@ -1008,7 +1015,7 @@ textarea {
   height: 40px;
   border-radius: 50%;
   border: 1px solid var(--border-strong);
-  background: rgba(20, 23, 30, 0.8);
+  background: rgba(32, 28, 19, 0.82);
   color: var(--text);
   font-size: 16px;
   cursor: pointer;
@@ -1031,7 +1038,7 @@ textarea {
 }
 .preview-dot.active {
   background: var(--accent);
-  box-shadow: 0 0 0 3px rgba(91, 140, 255, 0.22);
+  box-shadow: 0 0 0 3px rgba(106, 166, 155, 0.22);
 }
 
 /* ── Accessibility: visible keyboard focus ──────────────────────────────── */
