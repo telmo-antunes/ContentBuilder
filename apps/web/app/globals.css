@@ -1466,6 +1466,38 @@ input[type='color'] {
   .pv-aur { animation: none; }
   .pv-head, .pv-stage { animation: none; }
 }
+/* Send-to-phone hand-off — shares the .pv-shell brand-tinted family. */
+.sh-inner { gap: 4px; }
+.sh-strip {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  max-width: min(560px, 92vw);
+  padding: 4px 2px 10px;
+  scroll-snap-type: x mandatory;
+  animation: fade-up var(--dur-3) var(--ease-out) both;
+  animation-delay: 60ms;
+}
+.sh-strip img {
+  height: 190px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  scroll-snap-align: center;
+  flex: 0 0 auto;
+}
+.sh-share {
+  width: min(460px, 90vw);
+  margin-top: 18px;
+  padding: 14px 0;
+  font-size: 16px;
+  justify-content: center;
+}
+.sh-fallback {
+  margin-top: 16px;
+  width: min(460px, 90vw);
+  text-align: center;
+}
 /* Clip the track and animate slide changes with the shared motion tokens. */
 .preview-stage-wrap {
   position: relative;

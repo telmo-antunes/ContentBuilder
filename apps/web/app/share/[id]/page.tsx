@@ -12,6 +12,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import type { Project } from '@contentbuilder/shared';
 import { getProject, type ProjectDetail } from '../../lib/api';
+import { toRenderKit } from '../../../lib/render/projectRender';
 
 /** Route stored absolute media URLs through the same-origin /api proxy so they
  *  load on a phone (the phone can't resolve the dev machine's "localhost"). */
@@ -85,64 +86,85 @@ export default function SharePage() {
   if (error && !project) return <div className="error-box" style={{ margin: 16 }}>{error}</div>;
   if (!project) return <p className="muted" style={{ margin: 16 }}>Loading…</p>;
 
+  // Brand-tint the ambient field from the kit's palette — same family as the
+  // interactive preview, so both client-facing surfaces feel like one product.
+  const kit = toRenderKit(project.brandKit);
+  const tint = {
+    '--b1': kit.colors.accent ?? kit.colors.primary,
+    '--b2': kit.colors.primary,
+    '--b3': kit.colors.secondary ?? kit.colors.primary,
+  } as React.CSSProperties;
+
   return (
-    <div style={{ maxWidth: 520, margin: '0 auto', padding: '8px 16px 40px' }}>
-      <h1 style={{ fontSize: 22, marginBottom: 2 }}>{project.title}</h1>
-      <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
-        {renders.length} {renders.length === 1 ? 'image' : 'images'} · exported and ready to post
-      </p>
+    <div className="pv-shell" style={tint}>
+      <div className="pv-atmo" aria-hidden>
+        <span className="pv-aur a" />
+        <span className="pv-aur b" />
+        <span className="pv-grain" />
+        <span className="pv-vignette" />
+      </div>
 
-      {renders.length === 0 ? (
-        <div className="empty">
-          No export yet — export the project from the editor first, then reopen this page.
-        </div>
-      ) : (
-        <>
-          <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 6 }}>
-            {renders.map((url, i) => (
-              <img
-                key={url}
-                src={url}
-                alt={`Slide ${i + 1}`}
-                style={{ height: 170, borderRadius: 10, border: '1px solid var(--border)' }}
-              />
-            ))}
+      <div className="pv-inner sh-inner">
+        <header className="pv-head">
+          <p className="pv-eyebrow">Ready to post</p>
+          <h1>{project.title}</h1>
+          <p className="pv-sub">
+            {renders.length} {renders.length === 1 ? 'image' : 'images'} · exported and ready
+          </p>
+        </header>
+
+        {renders.length === 0 ? (
+          <div className="empty" style={{ maxWidth: 460 }}>
+            No export yet — export the project from the editor first, then reopen this page.
           </div>
-
-          {canShareFiles ? (
-            <button className="btn primary" style={{ width: '100%', marginTop: 14, padding: '12px 0', fontSize: 16 }} onClick={() => void share()}>
-              📲 Share… (pick Instagram)
-            </button>
-          ) : (
-            <div style={{ marginTop: 14 }}>
-              <p className="muted" style={{ fontSize: 13 }}>
-                This browser can&rsquo;t share files directly — open this page on your PHONE (copy the
-                link from the editor&rsquo;s &ldquo;Post from your phone&rdquo; dialog), or save the images below.
-              </p>
-              <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-                {renders.map((url, i) => (
-                  <a key={url} className="btn sm" href={url} download={`${String(i + 1).padStart(2, '0')}.png`}>
-                    ⬇ Slide {i + 1}
-                  </a>
-                ))}
-              </div>
+        ) : (
+          <>
+            <div className="sh-strip">
+              {renders.map((url, i) => (
+                <img key={url} src={url} alt={`Slide ${i + 1}`} />
+              ))}
             </div>
-          )}
 
-          {captionText && (
-            <div className="panel" style={{ marginTop: 16 }}>
-              <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-                <strong style={{ fontSize: 14 }}>Caption</strong>
-                <button className="btn sm" onClick={() => void copyCaption()}>Copy</button>
+            {canShareFiles ? (
+              <button className="btn primary sh-share" onClick={() => void share()}>
+                Share… &nbsp;<span style={{ opacity: 0.85 }}>pick Instagram</span>
+              </button>
+            ) : (
+              <div className="sh-fallback">
+                <p className="pv-sub" style={{ marginTop: 0 }}>
+                  This browser can&rsquo;t share files directly — open this page on your <strong>phone</strong>{' '}
+                  (copy the link from the editor&rsquo;s &ldquo;Post from your phone&rdquo; dialog), or save the
+                  images below.
+                </p>
+                <div className="row" style={{ gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+                  {renders.map((url, i) => (
+                    <a key={url} className="btn sm ghost" href={url} download={`${String(i + 1).padStart(2, '0')}.png`}>
+                      ↓ Slide {i + 1}
+                    </a>
+                  ))}
+                </div>
               </div>
-              <p style={{ whiteSpace: 'pre-wrap', fontSize: 13, marginBottom: 0 }}>{captionText}</p>
-            </div>
-          )}
+            )}
 
-          {status && <p className="muted" style={{ marginTop: 12, fontSize: 13 }}>{status}</p>}
-          {error && <p style={{ color: 'var(--danger)', fontSize: 13 }}>{error}</p>}
-        </>
-      )}
+            {captionText && (
+              <div className="pv-caption">
+                <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span className="pv-caption-lab">Caption</span>
+                  <button className="btn sm ghost" onClick={() => void copyCaption()}>Copy</button>
+                </div>
+                <p>{captionText}</p>
+              </div>
+            )}
+
+            {status && <p className="pv-sub" style={{ marginTop: 12 }}>{status}</p>}
+            {error && <p style={{ color: 'var(--danger)', fontSize: 13, marginTop: 8 }}>{error}</p>}
+          </>
+        )}
+
+        <p className="pv-foot">
+          Made with <span className="wm">ContentBuilder</span>
+        </p>
+      </div>
     </div>
   );
 }
