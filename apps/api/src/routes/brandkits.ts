@@ -239,6 +239,32 @@ businessBrandKitRouter.get(
 );
 
 /** Item-scoped: mounted at /brandkits */
+/**
+ * Author the brand's DESIGN RECIPE from its evidence and store it on the kit —
+ * the design system every AI-composed slide is built against. This is the heart
+ * of onboarding: a kit without a recipe can't compose anything on-brand.
+ */
+async function authorRecipeForKit(kit: {
+  get(key: string): any;
+  set(key: string, value: unknown): void;
+  save(): Promise<unknown>;
+}): Promise<void> {
+  const biz = await BusinessModel.findById(kit.get('businessId')).lean<Record<string, any> | null>();
+  const profile = biz?.profile ?? {};
+  const evidence: RecipeEvidence = {
+    name: biz?.name ?? 'Brand',
+    category: profile.category,
+    colors: kit.get('colors'),
+    fonts: kit.get('fonts'),
+    logoTreatment: kit.get('logoTreatment'),
+    styleDescriptor: kit.get('styleDescriptor'),
+    voice: kit.get('voice') || (Array.isArray(profile.tone) ? profile.tone.join(', ') : undefined),
+  };
+  const recipe = await authorRecipe(evidence);
+  kit.set('recipe', recipe);
+  await kit.save();
+}
+
 export const brandKitRouter = Router();
 
 brandKitRouter.get(
@@ -278,25 +304,11 @@ brandKitRouter.post(
     const kitId = requireObjectId(req.params.kitId, 'Brand kit');
     const kit = await BrandKitModel.findById(kitId);
     if (!kit) throw new ApiError(404, 'Brand kit not found');
-    const biz = await BusinessModel.findById(kit.get('businessId')).lean<Record<string, any> | null>();
-    const profile = biz?.profile ?? {};
-    const evidence: RecipeEvidence = {
-      name: biz?.name ?? 'Brand',
-      category: profile.category,
-      colors: kit.get('colors'),
-      fonts: kit.get('fonts'),
-      logoTreatment: kit.get('logoTreatment'),
-      styleDescriptor: kit.get('styleDescriptor'),
-      voice: kit.get('voice') || (Array.isArray(profile.tone) ? profile.tone.join(', ') : undefined),
-    };
-    let recipe;
     try {
-      recipe = await authorRecipe(evidence);
+      await authorRecipeForKit(kit);
     } catch (err) {
       throw new ApiError(502, `Recipe author failed: ${publicErrMessage(err, 'AI error')}.`);
     }
-    kit.set('recipe', recipe);
-    await kit.save();
     res.json(kit.toJSON());
   }),
 );
@@ -344,26 +356,15 @@ brandKitRouter.patch(
 
     await kit.save();
 
-    // On approval, (re)generate the brand backgrounds so the business has 3
-    // ready-to-use post/story backgrounds, and design the brand's signature
-    // composition pack. Both best-effort — never block approval.
-    if (body.status === 'approved') {
-      const biz = await BusinessModel.findById(kit.get('businessId')).lean();
-      const profile = (biz as Record<string, any> | null)?.profile ?? {};
-      // ONE package: layouts (posts + stories) and their backgrounds are
-      // designed together so they read as a single system. Best-effort — never
-      // block approval. (The standalone backgrounds regenerate endpoint still
-      // exists for topping up extras.)
-      if (!kit.get('layoutLibrary')?.post?.length) {
-        try {
-          const inputs = await buildDirectorInputs(kit, profile, (biz as Record<string, any> | null)?.name);
-          const { artDirection, library } = await generateBrandPackage(inputs);
-          kit.set('artDirection', artDirection);
-          kit.set('layoutLibrary', library);
-          await kit.save();
-        } catch (err) {
-          console.error('[package] generation on approval failed:', err);
-        }
+    // On approval, author the brand's DESIGN RECIPE if it doesn't have one yet —
+    // this is what makes the kit able to compose on-brand posts. Best-effort:
+    // a failed author never blocks approval (the recipe can be (re)authored from
+    // the brand-kit screen). This is the onboarding hand-off into generation.
+    if (body.status === 'approved' && !kit.get('recipe')) {
+      try {
+        await authorRecipeForKit(kit);
+      } catch (err) {
+        console.error('[recipe] author on approval failed:', err);
       }
     }
 
