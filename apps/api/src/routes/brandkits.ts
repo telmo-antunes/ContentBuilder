@@ -14,6 +14,7 @@ import { assertPublicHttpUrl } from '../lib/urlGuard';
 import { googleFontAvailable, resolveRenderFonts } from '../lib/fonts';
 import { type TemplateBrandFacts } from '../lib/templates';
 import { generateBrandPackage, type DirectorInputs } from '../lib/director';
+import { authorRecipe, type RecipeEvidence } from '../lib/htmlDirector/authorRecipe';
 import { getStorage } from '../storage';
 import { harvestSiteImages } from '../lib/harvest';
 
@@ -263,6 +264,38 @@ brandKitRouter.post(
     const { artDirection, library } = await generateBrandPackage(inputs);
     kit.set('artDirection', artDirection);
     kit.set('layoutLibrary', library);
+    await kit.save();
+    res.json(kit.toJSON());
+  }),
+);
+
+// Author (or re-author) the brand's DESIGN RECIPE from its evidence — the
+// design system every AI-composed slide is built against. Runs on the design
+// tier; stored on the kit as `recipe`.
+brandKitRouter.post(
+  '/:kitId/recipe',
+  asyncHandler(async (req, res) => {
+    const kitId = requireObjectId(req.params.kitId, 'Brand kit');
+    const kit = await BrandKitModel.findById(kitId);
+    if (!kit) throw new ApiError(404, 'Brand kit not found');
+    const biz = await BusinessModel.findById(kit.get('businessId')).lean<Record<string, any> | null>();
+    const profile = biz?.profile ?? {};
+    const evidence: RecipeEvidence = {
+      name: biz?.name ?? 'Brand',
+      category: profile.category,
+      colors: kit.get('colors'),
+      fonts: kit.get('fonts'),
+      logoTreatment: kit.get('logoTreatment'),
+      styleDescriptor: kit.get('styleDescriptor'),
+      voice: kit.get('voice') || (Array.isArray(profile.tone) ? profile.tone.join(', ') : undefined),
+    };
+    let recipe;
+    try {
+      recipe = await authorRecipe(evidence);
+    } catch (err) {
+      throw new ApiError(502, `Recipe author failed: ${publicErrMessage(err, 'AI error')}.`);
+    }
+    kit.set('recipe', recipe);
     await kit.save();
     res.json(kit.toJSON());
   }),

@@ -12,6 +12,7 @@ import type { ImageLayoutConfig, LayoutImage, RenderBrandKit } from '../../lib/r
 export default function RenderStage({
   layoutType,
   blocks,
+  authored,
   format,
   kit,
   image,
@@ -23,6 +24,7 @@ export default function RenderStage({
 }: {
   layoutType: LayoutType;
   blocks: Block[];
+  authored?: { html: string; bg?: string };
   format: Format;
   kit: RenderBrandKit;
   image: LayoutImage | null;
@@ -35,7 +37,7 @@ export default function RenderStage({
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, margin: 0, padding: 0, zIndex: 2147483647 }}>
       <SlideRenderer
-        slide={{ layoutType, blocks }}
+        slide={{ layoutType, blocks, authored }}
         brandKit={kit}
         format={format}
         image={image}

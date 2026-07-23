@@ -3,6 +3,7 @@ import type { LayoutType } from './layouts';
 import type { AssetType, Format } from './formats';
 import type { BusinessProfile, BusinessGoal } from './profile';
 import type { ImageTreatment, LogoTreatment, ThemePreset } from './theme';
+import type { BrandRecipe } from './recipe';
 
 /**
  * Provider-agnostic media reference. Every stored asset (logo, upload,
@@ -67,6 +68,12 @@ export interface BrandKit {
   artDirection?: ArtDirection;
   /** The brand's OWN layout system — posts + stories, each layout with its matched background. */
   layoutLibrary?: LayoutLibrary;
+  /**
+   * The brand's design system — tokens + an authored stylesheet + composition,
+   * imagery and voice — authored ONCE and applied to every AI-generated slide.
+   * This is what the new HTML-authoring generation path composes against.
+   */
+  recipe?: BrandRecipe;
   createdAt: string;
 }
 
@@ -227,6 +234,12 @@ export interface Slide {
   /** Stock-search phrase chosen by the AI art director (drives the stock picker). */
   imageQuery?: string;
   overrides?: SlideOverrides;
+  /**
+   * AI-authored slide markup (semantic HTML using the brand recipe's classes).
+   * When present, the renderer mounts it instead of the block layout; `blocks`
+   * is retained for free-canvas conversion and back-compat.
+   */
+  authored?: { html: string; bg?: string };
 }
 
 export type ProjectStatus = 'draft' | 'rendered';

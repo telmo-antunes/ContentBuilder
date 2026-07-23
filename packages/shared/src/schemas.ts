@@ -89,6 +89,20 @@ export const slideSchema = z.object({
         .optional(),
     })
     .optional(),
+  /**
+   * AI-authored slide markup — semantic HTML that uses the brand recipe's
+   * component classes. When present, the renderer mounts this (sanitised, with
+   * the recipe stylesheet + brand tokens injected) instead of the block layout.
+   * `blocks` is kept alongside for free-canvas conversion and back-compat.
+   */
+  authored: z
+    .object({
+      html: z.string().max(20000),
+      /** Optional background-variant class applied to the slide root (e.g. 'photo',
+       *  'statement') — the recipe stylesheet defines what each looks like. */
+      bg: z.string().max(40).optional(),
+    })
+    .optional(),
 });
 
 const settingsSchema = z.object({

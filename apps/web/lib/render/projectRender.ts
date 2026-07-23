@@ -22,6 +22,7 @@ export function toRenderKit(kit: BrandKit | null | undefined): RenderBrandKit {
     fonts: { render: kit.fonts.render },
     logo: kit.logo?.url ? { url: kit.logo.url } : undefined,
     logoTreatment: kit.logoTreatment,
+    recipe: kit.recipe,
   };
 }
 

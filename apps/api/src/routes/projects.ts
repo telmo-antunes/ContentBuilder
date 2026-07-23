@@ -7,10 +7,12 @@ import { z } from 'zod';
 import {
   MAX_DRAFT_PARAGRAPH_CHARS,
   defaultThemeForCategory,
+  brandRecipeSchema,
   type BackgroundRole,
   type Format,
   type Slide,
 } from '@contentbuilder/shared';
+import { composeProject } from '../lib/htmlDirector/compose';
 import { ProjectModel, ProjectVersionModel, BusinessModel, BrandKitModel, MediaAssetModel } from '../models';
 import { ApiError, asyncHandler, parseBody, publicErrMessage, requireObjectId } from '../lib/http';
 import { createProjectSchema, slideSchema, updateProjectSchema, type SlideInput } from '../lib/validation';
@@ -27,6 +29,11 @@ import { aiDraftConfigured, aiFreeConfigured, config } from '../config';
 const draftSchema = z.object({
   paragraph: z.string().trim().min(1, 'Paragraph is required').max(MAX_DRAFT_PARAGRAPH_CHARS),
   mode: z.enum(['designer', 'free']).default('designer'),
+});
+
+const composeSchema = z.object({
+  idea: z.string().trim().min(1, 'An idea is required').max(MAX_DRAFT_PARAGRAPH_CHARS),
+  slideCount: z.number().int().min(1).max(12).optional(),
 });
 
 export const projectsRouter = Router();
@@ -277,6 +284,59 @@ projectsRouter.post(
     await project.save(); // persist so the critique's /render pass can see the slides
     // Best-effort: polish the layout, then caption from the polished slides.
     await finalizeDraftedProject(project);
+    res.json(project.toJSON());
+  }),
+);
+
+// AI compose: turn an idea into on-brand AUTHORED slides using the brand's
+// recipe (its design system). Requires the brand to have a recipe. Replaces the
+// project's slides; the previous state is kept recoverable via a version.
+projectsRouter.post(
+  '/:id/compose',
+  asyncHandler(async (req, res) => {
+    const id = requireObjectId(req.params.id, 'Project');
+    const { idea, slideCount } = parseBody(composeSchema, req.body);
+    if (!aiDraftConfigured()) {
+      throw new ApiError(400, 'AI is not configured (set ANTHROPIC_API_KEY + ANTHROPIC_MODEL_SMALL).');
+    }
+    const project = await ProjectModel.findById(id);
+    if (!project) throw new ApiError(404, 'Project not found');
+
+    const kit = await approvedKitFor(String(project.get('businessId')));
+    const parsedRecipe = kit && (kit as { recipe?: unknown }).recipe
+      ? brandRecipeSchema.safeParse((kit as { recipe?: unknown }).recipe)
+      : null;
+    if (!parsedRecipe?.success) {
+      throw new ApiError(400, 'This brand has no design recipe yet — generate the brand recipe first.');
+    }
+
+    let composed;
+    try {
+      composed = await composeProject(parsedRecipe.data, idea, {
+        format: project.get('format'),
+        slideCount,
+      });
+    } catch (err) {
+      throw new ApiError(502, `Compose failed: ${publicErrMessage(err, 'AI error')}. You can build manually instead.`);
+    }
+    if (!composed.length) {
+      throw new ApiError(502, 'The compose came back empty — try rephrasing the idea.');
+    }
+
+    if (project.get('slides')?.length) await saveVersion(project, 'Before AI compose').catch(() => {});
+    project.set(
+      'slides',
+      composed.map((s, i) => ({
+        id: randomUUID(),
+        order: i,
+        layoutType: 'TextOnly',
+        blocks: [],
+        imageNeed: 'none',
+        authored: s.authored,
+      })),
+    );
+    project.set('status', 'draft');
+    await project.save();
     res.json(project.toJSON());
   }),
 );
