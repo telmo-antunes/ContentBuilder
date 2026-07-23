@@ -80,95 +80,123 @@ export default function PreviewPage() {
   const { height, width } = dimensionsFor(project.format);
   const slideH = Math.round((displayWidth * height) / width);
   const label = isStory ? 'Frame' : 'Slide';
+  const pad = (n: number) => String(n).padStart(2, '0');
+
+  // Brand-tint the ambient field from the kit's own palette — the surrounding
+  // chrome stays quiet so the post itself is the only bold thing on screen.
+  const tint = {
+    '--b1': kit.colors.accent ?? kit.colors.primary,
+    '--b2': kit.colors.primary,
+    '--b3': kit.colors.secondary ?? kit.colors.primary,
+  } as React.CSSProperties;
 
   return (
-    <div className="preview-page">
-      <div className="preview-page-head">
-        <h1>{project.title}</h1>
-        <p className="muted">
-          {total} {isStory ? 'frame' : 'slide'}{total === 1 ? '' : 's'} · swipe or use ← →
+    <div className="pv-shell" style={tint}>
+      <div className="pv-atmo" aria-hidden>
+        <span className="pv-aur a" />
+        <span className="pv-aur b" />
+        <span className="pv-grain" />
+        <span className="pv-vignette" />
+      </div>
+
+      <div className="pv-inner">
+        <header className="pv-head">
+          <p className="pv-eyebrow">{isStory ? 'Story' : 'Carousel'}</p>
+          <h1>{project.title}</h1>
+          <p className="pv-sub">
+            {total} {isStory ? 'frame' : 'slide'}{total === 1 ? '' : 's'} ·{' '}
+            <span className="pv-hint">swipe or use ← →</span>
+          </p>
+        </header>
+
+        {/* Swipeable stage: a track of all slides translated by index. */}
+        <div className="pv-stage" style={{ width: displayWidth }}>
+          <div
+            className="preview-stage-wrap"
+            style={{ width: displayWidth, height: slideH }}
+            onTouchStart={(e) => {
+              const t = e.touches[0];
+              touchStart.current = t ? { x: t.clientX, y: t.clientY } : null;
+            }}
+            onTouchEnd={(e) => {
+              const s = touchStart.current;
+              const t = e.changedTouches[0];
+              if (!s || !t) return;
+              const dx = t.clientX - s.x;
+              const dy = t.clientY - s.y;
+              if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) go(dx < 0 ? 1 : -1);
+              touchStart.current = null;
+            }}
+          >
+            <div
+              className="preview-track"
+              style={{ width: displayWidth * total, transform: `translateX(${-idx * displayWidth}px)` }}
+            >
+              {slides.map((s, i) => (
+                <div key={s.id} style={{ width: displayWidth, flex: '0 0 auto' }} aria-hidden={i !== idx}>
+                  <ScaledSlide format={project.format} displayWidth={displayWidth}>
+                    <SlideRenderer
+                      slide={s}
+                      brandKit={kit}
+                      format={project.format}
+                      image={resolveSlideImage(s, project.media)}
+                      imageLayout={resolveImageLayout(s, project.media)}
+                      theme={s.overrides?.theme ?? theme}
+                      slideIndex={i}
+                      slideTotal={total}
+                      showCounter={Boolean(project.settings?.slideCounter)}
+                      forExport
+                    />
+                  </ScaledSlide>
+                </div>
+              ))}
+            </div>
+
+            {/* Tap zones (left / right half) for desktop clicking. */}
+            {idx > 0 && <button className="preview-tap left" onClick={() => go(-1)} aria-label={`Previous ${label.toLowerCase()}`} />}
+            {idx < total - 1 && <button className="preview-tap right" onClick={() => go(1)} aria-label={`Next ${label.toLowerCase()}`} />}
+          </div>
+        </div>
+
+        <div className="pv-nav">
+          <span className="pv-count">
+            <span className="on">{pad(idx + 1)}</span>
+            <span className="sep">/</span>
+            {pad(total)}
+          </span>
+          {total > 1 && (
+            <div className="pv-dots">
+              {slides.map((s, i) => (
+                <button
+                  key={s.id}
+                  className={`pv-dot ${i === idx ? 'active' : ''}`}
+                  onClick={() => setIdx(i)}
+                  aria-label={`Go to ${label.toLowerCase()} ${i + 1}`}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {captionText && (
+          <div className="pv-caption">
+            <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+              <span className="pv-caption-lab">Caption</span>
+              <button
+                className="btn sm ghost"
+                onClick={() => void navigator.clipboard?.writeText(captionText)}
+              >
+                Copy
+              </button>
+            </div>
+            <p>{captionText}</p>
+          </div>
+        )}
+
+        <p className="pv-foot">
+          Made with <span className="wm">ContentBuilder</span>
         </p>
       </div>
-
-      {/* Swipeable stage: a track of all slides translated by index. */}
-      <div
-        className="preview-stage-wrap"
-        style={{ width: displayWidth, height: slideH }}
-        onTouchStart={(e) => {
-          const t = e.touches[0];
-          touchStart.current = t ? { x: t.clientX, y: t.clientY } : null;
-        }}
-        onTouchEnd={(e) => {
-          const s = touchStart.current;
-          const t = e.changedTouches[0];
-          if (!s || !t) return;
-          const dx = t.clientX - s.x;
-          const dy = t.clientY - s.y;
-          if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) go(dx < 0 ? 1 : -1);
-          touchStart.current = null;
-        }}
-      >
-        <div
-          className="preview-track"
-          style={{ width: displayWidth * total, transform: `translateX(${-idx * displayWidth}px)` }}
-        >
-          {slides.map((s, i) => (
-            <div key={s.id} style={{ width: displayWidth, flex: '0 0 auto' }} aria-hidden={i !== idx}>
-              <ScaledSlide format={project.format} displayWidth={displayWidth}>
-                <SlideRenderer
-                  slide={s}
-                  brandKit={kit}
-                  format={project.format}
-                  image={resolveSlideImage(s, project.media)}
-                  imageLayout={resolveImageLayout(s, project.media)}
-                  theme={s.overrides?.theme ?? theme}
-                  slideIndex={i}
-                  slideTotal={total}
-                  showCounter={Boolean(project.settings?.slideCounter)}
-                  forExport
-                />
-              </ScaledSlide>
-            </div>
-          ))}
-        </div>
-
-        {/* Tap zones (left / right half) for desktop clicking. */}
-        {idx > 0 && <button className="preview-tap left" onClick={() => go(-1)} aria-label={`Previous ${label.toLowerCase()}`} />}
-        {idx < total - 1 && <button className="preview-tap right" onClick={() => go(1)} aria-label={`Next ${label.toLowerCase()}`} />}
-      </div>
-
-      {total > 1 && (
-        <div className="preview-dots" style={{ marginTop: 14 }}>
-          {slides.map((s, i) => (
-            <button
-              key={s.id}
-              className={`preview-dot ${i === idx ? 'active' : ''}`}
-              onClick={() => setIdx(i)}
-              aria-label={`Go to ${label.toLowerCase()} ${i + 1}`}
-            />
-          ))}
-        </div>
-      )}
-      <p className="muted" style={{ fontSize: 13, marginTop: 8 }}>
-        {label} {idx + 1} of {total}
-      </p>
-
-      {captionText && (
-        <div className="preview-caption">
-          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-            <strong style={{ fontSize: 14 }}>Caption</strong>
-            <button
-              className="btn sm"
-              onClick={() => void navigator.clipboard?.writeText(captionText)}
-            >
-              Copy
-            </button>
-          </div>
-          <p style={{ whiteSpace: 'pre-wrap', fontSize: 13, marginBottom: 0 }}>{captionText}</p>
-        </div>
-      )}
-
-      <p className="preview-foot muted">Made with ContentBuilder</p>
     </div>
   );
 }
