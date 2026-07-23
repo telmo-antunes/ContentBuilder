@@ -2,7 +2,13 @@
 
 import { useEffect, useId } from 'react';
 import type { CSSProperties } from 'react';
-import { recipeCssVars, recipeFontFamilies, type BrandRecipe } from '@contentbuilder/shared';
+import {
+  recipeCssVars,
+  recipeFontFamilies,
+  recipeStylesheetFor,
+  type BrandRecipe,
+  type Format,
+} from '@contentbuilder/shared';
 import { ensureGoogleFonts } from './fontLoader';
 
 /**
@@ -17,10 +23,13 @@ import { ensureGoogleFonts } from './fontLoader';
 export function AuthoredSlide({
   recipe,
   authored,
+  format,
   logoUrl,
 }: {
   recipe: BrandRecipe;
   authored: { html: string; bg?: string };
+  /** The target canvas — selects the recipe's per-format vertical tuning. */
+  format: Format;
   logoUrl?: string;
 }) {
   const scope = 'cbs' + useId().replace(/[^a-zA-Z0-9]/g, '');
@@ -30,7 +39,9 @@ export function AuthoredSlide({
     ensureGoogleFonts(recipeFontFamilies(recipe.tokens));
   }, [recipe.tokens]);
 
-  const scopedCss = recipe.stylesheet.replace(/\.cb-slide/g, `.${scope} .cb-slide`);
+  // Base stylesheet + the format's vertical override (square/story), then scope
+  // every .cb-slide rule to this instance so multiple slides can share a page.
+  const scopedCss = recipeStylesheetFor(recipe, format).replace(/\.cb-slide/g, `.${scope} .cb-slide`);
   // Set the logo URL in the stylesheet (a data: URL's ";base64," breaks an inline style attr).
   const logoRule = logoUrl ? `.${scope}{--cb-logo:url("${logoUrl.replace(/["\\<>]/g, '')}")}` : '';
   const wrapperStyle = { position: 'absolute', inset: 0, ...recipeCssVars(recipe.tokens) } as CSSProperties;

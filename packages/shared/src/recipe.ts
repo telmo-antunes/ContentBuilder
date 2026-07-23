@@ -47,6 +47,23 @@ export const recipeComponentSchema = z.object({
 });
 export type RecipeComponent = z.infer<typeof recipeComponentSchema>;
 
+/**
+ * Per-format tuning for a recipe. Every Instagram format is 1080px WIDE
+ * (1080×1080 square, 1080×1350 post, 1080×1920 story), so a brand's type scale
+ * and horizontal rhythm carry across all of them — only VERTICAL metrics differ
+ * (padding, safe-areas, how much the content spreads). A variant therefore only
+ * needs to *append* a small override to the base (4:5) stylesheet, plus optional
+ * format-specific composition patterns. Absent formats fall back to the base.
+ */
+export const recipeFormatVariantSchema = z.object({
+  /** CSS appended after the base stylesheet for this format — same `.cb-slide`
+   *  scope, overriding vertical padding / sizes for the canvas's aspect. */
+  stylesheet: z.string().max(8000).default(''),
+  /** Format-specific arrangement patterns; falls back to the base patterns when empty. */
+  patterns: z.array(z.string().max(200)).max(12).default([]),
+});
+export type RecipeFormatVariant = z.infer<typeof recipeFormatVariantSchema>;
+
 export const brandRecipeSchema = z.object({
   /** Bump when the recipe shape changes in a breaking way. */
   version: z.literal(1).default(1),
@@ -79,6 +96,13 @@ export const brandRecipeSchema = z.object({
   /** The class vocabulary the slide composer is allowed to use — its palette of
    *  brand components. Names must correspond to classes in `stylesheet`. */
   components: z.array(recipeComponentSchema).max(40).default([]),
+
+  /** Per-format vertical tuning, keyed by format string ('1080x1920' story,
+   *  '1080x1080' square). The base stylesheet targets 1080×1350; each entry
+   *  appends an override so the OTHER canvases are on-brand too. Optional and
+   *  backwards-compatible — a recipe without it renders every format from the
+   *  base stylesheet (correct width, base vertical metrics). */
+  formats: z.record(z.string(), recipeFormatVariantSchema).optional(),
 
   composition: z
     .object({
@@ -144,4 +168,27 @@ export function recipeFontFamilies(tokens: RecipeTokens): string[] {
   return [tokens.displayFamily, tokens.bodyFamily, tokens.accentFamily].filter(
     (f): f is string => typeof f === 'string' && f.length > 0,
   );
+}
+
+/** The recipe's canvas dimensions per Instagram format (all 1080 wide). */
+export const RECIPE_FORMAT_DIMS: Record<string, { w: number; h: number; label: string }> = {
+  '1080x1080': { w: 1080, h: 1080, label: 'square 1:1' },
+  '1080x1350': { w: 1080, h: 1350, label: 'portrait 4:5' },
+  '1080x1920': { w: 1080, h: 1920, label: 'story 9:16' },
+};
+
+/**
+ * The stylesheet to inject for a given format: the base (4:5) sheet, with the
+ * format's override appended when one exists. Both are `.cb-slide`-scoped, so
+ * the later rules win by cascade order. Unknown/absent formats use the base.
+ */
+export function recipeStylesheetFor(recipe: BrandRecipe, format: string): string {
+  const extra = recipe.formats?.[format]?.stylesheet?.trim();
+  return extra ? `${recipe.stylesheet}\n/* format ${format} */\n${extra}` : recipe.stylesheet;
+}
+
+/** The composition patterns for a format (format-specific if given, else base). */
+export function recipePatternsFor(recipe: BrandRecipe, format: string): string[] {
+  const fmt = recipe.formats?.[format]?.patterns;
+  return fmt && fmt.length ? fmt : recipe.composition.patterns;
 }

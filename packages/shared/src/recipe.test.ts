@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { brandRecipeSchema, recipeCssVars, recipeFontFamilies, RECIPE_VAR_PREFIX } from './recipe';
+import {
+  brandRecipeSchema,
+  recipeCssVars,
+  recipeFontFamilies,
+  recipeStylesheetFor,
+  recipePatternsFor,
+  RECIPE_VAR_PREFIX,
+} from './recipe';
 
 const minimal = {
   tokens: {
@@ -65,5 +72,43 @@ describe('recipeFontFamilies', () => {
       tokens: { ...minimal.tokens, accentFamily: 'Playfair Display' },
     });
     expect(recipeFontFamilies(r2.tokens)).toEqual(['Oswald', 'Inter', 'Playfair Display']);
+  });
+});
+
+describe('per-format tuning', () => {
+  const withFormats = brandRecipeSchema.parse({
+    ...minimal,
+    stylesheet: '.cb-slide{ padding:96px; } .cb-slide .headline{ font-size:112px; }',
+    composition: { patterns: ['cover: logo → headline'] },
+    formats: {
+      '1080x1920': {
+        stylesheet: '.cb-slide{ padding:210px 88px 240px; }',
+        patterns: ['story-cover: logo → fill → headline'],
+      },
+      '1080x1080': { stylesheet: '.cb-slide{ padding:72px; }' },
+    },
+  });
+
+  it('appends the format override after the base stylesheet', () => {
+    const story = recipeStylesheetFor(withFormats, '1080x1920');
+    expect(story).toContain('font-size:112px'); // base preserved
+    expect(story).toContain('padding:210px 88px 240px'); // override appended
+    // the override comes AFTER the base so it wins by cascade order
+    expect(story.indexOf('padding:210px')).toBeGreaterThan(story.indexOf('padding:96px'));
+  });
+
+  it('returns the base stylesheet unchanged for the base format (no override)', () => {
+    expect(recipeStylesheetFor(withFormats, '1080x1350')).toBe(withFormats.stylesheet);
+  });
+
+  it('returns the base stylesheet for a recipe with no formats at all', () => {
+    const plain = brandRecipeSchema.parse({ ...minimal, stylesheet: '.cb-slide{}' });
+    expect(recipeStylesheetFor(plain, '1080x1920')).toBe('.cb-slide{}');
+  });
+
+  it('uses format-specific patterns when present, else the base patterns', () => {
+    expect(recipePatternsFor(withFormats, '1080x1920')).toEqual(['story-cover: logo → fill → headline']);
+    expect(recipePatternsFor(withFormats, '1080x1080')).toEqual(['cover: logo → headline']); // falls back
+    expect(recipePatternsFor(withFormats, '1080x1350')).toEqual(['cover: logo → headline']);
   });
 });

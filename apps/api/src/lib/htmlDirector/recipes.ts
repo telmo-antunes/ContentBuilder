@@ -80,6 +80,36 @@ export const dynatosRecipe: BrandRecipe = brandRecipeSchema.parse({
     { className: 'handle', use: 'The @handle, small muted uppercase, at the very bottom.' },
     { className: 'fill', use: 'An empty spacer div that pushes content down (flex-grow). Use to bottom-anchor.' },
   ],
+  // Same 1080-wide type scale; only the vertical rhythm changes per canvas.
+  formats: {
+    // Story 9:16 — tall. Respect Instagram's top/bottom UI safe zones and let the
+    // extra height breathe (bigger headline, roomier spacing).
+    '1080x1920': {
+      stylesheet: `
+.cb-slide{ padding:210px 88px 240px; }
+.cb-slide .headline{ font-size:124px; margin-top:30px; }
+.cb-slide .headline.sm{ font-size:92px; }
+.cb-slide .tagline{ font-size:48px; margin-top:42px; }
+.cb-slide .body{ font-size:36px; margin-top:32px; }
+.cb-slide .quote{ font-size:82px; }
+`.trim(),
+    },
+    // Square 1:1 — short. Tighten padding and pull type down a notch so a full
+    // composition still fits without overflow.
+    '1080x1080': {
+      stylesheet: `
+.cb-slide{ padding:72px 84px 76px; }
+.cb-slide .eyebrow{ font-size:24px; }
+.cb-slide .headline{ font-size:92px; line-height:.96; margin-top:20px; }
+.cb-slide .headline.sm{ font-size:68px; }
+.cb-slide .tagline{ font-size:38px; margin-top:24px; }
+.cb-slide .rule{ margin:26px 0; }
+.cb-slide .body{ font-size:30px; margin-top:22px; }
+.cb-slide .quote{ font-size:60px; }
+.cb-slide .cta{ padding:22px 40px; font-size:29px; }
+`.trim(),
+    },
+  },
   composition: {
     align: 'flush-left',
     patterns: [
@@ -177,6 +207,37 @@ export const detailMastersRecipe: BrandRecipe = brandRecipeSchema.parse({
     { className: 'handle', use: 'The url / @handle at the bottom, muted.' },
     { className: 'fill', use: 'An empty flex-grow spacer to bottom-anchor content.' },
   ],
+  // Same 1080-wide serif scale; only vertical rhythm changes per canvas.
+  formats: {
+    // Story 9:16 — tall. Safe-area padding, roomier spacing, a bigger stat number.
+    '1080x1920': {
+      stylesheet: `
+.cb-slide{ padding:210px 84px 240px; }
+.cb-slide .headline{ font-size:98px; margin-top:34px; }
+.cb-slide .headline.sm{ font-size:76px; }
+.cb-slide .body{ font-size:35px; margin-top:32px; }
+.cb-slide .stat{ font-size:230px; }
+`.trim(),
+    },
+    // Square 1:1 — short. Tighten everything so a full composition fits.
+    '1080x1080': {
+      stylesheet: `
+.cb-slide{ padding:68px 80px 72px; }
+.cb-slide .eyebrow{ font-size:23px; }
+.cb-slide .monogram{ height:48px; width:48px; }
+.cb-slide .wordmark{ font-size:34px; }
+.cb-slide .headline{ font-size:72px; line-height:1.08; margin-top:22px; }
+.cb-slide .headline.sm{ font-size:58px; }
+.cb-slide .rule{ margin:24px 0; }
+.cb-slide .body{ font-size:29px; margin-top:22px; }
+.cb-slide .stat{ font-size:150px; }
+.cb-slide .panel{ padding:24px 26px; }
+.cb-slide .panel .row{ font-size:26px; padding:12px 0; }
+.cb-slide .cta{ padding:22px 40px; font-size:29px; }
+.cb-slide .handle{ font-size:24px; }
+`.trim(),
+    },
+  },
   composition: {
     align: 'flush-left',
     patterns: [

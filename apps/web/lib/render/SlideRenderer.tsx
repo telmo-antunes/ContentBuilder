@@ -88,7 +88,7 @@ export function SlideRenderer({
     return (
       <RenderProvider value={{ forExport, theme }}>
         <SlideFrame format={format}>
-          <AuthoredSlide recipe={brandKit.recipe} authored={slide.authored} logoUrl={brandKit.logo?.url} />
+          <AuthoredSlide recipe={brandKit.recipe} authored={slide.authored} format={format} logoUrl={brandKit.logo?.url} />
           {counterEl}
         </SlideFrame>
       </RenderProvider>

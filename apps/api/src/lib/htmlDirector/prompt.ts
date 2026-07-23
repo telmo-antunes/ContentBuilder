@@ -13,7 +13,7 @@
  * inside `.cb-slide`; the renderer injects the recipe stylesheet + `--cb-*`
  * tokens around it. The fragment is sanitised (allowlist) before it is stored.
  */
-import type { BrandRecipe } from '@contentbuilder/shared';
+import { RECIPE_FORMAT_DIMS, recipePatternsFor, type BrandRecipe } from '@contentbuilder/shared';
 
 /** A slide's role — selects which composition pattern the composer follows. */
 export type SlideRole = 'cover' | 'statement' | 'quote' | 'feature' | 'stat' | 'list' | 'cta';
@@ -45,9 +45,9 @@ export interface ComposeSlideInput {
 }
 
 /** Render the recipe into the compact spec the composer reasons over. */
-export function recipeSpecBlock(recipe: BrandRecipe): string {
+export function recipeSpecBlock(recipe: BrandRecipe, format: string): string {
   const comps = recipe.components.map((c) => `  .${c.className} — ${c.use}`).join('\n');
-  const patterns = recipe.composition.patterns.map((p) => `  - ${p}`).join('\n');
+  const patterns = recipePatternsFor(recipe, format).map((p) => `  - ${p}`).join('\n');
   return [
     `SIGNATURE MOVE (${recipe.signature.name}): ${recipe.signature.description}`,
     `ALIGNMENT: ${recipe.composition.align}`,
@@ -68,7 +68,7 @@ HARD RULES
 - Copy is VERBATIM. Emit each provided text part exactly as given — no rewording, no added words, no new sentences, no punctuation changes. Do not add copy that wasn't provided.
 - Apply the brand SIGNATURE MOVE exactly as its description says (e.g. wrap the emphasis phrase in the specified span; or place the tagline element).
 - Follow the COMPOSITION PATTERN that matches this slide's ROLE. Use a <div class="fill"></div> spacer where the pattern bottom-anchors content.
-- The canvas is large (1080×1350) and the stylesheet already sets big, legible type — do not fight it. Keep the fragment to the few elements the pattern calls for; embrace negative space.
+- The canvas (dimensions given below) is large and the stylesheet already sets big, legible type for it — do not fight it. Keep the fragment to the few elements the pattern calls for; embrace negative space. On a taller (story) canvas lean on the fill spacer to spread content; on a square canvas keep it to the essentials.
 - If a copy part is absent, omit its element (don't fabricate a placeholder).
 
 Return only the fragment (the inner markup of .cb-slide).`;
@@ -99,13 +99,15 @@ export function buildComposeMessages(
       ? `  rows:\n` + p.rows.map((r) => `    - ${JSON.stringify(r)}`).join('\n')
       : '';
 
+  const dims = RECIPE_FORMAT_DIMS[input.format];
+  const canvas = dims ? `${dims.w}×${dims.h} (${dims.label})` : input.format;
   const user = [
     `BRAND SPEC`,
-    recipeSpecBlock(recipe),
+    recipeSpecBlock(recipe, input.format),
     ``,
     `THIS SLIDE`,
     `  role: ${input.role}`,
-    `  format: ${input.format}`,
+    `  canvas: ${canvas}`,
     input.photo ? `  photo: true (add class "photo" to nothing — the renderer sets it; compose the photo-cover pattern)` : ``,
     `  copy parts (VERBATIM — arrange, do not change):`,
     partLines || '  (none)',
