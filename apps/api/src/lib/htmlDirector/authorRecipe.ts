@@ -8,7 +8,7 @@
  * matches the exact shape + the 1080×1350, cinematic-background quality bar.
  */
 import { brandRecipeSchema, type BrandRecipe } from '@contentbuilder/shared';
-import { aiMessageLarge, textOf, designModel, withOpusReasoning } from '../ai';
+import { aiMessageLarge, textOf, modelFor, withOpusReasoning } from '../ai';
 import { sanitizeRecipeCss } from '../cssSanitize';
 import { dynatosRecipe } from './recipes';
 
@@ -77,7 +77,7 @@ export async function authorRecipe(
   evidence: RecipeEvidence,
   opts?: { model?: string; reasoning?: boolean },
 ): Promise<BrandRecipe> {
-  const model = opts?.model ?? designModel();
+  const model = opts?.model ?? (await modelFor('recipe'));
   const user = [
     `WORKED EXAMPLE (a different brand — match this JSON shape + quality, DO NOT copy its colours/fonts/voice):`,
     exampleBlock(),

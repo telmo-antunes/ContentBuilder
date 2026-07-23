@@ -100,6 +100,8 @@ export interface AiSettings {
   templatesModel: string;
   alternativesModel: string;
   photoFitModel: string;
+  recipeModel: string;
+  composeModel: string;
   designerSystem: string;
   freeSystem: string;
   templatesSystem: string;
@@ -108,7 +110,7 @@ export interface AiSettings {
 export interface SettingsResponse {
   settings: AiSettings;
   defaults: { designerSystem: string; freeSystem: string; templatesSystem: string; freeMaxTokens: number };
-  envModels: { model: string; modelSmall: string; modelLarge: string };
+  envModels: { model: string; modelSmall: string; modelLarge: string; modelDesign: string };
   stock?: { configured: boolean };
 }
 export const getSettings = () => request<SettingsResponse>('/settings');

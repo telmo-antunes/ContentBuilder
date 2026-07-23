@@ -53,7 +53,11 @@ export type AiFeature =
   | 'templates'
   | 'director'
   | 'alternatives'
-  | 'photofit';
+  | 'photofit'
+  // The HTML-authoring generation path: author the brand recipe (design tier,
+  // once per brand) + compose an idea into authored slides (cheap tier).
+  | 'recipe'
+  | 'compose';
 
 const OVERRIDE_FIELD: Record<AiFeature, string> = {
   vision: 'visionModel',
@@ -65,6 +69,8 @@ const OVERRIDE_FIELD: Record<AiFeature, string> = {
   director: 'directorModel',
   alternatives: 'alternativesModel',
   photofit: 'photoFitModel',
+  recipe: 'recipeModel',
+  compose: 'composeModel',
 };
 
 const ENV_DEFAULT: Record<AiFeature, () => string> = {
@@ -79,6 +85,10 @@ const ENV_DEFAULT: Record<AiFeature, () => string> = {
   alternatives: premiumModel,
   // Judging photos against copy is a vision task → vision tier.
   photofit: () => config.ai.modelLarge ?? config.ai.model!,
+  // Authoring the brand recipe is design-critical → design tier; composing an
+  // idea into authored slides is a mechanical parse+arrange → cheap tier.
+  recipe: designModel,
+  compose: () => config.ai.modelSmall ?? config.ai.model!,
 };
 
 /**

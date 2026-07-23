@@ -11,7 +11,7 @@
  */
 import { z } from 'zod';
 import type { BrandRecipe } from '@contentbuilder/shared';
-import { aiMessage, textOf } from '../ai';
+import { aiMessage, modelFor, textOf } from '../ai';
 import { config } from '../../config';
 import { sanitizeAuthoredHtml } from '../htmlSanitize';
 import { buildComposeMessages, type ComposeParts, type ComposeSlideInput, type SlideRole } from './prompt';
@@ -154,10 +154,13 @@ export async function composeProject(
   idea: string,
   opts?: ComposeOptions,
 ): Promise<Array<{ role: SlideRole; authored: { html: string; bg?: string } }>> {
-  const inputs = await parseForCompose(recipe, idea, opts);
+  // Resolve the compose model once (Settings override → cheap tier) and thread
+  // it through the parse + per-slide compose calls, so all share one lookup.
+  const o: ComposeOptions = { ...opts, model: opts?.model ?? (await modelFor('compose')) };
+  const inputs = await parseForCompose(recipe, idea, o);
   const out: Array<{ role: SlideRole; authored: { html: string; bg?: string } }> = [];
   for (const input of inputs) {
-    const authored = await composeSlide(recipe, input, opts);
+    const authored = await composeSlide(recipe, input, o);
     if (authored.html) out.push({ role: input.role, authored });
   }
   return out;
