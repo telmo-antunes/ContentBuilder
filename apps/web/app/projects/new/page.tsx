@@ -154,14 +154,14 @@ function NewProjectForm() {
     return (
       <div style={{ maxWidth: 640 }}>
         <p className="muted">
-          <Link href="/">← Businesses</Link>
+          <Link href="/">← Studio</Link>
         </p>
         <h1>New project</h1>
         <div className="empty">
-          No business has an approved brand kit yet. Add a business and approve its kit first.
+          No brand has an approved kit yet. Add a brand and approve its kit first.
           <div style={{ marginTop: 12 }}>
             <Link className="btn" href="/">
-              Go to Businesses
+              Go to your studio
             </Link>
           </div>
         </div>
@@ -172,7 +172,7 @@ function NewProjectForm() {
   return (
     <div className="create-wrap">
       <p className="muted" style={{ marginBottom: 10 }}>
-        <Link href="/">← Businesses</Link>
+        <Link href="/">← Studio</Link>
       </p>
       <header className="create-hero">
         <p className="eyebrow">New post{selectedBiz ? ` · ${selectedBiz.name}` : ''}</p>
@@ -191,7 +191,7 @@ function NewProjectForm() {
         <div className="card" style={{ marginBottom: 14 }}>
           <div className="grid-2">
             <div className="field" style={{ margin: 0 }}>
-              <label htmlFor="np-biz">Business</label>
+              <label htmlFor="np-biz">Brand</label>
               <select id="np-biz" value={businessId} onChange={(e) => setBusinessId(e.target.value)}>
                 {!businesses && <option>Loading…</option>}
                 {businesses?.map((b) => (

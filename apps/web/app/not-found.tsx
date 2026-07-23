@@ -9,7 +9,7 @@ export default function NotFound() {
       </p>
       <div style={{ marginTop: 16 }}>
         <Link className="btn primary" href="/">
-          ← Back to businesses
+          ← Back to the studio
         </Link>
       </div>
     </div>

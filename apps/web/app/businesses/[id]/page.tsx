@@ -102,7 +102,7 @@ export default function BusinessDetailPage() {
   return (
     <div>
       <p className="muted">
-        <Link href="/">← Businesses</Link>
+        <Link href="/">← Studio</Link>
       </p>
       {error && <div className="error-box">{error}</div>}
       {!biz && !error && <p className="muted">Loading…</p>}

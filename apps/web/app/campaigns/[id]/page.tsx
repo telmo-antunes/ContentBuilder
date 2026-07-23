@@ -97,7 +97,7 @@ export default function CampaignPage() {
     return (
       <div>
         <p className="muted">
-          <Link href="/">← Businesses</Link>
+          <Link href="/">← Studio</Link>
         </p>
         <div className="error-box">{error}</div>
       </div>
@@ -110,7 +110,7 @@ export default function CampaignPage() {
   return (
     <div style={{ maxWidth: 860 }}>
       <p className="muted" style={{ marginBottom: 6 }}>
-        <Link href={`/businesses/${campaign.businessId}`}>← Back to business</Link>
+        <Link href={`/businesses/${campaign.businessId}`}>← Back to brand</Link>
       </p>
       <h1 style={{ marginTop: 0 }}>{campaign.name}</h1>
       <p className="muted" style={{ marginTop: 0 }}>

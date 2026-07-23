@@ -49,7 +49,7 @@ export default function SettingsPage() {
   if (error && !data) {
     return (
       <div>
-        <p className="muted"><Link href="/">← Businesses</Link></p>
+        <p className="muted"><Link href="/">← Studio</Link></p>
         <div className="error-box">{error}</div>
       </div>
     );
@@ -61,7 +61,7 @@ export default function SettingsPage() {
 
   return (
     <div style={{ maxWidth: 860 }}>
-      <p className="muted" style={{ marginBottom: 6 }}><Link href="/">← Businesses</Link></p>
+      <p className="muted" style={{ marginBottom: 6 }}><Link href="/">← Studio</Link></p>
       <h1 style={{ fontFamily: 'var(--display)', marginBottom: 4 }}>AI Settings</h1>
       <p className="muted" style={{ marginTop: 0 }}>
         Every AI touchpoint's model is overridable here, plus the draft system prompts. Leave a

@@ -79,11 +79,11 @@ function NewCampaignForm() {
     return (
       <div>
         <p className="muted">
-          <Link href="/">← Businesses</Link>
+          <Link href="/">← Studio</Link>
         </p>
         <div className="card" style={{ marginTop: 12 }}>
-          <p>No business is ready for a campaign yet.</p>
-          <p className="muted">A campaign needs a business with a completed profile and an approved brand kit.</p>
+          <p>No brand is ready for a campaign yet.</p>
+          <p className="muted">A campaign needs a brand with a completed profile and an approved kit.</p>
         </div>
       </div>
     );
@@ -108,7 +108,7 @@ function NewCampaignForm() {
 
       <form onSubmit={submit} style={{ marginTop: 16, display: 'grid', gap: 14 }}>
         <div>
-          <div className="section-label">Business</div>
+          <div className="section-label">Brand</div>
           <select value={businessId} onChange={(e) => setBusinessId(e.target.value)}>
             {(businesses ?? []).map((b) => (
               <option key={b._id} value={b._id}>

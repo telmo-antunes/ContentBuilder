@@ -19,7 +19,7 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
           Try again
         </button>
         <Link className="btn" href="/">
-          Back to businesses
+          Back to the studio
         </Link>
       </div>
     </div>

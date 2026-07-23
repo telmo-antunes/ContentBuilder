@@ -570,7 +570,7 @@ export default function ProjectEditorPage() {
     return (
       <div>
         <p className="muted">
-          <Link href="/">← Businesses</Link>
+          <Link href="/">← Studio</Link>
         </p>
         <div className="error-box">{error}</div>
       </div>
@@ -580,7 +580,7 @@ export default function ProjectEditorPage() {
     return (
       <div>
         <p className="muted">
-          <Link href="/">← Businesses</Link>
+          <Link href="/">← Studio</Link>
         </p>
         {detail && slides.length === 0 ? (
           <EmptyProject detail={detail} title={title} setTitle={setTitle} onAdd={addSlide} saveState={saveState} />
@@ -594,7 +594,7 @@ export default function ProjectEditorPage() {
   return (
     <div className="editor-shell">
       <p className="muted" style={{ marginBottom: 6, display: 'flex', gap: 16, alignItems: 'center' }}>
-        <Link href={`/businesses/${detail.businessId}`}>← {/* business */}Back to business</Link>
+        <Link href={`/businesses/${detail.businessId}`}>← Back to brand</Link>
         <Link href={`/projects/${detail._id}/review`}>Review ↗</Link>
       </p>
       <div className="editor-head">

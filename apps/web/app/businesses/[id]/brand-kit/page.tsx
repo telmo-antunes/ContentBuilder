@@ -114,7 +114,7 @@ export default function BrandKitPage() {
   return (
     <div>
       <p className="muted" style={{ marginBottom: 6 }}>
-        <Link href={`/businesses/${id}`}>← Back to business</Link>
+        <Link href={`/businesses/${id}`}>← Back to brand</Link>
       </p>
       <h1>Brand kit{business ? ` — ${business.name}` : ''}</h1>
 
@@ -134,7 +134,7 @@ export default function BrandKitPage() {
               disabled={!business?.websiteUrl || !business?.hasProfile || busy !== null}
               title={
                 !business?.hasProfile
-                  ? 'Complete the business profile first'
+                  ? 'Complete the brand profile first'
                   : business?.websiteUrl
                     ? business.websiteUrl
                     : 'No website on file'
@@ -149,13 +149,13 @@ export default function BrandKitPage() {
           {business && !business.hasProfile && (
             <p className="muted" style={{ fontSize: 13, marginBottom: 0 }}>
               AI extraction is locked until you{' '}
-              <Link href={`/businesses/${id}`}>complete this business&apos;s profile</Link>. You can still
+              <Link href={`/businesses/${id}`}>complete this brand&apos;s profile</Link>. You can still
               enter the kit manually now.
             </p>
           )}
           {!business?.websiteUrl && (
             <p className="muted" style={{ fontSize: 13, marginBottom: 0 }}>
-              This business has no website URL — use manual entry, or add a URL on the business page.
+              This brand has no website URL — use manual entry, or add a URL on the brand page.
             </p>
           )}
           {busy === 'analyze' && (
@@ -978,7 +978,7 @@ function BrandBackgrounds({
         Background graphics
       </div>
       <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
-        Subtle backgrounds themed to your business, unique to you, and generated from your palette — drop them behind any
+        Subtle backgrounds themed to your brand, unique to you, and generated from your palette — drop them behind any
         post or story for depth. They appear under &ldquo;Brand backgrounds&rdquo; in the editor&apos;s image picker.
       </p>
       {bgs.length > 0 ? (

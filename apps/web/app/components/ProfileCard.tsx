@@ -89,7 +89,7 @@ export default function ProfileCard({
   return (
     <div className="card" style={{ marginBottom: 16 }}>
       <div className="section-label" style={{ marginTop: 0 }}>
-        {profile ? 'Edit profile' : 'Tell us about this business'}
+        {profile ? 'Edit profile' : 'Tell us about this brand'}
       </div>
       <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
         This tailors your starter templates and unlocks the AI features (brand extraction &amp;
