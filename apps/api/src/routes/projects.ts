@@ -13,6 +13,7 @@ import {
   type Slide,
 } from '@contentbuilder/shared';
 import { composeProject } from '../lib/htmlDirector/compose';
+import { sanitizeAuthoredHtml } from '../lib/htmlSanitize';
 import { ProjectModel, ProjectVersionModel, BusinessModel, BrandKitModel, MediaAssetModel } from '../models';
 import { ApiError, asyncHandler, parseBody, publicErrMessage, requireObjectId } from '../lib/http';
 import { createProjectSchema, slideSchema, updateProjectSchema, type SlideInput } from '../lib/validation';
@@ -50,6 +51,14 @@ export function normalizeSlides(slides: SlideInput[]) {
       s.mediaAssetId && Types.ObjectId.isValid(s.mediaAssetId) ? s.mediaAssetId : undefined,
     imageQuery: s.imageQuery,
     overrides: s.overrides,
+    // Preserve AI-authored markup (recipe-driven slides) through every
+    // slide-persisting path, and re-sanitise it defensively — this is the one
+    // place client-supplied authored HTML can reach storage → render. Dropping
+    // it here previously forced /compose to bypass this normaliser and made a
+    // refine on an authored slide wipe its markup.
+    authored: s.authored
+      ? { html: sanitizeAuthoredHtml(s.authored.html), ...(s.authored.bg ? { bg: s.authored.bg } : {}) }
+      : undefined,
   }));
 }
 

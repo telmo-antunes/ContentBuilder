@@ -1626,6 +1626,38 @@ input[type='color'] {
 .studio-tok .val { color: var(--text); display: flex; align-items: center; gap: 8px; font-variant-numeric: tabular-nums; }
 .studio-divln { height: 1px; background: var(--border); margin: 16px 0; }
 
+/* ── Authored-slide editor (surgical copy/order/accent, recipe kept intact) ── */
+.studio-pcard.editing { outline: 2px dashed var(--accent); outline-offset: 4px; }
+.aed { margin-top: 16px; }
+.aed-head { display: flex; align-items: baseline; justify-content: space-between; }
+.aed-head h5 { font-family: var(--display); font-size: 16px; }
+.aed-list { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.aed-row { border: 1px solid var(--border); border-radius: 10px; padding: 9px 10px; background: var(--panel); }
+.aed-rowtop { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.aed-tag { font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent-2); font-weight: 600; }
+.aed-ctl { display: flex; gap: 2px; }
+.aed-ctl button {
+  width: 22px; height: 22px; padding: 0; border: 1px solid var(--border); background: var(--panel-2);
+  color: var(--muted); border-radius: 6px; cursor: pointer; font-size: 12px; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
+}
+.aed-ctl button:hover:not(:disabled) { color: var(--text); border-color: var(--border-strong); }
+.aed-ctl button.del:hover:not(:disabled) { color: var(--danger); border-color: var(--danger); }
+.aed-ctl button:disabled { opacity: 0.35; cursor: default; }
+.aed-text {
+  width: 100%; resize: vertical; font-family: var(--body); font-size: 13px; line-height: 1.45;
+  padding: 7px 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg);
+  color: var(--text);
+}
+.aed-emph {
+  width: 100%; margin-top: 6px; font-size: 12px; padding: 6px 9px; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--bg); color: var(--accent-2);
+}
+.aed-text:focus, .aed-emph:focus { outline: none; border-color: var(--accent-2); }
+.aed-struct { font-size: 12px; color: var(--faint); font-style: italic; padding: 2px 0; }
+.aed-actions { display: flex; gap: 8px; margin-top: 14px; }
+
 /* ── Dashboard — the studio home (brand cards) ──────────────────────────── */
 .dash-mast .eyebrow { font-size: 11px; letter-spacing: 0.28em; text-transform: uppercase; color: var(--accent-2); font-weight: 600; }
 .dash-mast h1 { font-family: var(--display); font-size: clamp(30px, 4vw, 46px); line-height: 1.02; letter-spacing: -0.015em; margin: 12px 0 0; }

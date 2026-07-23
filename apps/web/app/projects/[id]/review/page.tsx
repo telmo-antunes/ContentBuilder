@@ -9,10 +9,12 @@ import {
   type RefineIntent,
   type BrandRecipe,
   type Format,
+  type Slide,
 } from '@contentbuilder/shared';
 import {
   getProject,
   refineProjectSlide,
+  updateProject,
   getShareInfo,
   listBusinesses,
   type ProjectDetail,
@@ -22,7 +24,13 @@ import { api } from '../../../lib/config';
 import { SlideRenderer } from '../../../../lib/render/SlideRenderer';
 import { ScaledSlide } from '../../../../lib/render/SlideFrame';
 import { toRenderKit, resolveSlideImage, resolveImageLayout } from '../../../../lib/render/projectRender';
+import { parseAuthored, buildAuthored, type AuthoredEl } from '../../../../lib/authoredEdit';
 import { toast } from '../../../components/Toast';
+
+/** Text elements where the brand's signature emphasis (accent phrase) applies. */
+const EMPH_CLASSES = new Set(['headline', 'tagline', 'quote', 'body', 'lead', 'sub']);
+const canEmphasize = (el: AuthoredEl) =>
+  el.emphasis !== undefined || EMPH_CLASSES.has(el.className.split(/\s+/)[0] ?? '');
 
 function timeAgo(iso?: string): string {
   if (!iso) return '—';
@@ -46,6 +54,11 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
   const [exporting, setExporting] = useState(false);
   const [sel, setSel] = useState(0);
   const [brands, setBrands] = useState<BusinessSummary[]>([]);
+  // Surgical editing of the selected AUTHORED slide (copy / order / emphasis),
+  // kept in the recipe's own markup so nothing about the brand design degrades.
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editEls, setEditEls] = useState<AuthoredEl[]>([]);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -79,6 +92,56 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
       }
     },
     [projectId],
+  );
+
+  // ── Authored-slide editing ────────────────────────────────────────────────
+  const startEdit = useCallback((slide: Slide) => {
+    setEditId(slide.id);
+    setEditEls(parseAuthored(slide.authored?.html ?? ''));
+  }, []);
+  const cancelEdit = useCallback(() => {
+    setEditId(null);
+    setEditEls([]);
+  }, []);
+  const patchEl = useCallback((key: string, patch: Partial<AuthoredEl>) => {
+    setEditEls((els) => els.map((e) => (e.key === key ? { ...e, ...patch } : e)));
+  }, []);
+  const moveEl = useCallback((key: string, dir: -1 | 1) => {
+    setEditEls((els) => {
+      const i = els.findIndex((e) => e.key === key);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= els.length) return els;
+      const next = [...els];
+      const a = next[i]!;
+      next[i] = next[j]!;
+      next[j] = a;
+      return next;
+    });
+  }, []);
+  const removeEl = useCallback((key: string) => {
+    setEditEls((els) => els.filter((e) => e.key !== key));
+  }, []);
+
+  const saveEdit = useCallback(
+    async (allSlides: Slide[]) => {
+      if (!editId) return;
+      setSaving(true);
+      try {
+        const nextSlides = allSlides.map((s) =>
+          s.id === editId ? { ...s, authored: { ...s.authored, html: buildAuthored(editEls) } } : s,
+        );
+        const updated = await updateProject(projectId, { slides: nextSlides as Slide[] });
+        setProject((prev) => (prev ? { ...prev, slides: updated.slides } : prev));
+        toast('Slide updated', 'ok');
+        setEditId(null);
+        setEditEls([]);
+      } catch {
+        toast('Could not save the slide', 'error');
+      } finally {
+        setSaving(false);
+      }
+    },
+    [editId, editEls, projectId],
   );
 
   const exportZip = useCallback(async () => {
@@ -135,6 +198,14 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
   const cardW = project.format === '1080x1920' ? 208 : 296;
   const authored = slides.length > 0 && slides.every((s) => s.authored?.html);
   const selected = slides[Math.min(sel, slides.length - 1)];
+  // Live-edited view: while editing, swap the selected slide's authored HTML for
+  // the in-progress rebuild so the deck + preview reflect edits before saving.
+  const editingHtml = editId ? buildAuthored(editEls) : null;
+  const workingSlides =
+    editId && editingHtml !== null
+      ? slides.map((s) => (s.id === editId ? { ...s, authored: { ...s.authored, html: editingHtml } } : s))
+      : slides;
+  const selectedWorking = workingSlides[Math.min(sel, workingSlides.length - 1)];
   const contrast =
     recipe && recipe.tokens.ink && recipe.tokens.ground
       ? contrastRatio(recipe.tokens.ink, recipe.tokens.ground)
@@ -274,11 +345,14 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
             </p>
 
             <div className="studio-deck">
-              {slides.map((slide, i) => (
+              {workingSlides.map((slide, i) => (
                 <div
                   key={slide.id}
-                  className={`studio-pcard${i === sel ? ' sel' : ''}`}
-                  onClick={() => setSel(i)}
+                  className={`studio-pcard${i === sel ? ' sel' : ''}${slide.id === editId ? ' editing' : ''}`}
+                  onClick={() => {
+                    if (editId && slide.id !== editId) cancelEdit(); // discard unsaved edits when switching
+                    setSel(i);
+                  }}
                 >
                   <span className="num">{i + 1}</span>
                   <ScaledSlide format={project.format} displayWidth={cardW}>
@@ -300,76 +374,137 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
           {/* ── inspector ── */}
           <aside className="studio-inspector">
             <p className="studio-eyebrow">Slide {sel + 1} of {slides.length}</p>
-            {selected && (
+            {selectedWorking && (
               <div style={{ marginTop: 12, borderRadius: 12, overflow: 'hidden', border: '1px solid var(--border)' }}>
                 <ScaledSlide format={project.format} displayWidth={288}>
                   <SlideRenderer
-                    slide={selected}
+                    slide={selectedWorking}
                     brandKit={kit}
                     format={project.format}
-                    image={resolveSlideImage(selected, project.media)}
-                    imageLayout={resolveImageLayout(selected, project.media)}
-                    theme={selected.overrides?.theme ?? project.settings?.theme ?? 'editorial'}
+                    image={resolveSlideImage(selectedWorking, project.media)}
+                    imageLayout={resolveImageLayout(selectedWorking, project.media)}
+                    theme={selectedWorking.overrides?.theme ?? project.settings?.theme ?? 'editorial'}
                     forExport
                   />
                 </ScaledSlide>
               </div>
             )}
 
-            <h5>Refine this slide</h5>
-            <p className="muted" style={{ fontSize: 11.5 }}>Bounded to the brand &amp; safe area. Copy is never touched.</p>
-            <div className="intents">
-              {REFINE_INTENTS.map(({ intent, label, hint }) => (
-                <button
-                  key={intent}
-                  className="btn sm"
-                  title={hint}
-                  disabled={busy !== null || !selected}
-                  onClick={() => selected && applyIntent(selected.id, intent)}
-                >
-                  {selected && busy === `${selected.id}:${intent}` ? '…' : label}
-                </button>
-              ))}
-            </div>
-
-            {recipe && (
+            {editId && selectedWorking?.id === editId ? (
+              <div className="aed">
+                <div className="aed-head">
+                  <h5 style={{ margin: 0 }}>Edit slide</h5>
+                  <span className="muted" style={{ fontSize: 11 }}>copy · order · accent</span>
+                </div>
+                <p className="muted" style={{ fontSize: 11.5, marginTop: 2 }}>
+                  Edits stay in the brand&apos;s design — the styling never changes.
+                </p>
+                <div className="aed-list">
+                  {editEls.map((el, i) => (
+                    <div className="aed-row" key={el.key}>
+                      <div className="aed-rowtop">
+                        <span className="aed-tag">{el.label}</span>
+                        <div className="aed-ctl">
+                          <button title="Move up" disabled={i === 0} onClick={() => moveEl(el.key, -1)}>↑</button>
+                          <button title="Move down" disabled={i === editEls.length - 1} onClick={() => moveEl(el.key, 1)}>↓</button>
+                          <button title="Remove" className="del" onClick={() => removeEl(el.key)}>✕</button>
+                        </div>
+                      </div>
+                      {el.kind === 'text' ? (
+                        <>
+                          <textarea
+                            className="aed-text"
+                            rows={Math.min(4, Math.max(1, Math.ceil(el.text.length / 30)))}
+                            value={el.text}
+                            onChange={(e) => patchEl(el.key, { text: e.target.value })}
+                          />
+                          {canEmphasize(el) && (
+                            <input
+                              className="aed-emph"
+                              placeholder="accent phrase (the brand signature) — optional"
+                              value={el.emphasis ?? ''}
+                              onChange={(e) => patchEl(el.key, { emphasis: e.target.value || undefined })}
+                            />
+                          )}
+                        </>
+                      ) : (
+                        <div className="aed-struct">{el.label} — kept exactly as designed</div>
+                      )}
+                    </div>
+                  ))}
+                  {editEls.length === 0 && (
+                    <p className="muted" style={{ fontSize: 12 }}>Nothing left on this slide — cancel to restore it.</p>
+                  )}
+                </div>
+                <div className="aed-actions">
+                  <button className="btn primary sm" disabled={saving} onClick={() => saveEdit(slides)}>
+                    {saving ? 'Saving…' : 'Save slide'}
+                  </button>
+                  <button className="btn ghost sm" disabled={saving} onClick={cancelEdit}>Cancel</button>
+                </div>
+              </div>
+            ) : (
               <>
-                <div className="studio-divln" />
-                <div className="k" style={{ fontSize: 9.5, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 10 }}>
-                  Brand tokens
+                <h5>Refine this slide</h5>
+                <p className="muted" style={{ fontSize: 11.5 }}>Bounded to the brand &amp; safe area. Copy is never touched.</p>
+                <div className="intents">
+                  {REFINE_INTENTS.map(({ intent, label, hint }) => (
+                    <button
+                      key={intent}
+                      className="btn sm"
+                      title={hint}
+                      disabled={busy !== null || !selected}
+                      onClick={() => selected && applyIntent(selected.id, intent)}
+                    >
+                      {selected && busy === `${selected.id}:${intent}` ? '…' : label}
+                    </button>
+                  ))}
                 </div>
-                <div className="studio-tok">
-                  <span className="lab">Ground</span>
-                  <span className="val"><span className="studio-sw" style={{ background: recipe.tokens.ground, margin: 0 }} />{recipe.tokens.ground}</span>
-                </div>
-                <div className="studio-tok">
-                  <span className="lab">Accent</span>
-                  <span className="val"><span className="studio-sw" style={{ background: recipe.tokens.accent, margin: 0 }} />{recipe.tokens.accent}</span>
-                </div>
-                <div className="studio-tok">
-                  <span className="lab">Display</span>
-                  <span className="val">{recipe.tokens.displayFamily}</span>
-                </div>
-                {contrast !== null && (
-                  <div className="studio-tok">
-                    <span className="lab">Contrast</span>
-                    <span className="val" style={{ color: contrast >= 4.5 ? 'var(--accent)' : 'var(--warn)' }}>
-                      {contrast.toFixed(1)} : 1 {contrast >= 4.5 ? '✓' : '⚠'}
-                    </span>
-                  </div>
+
+                {recipe && (
+                  <>
+                    <div className="studio-divln" />
+                    <div className="k" style={{ fontSize: 9.5, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 10 }}>
+                      Brand tokens
+                    </div>
+                    <div className="studio-tok">
+                      <span className="lab">Ground</span>
+                      <span className="val"><span className="studio-sw" style={{ background: recipe.tokens.ground, margin: 0 }} />{recipe.tokens.ground}</span>
+                    </div>
+                    <div className="studio-tok">
+                      <span className="lab">Accent</span>
+                      <span className="val"><span className="studio-sw" style={{ background: recipe.tokens.accent, margin: 0 }} />{recipe.tokens.accent}</span>
+                    </div>
+                    <div className="studio-tok">
+                      <span className="lab">Display</span>
+                      <span className="val">{recipe.tokens.displayFamily}</span>
+                    </div>
+                    {contrast !== null && (
+                      <div className="studio-tok">
+                        <span className="lab">Contrast</span>
+                        <span className="val" style={{ color: contrast >= 4.5 ? 'var(--accent)' : 'var(--warn)' }}>
+                          {contrast.toFixed(1)} : 1 {contrast >= 4.5 ? '✓' : '⚠'}
+                        </span>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {authored ? (
+                  <button
+                    className="btn"
+                    style={{ width: '100%', justifyContent: 'center', marginTop: 18 }}
+                    disabled={!selected?.authored?.html}
+                    onClick={() => selected && startEdit(selected)}
+                  >
+                    ✎ Edit this slide
+                  </button>
+                ) : (
+                  <Link className="btn" href={`/projects/${projectId}`} style={{ width: '100%', justifyContent: 'center', marginTop: 18 }}>
+                    Open in editor
+                  </Link>
                 )}
               </>
-            )}
-
-            {authored ? (
-              <p className="muted" style={{ fontSize: 11.5, marginTop: 18 }}>
-                Fine-grained free-canvas editing for AI-composed slides is coming soon. For now, refine
-                by intent above, or re-compose from a new idea.
-              </p>
-            ) : (
-              <Link className="btn" href={`/projects/${projectId}`} style={{ width: '100%', justifyContent: 'center', marginTop: 18 }}>
-                Open in editor
-              </Link>
             )}
           </aside>
         </div>
