@@ -31,19 +31,10 @@ const NAV: { href: string; label: string; icon: ReactNode; match: (p: string) =>
       </svg>
     ),
   },
-  {
-    href: '/gallery',
-    label: 'Layouts',
-    match: (p) => p.startsWith('/gallery'),
-    icon: (
-      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6">
-        <rect x="3.5" y="3.5" width="7" height="7" rx="1.5" />
-        <rect x="13.5" y="3.5" width="7" height="7" rx="1.5" />
-        <rect x="3.5" y="13.5" width="7" height="7" rx="1.5" />
-        <rect x="13.5" y="13.5" width="7" height="7" rx="1.5" />
-      </svg>
-    ),
-  },
+  // NOTE: /gallery is an internal engine reference (generic archetypes, no AI /
+  // no DB) — deliberately NOT in the product rail, since "layouts" in this
+  // product means a brand's OWN recipe compositions, not generic ones. Still
+  // reachable by URL for engineering.
   {
     href: '/settings',
     label: 'Settings',
