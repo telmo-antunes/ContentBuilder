@@ -9,7 +9,6 @@ import { existsSync, mkdirSync, copyFileSync, writeFileSync } from 'node:fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '..');
-const nodeModules = resolve(root, 'node_modules');
 const webNodeModules = resolve(root, 'apps/web/node_modules');
 const outDir = resolve(root, 'apps/web/public/fonts');
 const cssOut = resolve(root, 'apps/web/app/fonts.generated.css');
@@ -33,10 +32,28 @@ const FONTS = [
   { slug: 'source-serif-4', family: 'Source Serif 4', weights: [400, 600, 700] },
 ];
 
+// node_modules dirs to search, in priority order: the web app's own, then this
+// checkout's and every ANCESTOR's node_modules. Walking up matters for git
+// worktrees, whose deps are hoisted to the primary checkout's node_modules — a
+// worktree's own node_modules is partial and won't contain @fontsource.
+function nodeModulesBases() {
+  const bases = [webNodeModules];
+  let dir = root;
+  for (;;) {
+    bases.push(resolve(dir, 'node_modules'));
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return bases;
+}
+const NM_BASES = nodeModulesBases();
+
 function sourcePath(slug, weight) {
-  // npm workspaces may hoist to root node_modules or keep in the web app's.
+  // npm workspaces may hoist to root node_modules or keep it in the web app's;
+  // git worktrees resolve to an ancestor's node_modules.
   const rel = `@fontsource/${slug}/files/${slug}-latin-${weight}-normal.woff2`;
-  for (const base of [nodeModules, webNodeModules]) {
+  for (const base of NM_BASES) {
     const p = resolve(base, rel);
     if (existsSync(p)) return p;
   }

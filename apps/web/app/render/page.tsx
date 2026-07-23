@@ -40,6 +40,7 @@ export default async function RenderPage({
     <RenderStage
       layoutType={slide.layoutType}
       blocks={slide.blocks}
+      authored={slide.authored}
       format={project.format}
       kit={kit}
       image={image}

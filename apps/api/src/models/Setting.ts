@@ -22,6 +22,9 @@ const settingSchema = new Schema(
     templatesModel: { type: String, default: '' },
     /** Brand Design Director (layouts + authored backgrounds) — the design tier. */
     directorModel: { type: String, default: '' },
+    /** HTML-authoring path: brand recipe author (design tier) + idea→slide compose (cheap tier). */
+    recipeModel: { type: String, default: '' },
+    composeModel: { type: String, default: '' },
     /** Paragraph→content-unit parse for free drafts (mechanical → cheap tier). */
     draftParseModel: { type: String, default: '' },
     alternativesModel: { type: String, default: '' },

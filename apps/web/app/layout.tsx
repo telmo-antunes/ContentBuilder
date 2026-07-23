@@ -19,8 +19,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
       </head>
       <body>
-        <AppChrome />
-        <main className="container">{children}</main>
+        <div className="app-shell">
+          <AppChrome />
+          <main className="container">{children}</main>
+        </div>
         <ConfirmHost />
         <ToastHost />
       </body>

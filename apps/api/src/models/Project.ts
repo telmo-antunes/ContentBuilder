@@ -103,6 +103,15 @@ const slideSchema = new Schema(
       ),
       required: false,
     },
+    /** AI-authored slide markup (semantic HTML using the brand recipe's classes).
+     *  When present, the renderer mounts this instead of the block layout. */
+    authored: {
+      type: new Schema(
+        { html: { type: String, required: true }, bg: { type: String, required: false } },
+        { _id: false },
+      ),
+      required: false,
+    },
   },
   { _id: false },
 );

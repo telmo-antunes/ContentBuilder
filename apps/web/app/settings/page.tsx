@@ -81,9 +81,17 @@ export default function SettingsPage() {
           const visionDefault = env.modelLarge || env.model || 'env default';
           const judgmentDefault = env.modelLarge || env.modelSmall || env.model || 'env default';
           const smallDefault = env.modelSmall || env.model || 'env default';
+          const designDefault = env.modelDesign || env.modelLarge || env.modelSmall || env.model || 'env default';
           const groups: Array<{ name: string; fields: Array<{ key: keyof AiSettings; label: string; hint: string; ph: string }> }> = [
             {
-              name: 'Drafting',
+              name: 'On-brand generation (the recipe path)',
+              fields: [
+                { key: 'recipeModel', label: 'Brand recipe', hint: 'authors the brand’s design system — once per brand (design tier)', ph: designDefault },
+                { key: 'composeModel', label: 'Slide compose', hint: 'writes + arranges an idea into on-brand authored slides', ph: smallDefault },
+              ],
+            },
+            {
+              name: 'Drafting (block layouts)',
               fields: [
                 { key: 'designerModel', label: 'Draft — Designer', hint: 'arranges copy into preset layouts', ph: smallDefault },
                 { key: 'freeModel', label: 'Draft — Free canvas', hint: 'positions blocks freely (hardest task)', ph: judgmentDefault },
@@ -103,7 +111,7 @@ export default function SettingsPage() {
               fields: [
                 { key: 'captionModel', label: 'Captions', hint: 'writes the post caption in the brand voice', ph: judgmentDefault },
                 { key: 'campaignModel', label: 'Campaign planning', hint: 'turns a brief into a post series', ph: judgmentDefault },
-                { key: 'templatesModel', label: 'Brand compositions', hint: 'designs the brand package (layouts + backgrounds)', ph: judgmentDefault },
+                { key: 'templatesModel', label: 'Brand package (legacy)', hint: 'older director path — block layouts + SVG backgrounds', ph: judgmentDefault },
                 { key: 'alternativesModel', label: 'Slide alternatives', hint: 'proposes 3 layout variants of a slide', ph: judgmentDefault },
               ],
             },

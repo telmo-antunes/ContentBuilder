@@ -17,7 +17,9 @@ out/
 
 # local storage (disk StorageProvider) data dir — media is regenerated/seeded.
 # Anchored to repo root so it does NOT match the source dir apps/api/src/storage.
-/storage/
+# No trailing slash: in a git worktree this path is a symlink, which a
+# directory-only pattern ("/storage/") would not match.
+/storage
 
 # bundled dev MongoDB data dir
 .mongo-data/

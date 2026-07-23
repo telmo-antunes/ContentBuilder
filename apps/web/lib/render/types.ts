@@ -1,5 +1,6 @@
 import type {
   BrandColors,
+  BrandRecipe,
   Block,
   BlockFrame,
   Format,
@@ -18,6 +19,8 @@ export interface RenderBrandKit {
   fonts: { render: { heading: string; body: string } };
   logo?: { url?: string };
   logoTreatment?: LogoTreatment;
+  /** The brand's design system — present when the kit has an authored recipe. */
+  recipe?: BrandRecipe;
 }
 
 export interface LayoutImage {

@@ -100,6 +100,8 @@ export interface AiSettings {
   templatesModel: string;
   alternativesModel: string;
   photoFitModel: string;
+  recipeModel: string;
+  composeModel: string;
   designerSystem: string;
   freeSystem: string;
   templatesSystem: string;
@@ -108,7 +110,7 @@ export interface AiSettings {
 export interface SettingsResponse {
   settings: AiSettings;
   defaults: { designerSystem: string; freeSystem: string; templatesSystem: string; freeMaxTokens: number };
-  envModels: { model: string; modelSmall: string; modelLarge: string };
+  envModels: { model: string; modelSmall: string; modelLarge: string; modelDesign: string };
   stock?: { configured: boolean };
 }
 export const getSettings = () => request<SettingsResponse>('/settings');
@@ -184,6 +186,18 @@ export const refineProjectSlide = (projectId: string, slideId: string, intent: R
     `/projects/${projectId}/slides/${slideId}/refine`,
     { method: 'POST', body: JSON.stringify({ intent }) },
   );
+
+/** AI-compose: turn an idea into on-brand AUTHORED slides using the brand recipe. */
+export const composeProjectAI = (id: string, idea: string, slideCount?: number) =>
+  request<Project>(
+    `/projects/${id}/compose`,
+    { method: 'POST', body: JSON.stringify({ idea, ...(slideCount ? { slideCount } : {}) }) },
+    180_000,
+  );
+
+/** Author (or re-author) the brand's design recipe from its kit evidence (design tier). */
+export const authorBrandRecipe = (kitId: string) =>
+  request<{ _id: string; recipe?: unknown }>(`/brandkits/${kitId}/recipe`, { method: 'POST' }, 180_000);
 
 export interface CritiqueReportItem {
   slideId: string;

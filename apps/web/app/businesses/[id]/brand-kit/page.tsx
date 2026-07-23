@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import type { BrandKit, BrandLayout, LayoutLibrary, MediaAsset } from '@contentbuilder/shared';
-import { BUNDLED_FONT_FAMILIES } from '@contentbuilder/shared';
+import type { BrandKit, BrandLayout, BrandRecipe, LayoutLibrary, MediaAsset } from '@contentbuilder/shared';
+import { BUNDLED_FONT_FAMILIES, contrastRatio } from '@contentbuilder/shared';
 import {
   getBrandKit,
   getBusiness,
@@ -17,6 +17,7 @@ import {
   generateAiBackground,
   deleteMedia,
   regenerateBrandPackage,
+  authorBrandRecipe,
   type BusinessDetail,
 } from '../../../lib/api';
 import { SlideRenderer } from '../../../../lib/render/SlideRenderer';
@@ -296,7 +297,24 @@ function KitEditor({
     kit.logo?.url ? { key: kit.logo.key ?? '', url: kit.logo.url, sourceUrl: kit.logo.sourceUrl } : undefined,
   );
   const [logoTreatment, setLogoTreatment] = useState<'original' | 'mono'>(kit.logoTreatment ?? 'original');
+  const [recipe, setRecipe] = useState<BrandRecipe | undefined>((kit as { recipe?: BrandRecipe }).recipe);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Reveal sections as they scroll into view (motion the eye follows down the page).
+  useEffect(() => {
+    const io = new IntersectionObserver(
+      (entries) =>
+        entries.forEach((en) => {
+          if (en.isIntersecting) {
+            en.target.classList.add('in');
+            io.unobserve(en.target);
+          }
+        }),
+      { threshold: 0.12, rootMargin: '0px 0px -8% 0px' },
+    );
+    document.querySelectorAll('.bk-reveal').forEach((el) => io.observe(el));
+    return () => io.disconnect();
+  }, []);
 
   const setColor = (role: keyof BrandKit['colors'], value: string) =>
     setColors((c) => ({ ...c, [role]: value }));
@@ -363,207 +381,353 @@ function KitEditor({
   };
 
   const isDraft = kit.status === 'draft';
-  const [tab, setTab] = useState<'identity' | 'backgrounds' | 'compositions'>('identity');
+
+  const readable = (hex: string): string => {
+    if (!HEX.test(hex)) return '#ffffff';
+    try {
+      return contrastRatio(hex, '#111111') >= contrastRatio(hex, '#ffffff') ? '#111111' : '#ffffff';
+    } catch {
+      return '#ffffff';
+    }
+  };
+  const onHeroMove = (e: React.MouseEvent<HTMLElement>) => {
+    const el = e.currentTarget;
+    const r = el.getBoundingClientRect();
+    el.style.setProperty('--mx', String((e.clientX - r.left) / r.width - 0.5));
+    el.style.setProperty('--my', String((e.clientY - r.top) / r.height - 0.5));
+  };
+  const onHeroLeave = (e: React.MouseEvent<HTMLElement>) => {
+    e.currentTarget.style.setProperty('--mx', '0');
+    e.currentTarget.style.setProperty('--my', '0');
+  };
+  const authorRec = async () => {
+    setBusy('recipe');
+    setError(null);
+    try {
+      const res = await authorBrandRecipe(kit._id);
+      setRecipe((res as { recipe?: BrandRecipe }).recipe);
+      toast('Brand recipe designed — new posts compose against it');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const previewSlide = {
+    layoutType: 'Cover' as const,
+    blocks: [
+      { type: 'eyebrow' as const, text: 'BRAND PREVIEW' },
+      { type: 'title' as const, text: businessName },
+      { type: 'subtitle' as const, text: 'On-brand in seconds' },
+    ],
+  };
+  const textOnBrand = readable(colors.background);
+  const tint = (a: string) => (HEX.test(colors.text) ? colors.text + a : `rgba(20,18,14,${parseInt(a, 16) / 255})`);
 
   return (
     <>
-      <div className="row" style={{ marginBottom: 14 }}>
-        <span className={`badge ${isDraft ? 'warn' : 'ok'}`}>
-          <span className="dot" /> {isDraft ? 'Draft — review & approve' : 'Approved'}
+      {/* ── The brand, alive: a hero rendered in the brand's OWN colors ── */}
+      <section
+        className="bk-hero bk-rise"
+        style={{ background: colors.background, color: textOnBrand }}
+        onMouseMove={onHeroMove}
+        onMouseLeave={onHeroLeave}
+      >
+        <span className="bk-blob a" style={{ background: colors.primary }} />
+        <span className="bk-blob b" style={{ background: colors.accent }} />
+        <span className="bk-blob c" style={{ background: colors.secondary }} />
+        <span className="bk-sheen" />
+        <span className="bk-hero-grain" />
+        <span className="bk-hero-wm" style={{ color: textOnBrand }} aria-hidden>
+          {businessName.trim().charAt(0).toUpperCase()}
         </span>
-        <span className="prov">
-          {provenanceChips(kit.provenance).map((chip) => (
-            <span key={chip} className="badge">
-              {chip}
-            </span>
-          ))}
-        </span>
-      </div>
-
-      <div className="row" style={{ gap: 6, marginBottom: 14 }}>
-        {(
-          [
-            ['identity', 'Identity'],
-            ['backgrounds', 'Backgrounds'],
-            ['compositions', 'Layouts'],
-          ] as const
-        ).map(([v, label]) => (
-          <button key={v} className={`btn sm ${tab === v ? 'primary' : 'ghost'}`} onClick={() => setTab(v)}>
-            {label}
-          </button>
-        ))}
-      </div>
-
-      <div className="kit-cols" style={tab === 'identity' ? undefined : { display: 'none' }}>
-        {/* Left: screenshot + live preview */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {kit.homepageScreenshot?.url && (
-            <div>
-              <div className="section-label" style={{ marginTop: 0 }}>
-                Homepage
-              </div>
-              <img className="shot" src={kit.homepageScreenshot.url} alt="homepage screenshot" />
+        <span className="bk-accent-line" style={{ color: colors.accent }} />
+        <span className="bk-vignette" />
+        <div className="bk-hero-inner">
+          <div className="bk-hero-id">
+            {logo?.url && <img className="bk-hero-logo" src={logo.url} alt="" />}
+            <div className="bk-hero-eyebrow" style={{ color: colors.accent }}>
+              Brand kit · the design system
             </div>
-          )}
-          <div>
-            <div className="section-label">Live preview</div>
-            <ScaledSlide format="1080x1080" displayWidth={288}>
-              <SlideRenderer
-                slide={{
-                  layoutType: 'Cover',
-                  blocks: [
-                    { type: 'eyebrow', text: 'BRAND PREVIEW' },
-                    { type: 'title', text: businessName },
-                    { type: 'subtitle', text: 'On-brand in seconds' },
-                  ],
-                }}
-                brandKit={renderKit}
-                format="1080x1080"
-                image={null}
-              />
-            </ScaledSlide>
+            <h1 className="bk-hero-name2">
+              {businessName.split(' ').map((word, i) => (
+                <span key={`${word}-${i}`} className="bk-word" style={{ animationDelay: `${0.18 + i * 0.1}s` }}>
+                  {word}
+                  {i < businessName.split(' ').length - 1 ? ' ' : ''}
+                </span>
+              ))}
+            </h1>
+            <div className="bk-hero-meta">
+              <span
+                className="bk-hero-pill"
+                style={{ background: tint('22'), color: textOnBrand, border: `1px solid ${tint('33')}` }}
+              >
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: isDraft ? '#e0a23a' : colors.accent }} />
+                {isDraft ? 'Draft — review & approve' : 'Approved'}
+              </span>
+              {provenanceChips(kit.provenance)
+                .slice(0, 2)
+                .map((chip) => (
+                  <span
+                    key={chip}
+                    className="bk-hero-pill"
+                    style={{ background: tint('14'), color: textOnBrand, border: `1px solid ${tint('22')}`, opacity: 0.9 }}
+                  >
+                    {chip}
+                  </span>
+                ))}
+            </div>
+          </div>
+          <div className="bk-hero-sample">
+            <div className="tilt">
+              <ScaledSlide format="1080x1350" displayWidth={210}>
+                <SlideRenderer slide={previewSlide} brandKit={renderKit} format="1080x1350" image={null} forExport />
+              </ScaledSlide>
+            </div>
           </div>
         </div>
+      </section>
 
-        {/* Right: editable fields */}
-        <div className="panel">
-          <div className="section-label" style={{ marginTop: 0 }}>
-            Colors &amp; roles
+      {/* ── The recipe — the centrepiece ── */}
+      <section className="bk-sec bk-reveal" style={{ animationDelay: '0.05s' }}>
+        <div className={`bk-recipe${busy === 'recipe' ? ' bk-shimmer' : ''}`}>
+          <div className="bk-recipe-top">
+            <span className="lbl">The recipe</span>
+            {recipe ? (
+              <span className="badge ok"><span className="dot" /> live</span>
+            ) : (
+              <span className="badge">not designed yet</span>
+            )}
+            <button className="btn sm primary" style={{ marginLeft: 'auto' }} onClick={authorRec} disabled={busy !== null}>
+              {busy === 'recipe' ? 'Designing…' : recipe ? 'Re-design ✦' : 'Design the recipe ✦'}
+            </button>
           </div>
-          {ROLES.map(([role, label]) => (
-            <div className="swatch-row" key={role}>
-              <span className="role">{label}</span>
-              <input
-                type="color"
-                value={colors[role]}
-                onChange={(e) => setColor(role, e.target.value.toUpperCase())}
-              />
-              <input
-                type="text"
-                value={colors[role]}
-                aria-invalid={!HEX.test(colors[role])}
-                aria-label={`${label} hex color`}
-                onChange={(e) => setColor(role, e.target.value.toUpperCase())}
-                style={HEX.test(colors[role]) ? undefined : { borderColor: 'var(--danger)' }}
-              />
-            </div>
-          ))}
-          {!colorsValid && (
-            <p className="muted" style={{ fontSize: 12, color: 'var(--danger)', marginTop: 4 }}>
-              Enter valid hex colors (e.g. #0B1F3A) to save.
-            </p>
-          )}
-          {kit.colors.palette?.length > 0 && (
+          {recipe ? (
             <>
-              <p className="muted" style={{ fontSize: 12, margin: '6px 0' }}>
-                Sampled palette (click to copy a hex into focus, or use the pickers above):
+              <p className="bk-recipe-quote">
+                &ldquo;{recipe.signature.description || recipe.signature.name}&rdquo;
               </p>
-              <div className="row" style={{ gap: 6 }}>
-                {kit.colors.palette.map((hex) => (
-                  <span
-                    key={hex}
-                    className="chip"
-                    style={{ background: hex }}
-                    title={hex}
-                    onClick={() => navigator.clipboard?.writeText(hex)}
-                  />
-                ))}
+              <div className="bk-recipe-grid">
+                <div>
+                  <div className="k">Palette</div>
+                  <div className="v">
+                    <span className="bk-bigsw" style={{ background: recipe.tokens.ground }} />
+                    <span className="bk-bigsw" style={{ background: recipe.tokens.accent }} />
+                    {recipe.tokens.ink && <span className="bk-bigsw" style={{ background: recipe.tokens.ink }} />}
+                    {recipe.tokens.accentAlt && <span className="bk-bigsw" style={{ background: recipe.tokens.accentAlt }} />}
+                  </div>
+                </div>
+                <div>
+                  <div className="k">Type</div>
+                  <div className="v">
+                    {recipe.tokens.displayFamily}
+                    {recipe.tokens.accentFamily ? ` · ${recipe.tokens.accentFamily}` : ''}
+                  </div>
+                </div>
+                <div>
+                  <div className="k">Signature</div>
+                  <div className="v">{recipe.signature.name}</div>
+                </div>
+                <div>
+                  <div className="k">Imagery</div>
+                  <div className="v">{recipe.imagery.treatment || '—'}</div>
+                </div>
+                <div>
+                  <div className="k">Voice</div>
+                  <div className="v">{recipe.voice.description || '—'}</div>
+                </div>
               </div>
             </>
+          ) : (
+            <p className="v" style={{ marginTop: 14, maxWidth: '62ch', color: 'var(--muted)', lineHeight: 1.6 }}>
+              The brand&rsquo;s design system. The AI reads this kit and authors a full recipe — palette rationing, a
+              type system, a signature move, imagery treatment, and voice — that <em>every</em> future post composes
+              against. This is where &ldquo;on-brand&rdquo; stops being a hope and becomes automatic.
+            </p>
           )}
+        </div>
+      </section>
 
-          <div className="section-label">Fonts</div>
-          <div className="grid-2">
-            <FontSelect
-              label="Heading"
-              value={heading}
-              detected={kit.fonts.detected?.heading}
-              onChange={setHeading}
-            />
-            <FontSelect
-              label="Body"
-              value={body}
-              detected={kit.fonts.detected?.body}
-              onChange={setBody}
-            />
-          </div>
-
-          <div className="section-label">Logo</div>
-          <div className="row">
-            {logo?.url ? (
-              <img
-                src={logo.url}
-                alt="logo"
-                style={{ height: 44, maxWidth: 160, objectFit: 'contain', background: '#222', borderRadius: 8, padding: 4 }}
-              />
-            ) : (
-              <span className="muted" style={{ fontSize: 13 }}>
-                No logo
-              </span>
-            )}
-            <button className="btn sm" onClick={() => fileRef.current?.click()} disabled={busy !== null}>
-              {busy === 'logo' ? 'Uploading…' : logo ? 'Replace' : 'Upload logo'}
-            </button>
-            {logo && (
-              <button className="btn ghost sm" onClick={() => setLogo(undefined)}>
-                Remove
-              </button>
-            )}
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp,image/svg+xml"
-              style={{ display: 'none' }}
-              onChange={(e) => onUploadLogo(e.target.files?.[0])}
-            />
-          </div>
-          {logo?.url && (
-            <div className="row" style={{ gap: 4, marginTop: 8 }}>
-              {(['original', 'mono'] as const).map((t) => (
-                <button
-                  key={t}
-                  className={`btn sm ${logoTreatment === t ? 'primary' : 'ghost'}`}
-                  onClick={() => setLogoTreatment(t)}
-                  title={t === 'mono' ? 'Knock the logo out to a single color that contrasts each slide' : 'Use the logo as-is'}
-                >
-                  {t === 'original' ? 'Original' : 'Monochrome'}
-                </button>
+      {/* ── The atelier: living controls ── */}
+      <div className="bk-cols">
+        <div>
+          <section className="bk-sec bk-reveal" style={{ animationDelay: '0.1s' }}>
+            <div className="bk-sec-h">
+              <span className="n">01</span>
+              <h2>Palette &amp; roles</h2>
+              <span className="aside">click a chip to recolor</span>
+            </div>
+            <div className="bk-swatches">
+              {ROLES.map(([role, label]) => {
+                const hex = colors[role];
+                const fg = readable(hex);
+                return (
+                  <label key={role} className="bk-swatch" style={{ background: HEX.test(hex) ? hex : '#333', color: fg }}>
+                    <input
+                      type="color"
+                      className="native"
+                      value={HEX.test(hex) ? hex : '#000000'}
+                      aria-label={`${label} color`}
+                      onChange={(e) => setColor(role, e.target.value.toUpperCase())}
+                    />
+                    <span className="edit-dot" style={{ border: `1px solid ${fg}`, color: fg }}>✎</span>
+                    <span className="role">{label}</span>
+                    <span className="hex">{hex}</span>
+                  </label>
+                );
+              })}
+            </div>
+            <div className="bk-hexrow" style={{ flexWrap: 'wrap', gap: 14, marginTop: 16 }}>
+              {ROLES.map(([role, label]) => (
+                <div key={role} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <span className="muted" style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em' }}>{label}</span>
+                  <input
+                    value={colors[role]}
+                    aria-invalid={!HEX.test(colors[role])}
+                    aria-label={`${label} hex`}
+                    onChange={(e) => setColor(role, e.target.value.toUpperCase())}
+                    style={{ width: 108, fontFamily: 'ui-monospace, monospace', fontSize: 13, ...(HEX.test(colors[role]) ? {} : { borderColor: 'var(--danger)' }) }}
+                  />
+                </div>
               ))}
             </div>
+            {!colorsValid && (
+              <p className="muted" style={{ fontSize: 12, color: 'var(--danger)', marginTop: 6 }}>
+                Enter valid hex colors (e.g. #0B1F3A) to save.
+              </p>
+            )}
+            {kit.colors.palette?.length > 0 && (
+              <div style={{ marginTop: 16 }}>
+                <span className="muted" style={{ fontSize: 12 }}>Sampled from the site — click to copy:</span>
+                <div className="row" style={{ gap: 6, marginTop: 6 }}>
+                  {kit.colors.palette.map((hex) => (
+                    <span key={hex} className="chip" style={{ background: hex }} title={hex} onClick={() => navigator.clipboard?.writeText(hex)} />
+                  ))}
+                </div>
+              </div>
+            )}
+          </section>
+
+          <section className="bk-sec bk-reveal" style={{ animationDelay: '0.14s' }}>
+            <div className="bk-sec-h">
+              <span className="n">02</span>
+              <h2>Typography</h2>
+              <span className="aside">specimens in the brand fonts</span>
+            </div>
+            <div className="bk-type">
+              <div className="bk-spec">
+                <div className="role">Heading{kit.fonts.detected?.heading ? ` · site: ${cleanFontName(kit.fonts.detected.heading)}` : ''}</div>
+                <div className="aa" style={{ fontFamily: `'${heading}', var(--display)` }}>Aa</div>
+                <div className="pan" style={{ fontFamily: `'${heading}', var(--display)` }}>The quick brown fox.</div>
+                <FontSelect label="Heading font" value={heading} detected={kit.fonts.detected?.heading} onChange={setHeading} />
+              </div>
+              <div className="bk-spec">
+                <div className="role">Body{kit.fonts.detected?.body ? ` · site: ${cleanFontName(kit.fonts.detected.body)}` : ''}</div>
+                <div className="aa" style={{ fontFamily: `'${body}', var(--body)`, fontSize: 46 }}>Aa</div>
+                <div className="pan" style={{ fontFamily: `'${body}', var(--body)` }}>Body copy flows here, calm and legible.</div>
+                <FontSelect label="Body font" value={body} detected={kit.fonts.detected?.body} onChange={setBody} />
+              </div>
+            </div>
+          </section>
+
+          {kit.homepageScreenshot?.url && (
+            <section className="bk-sec bk-reveal" style={{ animationDelay: '0.18s' }}>
+              <div className="bk-sec-h">
+                <span className="n">03</span>
+                <h2>Source evidence</h2>
+                <span className="aside">the site the kit was read from</span>
+              </div>
+              <img className="shot" src={kit.homepageScreenshot.url} alt="homepage" style={{ borderRadius: 14, width: '100%' }} />
+            </section>
           )}
+        </div>
 
-          <div className="section-label">Style descriptor</div>
-          <input
-            value={styleDescriptor}
-            placeholder="e.g. minimal, high-contrast, generous whitespace"
-            onChange={(e) => setStyleDescriptor(e.target.value)}
-          />
+        {/* right rail: sticky preview + logo + voice */}
+        <div className="bk-sticky">
+          <section className="bk-reveal" style={{ animationDelay: '0.12s' }}>
+            <div className="section-label" style={{ marginTop: 0 }}>Live preview</div>
+            <ScaledSlide format="1080x1350" displayWidth={288}>
+              <SlideRenderer slide={previewSlide} brandKit={renderKit} format="1080x1350" image={null} forExport />
+            </ScaledSlide>
+          </section>
 
-          <div className="section-label">Brand voice</div>
-          <textarea
-            value={voice}
-            rows={2}
-            placeholder="How the brand talks — e.g. confident, plain-spoken; addresses operators directly; avoids hype"
-            onChange={(e) => setVoice(e.target.value)}
-          />
-          <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-            Used to write captions in the brand&rsquo;s own register.
-          </p>
+          <section className="bk-reveal" style={{ animationDelay: '0.16s', marginTop: 20 }}>
+            <div className="section-label">Logo</div>
+            <div className="bk-logo-stage" style={{ background: colors.background }}>
+              {logo?.url ? <img src={logo.url} alt="" /> : <span style={{ color: textOnBrand, opacity: 0.6, fontSize: 13 }}>No logo yet</span>}
+            </div>
+            <div className="row" style={{ marginTop: 10 }}>
+              <button className="btn sm" onClick={() => fileRef.current?.click()} disabled={busy !== null}>
+                {busy === 'logo' ? 'Uploading…' : logo ? 'Replace' : 'Upload'}
+              </button>
+              {logo && (
+                <button className="btn ghost sm" onClick={() => setLogo(undefined)}>Remove</button>
+              )}
+              {logo?.url && (
+                <div className="row" style={{ gap: 4, marginLeft: 'auto' }}>
+                  {(['original', 'mono'] as const).map((t) => (
+                    <button
+                      key={t}
+                      className={`btn sm ${logoTreatment === t ? 'primary' : 'ghost'}`}
+                      onClick={() => setLogoTreatment(t)}
+                      title={t === 'mono' ? 'Knock the logo out to a single contrasting color' : 'Use the logo as-is'}
+                    >
+                      {t === 'original' ? 'Original' : 'Mono'}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                style={{ display: 'none' }}
+                onChange={(e) => onUploadLogo(e.target.files?.[0])}
+              />
+            </div>
+          </section>
+
+          <section className="bk-reveal" style={{ animationDelay: '0.2s', marginTop: 20 }}>
+            <div className="section-label">Style descriptor</div>
+            <input
+              value={styleDescriptor}
+              placeholder="e.g. minimal, high-contrast, generous whitespace"
+              onChange={(e) => setStyleDescriptor(e.target.value)}
+            />
+            <div className="section-label">Brand voice</div>
+            <textarea
+              value={voice}
+              rows={3}
+              placeholder="How the brand talks — confident, plain-spoken; addresses operators directly; avoids hype"
+              onChange={(e) => setVoice(e.target.value)}
+            />
+            <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+              Grounds the recipe&rsquo;s voice and the captions in the brand&rsquo;s own register.
+            </p>
+          </section>
         </div>
       </div>
 
-      {/* Keep the hidden tabs MOUNTED (display:none) so per-tab state and
-          in-flight generations survive switching. */}
-      <div style={tab === 'backgrounds' ? undefined : { display: 'none' }}>
+      {/* generated system */}
+      <section className="bk-sec bk-reveal" style={{ animationDelay: '0.06s' }}>
+        <div className="bk-sec-h">
+          <span className="n">04</span>
+          <h2>Backgrounds</h2>
+        </div>
         <BrandBackgrounds businessId={businessId} colors={colors} colorsValid={colorsValid} setError={setError} styleDescriptor={styleDescriptor} businessName={businessName} />
-      </div>
+      </section>
 
-      <div style={tab === 'compositions' ? undefined : { display: 'none' }}>
+      <section className="bk-sec bk-reveal" style={{ animationDelay: '0.06s' }}>
+        <div className="bk-sec-h">
+          <span className="n">05</span>
+          <h2>Layouts</h2>
+        </div>
         <BrandLayoutLibrary kit={kit} renderKit={renderKit} setError={setError} />
-      </div>
+      </section>
 
-      {/* Actions — sticky so Approve/Save never scrolls out of reach. */}
-      <div className="row kit-actions" style={{ marginTop: 18, justifyContent: 'space-between' }}>
+      {/* actions — sticky at the foot */}
+      <div className="bk-actions">
         <div className="row">
           <button className="btn primary" onClick={() => save(true)} disabled={busy !== null || !colorsValid}>
             {busy === 'save' ? 'Saving…' : isDraft ? 'Approve brand kit' : 'Save changes'}
@@ -573,6 +737,9 @@ function KitEditor({
               Save draft
             </button>
           )}
+          {hasApproved && isDraft && (
+            <span className="muted" style={{ fontSize: 12 }}>Approving replaces the current kit.</span>
+          )}
         </div>
         <div className="row">
           {onReanalyze && (
@@ -581,15 +748,10 @@ function KitEditor({
             </button>
           )}
           <button className="btn ghost sm" onClick={onManual} disabled={busy !== null}>
-            Start fresh (manual)
+            Start fresh
           </button>
         </div>
       </div>
-      {hasApproved && isDraft && (
-        <p className="muted" style={{ fontSize: 13 }}>
-          This business already has an approved kit; approving this draft replaces it as the current kit.
-        </p>
-      )}
     </>
   );
 }

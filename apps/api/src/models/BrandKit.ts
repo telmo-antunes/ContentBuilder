@@ -67,6 +67,12 @@ const brandKitSchema = new Schema(
      * same reason as templatePack: zod validates at generation time.
      */
     layoutLibrary: { type: Schema.Types.Mixed, default: undefined },
+    /**
+     * The brand's design system (tokens + authored stylesheet + composition +
+     * imagery + voice) for the HTML-authoring generation path. Mixed — zod
+     * (brandRecipeSchema) validates at author time.
+     */
+    recipe: { type: Schema.Types.Mixed, default: undefined },
     createdAt: { type: Date, default: () => new Date() },
   },
   baseSchemaOptions,
