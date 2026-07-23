@@ -6,8 +6,6 @@ import { BusinessModel, MediaAssetModel, BrandKitModel } from '../models';
 import { getStorage } from '../storage';
 import { z as zStock } from 'zod';
 import { ApiError, asyncHandler, parseBody, requireObjectId } from '../lib/http';
-import { generateBusinessBackgrounds } from '../lib/backgrounds';
-import { generateAiBackground } from '../lib/aiBackground';
 import { searchStockPhotos, stockConfigured, storeStockPhoto } from '../lib/stock';
 import { sanitizeSvgUpload } from '../lib/svgSanitize';
 
@@ -41,102 +39,7 @@ mediaRouter.get(
 );
 
 // Palette + count validation shared by both background endpoints.
-function readColors(req: { body: unknown }): { colors: Record<string, string> & { palette?: string[] }; count: number } {
-  const body = req.body as { colors?: Record<string, string> & { palette?: string[] }; count?: number };
-  const colors = body?.colors;
-  if (!colors?.background || !colors?.primary) throw new ApiError(400, 'Missing brand colors.');
-  const count = Math.max(1, Math.min(12, Math.round(Number(body?.count) || 3)));
-  return { colors, count };
-}
-function bgColors(colors: Record<string, string> & { palette?: string[] }) {
-  return {
-    primary: colors.primary!,
-    secondary: colors.secondary ?? colors.primary!,
-    accent: colors.accent ?? colors.primary!,
-    background: colors.background!,
-    text: colors.text,
-    palette: colors.palette,
-  };
-}
-
-// Regenerate the procedural brand backgrounds — unique per business, themed to
-// the vertical, business-chosen `count`. Replaces the previous procedural set.
-mediaRouter.post(
-  '/backgrounds',
-  asyncHandler(async (req, res) => {
-    const businessId = requireObjectId((req.params as Record<string, string>).id, 'Business');
-    const business = await BusinessModel.findById(businessId).lean();
-    if (!business) throw new ApiError(404, 'Business not found');
-    const { colors, count } = readColors(req);
-    const profile = (business as Record<string, any>).profile ?? {};
-
-    // Drop the previous procedural set (label prefix) so count/vertical changes
-    // don't leave orphans; AI backgrounds (different label) are untouched.
-    const stale = await MediaAssetModel.find({ businessId, type: 'generated', label: { $regex: '^Brand background' } });
-    for (const a of stale) {
-      try { await getStorage().remove(a.get('key')); } catch { /* best-effort */ }
-      await a.deleteOne();
-    }
-
-    const assets = await generateBusinessBackgrounds(businessId, bgColors(colors), {
-      category: profile.category,
-      tone: profile.tone,
-      count,
-    });
-    res.status(201).json(assets);
-  }),
-);
-
-// Generate ONE AI background (cheap: SVG via the small text model), sanitized and
-// stored alongside the procedural ones. Appends — never overwrites existing.
-mediaRouter.post(
-  '/backgrounds/ai',
-  asyncHandler(async (req, res) => {
-    const businessId = requireObjectId((req.params as Record<string, string>).id, 'Business');
-    const business = await BusinessModel.findById(businessId).lean();
-    if (!business) throw new ApiError(404, 'Business not found');
-    const { colors } = readColors(req);
-    const profile = (business as Record<string, any>).profile ?? {};
-    const body = req.body as { styleDescriptor?: string; businessName?: string };
-
-    // The brand aesthetic is the strongest fit signal — prefer what the editor
-    // sent, else fall back to the approved kit's descriptor.
-    let styleDescriptor = (body.styleDescriptor || '').trim();
-    if (!styleDescriptor) {
-      const kit = await BrandKitModel.findOne({ businessId, status: 'approved' }).sort({ createdAt: -1 }).lean();
-      styleDescriptor = ((kit as Record<string, any>)?.styleDescriptor as string) ?? '';
-    }
-    // Rotate the composition by how many AI backgrounds already exist, so each
-    // new one is deliberately different from the last.
-    const variant = await MediaAssetModel.countDocuments({ businessId, type: 'generated', label: 'AI background' });
-
-    const svg = await generateAiBackground(bgColors(colors), {
-      category: profile.category,
-      tone: profile.tone,
-      styleDescriptor,
-      businessName: body.businessName || ((business as Record<string, any>).name as string),
-      variant,
-    });
-    if (!svg) {
-      throw new ApiError(502, 'AI background generation is unavailable or produced an unusable result. Try again, or use the generated backgrounds.');
-    }
-
-    const key = `backgrounds/${businessId}/ai-${randomUUID()}.svg`;
-    const stored = await getStorage().save(key, Buffer.from(svg, 'utf8'), { contentType: 'image/svg+xml' });
-    const asset = await MediaAssetModel.create({
-      businessId,
-      type: 'generated',
-      label: 'AI background',
-      key: stored.key,
-      url: stored.url,
-      width: 1080,
-      height: 1350,
-    });
-    res.status(201).json(asset.toJSON());
-  }),
-);
-
-// Remove a media asset (e.g. dismiss a generated background you don't like).
+// Remove a media asset (e.g. an uploaded or stock photo you no longer want).
 mediaRouter.delete(
   '/:assetId',
   asyncHandler(async (req, res) => {

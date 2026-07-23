@@ -43,48 +43,30 @@ export function designModel(): string {
   return pickModel(config.ai.modelDesign, config.ai.modelLarge, config.ai.modelSmall, config.ai.model)!;
 }
 
-/** Every non-draft AI touchpoint, each individually overridable from Settings. */
+/** Every live AI touchpoint, each individually overridable from Settings. */
 export type AiFeature =
+  // Onboarding: read the brand from its site (vision), then author its recipe.
   | 'vision'
-  | 'critique'
-  | 'caption'
-  | 'campaign'
-  | 'background'
-  | 'templates'
-  | 'director'
-  | 'alternatives'
-  | 'photofit'
-  // The HTML-authoring generation path: author the brand recipe (design tier,
-  // once per brand) + compose an idea into authored slides (cheap tier).
   | 'recipe'
-  | 'compose';
+  // Per-post: compose the idea into authored slides, write the caption, fit a photo.
+  | 'compose'
+  | 'caption'
+  | 'photofit';
 
 const OVERRIDE_FIELD: Record<AiFeature, string> = {
   vision: 'visionModel',
-  critique: 'critiqueModel',
-  caption: 'captionModel',
-  campaign: 'campaignModel',
-  background: 'backgroundModel',
-  templates: 'templatesModel',
-  director: 'directorModel',
-  alternatives: 'alternativesModel',
-  photofit: 'photoFitModel',
   recipe: 'recipeModel',
   compose: 'composeModel',
+  caption: 'captionModel',
+  photofit: 'photoFitModel',
 };
 
 const ENV_DEFAULT: Record<AiFeature, () => string> = {
+  // Reading colors/type/voice off the homepage is a vision task → vision tier.
   vision: () => config.ai.modelLarge ?? config.ai.model!,
-  critique: () => config.ai.modelLarge ?? config.ai.model!,
-  caption: premiumModel,
-  campaign: premiumModel,
-  background: () => config.ai.modelSmall ?? config.ai.model!,
-  // The Brand Design Director + its legacy `templates` alias run on the design tier.
-  director: designModel,
-  templates: designModel,
-  alternatives: premiumModel,
   // Judging photos against copy is a vision task → vision tier.
   photofit: () => config.ai.modelLarge ?? config.ai.model!,
+  caption: premiumModel,
   // Authoring the brand recipe is design-critical → design tier; composing an
   // idea into authored slides is a mechanical parse+arrange → cheap tier.
   recipe: designModel,

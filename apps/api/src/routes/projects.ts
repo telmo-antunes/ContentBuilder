@@ -8,9 +8,6 @@ import {
   MAX_DRAFT_PARAGRAPH_CHARS,
   defaultThemeForCategory,
   brandRecipeSchema,
-  type BackgroundRole,
-  type Format,
-  type Slide,
 } from '@contentbuilder/shared';
 import { composeProject } from '../lib/htmlDirector/compose';
 import { sanitizeAuthoredHtml } from '../lib/htmlSanitize';
@@ -18,19 +15,8 @@ import { ProjectModel, ProjectVersionModel, BusinessModel, BrandKitModel, MediaA
 import { ApiError, asyncHandler, parseBody, publicErrMessage, requireObjectId } from '../lib/http';
 import { createProjectSchema, slideSchema, updateProjectSchema, type SlideInput } from '../lib/validation';
 import { renderSlidesToPng, slugify } from '../lib/exporter';
-import { draftSlidesFromParagraph } from '../lib/draft';
-import { brandPackContext } from '../lib/templates';
-import { refineSlide, isRefineIntent } from '../lib/refine';
-import { generateSlideAlternatives } from '../lib/alternatives';
-import { resolveDraftImages } from '../lib/stock';
 import { generateCaption, type GeneratedCaption } from '../lib/caption';
-import { critiqueProject } from '../lib/critique';
-import { aiDraftConfigured, aiFreeConfigured, config } from '../config';
-
-const draftSchema = z.object({
-  paragraph: z.string().trim().min(1, 'Paragraph is required').max(MAX_DRAFT_PARAGRAPH_CHARS),
-  mode: z.enum(['designer', 'free']).default('designer'),
-});
+import { aiDraftConfigured, config } from '../config';
 
 const composeSchema = z.object({
   idea: z.string().trim().min(1, 'An idea is required').max(MAX_DRAFT_PARAGRAPH_CHARS),
@@ -101,33 +87,6 @@ async function scrubForeignMedia(
     for (const obj of o?.imageObjects ?? []) {
       if (obj?.mediaAssetId && !owned.has(String(obj.mediaAssetId))) obj.mediaAssetId = undefined;
     }
-  }
-}
-
-/**
- * Finish a freshly-drafted project (slides already set + saved): best-effort layout
- * polish then caption, in that order so the caption reflects the polished slides.
- * Never throws — a web-down / AI-off environment still yields a usable draft.
- * Shared by the draft route and the campaign concept-draft.
- */
-export async function finalizeDraftedProject(project: {
-  get: (k: string) => any;
-  set: (k: string, v: unknown) => void;
-  save: () => Promise<unknown>;
-}): Promise<void> {
-  try {
-    await critiqueProject(project);
-  } catch (err) {
-    console.warn('[critique] auto-polish failed:', err instanceof Error ? err.message : err);
-  }
-  try {
-    const caption = await buildCaption(project);
-    if (caption.text || caption.hashtags.length) {
-      project.set('caption', caption);
-      await project.save();
-    }
-  } catch (err) {
-    console.warn('[caption] auto-generate failed:', err instanceof Error ? err.message : err);
   }
 }
 
@@ -242,61 +201,6 @@ projectsRouter.delete(
   }),
 );
 
-// Optional AI draft: arrange the user's paragraph into slides (paragraph +
-// type/format only — never the brand kit). One-time, opt-in, behind the
-// AI-configured check; fails soft so the user can always build manually.
-projectsRouter.post(
-  '/:id/draft',
-  asyncHandler(async (req, res) => {
-    const id = requireObjectId(req.params.id, 'Project');
-    const { paragraph, mode } = parseBody(draftSchema, req.body);
-    if (mode === 'free' ? !aiFreeConfigured() : !aiDraftConfigured()) {
-      throw new ApiError(400, 'AI draft is not configured (set ANTHROPIC_API_KEY + ANTHROPIC_MODEL_SMALL).');
-    }
-    const project = await ProjectModel.findById(id);
-    if (!project) throw new ApiError(404, 'Project not found');
-    const business = await BusinessModel.findById(project.get('businessId')).lean();
-    if (!(business as { profile?: { category?: string } } | null)?.profile?.category) {
-      throw new ApiError(400, 'Complete the business profile before using the AI draft.');
-    }
-
-    let slides: SlideInput[];
-    try {
-      slides = await draftSlidesFromParagraph(
-        paragraph,
-        project.get('type'),
-        project.get('format'),
-        mode,
-        await brandPackContext(String(project.get('businessId')), project.get('format')),
-      );
-    } catch (err) {
-      throw new ApiError(
-        502,
-        `Draft failed: ${publicErrMessage(err, 'AI error')}. You can build manually instead.`,
-      );
-    }
-    if (slides.length === 0) {
-      throw new ApiError(502, 'The draft came back empty — try rephrasing, or build manually.');
-    }
-
-    // Art direction pass: place stock photos on the slides the AI marked for
-    // imagery (best-effort — no key / no hit just leaves the placeholder).
-    try {
-      await resolveDraftImages(String(project.get('businessId')), slides, project.get('format'));
-    } catch (err) {
-      console.error('[draft] stock image resolution failed:', err);
-    }
-
-    // A draft replaces everything — keep what was there recoverable.
-    if (project.get('slides')?.length) await saveVersion(project, 'Before AI draft').catch(() => {});
-    project.set('slides', normalizeSlides(slides));
-    await project.save(); // persist so the critique's /render pass can see the slides
-    // Best-effort: polish the layout, then caption from the polished slides.
-    await finalizeDraftedProject(project);
-    res.json(project.toJSON());
-  }),
-);
-
 // AI compose: turn an idea into on-brand AUTHORED slides using the brand's
 // recipe (its design system). Requires the brand to have a recipe. Replaces the
 // project's slides; the previous state is kept recoverable via a version.
@@ -347,73 +251,6 @@ projectsRouter.post(
     project.set('status', 'draft');
     await project.save();
     res.json(project.toJSON());
-  }),
-);
-
-// Propose 3 layout alternatives for ONE slide (same copy, new structure).
-// Returns candidates only — nothing is saved until the user applies one.
-projectsRouter.post(
-  '/:id/slides/:slideId/alternatives',
-  asyncHandler(async (req, res) => {
-    const id = requireObjectId(req.params.id, 'Project');
-    const project = await ProjectModel.findById(id).lean();
-    if (!project) throw new ApiError(404, 'Project not found');
-    const slides = (project as Record<string, any>).slides as Array<Record<string, any>>;
-    const slide = slides.find((s) => s.id === req.params.slideId);
-    if (!slide) throw new ApiError(404, 'Slide not found');
-    const parsed = slideSchema.safeParse(slide);
-    if (!parsed.success) throw new ApiError(422, 'Slide is not in a valid state.');
-    let alternatives: SlideInput[];
-    try {
-      alternatives = await generateSlideAlternatives(
-        parsed.data,
-        (project as Record<string, any>).type,
-        (project as Record<string, any>).format,
-        (await brandPackContext(String((project as Record<string, any>).businessId), (project as Record<string, any>).format))?.pack,
-      );
-    } catch (err) {
-      throw new ApiError(502, `Alternatives failed: ${publicErrMessage(err, 'AI error')}.`);
-    }
-    if (!alternatives.length) throw new ApiError(502, 'No usable alternatives came back — try again.');
-    res.json({ alternatives });
-  }),
-);
-
-// Design-first refinement: apply a high-level INTENT to one slide as a bounded,
-// deterministic transform (no AI). Powers the review flow's intent chips.
-const refineSchema = z.object({ intent: z.string() });
-projectsRouter.post(
-  '/:id/slides/:slideId/refine',
-  asyncHandler(async (req, res) => {
-    const id = requireObjectId(req.params.id, 'Project');
-    const { intent } = parseBody(refineSchema, req.body);
-    if (!isRefineIntent(intent)) throw new ApiError(400, 'Unknown refine intent.');
-    const project = await ProjectModel.findById(id);
-    if (!project) throw new ApiError(404, 'Project not found');
-    // Mongoose subdocuments must be converted to plain objects — spreading a
-    // subdocument (as refineSlide does) would drop its data fields.
-    const slides = (project.get('slides') as Array<{ toObject?: () => SlideInput }>).map((s) =>
-      typeof s.toObject === 'function' ? s.toObject() : (s as SlideInput),
-    );
-    const idx = slides.findIndex((s) => s.id === req.params.slideId);
-    if (idx < 0) throw new ApiError(404, 'Slide not found');
-    const format = project.get('format') as Format;
-
-    // Build the role -> background-asset map from the brand's own layout library
-    // so "bolder/calmer background" can step through the authored backgrounds.
-    const ctx = await brandPackContext(String(project.get('businessId')), format);
-    const backgroundsByRole: Partial<Record<BackgroundRole, string>> = {};
-    for (const l of ctx?.layouts ?? []) {
-      if (l.backgroundRole && l.backgroundMediaAssetId) backgroundsByRole[l.backgroundRole] = l.backgroundMediaAssetId;
-    }
-
-    const result = refineSlide(slides[idx] as Slide, intent, format, { backgroundsByRole });
-    if (result.changed) {
-      slides[idx] = result.slide as SlideInput;
-      project.set('slides', normalizeSlides(slides));
-      await project.save();
-    }
-    res.json({ project: project.toJSON(), changed: result.changed, note: result.note });
   }),
 );
 
@@ -512,28 +349,6 @@ projectsRouter.get(
       onLan: Boolean(lan),
       hasRenders: ((project as Record<string, unknown>).renders as string[] | undefined)?.length ?? 0,
     });
-  }),
-);
-
-// Self-critique the rendered slides and auto-apply bounded fixes ("Polish layout").
-projectsRouter.post(
-  '/:id/critique',
-  asyncHandler(async (req, res) => {
-    const id = requireObjectId(req.params.id, 'Project');
-    const project = await ProjectModel.findById(id);
-    if (!project) throw new ApiError(404, 'Project not found');
-    if (!project.get('slides')?.length) throw new ApiError(400, 'Project has no slides to polish.');
-    await saveVersion(project, 'Before polish').catch(() => {});
-    let report;
-    try {
-      report = await critiqueProject(project);
-    } catch (err) {
-      throw new ApiError(
-        502,
-        `Polish failed: ${publicErrMessage(err, 'render error')}. Is the web server running?`,
-      );
-    }
-    res.json({ project: project.toJSON(), report });
   }),
 );
 

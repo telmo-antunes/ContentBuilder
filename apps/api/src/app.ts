@@ -10,10 +10,8 @@ import { businessesRouter } from './routes/businesses';
 import { projectsRouter } from './routes/projects';
 import { mediaRouter } from './routes/media';
 import { businessBrandKitRouter, brandKitRouter } from './routes/brandkits';
-import { businessCampaignRouter, campaignRouter } from './routes/campaigns';
 import { settingsRouter } from './routes/settings';
 import { usageRouter } from './routes/usage';
-import { renderStashRouter } from './routes/renderStash';
 
 const CONTENT_TYPES: Record<string, string> = {
   '.png': 'image/png',
@@ -101,7 +99,7 @@ export function createApp() {
     const WINDOW_MS = 5 * 60 * 1000;
     const MAX = 30;
     const hits = new Map<string, number[]>();
-    const EXPENSIVE = /(\/analyze|\/draft|\/critique|\/caption|\/export|\/backgrounds(\/ai)?|\/campaigns|\/regenerate)$/;
+    const EXPENSIVE = /(\/analyze|\/recipe|\/compose|\/caption|\/export)$/;
     app.use((req: Request, res: Response, next) => {
       if (req.method !== 'POST' || !EXPENSIVE.test(req.path)) return next();
       const now = Date.now();
@@ -124,16 +122,12 @@ export function createApp() {
   // More specific business-scoped routers first (extra path segments), so they
   // win over businessesRouter's '/:id'.
   app.use('/businesses/:id/media', mediaRouter);
-  app.use('/businesses/:id/campaigns', businessCampaignRouter);
   app.use('/businesses/:id', businessBrandKitRouter);
   app.use('/businesses', businessesRouter);
   app.use('/brandkits', brandKitRouter);
-  app.use('/campaigns', campaignRouter);
   app.use('/projects', projectsRouter);
   app.use('/settings', settingsRouter);
   app.use('/usage', usageRouter);
-  // Ephemeral render payloads for the design-time preview loop (read-only).
-  app.use('/render-stash', renderStashRouter);
 
   // Serve stored media through the StorageProvider (provider-agnostic).
   app.get(`${MEDIA_ROUTE}/*`, async (req: Request, res: Response) => {

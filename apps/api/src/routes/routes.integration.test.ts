@@ -21,42 +21,9 @@ vi.hoisted(() => {
   delete process.env.APP_PASSWORD; // auth must be off for these tests
 });
 
-// ── Mock every expensive boundary ─────────────────────────────────────────────
-vi.mock('../lib/draft', async (importOriginal) => {
-  const actual = (await importOriginal()) as Record<string, unknown>;
-  return {
-    ...actual,
-    draftSlidesFromParagraph: vi.fn(async () => [
-      {
-        layoutType: 'TextOnly',
-        blocks: [{ type: 'title', text: 'Mock title' }],
-        imageNeed: 'none' as const,
-      },
-    ]),
-  };
-});
-vi.mock('../lib/critique', () => ({
-  critiqueProject: vi.fn(async () => []),
-}));
+// ── Mock the AI boundaries the surviving routes touch ─────────────────────────
 vi.mock('../lib/caption', () => ({
   generateCaption: vi.fn(async () => ({ text: 'Mock caption', hashtags: ['#mock'] })),
-}));
-vi.mock('../lib/campaign', async (importOriginal) => {
-  const actual = (await importOriginal()) as Record<string, unknown>;
-  return {
-    ...actual,
-    planCampaign: vi.fn(async (ctx: { count: number }) =>
-      Array.from({ length: ctx.count }, (_, i) => ({
-        id: `concept-${i}`,
-        title: `Concept ${i}`,
-        angle: 'angle',
-        paragraph: 'Some real copy to lay out.',
-      })),
-    ),
-  };
-});
-vi.mock('../lib/backgrounds', () => ({
-  generateBusinessBackgrounds: vi.fn(async () => []),
 }));
 
 import { createApp } from '../app';
@@ -236,70 +203,9 @@ describe('projects', () => {
     expect(String(res.body.slides[1].mediaAssetId)).toBe(String(mine._id));
   });
 
-  it('drafts via the mocked engine and attaches the mocked caption', async () => {
-    const biz = await seedBusiness();
-    await seedApprovedKit(String(biz._id));
-    const created = await request(app())
-      .post('/projects')
-      .send({ businessId: String(biz._id), title: 'P', type: 'carousel', format: '1080x1080' });
-    const res = await request(app())
-      .post(`/projects/${created.body._id}/draft`)
-      .send({ paragraph: 'Hello world', mode: 'designer' });
-    expect(res.status).toBe(200);
-    expect(res.body.slides).toHaveLength(1);
-    expect(res.body.slides[0].blocks[0].text).toBe('Mock title');
-    expect(res.body.caption?.text).toBe('Mock caption');
-  });
-});
-
-// ── Campaigns ─────────────────────────────────────────────────────────────────
-describe('campaigns', () => {
-  it('plans concepts, drafts one on demand, and is idempotent on redraft', async () => {
-    const biz = await seedBusiness();
-    await seedApprovedKit(String(biz._id));
-
-    const campaign = await request(app())
-      .post(`/businesses/${biz._id}/campaigns`)
-      .send({ brief: 'A series', count: 3, type: 'carousel', format: '1080x1080' });
-    expect(campaign.status).toBe(201);
-    expect(campaign.body.concepts).toHaveLength(3);
-
-    const conceptId = campaign.body.concepts[0].id;
-    const first = await request(app()).post(
-      `/campaigns/${campaign.body._id}/concepts/${conceptId}/draft`,
-    );
-    expect(first.status).toBe(201);
-    expect(first.body.campaignId).toBe(String(campaign.body._id));
-
-    // Second call must return the SAME project, not draft a duplicate.
-    const second = await request(app()).post(
-      `/campaigns/${campaign.body._id}/concepts/${conceptId}/draft`,
-    );
-    expect(second.status).toBe(200);
-    expect(second.body._id).toBe(first.body._id);
-    expect(await ProjectModel.countDocuments()).toBe(1);
-  });
 });
 
 // ── Per-touchpoint model overrides ────────────────────────────────────────────
-describe('settings prompt footgun guard', () => {
-  it('stores an UNEDITED default prompt as blank, but keeps a real edit', async () => {
-    const defaults = (await request(app()).get('/settings')).body.defaults;
-
-    await request(app()).put('/settings').send({ designerSystem: defaults.designerSystem });
-    let s = (await request(app()).get('/settings')).body.settings;
-    expect(s.designerSystem).toBe('');
-
-    await request(app())
-      .put('/settings')
-      .send({ designerSystem: `${defaults.designerSystem}\nCUSTOM RULE` });
-    s = (await request(app()).get('/settings')).body.settings;
-    expect(s.designerSystem).toContain('CUSTOM RULE');
-
-    await request(app()).put('/settings').send({ designerSystem: '' }); // reset
-  });
-});
-
 describe('modelFor', () => {
   it('falls back to the env tier when no override is stored', async () => {
     expect(await modelFor('caption')).toBe('claude-test'); // from the stubbed env
@@ -308,7 +214,7 @@ describe('modelFor', () => {
   it('prefers the Settings override for its touchpoint only', async () => {
     await SettingModel.create({ key: 'ai', captionModel: 'claude-caption-override' });
     expect(await modelFor('caption')).toBe('claude-caption-override');
-    expect(await modelFor('campaign')).toBe('claude-test'); // untouched touchpoint
+    expect(await modelFor('recipe')).toBe('claude-test'); // untouched touchpoint
 
     // Settings PUT persists the override fields too.
     const res = await request(app()).put('/settings').send({ visionModel: 'claude-vision-override' });
