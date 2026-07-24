@@ -17,6 +17,7 @@ import { ProjectModel, ProjectVersionModel, BusinessModel, BrandKitModel, MediaA
 import { ApiError, asyncHandler, parseBody, publicErrMessage, requireObjectId } from '../lib/http';
 import { createProjectSchema, slideSchema, updateProjectSchema, type SlideInput } from '../lib/validation';
 import { renderSlidesToPng, slugify } from '../lib/exporter';
+import { renderProjectToVideo } from '../lib/videoExporter';
 import { generateCaption, type GeneratedCaption } from '../lib/caption';
 import { aiDraftConfigured, config } from '../config';
 
@@ -444,5 +445,37 @@ projectsRouter.post(
     archive.pipe(res);
     for (const slide of rendered) archive.append(slide.buffer, { name: slide.name });
     await archive.finalize();
+  }),
+);
+
+// Animated export: drive each slide's reveal choreography through the /render
+// route in motion mode, capture it frame-by-frame (deterministically, by
+// stepping the CSS timeline), and encode one Instagram-ready MP4.
+projectsRouter.post(
+  '/:id/export-video',
+  asyncHandler(async (req, res) => {
+    const id = requireObjectId(req.params.id, 'Project');
+    const project = await ProjectModel.findById(id);
+    if (!project) throw new ApiError(404, 'Project not found');
+    const slides = project.get('slides') ?? [];
+    if (!slides.length) throw new ApiError(400, 'Project has no slides to export');
+    if (!slides.every((s: { authored?: { html?: string } }) => s.authored?.html)) {
+      throw new ApiError(400, 'Video export needs AI-composed slides.');
+    }
+
+    let video;
+    try {
+      video = await renderProjectToVideo(project.toJSON() as never);
+    } catch (err) {
+      throw new ApiError(
+        502,
+        `Video export failed: ${publicErrMessage(err, 'render error')}. Is the web server running?`,
+      );
+    }
+
+    const filename = `${slugify(project.get('title'))}.mp4`;
+    res.setHeader('Content-Type', 'video/mp4');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(video.buffer);
   }),
 );
