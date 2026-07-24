@@ -20,6 +20,7 @@ export function SlideRenderer({
   slide,
   brandKit,
   format,
+  image,
   forExport = false,
   theme = 'editorial',
   slideIndex,
@@ -84,6 +85,7 @@ export function SlideRenderer({
             authored={slide.authored}
             format={format}
             logoUrl={brandKit.logo?.url}
+            photoUrl={slide.authored.bg === 'photo' ? image?.url : undefined}
           />
         ) : (
           // No recipe/markup yet — a neutral branded field rather than a crash.

@@ -8,9 +8,11 @@ import {
   MAX_DRAFT_PARAGRAPH_CHARS,
   defaultThemeForCategory,
   brandRecipeSchema,
+  type BrandRecipe,
 } from '@contentbuilder/shared';
 import { composeProject } from '../lib/htmlDirector/compose';
 import { sanitizeAuthoredHtml } from '../lib/htmlSanitize';
+import { stockConfigured, searchStockPhotos, storeStockPhoto } from '../lib/stock';
 import { ProjectModel, ProjectVersionModel, BusinessModel, BrandKitModel, MediaAssetModel } from '../models';
 import { ApiError, asyncHandler, parseBody, publicErrMessage, requireObjectId } from '../lib/http';
 import { createProjectSchema, slideSchema, updateProjectSchema, type SlideInput } from '../lib/validation';
@@ -22,6 +24,13 @@ const composeSchema = z.object({
   idea: z.string().trim().min(1, 'An idea is required').max(MAX_DRAFT_PARAGRAPH_CHARS),
   slideCount: z.number().int().min(1).max(12).optional(),
 });
+
+/** A Pexels query for a brand's photo covers, from the recipe's imagery treatment
+ *  (the subject usually leads the first clause). Empty string → skip the search. */
+function photoQueryFor(recipe: BrandRecipe): string {
+  const first = (recipe.imagery.treatment || '').split(/[,;]| with | so | that /i)[0] ?? '';
+  return first.replace(/-/g, ' ').slice(0, 60).trim();
+}
 
 export const projectsRouter = Router();
 
@@ -237,17 +246,37 @@ projectsRouter.post(
     }
 
     if (project.get('slides')?.length) await saveVersion(project, 'Before AI compose').catch(() => {});
-    project.set(
-      'slides',
-      composed.map((s, i) => ({
+
+    // Best-effort: give photo-role slides (authored.bg === 'photo') a real stock
+    // photo — the recipe's `.photo` class layers it as var(--cb-photo) under a
+    // scrim. Without a Pexels key this is a no-op and the gradient shows instead.
+    const businessId = String(project.get('businessId'));
+    const query = photoQueryFor(parsedRecipe.data);
+    const orientation = project.get('format') === '1080x1080' ? 'square' : 'portrait';
+    const slides: Array<Record<string, unknown>> = [];
+    for (let i = 0; i < composed.length; i++) {
+      const s = composed[i]!;
+      let mediaAssetId: string | undefined;
+      if (s.authored.bg === 'photo' && stockConfigured() && query) {
+        try {
+          const cands = await searchStockPhotos(query, orientation, 4);
+          const stored = cands.length ? await storeStockPhoto(businessId, cands[0]!) : null;
+          if (stored?._id) mediaAssetId = String(stored._id);
+        } catch {
+          /* best-effort — leave the gradient fallback */
+        }
+      }
+      slides.push({
         id: randomUUID(),
         order: i,
         layoutType: 'TextOnly',
         blocks: [],
         imageNeed: 'none',
         authored: s.authored,
-      })),
-    );
+        ...(mediaAssetId ? { mediaAssetId } : {}),
+      });
+    }
+    project.set('slides', slides);
     project.set('status', 'draft');
     await project.save();
     res.json(project.toJSON());
