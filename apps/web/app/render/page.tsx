@@ -34,17 +34,12 @@ export default async function RenderPage({
   if (!slide) return <div data-render-error>no slide</div>;
 
   const kit = toRenderKit(project.brandKit);
-  const image = resolveSlideImage(slide, project.media);
 
   return (
     <RenderStage
-      layoutType={slide.layoutType}
-      blocks={slide.blocks}
       authored={slide.authored}
       format={project.format}
       kit={kit}
-      image={image}
-      imageLayout={resolveImageLayout(slide, project.media)}
       theme={slide.overrides?.theme ?? project.settings?.theme ?? 'editorial'}
       slideIndex={idx}
       slideTotal={ordered.length}

@@ -2,8 +2,6 @@ import type {
   Business,
   BrandKit,
   BusinessProfile,
-  BusinessGoal,
-  Campaign,
   Caption,
   MediaAsset,
   Project,
@@ -11,7 +9,6 @@ import type {
   Slide,
   AssetType,
   Format,
-  RefineIntent,
 } from '@contentbuilder/shared';
 import { api } from './config';
 
@@ -90,26 +87,14 @@ export interface HealthResponse {
 export const getHealth = () => request<HealthResponse>('/health');
 
 export interface AiSettings {
-  designerModel: string;
-  freeModel: string;
   visionModel: string;
-  critiqueModel: string;
   captionModel: string;
-  campaignModel: string;
-  backgroundModel: string;
-  templatesModel: string;
-  alternativesModel: string;
   photoFitModel: string;
   recipeModel: string;
   composeModel: string;
-  designerSystem: string;
-  freeSystem: string;
-  templatesSystem: string;
-  freeMaxTokens: number | null;
 }
 export interface SettingsResponse {
   settings: AiSettings;
-  defaults: { designerSystem: string; freeSystem: string; templatesSystem: string; freeMaxTokens: number };
   envModels: { model: string; modelSmall: string; modelLarge: string; modelDesign: string };
   stock?: { configured: boolean };
 }
@@ -170,22 +155,9 @@ export const updateProject = (
 export const deleteProject = (id: string) =>
   request<{ ok: boolean }>(`/projects/${id}`, { method: 'DELETE' });
 
-export const draftProject = (id: string, paragraph: string, mode: 'designer' | 'free' = 'designer') =>
-  request<Project>(`/projects/${id}/draft`, {
-    method: 'POST',
-    body: JSON.stringify({ paragraph, mode }),
-  });
-
 /** (Re)generate the social caption for a project's current slides, in the brand voice. */
 export const generateProjectCaption = (id: string) =>
   request<Project>(`/projects/${id}/caption`, { method: 'POST' });
-
-/** Design-first refinement: apply a high-level intent to one slide (instant, no AI). */
-export const refineProjectSlide = (projectId: string, slideId: string, intent: RefineIntent) =>
-  request<{ project: ProjectDetail; changed: boolean; note: string }>(
-    `/projects/${projectId}/slides/${slideId}/refine`,
-    { method: 'POST', body: JSON.stringify({ intent }) },
-  );
 
 /** AI-compose: turn an idea into on-brand AUTHORED slides using the brand recipe. */
 export const composeProjectAI = (id: string, idea: string, slideCount?: number) =>
@@ -198,19 +170,6 @@ export const composeProjectAI = (id: string, idea: string, slideCount?: number) 
 /** Author (or re-author) the brand's design recipe from its kit evidence (design tier). */
 export const authorBrandRecipe = (kitId: string) =>
   request<{ _id: string; recipe?: unknown }>(`/brandkits/${kitId}/recipe`, { method: 'POST' }, 180_000);
-
-export interface CritiqueReportItem {
-  slideId: string;
-  order: number;
-  issues: string[];
-  applied: string[];
-}
-
-/** Self-critique the rendered slides and auto-apply bounded layout fixes. */
-export const polishProject = (id: string) =>
-  request<{ project: Project; report: CritiqueReportItem[] }>(`/projects/${id}/critique`, {
-    method: 'POST',
-  });
 
 // ── Stock photos ────────────────────────────────────────────────────────────
 export interface StockCandidate {
@@ -254,78 +213,9 @@ export const saveProjectVersion = (id: string, label?: string) =>
 export const restoreProjectVersion = (id: string, versionId: string) =>
   request<Project>(`/projects/${id}/versions/${versionId}/restore`, { method: 'POST' });
 
-/** 3 AI-proposed layout alternatives for one slide (same copy, new structure). */
-export const getSlideAlternatives = (projectId: string, slideId: string) =>
-  request<{ alternatives: Slide[] }>(`/projects/${projectId}/slides/${slideId}/alternatives`, {
-    method: 'POST',
-  });
-
-// ── Campaigns ───────────────────────────────────────────────────────────────
-export const listCampaigns = (businessId: string) =>
-  request<Campaign[]>(`/businesses/${businessId}/campaigns`);
-
-export const getCampaign = (id: string) => request<Campaign>(`/campaigns/${id}`);
-
-export const createCampaign = (
-  businessId: string,
-  data: { name?: string; brief: string; count: number; goal?: BusinessGoal; type: AssetType; format: Format },
-) =>
-  request<Campaign>(`/businesses/${businessId}/campaigns`, {
-    method: 'POST',
-    body: JSON.stringify(data),
-  });
-
-/** Draft one campaign concept into a real project (returns the created/linked project). */
-export const draftConcept = (campaignId: string, conceptId: string) =>
-  request<Project>(`/campaigns/${campaignId}/concepts/${conceptId}/draft`, { method: 'POST' });
-
-/** Edit a concept's title/angle/paragraph. Returns the updated campaign. */
-export const editConcept = (
-  campaignId: string,
-  conceptId: string,
-  data: { title?: string; angle?: string; paragraph?: string },
-) =>
-  request<Campaign>(`/campaigns/${campaignId}/concepts/${conceptId}`, {
-    method: 'PATCH',
-    body: JSON.stringify(data),
-  });
-
-/** Move a concept up (-1) or down (+1) in the series order. */
-export const moveConcept = (campaignId: string, conceptId: string, dir: -1 | 1) =>
-  request<Campaign>(`/campaigns/${campaignId}/concepts/${conceptId}/move`, {
-    method: 'POST',
-    body: JSON.stringify({ dir }),
-  });
-
-/** Regenerate ONE undrafted concept with a fresh angle. */
-export const regenerateConcept = (campaignId: string, conceptId: string) =>
-  request<Campaign>(`/campaigns/${campaignId}/concepts/${conceptId}/regenerate`, {
-    method: 'POST',
-  });
-
-export const deleteCampaign = (id: string) =>
-  request<{ ok: boolean }>(`/campaigns/${id}`, { method: 'DELETE' });
-
 // ── Media ───────────────────────────────────────────────────────────────────
 export const listMedia = (businessId: string) =>
   request<MediaAsset[]>(`/businesses/${businessId}/media`);
-
-export const regenerateBackgrounds = (businessId: string, colors: object, count = 3) =>
-  request<MediaAsset[]>(`/businesses/${businessId}/media/backgrounds`, {
-    method: 'POST',
-    body: JSON.stringify({ colors, count }),
-  });
-
-/** Generate one AI background (SVG). Returns the new media asset. */
-export const generateAiBackground = (
-  businessId: string,
-  colors: object,
-  extra?: { styleDescriptor?: string; businessName?: string },
-) =>
-  request<MediaAsset>(`/businesses/${businessId}/media/backgrounds/ai`, {
-    method: 'POST',
-    body: JSON.stringify({ colors, ...extra }),
-  });
 
 export const deleteMedia = (businessId: string, assetId: string) =>
   request<void>(`/businesses/${businessId}/media/${assetId}`, { method: 'DELETE' });

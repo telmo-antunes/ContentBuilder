@@ -3,14 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import type { Campaign, MediaAsset } from '@contentbuilder/shared';
+import type { MediaAsset } from '@contentbuilder/shared';
 import {
   getBusiness,
   getBrandKit,
   listMedia,
   deleteProject,
   createProject,
-  listCampaigns,
   type BusinessDetail,
 } from '../../lib/api';
 import ProfileCard from '../../components/ProfileCard';
@@ -22,7 +21,6 @@ import { toRenderKit } from '../../../lib/render/projectRender';
 export default function BusinessDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [biz, setBiz] = useState<BusinessDetail | null>(null);
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [kitRaw, setKitRaw] = useState<Awaited<ReturnType<typeof getBrandKit>>['approved']>(null);
   const [media, setMedia] = useState<MediaAsset[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -32,14 +30,12 @@ export default function BusinessDetailPage() {
   const reload = useCallback(async () => {
     setError(null);
     try {
-      const [b, c, k, m] = await Promise.all([
+      const [b, k, m] = await Promise.all([
         getBusiness(id),
-        listCampaigns(id).catch(() => []),
         getBrandKit(id).catch(() => ({ draft: null, approved: null })),
         listMedia(id).catch(() => []),
       ]);
       setBiz(b);
-      setCampaigns(c);
       setKitRaw(k.approved);
       setMedia(m);
     } catch (e) {
@@ -48,12 +44,6 @@ export default function BusinessDetailPage() {
   }, [id]);
 
   const renderKit = useMemo(() => (kitRaw ? toRenderKit(kitRaw) : null), [kitRaw]);
-
-  const campaignName = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const c of campaigns) m.set(c._id, c.name);
-    return m;
-  }, [campaigns]);
 
   const visibleProjects = useMemo(() => {
     const list = (biz?.projects ?? []).filter(
@@ -172,47 +162,6 @@ export default function BusinessDetailPage() {
 
           <ProfileCard businessId={biz._id} profile={biz.profile} onSaved={reload} />
 
-          {biz.hasApprovedKit && (
-            <>
-              <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-                <h2 style={{ margin: 0 }}>Campaigns ({campaigns.length})</h2>
-                <Link className="btn sm" href={`/campaigns/new?businessId=${biz._id}`}>
-                  ✦ New campaign
-                </Link>
-              </div>
-              {campaigns.length === 0 ? (
-                <div className="empty" style={{ marginTop: 12 }}>
-                  Plan a themed series of posts from a single brief.
-                </div>
-              ) : (
-                <div className="list" style={{ marginTop: 12 }}>
-                  {campaigns.map((c) => {
-                    const drafted = c.concepts.filter((x) => x.projectId).length;
-                    return (
-                      <div className="item" key={c._id}>
-                        <div className="grow">
-                          <div className="title">
-                            <Link href={`/campaigns/${c._id}`}>{c.name}</Link>
-                          </div>
-                          <div className="badges">
-                            <span className="badge accent">{c.type}</span>
-                            <span className="badge">{c.concepts.length} posts</span>
-                            <span className={`badge ${drafted === c.concepts.length ? 'ok' : ''}`}>
-                              {drafted} drafted
-                            </span>
-                          </div>
-                        </div>
-                        <Link className="btn sm" href={`/campaigns/${c._id}`}>
-                          Open
-                        </Link>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </>
-          )}
-
           <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 8, flexWrap: 'wrap', gap: 10 }}>
             <h2 style={{ margin: 0 }}>Projects ({biz.projects.length})</h2>
             <div className="row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -307,11 +256,6 @@ export default function BusinessDetailPage() {
                         <span className={`badge ${p.status === 'rendered' ? 'ok' : ''}`}>
                           {p.status === 'rendered' ? 'exported' : 'draft'}
                         </span>
-                        {p.campaignId && campaignName.get(String(p.campaignId)) && (
-                          <Link href={`/campaigns/${p.campaignId}`} className="badge" title="Part of a campaign">
-                            ✦ {campaignName.get(String(p.campaignId))}
-                          </Link>
-                        )}
                       </div>
                     </div>
                   </div>

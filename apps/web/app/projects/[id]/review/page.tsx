@@ -3,17 +3,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
-  REFINE_INTENTS,
   FORMAT_LABELS,
   contrastRatio,
-  type RefineIntent,
   type BrandRecipe,
   type Format,
   type Slide,
 } from '@contentbuilder/shared';
 import {
   getProject,
-  refineProjectSlide,
   updateProject,
   getShareInfo,
   listBusinesses,
@@ -44,13 +41,13 @@ function timeAgo(iso?: string): string {
 /**
  * The Studio — the design-first review workspace. An editorial masthead, the
  * brand recipe the slides were composed against, the live carousel, and a
- * right inspector to refine the selected slide by intent (copy is never touched).
+ * right inspector to surgically edit the selected authored slide (copy, order,
+ * and the brand's accent emphasis) without ever degrading the brand design.
  */
 export default function ReviewPage({ params }: { params: { id: string } }) {
   const projectId = params.id;
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [sel, setSel] = useState(0);
   const [brands, setBrands] = useState<BusinessSummary[]>([]);
@@ -75,24 +72,6 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
       .then(setBrands)
       .catch(() => {});
   }, []);
-
-  const applyIntent = useCallback(
-    async (slideId: string, intent: RefineIntent) => {
-      setBusy(`${slideId}:${intent}`);
-      try {
-        const res = await refineProjectSlide(projectId, slideId, intent);
-        // The endpoint returns the bare project; keep the joined brandKit/media
-        // (unchanged by a refine) and swap in only the updated slides.
-        setProject((prev) => (prev ? { ...prev, slides: res.project.slides } : prev));
-        toast(res.note, res.changed ? 'ok' : undefined);
-      } catch {
-        toast('Could not apply that change', 'error');
-      } finally {
-        setBusy(null);
-      }
-    },
-    [projectId],
-  );
 
   // ── Authored-slide editing ────────────────────────────────────────────────
   const startEdit = useCallback((slide: Slide) => {
@@ -232,18 +211,12 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
               </button>
             </>
           )}
-          {!authored && (
-            <Link className="btn ghost" href={`/projects/${projectId}`}>
-              Editor →
-            </Link>
-          )}
         </div>
       </div>
 
       {slides.length === 0 ? (
         <div className="empty">
-          This project has no slides yet.{' '}
-          <Link href={`/projects/${projectId}`}>Open the editor</Link> to build it, or start a{' '}
+          This project has no slides yet. Start a{' '}
           <Link href="/projects/new">new AI-composed project</Link>.
         </div>
       ) : (
@@ -341,7 +314,7 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
               <span className="live">Rendered live</span>
             </div>
             <p className="muted" style={{ fontSize: 12.5, margin: '6px 0 4px' }}>
-              Click a slide to select it, then refine on the right — bounded to the brand and safe area, copy untouched.
+              Click a slide to select it, then edit it on the right — copy, order, and the brand&apos;s accent, all kept in the recipe&apos;s own design.
             </p>
 
             <div className="studio-deck">
@@ -445,22 +418,6 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
               </div>
             ) : (
               <>
-                <h5>Refine this slide</h5>
-                <p className="muted" style={{ fontSize: 11.5 }}>Bounded to the brand &amp; safe area. Copy is never touched.</p>
-                <div className="intents">
-                  {REFINE_INTENTS.map(({ intent, label, hint }) => (
-                    <button
-                      key={intent}
-                      className="btn sm"
-                      title={hint}
-                      disabled={busy !== null || !selected}
-                      onClick={() => selected && applyIntent(selected.id, intent)}
-                    >
-                      {selected && busy === `${selected.id}:${intent}` ? '…' : label}
-                    </button>
-                  ))}
-                </div>
-
                 {recipe && (
                   <>
                     <div className="studio-divln" />
@@ -490,20 +447,14 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                   </>
                 )}
 
-                {authored ? (
-                  <button
-                    className="btn"
-                    style={{ width: '100%', justifyContent: 'center', marginTop: 18 }}
-                    disabled={!selected?.authored?.html}
-                    onClick={() => selected && startEdit(selected)}
-                  >
-                    ✎ Edit this slide
-                  </button>
-                ) : (
-                  <Link className="btn" href={`/projects/${projectId}`} style={{ width: '100%', justifyContent: 'center', marginTop: 18 }}>
-                    Open in editor
-                  </Link>
-                )}
+                <button
+                  className="btn"
+                  style={{ width: '100%', justifyContent: 'center', marginTop: 18 }}
+                  disabled={!selected?.authored?.html}
+                  onClick={() => selected && startEdit(selected)}
+                >
+                  ✎ Edit this slide
+                </button>
               </>
             )}
           </aside>

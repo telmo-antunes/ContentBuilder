@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import type { BrandKit, BrandLayout, BrandRecipe, LayoutLibrary, MediaAsset } from '@contentbuilder/shared';
+import type { BrandKit, BrandRecipe, MediaAsset } from '@contentbuilder/shared';
 import { BUNDLED_FONT_FAMILIES, contrastRatio } from '@contentbuilder/shared';
 import {
   getBrandKit,
@@ -12,11 +12,6 @@ import {
   createManualKit,
   patchBrandKit,
   uploadMedia,
-  listMedia,
-  regenerateBackgrounds,
-  generateAiBackground,
-  deleteMedia,
-  regenerateBrandPackage,
   authorBrandRecipe,
   type BusinessDetail,
 } from '../../../lib/api';
@@ -324,6 +319,9 @@ function KitEditor({
     fonts: { render: { heading, body } },
     logo: logo?.url ? { url: logo.url } : undefined,
     logoTreatment,
+    // Attach the recipe so the sample slide renders against the real design system
+    // (falls back to a neutral branded field until a recipe has been authored).
+    recipe,
   };
 
   const HEX = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
@@ -414,13 +412,17 @@ function KitEditor({
     }
   };
 
+  // Recipe-authored sample: the same semantic markup a composed slide uses, so
+  // the preview renders through the real recipe (not a legacy block layout).
+  const esc = (s: string) =>
+    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const previewSlide = {
-    layoutType: 'Cover' as const,
-    blocks: [
-      { type: 'eyebrow' as const, text: 'BRAND PREVIEW' },
-      { type: 'title' as const, text: businessName },
-      { type: 'subtitle' as const, text: 'On-brand in seconds' },
-    ],
+    authored: {
+      html:
+        '<p class="eyebrow">Brand preview</p><h1 class="headline">' +
+        esc(businessName) +
+        '</h1><p class="tagline">On-brand in seconds.</p>',
+    },
   };
   const textOnBrand = readable(colors.background);
   const tint = (a: string) => (HEX.test(colors.text) ? colors.text + a : `rgba(20,18,14,${parseInt(a, 16) / 255})`);
@@ -482,7 +484,7 @@ function KitEditor({
           <div className="bk-hero-sample">
             <div className="tilt">
               <ScaledSlide format="1080x1350" displayWidth={210}>
-                <SlideRenderer slide={previewSlide} brandKit={renderKit} format="1080x1350" image={null} forExport />
+                <SlideRenderer slide={previewSlide} brandKit={renderKit} format="1080x1350" forExport />
               </ScaledSlide>
             </div>
           </div>
@@ -648,7 +650,7 @@ function KitEditor({
           <section className="bk-reveal" style={{ animationDelay: '0.12s' }}>
             <div className="section-label" style={{ marginTop: 0 }}>Live preview</div>
             <ScaledSlide format="1080x1350" displayWidth={288}>
-              <SlideRenderer slide={previewSlide} brandKit={renderKit} format="1080x1350" image={null} forExport />
+              <SlideRenderer slide={previewSlide} brandKit={renderKit} format="1080x1350" forExport />
             </ScaledSlide>
           </section>
 
@@ -709,23 +711,6 @@ function KitEditor({
         </div>
       </div>
 
-      {/* generated system */}
-      <section className="bk-sec bk-reveal" style={{ animationDelay: '0.06s' }}>
-        <div className="bk-sec-h">
-          <span className="n">04</span>
-          <h2>Backgrounds</h2>
-        </div>
-        <BrandBackgrounds businessId={businessId} colors={colors} colorsValid={colorsValid} setError={setError} styleDescriptor={styleDescriptor} businessName={businessName} />
-      </section>
-
-      <section className="bk-sec bk-reveal" style={{ animationDelay: '0.06s' }}>
-        <div className="bk-sec-h">
-          <span className="n">05</span>
-          <h2>Layouts</h2>
-        </div>
-        <BrandLayoutLibrary kit={kit} renderKit={renderKit} setError={setError} />
-      </section>
-
       {/* actions — sticky at the foot */}
       <div className="bk-actions">
         <div className="row">
@@ -753,289 +738,5 @@ function KitEditor({
         </div>
       </div>
     </>
-  );
-}
-
-/** Sample copy poured into composition skeletons so the previews read as designs. */
-const SAMPLE_COPY: Record<string, { text: string; items?: string[] }> = {
-  eyebrow: { text: 'THE EYEBROW' },
-  title: { text: 'Headline goes here' },
-  subtitle: { text: 'A supporting subtitle' },
-  paragraph: { text: 'Body copy flows here with a sentence of supporting detail.' },
-  quote: { text: 'A short customer quote sits right here.' },
-  attribution: { text: '— A happy customer' },
-  date: { text: 'JUL 12' },
-  price: { text: '$49' },
-  list: { text: '', items: ['First point', 'Second point', 'Third point'] },
-  caption: { text: 'A small caption' },
-  cta: { text: 'Book now' },
-  footer: { text: 'yourbrand.com' },
-  handle: { text: '@yourbrand' },
-};
-
-/**
- * The brand's OWN layout system: post + story layouts, each designed WITH its
- * matched background in one director pass — one package, adjustable per piece.
- * Falls back to showing the legacy templatePack until a package is generated.
- */
-function BrandLayoutLibrary({
-  kit,
-  renderKit,
-  setError,
-}: {
-  kit: BrandKit;
-  renderKit: RenderBrandKit;
-  setError: (s: string | null) => void;
-}) {
-  const [library, setLibrary] = useState<LayoutLibrary | null>(
-    kit.layoutLibrary ??
-      (kit.templatePack?.length ? { post: kit.templatePack as BrandLayout[], story: [] } : null),
-  );
-  const [tab, setTab] = useState<'post' | 'story'>('post');
-  const [busy, setBusy] = useState(false);
-  // Background assets referenced by the layouts (loaded like BrandBackgrounds does).
-  const [media, setMedia] = useState<MediaAsset[]>([]);
-  const loadMedia = useCallback(async () => {
-    try {
-      setMedia(await listMedia(kit.businessId));
-    } catch {
-      /* previews just render without backgrounds */
-    }
-  }, [kit.businessId]);
-  useEffect(() => {
-    void loadMedia();
-  }, [loadMedia]);
-
-  const regen = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const fresh = await regenerateBrandPackage(kit._id);
-      setLibrary(fresh.layoutLibrary ?? null);
-      await loadMedia(); // new/updated background assets
-      const lib = fresh.layoutLibrary;
-      toast(`Brand package redesigned — ${lib?.post.length ?? 0} post + ${lib?.story.length ?? 0} story layouts`);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const bgUrl = (id?: string) => (id ? media.find((m) => m._id === id)?.url : undefined);
-  const layouts = tab === 'story' ? library?.story ?? [] : library?.post ?? [];
-  const format = tab === 'story' ? ('1080x1920' as const) : ('1080x1350' as const);
-  const thumbW = tab === 'story' ? 104 : 128;
-
-  return (
-    <div className="panel" style={{ marginTop: 14 }}>
-      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-        <div className="section-label" style={{ marginTop: 0 }}>Layout library</div>
-        <div className="row" style={{ gap: 6 }}>
-          <button className={`btn sm ${tab === 'post' ? 'primary' : 'ghost'}`} onClick={() => setTab('post')}>
-            Posts ({library?.post.length ?? 0})
-          </button>
-          <button className={`btn sm ${tab === 'story' ? 'primary' : 'ghost'}`} onClick={() => setTab('story')}>
-            Stories ({library?.story.length ?? 0})
-          </button>
-        </div>
-      </div>
-      <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-        This brand&rsquo;s own layouts — structure and background designed together as one system,
-        from the brand&rsquo;s voice and vertical. Drafts build on them; shown with sample copy.
-      </p>
-      {library?.direction && (
-        <p style={{ fontSize: 13, fontStyle: 'italic', margin: '0 0 10px', color: 'var(--muted)' }}>
-          &ldquo;{library.direction}&rdquo;
-        </p>
-      )}
-      {layouts.length > 0 ? (
-        <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
-          {layouts.map((t, i) => (
-            <div key={`${t.name}-${i}`} style={{ textAlign: 'center' }}>
-              <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
-                <ScaledSlide format={format} displayWidth={thumbW}>
-                  <SlideRenderer
-                    slide={{
-                      layoutType: 'FreePosition',
-                      blocks: t.blocks.map((b) => ({
-                        type: b.type,
-                        text: SAMPLE_COPY[b.type]?.text ?? 'Sample',
-                        items: SAMPLE_COPY[b.type]?.items,
-                        frame: b.frame,
-                        z: b.z,
-                      })),
-                    }}
-                    brandKit={renderKit}
-                    format={format}
-                    image={null}
-                    imageLayout={{
-                      imageFrame: t.imageFrame,
-                      background: t.imageBackground,
-                      decorations: t.decorations,
-                      backgroundUrl: bgUrl(t.backgroundMediaAssetId),
-                    }}
-                    forExport
-                  />
-                </ScaledSlide>
-              </div>
-              <div className="muted" style={{ fontSize: 11, marginTop: 5, maxWidth: thumbW }}>
-                {t.name}
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <p className="muted" style={{ fontSize: 12 }}>
-          {tab === 'story' && (library?.post.length ?? 0) > 0
-            ? 'No story layouts yet — redesign the package to add them.'
-            : 'None yet — the package is designed automatically when you approve the kit, or generate it now.'}
-        </p>
-      )}
-      <div className="row" style={{ marginTop: 12 }}>
-        <button className="btn sm" onClick={regen} disabled={busy}>
-          {busy ? 'Designing package…' : layouts.length ? '↻ Redesign package' : '✦ Design package'}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/** Shows the 3 procedural brand backgrounds + a regenerate-from-palette button. */
-function BrandBackgrounds({
-  businessId,
-  colors,
-  colorsValid,
-  setError,
-  styleDescriptor,
-  businessName,
-}: {
-  businessId: string;
-  colors: BrandKit['colors'];
-  colorsValid: boolean;
-  setError: (s: string | null) => void;
-  styleDescriptor: string;
-  businessName: string;
-}) {
-  const [bgs, setBgs] = useState<MediaAsset[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [aiBusy, setAiBusy] = useState(false);
-  const [count, setCount] = useState(3);
-
-  const load = useCallback(async () => {
-    try {
-      const m = await listMedia(businessId);
-      setBgs(m.filter((x) => x.type === 'generated'));
-    } catch {
-      /* non-fatal */
-    }
-  }, [businessId]);
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  const regen = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      // Regenerate replaces the procedural set; keep any AI backgrounds around.
-      const ai = bgs.filter((b) => b.label === 'AI background');
-      const fresh = await regenerateBackgrounds(businessId, colors, count);
-      setBgs([...fresh, ...ai]);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const addAi = async () => {
-    setAiBusy(true);
-    setError(null);
-    try {
-      const asset = await generateAiBackground(businessId, colors, { styleDescriptor, businessName });
-      setBgs((prev) => [asset, ...prev]);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setAiBusy(false);
-    }
-  };
-
-  const remove = async (assetId: string) => {
-    setBgs((prev) => prev.filter((b) => b._id !== assetId)); // optimistic
-    try {
-      await deleteMedia(businessId, assetId);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      void load(); // resync on failure
-    }
-  };
-
-  return (
-    <div className="panel" style={{ marginTop: 14 }}>
-      <div className="section-label" style={{ marginTop: 0 }}>
-        Background graphics
-      </div>
-      <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
-        Subtle backgrounds themed to your brand, unique to you, and generated from your palette — drop them behind any
-        post or story for depth. They appear under &ldquo;Brand backgrounds&rdquo; in the editor&apos;s image picker.
-      </p>
-      {bgs.length > 0 ? (
-        <div className="row" style={{ gap: 12 }}>
-          {bgs.map((b) => (
-            <div key={b._id} style={{ textAlign: 'center', position: 'relative' }}>
-              <img
-                src={b.url}
-                alt={b.label ?? 'brand background'}
-                style={{ width: 100, height: 125, objectFit: 'cover', borderRadius: 10, border: '1px solid var(--border)', display: 'block' }}
-              />
-              <button
-                className="icon-btn danger"
-                onClick={() => remove(b._id)}
-                title="Remove this background"
-                aria-label={`Remove ${(b.label ?? 'background').replace('Brand background — ', '')} background`}
-                style={{ position: 'absolute', top: 4, right: 4, width: 24, height: 24, background: 'rgba(0,0,0,0.55)' }}
-              >
-                ✕
-              </button>
-              <div className="muted" style={{ fontSize: 11, marginTop: 5 }}>
-                {(b.label ?? '').replace('Brand background — ', '')}
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <p className="muted" style={{ fontSize: 12 }}>
-          None yet — approve the kit, or generate them now.
-        </p>
-      )}
-      <div className="row" style={{ marginTop: 12, gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-        <label className="muted" style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
-          How many
-          <select
-            value={count}
-            onChange={(e) => setCount(Number(e.target.value))}
-            disabled={busy}
-            style={{ padding: '4px 6px', borderRadius: 6, background: 'var(--panel)', color: 'var(--text)', border: '1px solid var(--border)' }}
-          >
-            {[1, 2, 3, 4, 5, 6, 8].map((n) => (
-              <option key={n} value={n}>{n}</option>
-            ))}
-          </select>
-        </label>
-        <button className="btn sm" onClick={regen} disabled={busy || !colorsValid} title={!colorsValid ? 'Fix the colors first' : undefined}>
-          {busy ? 'Generating…' : bgs.some((b) => b.label !== 'AI background') ? 'Regenerate from palette' : 'Generate backgrounds'}
-        </button>
-        <button
-          className="btn sm ghost"
-          onClick={addAi}
-          disabled={aiBusy || !colorsValid}
-          title={!colorsValid ? 'Fix the colors first' : 'Generate one AI background (SVG)'}
-        >
-          {aiBusy ? 'Generating…' : '✨ AI background'}
-        </button>
-      </div>
-    </div>
   );
 }

@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -8,7 +7,7 @@ import { BusinessModel, BrandKitModel, ProjectModel, MediaAssetModel } from './m
 import { getStorage } from './storage';
 import type { StorageProvider } from './storage/StorageProvider';
 import { badgePng, solidPng } from './lib/png';
-import type { Slide } from '@contentbuilder/shared';
+import { dynatosRecipe, detailMastersRecipe } from './lib/htmlDirector/recipes';
 
 /** All seeded businesses (wiped + recreated on each run, so the seed is idempotent). */
 const SEED_NAMES = ['Apex Auto Detailing', 'Dynatós Program', 'DetailMasters CRM'];
@@ -17,11 +16,6 @@ const SEED_NAMES = ['Apex Auto Detailing', 'Dynatós Program', 'DetailMasters CR
 const LEGACY_NAMES = ['Dynatos', 'DetailMasters'];
 
 const ASSETS_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'seed-assets');
-
-/** Attach a generated slide id to each seed slide. */
-function withIds(slides: Omit<Slide, 'id'>[]): Slide[] {
-  return slides.map((s) => ({ ...s, id: randomUUID() }));
-}
 
 async function loadAsset(file: string): Promise<Buffer> {
   return readFile(resolve(ASSETS_DIR, file));
@@ -136,62 +130,10 @@ async function seedApex(storage: StorageProvider) {
     status: 'approved',
   });
 
-  const split = await seedPhoto(storage, bid, 'photo-portrait-2.jpg');
-  const story = await seedPhoto(storage, bid, 'photo-story-1.jpg');
-
-  await ProjectModel.create({
-    businessId: business._id,
-    title: 'Ceramic Coating Weekend',
-    type: 'carousel',
-    format: '1080x1350',
-    status: 'draft',
-    settings: { theme: 'soft', slideCounter: true },
-    slides: withIds([
-      { order: 1, layoutType: 'Cover', imageNeed: 'none', blocks: [
-        { type: 'eyebrow', text: 'LIMITED OFFER' },
-        { type: 'title', text: 'Ceramic Coating Weekend' },
-        { type: 'subtitle', text: '20% off all packages' },
-        { type: 'date', text: 'This Sat–Sun only' },
-      ] },
-      { order: 2, layoutType: 'SplitImageText', imageNeed: 'upload', mediaAssetId: split, overrides: { imageTreatment: 'tint' }, blocks: [
-        { type: 'title', text: 'Why ceramic?' },
-        { type: 'paragraph', text: 'A ceramic coating bonds to your paint, repelling water, dirt, and UV — keeping that just-detailed look for years.' },
-      ] },
-      { order: 3, layoutType: 'Checklist', imageNeed: 'none', blocks: [
-        { type: 'title', text: "What's included" },
-        { type: 'list', text: '', items: [
-          'Full exterior decontamination wash',
-          'Single-stage paint correction',
-          '9H ceramic coating',
-          '12-month protection guarantee',
-        ] },
-      ] },
-      { order: 4, layoutType: 'CTA', imageNeed: 'none', blocks: [
-        { type: 'cta', text: 'Book your slot this weekend' },
-        { type: 'handle', text: '@apexdetailing' },
-      ] },
-    ]),
-  });
-
-  await ProjectModel.create({
-    businessId: business._id,
-    title: 'Ceramic Weekend — Stories',
-    type: 'story',
-    format: '1080x1920',
-    status: 'draft',
-    settings: { theme: 'soft', slideCounter: false },
-    slides: withIds([
-      { order: 1, layoutType: 'BackgroundImage', imageNeed: 'upload', mediaAssetId: story, overrides: { imageTreatment: 'duotone' }, blocks: [
-        { type: 'eyebrow', text: 'THIS WEEKEND' },
-        { type: 'title', text: '20% off ceramic coating' },
-      ] },
-      { order: 2, layoutType: 'CTA', imageNeed: 'none', blocks: [
-        { type: 'title', text: 'Limited slots' },
-        { type: 'cta', text: 'Book now — link in bio' },
-        { type: 'handle', text: '@apexdetailing' },
-      ] },
-    ]),
-  });
+  // Media library seeds (uploads available to the brand — no block projects).
+  await seedPhoto(storage, bid, 'photo-portrait-2.jpg');
+  await seedPhoto(storage, bid, 'photo-story-1.jpg');
+  // Apex intentionally has no recipe — it demonstrates the "design the recipe" path.
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -234,73 +176,14 @@ async function seedDynatos(storage: StorageProvider) {
       'Dark, premium masculine aesthetic with bold gold accents and high contrast for impactful coaching brand messaging',
     homepageScreenshot: { key: home.key, url: home.url },
     provenance: { colors: 'sampled', fonts: 'computed+mapped', roles: 'vision', logo: 'dom' },
+    // Reference recipe — new posts compose on-brand against it out of the box.
+    recipe: dynatosRecipe,
     status: 'approved',
   });
 
-  const energy = await seedPhoto(storage, bid, 'photo-portrait-3.jpg');
-  const story = await seedPhoto(storage, bid, 'photo-story-1.jpg');
-
-  await ProjectModel.create({
-    businessId: business._id,
-    title: '3 traits of resilient founders',
-    type: 'carousel',
-    format: '1080x1350',
-    status: 'draft',
-    settings: { theme: 'editorial', slideCounter: true },
-    slides: withIds([
-      { order: 1, layoutType: 'Cover', imageNeed: 'none', blocks: [
-        { type: 'eyebrow', text: 'FOUNDER NOTES' },
-        { type: 'title', text: '3 traits of resilient founders' },
-        { type: 'subtitle', text: 'What actually keeps you in the game' },
-      ] },
-      { order: 2, layoutType: 'Statement', imageNeed: 'none', blocks: [
-        { type: 'eyebrow', text: 'MINDSET' },
-        { type: 'title', text: 'Recovery beats grit' },
-        { type: 'subtitle', text: "It's not how hard you push — it's how fast you reset." },
-      ] },
-      { order: 3, layoutType: 'SplitImageText', imageNeed: 'upload', mediaAssetId: energy, overrides: { imageTreatment: 'none' }, blocks: [
-        { type: 'title', text: 'Protect your energy' },
-        { type: 'paragraph', text: 'The founders who last guard their calendar like runway. Energy — not time — is the scarce resource.' },
-      ] },
-      { order: 4, layoutType: 'Checklist', imageNeed: 'none', blocks: [
-        { type: 'title', text: 'Your weekly reset' },
-        { type: 'list', text: '', items: [
-          'One full day genuinely offline',
-          'A walk with no podcast, no phone',
-          'Review the wins, not just the gaps',
-          'Say no to one good-but-not-great thing',
-        ] },
-      ] },
-      { order: 5, layoutType: 'Quote', imageNeed: 'none', blocks: [
-        { type: 'quote', text: "You don't rise to your goals. You fall to your systems." },
-        { type: 'attribution', text: 'A lesson learned twice' },
-      ] },
-      { order: 6, layoutType: 'CTA', imageNeed: 'none', blocks: [
-        { type: 'cta', text: "DM me 'RESET' for the checklist" },
-        { type: 'handle', text: '@dynatos' },
-      ] },
-    ]),
-  });
-
-  await ProjectModel.create({
-    businessId: business._id,
-    title: 'Lead without burning out — Story',
-    type: 'story',
-    format: '1080x1920',
-    status: 'draft',
-    settings: { theme: 'editorial', slideCounter: false },
-    slides: withIds([
-      { order: 1, layoutType: 'BackgroundImage', imageNeed: 'upload', mediaAssetId: story, overrides: { imageTreatment: 'duotone' }, blocks: [
-        { type: 'eyebrow', text: 'FREE TRAINING' },
-        { type: 'title', text: 'Lead without burning out' },
-      ] },
-      { order: 2, layoutType: 'CTA', imageNeed: 'none', blocks: [
-        { type: 'title', text: 'Save your seat' },
-        { type: 'cta', text: 'Link in bio' },
-        { type: 'handle', text: '@dynatos' },
-      ] },
-    ]),
-  });
+  // Media library seeds (uploads available to the brand — no block projects).
+  await seedPhoto(storage, bid, 'photo-portrait-3.jpg');
+  await seedPhoto(storage, bid, 'photo-story-1.jpg');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -342,70 +225,15 @@ async function seedDetailMasters(storage: StorageProvider) {
     styleDescriptor: 'Luxurious, dark-toned with warm gold accents, sophisticated and premium aesthetic',
     homepageScreenshot: { key: home.key, url: home.url },
     provenance: { colors: 'sampled', fonts: 'computed+mapped', roles: 'vision', logo: 'dom' },
+    // Reference recipe — new posts compose on-brand against it out of the box.
+    recipe: detailMastersRecipe,
     status: 'approved',
   });
 
-  const dash = await seedPhoto(storage, bid, 'photo-portrait-4.jpg');
-  const noShow = await seedPhoto(storage, bid, 'photo-portrait-1.jpg');
-  const story = await seedPhoto(storage, bid, 'photo-story-2.jpg');
-
-  await ProjectModel.create({
-    businessId: business._id,
-    title: 'Run your shop on autopilot',
-    type: 'carousel',
-    format: '1080x1350',
-    status: 'draft',
-    settings: { theme: 'bold', slideCounter: true },
-    slides: withIds([
-      { order: 1, layoutType: 'Cover', imageNeed: 'none', blocks: [
-        { type: 'eyebrow', text: 'NEW' },
-        { type: 'title', text: 'Run your shop on autopilot' },
-        { type: 'subtitle', text: 'The CRM built for detailers' },
-      ] },
-      { order: 2, layoutType: 'CenteredHero', imageNeed: 'upload', mediaAssetId: dash, overrides: { imageTreatment: 'tint' }, blocks: [
-        { type: 'eyebrow', text: 'DASHBOARD' },
-        { type: 'title', text: 'Every job on one screen' },
-        { type: 'paragraph', text: 'Bookings, reminders, payments and reviews — handled in one place.' },
-      ] },
-      { order: 3, layoutType: 'Checklist', imageNeed: 'none', blocks: [
-        { type: 'title', text: 'What you get' },
-        { type: 'list', text: '', items: [
-          'Online booking synced to your calendar',
-          'Automated SMS reminders',
-          'Card payments and deposits',
-          'Review requests on autopilot',
-        ] },
-      ] },
-      { order: 4, layoutType: 'SplitImageText', imageNeed: 'upload', mediaAssetId: noShow, overrides: { imageTreatment: 'none' }, blocks: [
-        { type: 'title', text: 'Cut no-shows by 40%' },
-        { type: 'paragraph', text: 'Automatic reminders and deposits mean fewer empty bays and more revenue per day.' },
-      ] },
-      { order: 5, layoutType: 'CTA', imageNeed: 'none', blocks: [
-        { type: 'cta', text: 'Start a free 14-day trial' },
-        { type: 'handle', text: '@detailmasters' },
-      ] },
-    ]),
-  });
-
-  await ProjectModel.create({
-    businessId: business._id,
-    title: 'Stop losing bookings — Story',
-    type: 'story',
-    format: '1080x1920',
-    status: 'draft',
-    settings: { theme: 'bold', slideCounter: false },
-    slides: withIds([
-      { order: 1, layoutType: 'BackgroundImage', imageNeed: 'upload', mediaAssetId: story, overrides: { imageTreatment: 'duotone' }, blocks: [
-        { type: 'eyebrow', text: 'FOR DETAILERS' },
-        { type: 'title', text: 'Stop losing bookings to DMs' },
-      ] },
-      { order: 2, layoutType: 'CTA', imageNeed: 'none', blocks: [
-        { type: 'title', text: 'See it in action' },
-        { type: 'cta', text: 'Free trial — link in bio' },
-        { type: 'handle', text: '@detailmasters' },
-      ] },
-    ]),
-  });
+  // Media library seeds (uploads available to the brand — no block projects).
+  await seedPhoto(storage, bid, 'photo-portrait-4.jpg');
+  await seedPhoto(storage, bid, 'photo-portrait-1.jpg');
+  await seedPhoto(storage, bid, 'photo-story-2.jpg');
 }
 
 seed().catch(async (err) => {
