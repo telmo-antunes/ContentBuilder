@@ -35,25 +35,21 @@ export function useStagedProgress(active: boolean, stages: ProgressStage[]): str
   return label;
 }
 
-/** The app's three long operations, with labels matched to the real pipeline. */
-export const DRAFT_STAGES: ProgressStage[] = [
-  { label: 'Arranging your copy into slides…', atMs: 0 },
-  { label: 'Composing layouts…', atMs: 8000 },
-  { label: 'Reviewing the design…', atMs: 25000 },
-  { label: 'Writing the caption…', atMs: 45000 },
-  { label: 'Almost there…', atMs: 75000 },
-];
-
-export const POLISH_STAGES: ProgressStage[] = [
-  { label: 'Rendering slides…', atMs: 0 },
-  { label: 'Reviewing the design…', atMs: 8000 },
-  { label: 'Applying fixes…', atMs: 20000 },
-  { label: 'Double-checking…', atMs: 35000 },
-];
-
+/** The app's long AI operations, with labels matched to the real pipeline. */
 export const ANALYZE_STAGES: ProgressStage[] = [
   { label: 'Capturing the homepage…', atMs: 0 },
-  { label: 'Reading colors & typography…', atMs: 12000 },
-  { label: 'Listening for the brand voice…', atMs: 25000 },
-  { label: 'Assembling the kit…', atMs: 40000 },
+  { label: 'Sampling the colours…', atMs: 9000 },
+  { label: 'Matching the typography…', atMs: 18000 },
+  { label: 'Listening for the brand voice…', atMs: 28000 },
+  { label: 'Assembling the kit…', atMs: 38000 },
+];
+
+export const RECIPE_STAGES: ProgressStage[] = [
+  { label: 'Studying your brand…', atMs: 0 },
+  { label: 'Rationing the palette…', atMs: 9000 },
+  { label: 'Setting the type system…', atMs: 18000 },
+  { label: 'Designing the signature move…', atMs: 28000 },
+  { label: 'Composing the backgrounds…', atMs: 40000 },
+  { label: 'Refining against the bar…', atMs: 55000 },
+  { label: 'Almost there…', atMs: 72000 },
 ];

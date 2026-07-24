@@ -1916,6 +1916,42 @@ input[type='color'] {
 .slide-step-val { min-width: 66px; text-align: center; font-size: 13px; color: var(--text); font-variant-numeric: tabular-nums; }
 .slide-step-val .u { color: var(--faint); font-size: 12px; }
 
+/* ── "The AI is working" — an anticipatory, animated loading panel ─────────── */
+.work { position: relative; overflow: hidden; border-radius: 16px; border: 1px solid var(--border); background: var(--panel); isolation: isolate; }
+.work-bare { border: none; background: transparent; border-radius: 0; }
+.work-bare .work-in { padding: 4px 0 0; }
+.work-aura { position: absolute; border-radius: 50%; filter: blur(64px); opacity: 0.34; z-index: 0; pointer-events: none; }
+.work-aura.a { width: 62%; height: 170%; left: -12%; top: -42%; background: radial-gradient(circle, var(--accent), transparent 70%); animation: work-float-a 8s ease-in-out infinite alternate; }
+.work-aura.b { width: 52%; height: 160%; right: -14%; bottom: -46%; background: radial-gradient(circle, var(--accent-2), transparent 70%); animation: work-float-b 10s ease-in-out infinite alternate; }
+@keyframes work-float-a { to { transform: translate(16%, 10%) scale(1.16); } }
+@keyframes work-float-b { to { transform: translate(-13%, -9%) scale(1.12); } }
+.work-grain { position: absolute; inset: 0; z-index: 1; opacity: 0.05; mix-blend-mode: overlay; pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='150' height='150'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+.work-in { position: relative; z-index: 2; padding: clamp(20px, 3vw, 30px); }
+.work-head { display: flex; align-items: center; gap: 9px; }
+.work-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: work-pulse 1.5s ease-out infinite; }
+@keyframes work-pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent); } 100% { box-shadow: 0 0 0 11px transparent; } }
+.work-title { font-size: 11px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--accent); font-weight: 700; }
+.work-label { font-family: var(--display); font-size: clamp(20px, 2.6vw, 30px); color: var(--text); margin: 12px 0 0; letter-spacing: -0.01em; line-height: 1.1; animation: work-rise 0.5s var(--ease-out) both; }
+@keyframes work-rise { from { opacity: 0; transform: translateY(9px); } }
+.work-bar { height: 3px; border-radius: 3px; background: var(--border); overflow: hidden; margin: 18px 0; position: relative; }
+.work-bar span { position: absolute; inset: 0; width: 38%; border-radius: 3px; background: linear-gradient(90deg, transparent, var(--accent), transparent); animation: work-sweep 1.7s ease-in-out infinite; }
+@keyframes work-sweep { from { transform: translateX(-120%); } to { transform: translateX(330%); } }
+.work-preview { display: flex; align-items: center; gap: 20px; margin-top: 4px; }
+.work-swatches { display: flex; gap: 8px; flex: 0 0 auto; }
+.work-swatches span { width: 34px; height: 34px; border-radius: 8px; background: var(--panel-2); border: 1px solid var(--border); animation: work-swell 1.9s ease-in-out infinite; }
+@keyframes work-swell { 0%, 100% { opacity: 0.4; transform: scale(0.9); } 50% { opacity: 1; transform: scale(1); } }
+.work-slide { flex: 1; min-width: 0; border: 1px solid var(--border); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 9px; background: var(--bg); }
+.work-ln { height: 11px; border-radius: 5px; background: linear-gradient(90deg, var(--panel-2), var(--border-strong), var(--panel-2)); background-size: 220% 100%; animation: work-shimmer 1.6s linear infinite; }
+.work-ln.lg { width: 82%; height: 17px; }
+.work-ln.md { width: 56%; }
+.work-ln.sm { width: 32%; height: 8px; }
+@keyframes work-shimmer { from { background-position: 220% 0; } to { background-position: -220% 0; } }
+.work-sub { color: var(--muted); font-size: 13px; margin: 18px 0 0; max-width: 52ch; line-height: 1.5; }
+@media (prefers-reduced-motion: reduce) {
+  .work-aura, .work-dot, .work-bar span, .work-swatches span, .work-ln, .work-label { animation: none; }
+}
+
 /* ── Start-empty: a live sample of the brand's own layouts ── */
 .seed-row { border-top: 1px solid var(--border); padding-top: 14px; }
 .seed-row a { text-decoration: none; }

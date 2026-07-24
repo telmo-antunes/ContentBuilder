@@ -20,7 +20,8 @@ import { ScaledSlide } from '../../../../lib/render/SlideFrame';
 import type { RenderBrandKit } from '../../../../lib/render/types';
 import { confirm } from '../../../components/ConfirmDialog';
 import { toast } from '../../../components/Toast';
-import { useStagedProgress, ANALYZE_STAGES } from '../../../components/useStagedProgress';
+import { ANALYZE_STAGES, RECIPE_STAGES } from '../../../components/useStagedProgress';
+import { WorkingPanel } from '../../../components/WorkingPanel';
 
 type ColorRoleKey = 'primary' | 'secondary' | 'accent' | 'background' | 'text';
 const ROLES: Array<[ColorRoleKey, string]> = [
@@ -40,7 +41,6 @@ export default function BrandKitPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const analyzeLabel = useStagedProgress(busy === 'analyze', ANALYZE_STAGES);
 
   const reload = useCallback(async () => {
     setError(null);
@@ -116,7 +116,18 @@ export default function BrandKitPage() {
       {error && <div className="error-box">{error}</div>}
       {loading && <p className="muted">Loading…</p>}
 
-      {!loading && !kit && (
+      {!loading && !kit && busy === 'analyze' && (
+        <div style={{ maxWidth: 640 }}>
+          <WorkingPanel
+            active
+            stages={ANALYZE_STAGES}
+            title="Meeting your brand"
+            sub="Reading the site's colours, type, logo and voice, then assigning roles — your brand kit is assembling. This takes ~20–40s."
+          />
+        </div>
+      )}
+
+      {!loading && !kit && busy !== 'analyze' && (
         <div className="card" style={{ maxWidth: 640 }}>
           <p className="muted" style={{ marginTop: 0 }}>
             Derive a brand kit from the website, or enter one manually (common for businesses that
@@ -135,7 +146,7 @@ export default function BrandKitPage() {
                     : 'No website on file'
               }
             >
-              {busy === 'analyze' ? analyzeLabel ?? 'Analyzing…' : 'Analyze website'}
+              Analyze website
             </button>
             <button className="btn" onClick={startManual} disabled={busy !== null}>
               {busy === 'manual' ? 'Creating…' : 'Skip extraction / enter manually'}
@@ -151,12 +162,6 @@ export default function BrandKitPage() {
           {!business?.websiteUrl && (
             <p className="muted" style={{ fontSize: 13, marginBottom: 0 }}>
               This brand has no website URL — use manual entry, or add a URL on the brand page.
-            </p>
-          )}
-          {busy === 'analyze' && (
-            <p className="muted" style={{ fontSize: 13 }}>
-              Loading the site, sampling colors &amp; fonts, fetching the logo, and asking the vision
-              model to assign color roles… this can take ~20–40s.
             </p>
           )}
         </div>
@@ -505,7 +510,15 @@ function KitEditor({
               {busy === 'recipe' ? 'Designing…' : recipe ? 'Re-design ✦' : 'Design the recipe ✦'}
             </button>
           </div>
-          {recipe ? (
+          {busy === 'recipe' ? (
+            <WorkingPanel
+              active
+              bare
+              stages={RECIPE_STAGES}
+              title="Designing the recipe"
+              sub="Authoring your brand's design system — palette rationing, a type system, a signature move, imagery and voice. This takes ~40–70s."
+            />
+          ) : recipe ? (
             <>
               <p className="bk-recipe-quote">
                 &ldquo;{recipe.signature.description || recipe.signature.name}&rdquo;
