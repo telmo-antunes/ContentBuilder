@@ -65,6 +65,18 @@ function stripFences(text: string): string {
   return (fenced?.[1] ?? text).trim();
 }
 
+/**
+ * The stored fragment must be the INNER markup of `.cb-slide` (the renderer adds
+ * the wrapper). Composers sometimes wrap their output in the full
+ * `<div class="cb-slide …">…</div>` anyway — which double-wraps at render and,
+ * worse, makes the whole slide one un-editable block. Strip a sole outer wrapper.
+ */
+function unwrapCbSlide(html: string): string {
+  const t = html.trim();
+  const m = t.match(/^<div\s+class="[^"]*\bcb-slide\b[^"]*"\s*>([\s\S]*)<\/div>$/i);
+  return m ? m[1]!.trim() : t;
+}
+
 /** Collapse to comparable plain text (tags out, entities + whitespace normalised). */
 function plain(s: string): string {
   return s
@@ -135,7 +147,7 @@ export async function composeSlide(
     system,
     messages: [{ role: 'user', content: user }],
   });
-  const safe = sanitizeAuthoredHtml(stripFences(textOf(resp)));
+  const safe = sanitizeAuthoredHtml(unwrapCbSlide(stripFences(textOf(resp))));
   // Mechanical verbatim guard: every provided part's copy must survive in the output.
   const hay = plain(safe);
   const missing = Object.entries(input.parts)

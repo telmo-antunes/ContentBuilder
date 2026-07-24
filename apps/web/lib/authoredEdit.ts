@@ -61,9 +61,21 @@ const nextKey = () => `ae${(seq += 1)}`;
 /** Parse an authored fragment into an editable element list. */
 export function parseAuthored(html: string): AuthoredEl[] {
   if (typeof window === 'undefined') return [];
-  const doc = new DOMParser().parseFromString(`<div id="r">${html}</div>`, 'text/html');
-  const root = doc.getElementById('r');
+  let root = new DOMParser().parseFromString(`<div id="r">${html}</div>`, 'text/html').getElementById('r');
   if (!root) return [];
+  // Defensive: some composer output wraps the whole slide in a `.cb-slide` div.
+  // Unwrap it so the inner elements are individually editable (and match what
+  // the renderer expects — the INNER fragment). Editing then re-saves it clean.
+  while (
+    root.children.length === 1 &&
+    /\bcb-slide\b/.test((root.children[0] as HTMLElement).getAttribute('class') ?? '')
+  ) {
+    const inner = new DOMParser()
+      .parseFromString(`<div id="r">${(root.children[0] as HTMLElement).innerHTML}</div>`, 'text/html')
+      .getElementById('r');
+    if (!inner) break;
+    root = inner;
+  }
   return Array.from(root.children).map((node) => {
     const el = node as HTMLElement;
     const className = el.getAttribute('class') ?? '';
