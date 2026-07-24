@@ -21,13 +21,6 @@ import { toRenderKit, resolveSlideImage, resolveImageLayout } from '../lib/rende
 
 const ROLES = ['background', 'secondary', 'primary', 'accent', 'text'] as const;
 
-function greeting(): string {
-  const h = new Date().getHours();
-  if (h < 5) return 'Still up';
-  if (h < 12) return 'Good morning';
-  if (h < 18) return 'Good afternoon';
-  return 'Good evening';
-}
 
 /** Render one real slide at a small size (the live post thumbnail). */
 function SlideThumb({ detail, slide, width }: { detail: ProjectDetail; slide: Slide; width: number }) {
@@ -113,21 +106,23 @@ export default function DashboardPage() {
   return (
     <div>
       <header className="dash-mast">
-        <p className="eyebrow">Your studio</p>
-        <h1>
-          {greeting()}<span className="it">.</span>
-        </h1>
+        <div className="dash-mast-top">
+          <p className="eyebrow">Studio</p>
+          {businesses && businesses.length > 0 && stats.approved > 0 && (
+            <Link className="btn primary" href="/projects/new">✦ New post</Link>
+          )}
+        </div>
         {businesses && businesses.length > 0 && (
           <div className="dash-stats">
-            <div>
+            <div className="stat">
               <div className="n">{stats.brands}</div>
               <div className="l">Brands</div>
             </div>
-            <div>
+            <div className="stat">
               <div className="n">{stats.projects}</div>
-              <div className="l">Projects</div>
+              <div className="l">Posts</div>
             </div>
-            <div>
+            <div className="stat">
               <div className="n">{stats.approved}</div>
               <div className="l">Approved kits</div>
             </div>
@@ -346,7 +341,7 @@ function BrandCard({
       </div>
       {preview && cover ? (
         <div className="bc-thumb">
-          <SlideThumb detail={preview} slide={cover} width={preview.format === '1080x1920' ? 82 : 104} />
+          <SlideThumb detail={preview} slide={cover} width={preview.format === '1080x1920' ? 66 : 84} />
         </div>
       ) : (
         <div className="bc-fallback">
