@@ -189,18 +189,28 @@ function NewProjectForm() {
             <label htmlFor="np-idea" className="section-label" style={{ margin: 0 }}>
               What&apos;s the post about?
             </label>
-            <div className="row" style={{ gap: 6, alignItems: 'center' }}>
-              <span className="muted" style={{ fontSize: 12 }}>Slides</span>
-              {[3, 4, 5, 6].map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  className={`btn sm ${slideCount === n ? 'primary' : ''}`}
-                  onClick={() => setSlideCount(n)}
-                >
-                  {n}
-                </button>
-              ))}
+            <div className="slide-step">
+              <button
+                type="button"
+                className="slide-step-btn"
+                aria-label="Fewer slides"
+                disabled={slideCount <= 2}
+                onClick={() => setSlideCount((n) => Math.max(2, n - 1))}
+              >
+                −
+              </button>
+              <span className="slide-step-val">
+                {slideCount} <span className="u">slide{slideCount === 1 ? '' : 's'}</span>
+              </span>
+              <button
+                type="button"
+                className="slide-step-btn"
+                aria-label="More slides"
+                disabled={slideCount >= 12}
+                onClick={() => setSlideCount((n) => Math.min(12, n + 1))}
+              >
+                +
+              </button>
             </div>
           </div>
           <textarea
