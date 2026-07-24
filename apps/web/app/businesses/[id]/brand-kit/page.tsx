@@ -560,39 +560,36 @@ function KitEditor({
               <h2>Palette &amp; roles</h2>
               <span className="aside">click a chip to recolor</span>
             </div>
-            <div className="bk-swatches">
+            {/* One control per colour: a chip (click → native picker) + an editable hex. */}
+            <div className="bk-palette">
               {ROLES.map(([role, label]) => {
                 const hex = colors[role];
-                const fg = readable(hex);
+                const valid = HEX.test(hex);
                 return (
-                  <label key={role} className="bk-swatch" style={{ background: HEX.test(hex) ? hex : '#333', color: fg }}>
-                    <input
-                      type="color"
-                      className="native"
-                      value={HEX.test(hex) ? hex : '#000000'}
-                      aria-label={`${label} color`}
-                      onChange={(e) => setColor(role, e.target.value.toUpperCase())}
-                    />
-                    <span className="edit-dot" style={{ border: `1px solid ${fg}`, color: fg }}>✎</span>
-                    <span className="role">{label}</span>
-                    <span className="hex">{hex}</span>
-                  </label>
+                  <div key={role} className="bk-color">
+                    <label className="bk-color-chip" style={{ background: valid ? hex : '#333' }} title={`Pick ${label}`}>
+                      <input
+                        type="color"
+                        className="native"
+                        value={valid ? hex : '#000000'}
+                        aria-label={`${label} color`}
+                        onChange={(e) => setColor(role, e.target.value.toUpperCase())}
+                      />
+                    </label>
+                    <div className="bk-color-meta">
+                      <span className="bk-color-role">{label}</span>
+                      <input
+                        className="bk-color-hex"
+                        value={hex}
+                        aria-invalid={!valid}
+                        aria-label={`${label} hex`}
+                        onChange={(e) => setColor(role, e.target.value.toUpperCase())}
+                        style={valid ? undefined : { borderColor: 'var(--danger)' }}
+                      />
+                    </div>
+                  </div>
                 );
               })}
-            </div>
-            <div className="bk-hexrow" style={{ flexWrap: 'wrap', gap: 14, marginTop: 16 }}>
-              {ROLES.map(([role, label]) => (
-                <div key={role} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <span className="muted" style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em' }}>{label}</span>
-                  <input
-                    value={colors[role]}
-                    aria-invalid={!HEX.test(colors[role])}
-                    aria-label={`${label} hex`}
-                    onChange={(e) => setColor(role, e.target.value.toUpperCase())}
-                    style={{ width: 108, fontFamily: 'ui-monospace, monospace', fontSize: 13, ...(HEX.test(colors[role]) ? {} : { borderColor: 'var(--danger)' }) }}
-                  />
-                </div>
-              ))}
             </div>
             {!colorsValid && (
               <p className="muted" style={{ fontSize: 12, color: 'var(--danger)', marginTop: 6 }}>
