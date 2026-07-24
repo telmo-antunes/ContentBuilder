@@ -97,8 +97,10 @@ export async function renderProjectToVideo(
       const el = await page.$('[data-slide-root]');
       if (!el) throw new Error(`Render route produced no slide for ${slide.id}`);
 
-      let settled: Buffer | null = null;
-      for (let f = 0; f <= revealFrames; f++) {
+      // Reveal: step the timeline frame-by-frame. Only seek WITHIN the active
+      // window — a paused animation seeked past its end paints stale in headless
+      // Chrome (elements silently vanish even though computed opacity is 1).
+      for (let f = 0; f < revealFrames; f++) {
         const t = Math.min(f * FRAME_MS, MOTION_MS);
         await page.evaluate(
           (ct: number) =>
@@ -111,12 +113,26 @@ export async function renderProjectToVideo(
             }),
           t,
         );
-        const shot = Buffer.from(await el.screenshot({ type: 'png' }));
-        frames.push(shot);
-        settled = shot;
+        frames.push(Buffer.from(await el.screenshot({ type: 'png' })));
       }
-      // Hold the settled frame so the slide is readable before the next one.
-      for (let h = 0; h < holdFrames && settled; h++) frames.push(settled);
+
+      // Settled: drop the motion class so the slide renders in its plain static
+      // state — identical to the still PNG export, and immune to the paused-seek
+      // repaint quirk. This frame is also what we hold on.
+      await page.evaluate(() => {
+        const doc = (globalThis as any).document;
+        doc.getAnimations().forEach((a: any) => {
+          try {
+            a.cancel();
+          } catch {
+            /* ignore */
+          }
+        });
+        doc.querySelectorAll('.cb-motion').forEach((n: any) => n.classList.remove('cb-motion'));
+      });
+      await new Promise((r) => setTimeout(r, 120));
+      const settled = Buffer.from(await el.screenshot({ type: 'png' }));
+      for (let h = 0; h < holdFrames; h++) frames.push(settled);
     }
   } finally {
     await page.close().catch(() => {});

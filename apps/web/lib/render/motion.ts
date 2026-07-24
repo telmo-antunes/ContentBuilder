@@ -15,8 +15,14 @@
 export const MOTION_DURATION_MS = 2600;
 
 export const MOTION_CSS = `
-.cb-slide.cb-motion > * { opacity: 0; animation: cb-rise 0.72s cubic-bezier(0.16,1,0.3,1) both; }
-.cb-slide.cb-motion > .fill { animation: none; opacity: 1; }
+/* NOTE: do NOT add a base \`opacity: 0\` here. \`animation-fill-mode: both\`
+   already applies the keyframe's \`from\` state during the delay (backwards
+   fill), and a redundant base opacity leaks into the PAINTED output when the
+   animation is paused + seeked for frame capture — computed style reports 1
+   while the element renders blank. That silently dropped elements from
+   exported video frames. */
+.cb-slide.cb-motion > * { animation: cb-rise 0.72s cubic-bezier(0.16,1,0.3,1) both; }
+.cb-slide.cb-motion > .fill { animation: none; }
 .cb-slide.cb-motion .logo,
 .cb-slide.cb-motion .logo-row,
 .cb-slide.cb-motion .wordmark { animation-delay: 0.12s; }
