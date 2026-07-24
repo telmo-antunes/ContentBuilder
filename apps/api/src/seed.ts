@@ -12,9 +12,6 @@ import { dynatosRecipe, detailMastersRecipe } from './lib/htmlDirector/recipes';
 /** All seeded businesses (wiped + recreated on each run, so the seed is idempotent). */
 const SEED_NAMES = ['Apex Auto Detailing', 'Dynatós Program', 'DetailMasters CRM'];
 
-/** Legacy names from earlier live-analyze runs — wiped (not recreated) so re-seeding is clean. */
-const LEGACY_NAMES = ['Dynatos', 'DetailMasters'];
-
 const ASSETS_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'seed-assets');
 
 async function loadAsset(file: string): Promise<Buffer> {
@@ -54,14 +51,15 @@ async function seedPhoto(storage: StorageProvider, businessId: string, file: str
 }
 
 async function wipePreviousSeed() {
-  const names = [...SEED_NAMES, ...LEGACY_NAMES];
-  const existing = await BusinessModel.find({ name: { $in: names } });
-  for (const b of existing) {
-    await BrandKitModel.deleteMany({ businessId: b._id });
-    await ProjectModel.deleteMany({ businessId: b._id });
-    await MediaAssetModel.deleteMany({ businessId: b._id });
-  }
-  await BusinessModel.deleteMany({ name: { $in: names } });
+  // Full reset: `npm run seed` rebuilds the demo state from scratch, so clear
+  // ALL businesses/kits/projects/media. A name-scoped wipe left stale duplicates
+  // (e.g. an old lowercase "detailmasters CRM") and leftover block-era projects.
+  await Promise.all([
+    ProjectModel.deleteMany({}),
+    BrandKitModel.deleteMany({}),
+    MediaAssetModel.deleteMany({}),
+    BusinessModel.deleteMany({}),
+  ]);
 }
 
 async function seed() {
