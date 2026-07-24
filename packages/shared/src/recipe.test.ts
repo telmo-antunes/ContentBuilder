@@ -5,6 +5,8 @@ import {
   recipeFontFamilies,
   recipeStylesheetFor,
   recipePatternsFor,
+  recipeMotionCss,
+  recipeMotionMs,
   RECIPE_VAR_PREFIX,
 } from './recipe';
 
@@ -110,5 +112,45 @@ describe('per-format tuning', () => {
     expect(recipePatternsFor(withFormats, '1080x1920')).toEqual(['story-cover: logo → fill → headline']);
     expect(recipePatternsFor(withFormats, '1080x1080')).toEqual(['cover: logo → headline']); // falls back
     expect(recipePatternsFor(withFormats, '1080x1350')).toEqual(['cover: logo → headline']);
+  });
+});
+
+describe('motion signature', () => {
+  const withMotion = (style: string, pace: string) =>
+    brandRecipeSchema.parse({ ...minimal, motion: { style, pace, description: 'x' } });
+
+  it('is optional — a recipe without one still produces a default choreography', () => {
+    const r = brandRecipeSchema.parse(minimal);
+    expect(r.motion).toBeUndefined();
+    const css = recipeMotionCss(r);
+    expect(css).toContain('cb-enter');
+    expect(css).toContain('translateY(28px)'); // the default rise
+    expect(recipeMotionMs(r)).toBeGreaterThan(0);
+  });
+
+  it('never emits a base opacity (it leaks into paused-seek frame capture)', () => {
+    // Guards the video-export bug: a base `opacity: 0` made elements render
+    // blank in captured frames even though computed opacity was 1.
+    expect(recipeMotionCss()).not.toMatch(/>\s*\*\s*\{[^}]*opacity/);
+  });
+
+  it('varies the from-state by style', () => {
+    expect(recipeMotionCss(withMotion('slide', 'balanced'))).toContain('translateX(-44px)');
+    expect(recipeMotionCss(withMotion('punch', 'balanced'))).toContain('scale(0.92)');
+    const fade = recipeMotionCss(withMotion('fade', 'balanced'));
+    expect(fade).toContain('opacity:0;');
+    expect(fade).not.toContain('translateY');
+  });
+
+  it('pace changes the tempo — punchy is quicker than calm', () => {
+    expect(recipeMotionMs(withMotion('rise', 'punchy'))).toBeLessThan(
+      recipeMotionMs(withMotion('rise', 'calm')),
+    );
+  });
+
+  it('falls back to defaults on unknown enum values (AI drift)', () => {
+    const r = brandRecipeSchema.parse({ ...minimal, motion: { style: 'zoom', pace: 'blazing' } });
+    expect(r.motion?.style).toBe('rise');
+    expect(r.motion?.pace).toBe('balanced');
   });
 });

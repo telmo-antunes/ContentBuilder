@@ -46,7 +46,7 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
   const projectId = params.id;
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [exporting, setExporting] = useState(false);
+  const [exporting, setExporting] = useState<'zip' | 'video' | null>(null);
   const [sel, setSel] = useState(0);
   // Surgical editing of the selected AUTHORED slide (copy / order / emphasis),
   // kept in the recipe's own markup so nothing about the brand design degrades.
@@ -114,28 +114,69 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
     [editId, editEls, projectId],
   );
 
-  const exportZip = useCallback(async () => {
-    setExporting(true);
-    try {
-      const res = await fetch(api(`/projects/${projectId}/export`), { method: 'POST' });
-      if (!res.ok) throw new Error(`Export failed (HTTP ${res.status})`);
-      const blob = await res.blob();
-      const name = (res.headers.get('Content-Disposition') ?? '').match(/filename="?([^"]+)"?/)?.[1] ?? 'project.zip';
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = name;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      toast('ZIP downloaded', 'ok');
-    } catch (e) {
-      toast(e instanceof Error ? e.message : 'Export failed', 'error');
-    } finally {
-      setExporting(false);
-    }
-  }, [projectId]);
+  /** Save a fetched blob response as a download. */
+  const saveBlob = useCallback(async (res: Response, fallback: string) => {
+    const blob = await res.blob();
+    const name =
+      (res.headers.get('Content-Disposition') ?? '').match(/filename="?([^"]+)"?/)?.[1] ?? fallback;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }, []);
+
+  /**
+   * Export the project. The PNG zip streams straight back; the VIDEO takes
+   * ~1–2 min (longer than any proxy will hold a request), so it runs as a job:
+   * start it, poll until it's rendered, then download.
+   */
+  const runExport = useCallback(
+    async (kind: 'zip' | 'video') => {
+      setExporting(kind);
+      try {
+        if (kind === 'zip') {
+          const res = await fetch(api(`/projects/${projectId}/export`), { method: 'POST' });
+          if (!res.ok) throw new Error(`Export failed (HTTP ${res.status})`);
+          await saveBlob(res, 'project.zip');
+          toast('ZIP downloaded', 'ok');
+          return;
+        }
+
+        const start = await fetch(api(`/projects/${projectId}/export-video`), { method: 'POST' });
+        if (!start.ok) {
+          const msg = await start.json().catch(() => null);
+          throw new Error(msg?.error ?? `Video export failed (HTTP ${start.status})`);
+        }
+        const { jobId } = (await start.json()) as { jobId: string };
+        toast('Rendering your video — this takes a minute…');
+
+        // Poll until the job produces the MP4 (or fails).
+        for (let i = 0; i < 150; i++) {
+          await new Promise((r) => setTimeout(r, 2500));
+          const poll = await fetch(api(`/projects/${projectId}/export-video/${jobId}`));
+          if (!poll.ok) {
+            const msg = await poll.json().catch(() => null);
+            throw new Error(msg?.error ?? `Video export failed (HTTP ${poll.status})`);
+          }
+          if (poll.headers.get('Content-Type')?.startsWith('video/')) {
+            await saveBlob(poll, 'project.mp4');
+            toast('Video downloaded', 'ok');
+            return;
+          }
+        }
+        throw new Error('Video export timed out.');
+      } catch (e) {
+        toast(e instanceof Error ? e.message : 'Export failed', 'error');
+      } finally {
+        setExporting(null);
+      }
+    },
+    [projectId, saveBlob],
+  );
 
   const share = useCallback(async () => {
     try {
@@ -197,8 +238,18 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
               <button className="btn" onClick={share}>
                 Share
               </button>
-              <button className="btn primary" onClick={exportZip} disabled={exporting}>
-                {exporting ? 'Exporting…' : '⬇ Export'}
+              {authored && (
+                <button
+                  className="btn"
+                  onClick={() => runExport('video')}
+                  disabled={exporting !== null}
+                  title="Render the slides as an animated MP4 (Reels / Stories)"
+                >
+                  {exporting === 'video' ? 'Rendering video…' : '🎬 Video'}
+                </button>
+              )}
+              <button className="btn primary" onClick={() => runExport('zip')} disabled={exporting !== null}>
+                {exporting === 'zip' ? 'Exporting…' : '⬇ Export'}
               </button>
             </>
           )}

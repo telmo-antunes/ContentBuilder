@@ -448,9 +448,30 @@ projectsRouter.post(
   }),
 );
 
-// Animated export: drive each slide's reveal choreography through the /render
-// route in motion mode, capture it frame-by-frame (deterministically, by
-// stepping the CSS timeline), and encode one Instagram-ready MP4.
+// ── Animated (video) export ─────────────────────────────────────────────────
+// Rendering a video takes ~1–2 min — far longer than a proxy/browser will hold a
+// request open — so it runs as a JOB: POST starts it, the client polls status,
+// then downloads the finished MP4.
+
+interface VideoJob {
+  state: 'running' | 'done' | 'error';
+  projectId: string;
+  filename: string;
+  buffer?: Buffer;
+  error?: string;
+  startedAt: number;
+}
+const videoJobs = new Map<string, VideoJob>();
+const VIDEO_JOB_TTL_MS = 30 * 60 * 1000;
+
+/** Drop finished jobs after a while so buffers don't accumulate. */
+function sweepVideoJobs(): void {
+  const now = Date.now();
+  for (const [id, job] of videoJobs) {
+    if (job.state !== 'running' && now - job.startedAt > VIDEO_JOB_TTL_MS) videoJobs.delete(id);
+  }
+}
+
 projectsRouter.post(
   '/:id/export-video',
   asyncHandler(async (req, res) => {
@@ -463,19 +484,46 @@ projectsRouter.post(
       throw new ApiError(400, 'Video export needs AI-composed slides.');
     }
 
-    let video;
-    try {
-      video = await renderProjectToVideo(project.toJSON() as never);
-    } catch (err) {
-      throw new ApiError(
-        502,
-        `Video export failed: ${publicErrMessage(err, 'render error')}. Is the web server running?`,
-      );
-    }
-
+    sweepVideoJobs();
+    const jobId = randomUUID();
     const filename = `${slugify(project.get('title'))}.mp4`;
+    videoJobs.set(jobId, { state: 'running', projectId: String(id), filename, startedAt: Date.now() });
+
+    // Fire and forget — the client polls. Never let a rejection escape.
+    void (async () => {
+      try {
+        const video = await renderProjectToVideo(project.toJSON() as never);
+        const job = videoJobs.get(jobId);
+        if (job) Object.assign(job, { state: 'done', buffer: video.buffer });
+      } catch (err) {
+        const job = videoJobs.get(jobId);
+        if (job) {
+          Object.assign(job, {
+            state: 'error',
+            error: `${publicErrMessage(err, 'render error')}. Is the web server running?`,
+          });
+        }
+        console.error('[video] export failed:', err);
+      }
+    })();
+
+    res.status(202).json({ jobId, state: 'running' });
+  }),
+);
+
+// Poll a video job. When done, the SAME url serves the MP4 as a download.
+projectsRouter.get(
+  '/:id/export-video/:jobId',
+  asyncHandler(async (req, res) => {
+    const job = videoJobs.get(req.params.jobId ?? '');
+    if (!job || job.projectId !== req.params.id) throw new ApiError(404, 'Video job not found');
+    if (job.state === 'error') throw new ApiError(502, `Video export failed: ${job.error}`);
+    if (job.state === 'running') {
+      res.json({ state: 'running', elapsedMs: Date.now() - job.startedAt });
+      return;
+    }
     res.setHeader('Content-Type', 'video/mp4');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.send(video.buffer);
+    res.setHeader('Content-Disposition', `attachment; filename="${job.filename}"`);
+    res.send(job.buffer);
   }),
 );

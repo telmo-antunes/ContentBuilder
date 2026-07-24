@@ -129,6 +129,12 @@ export const dynatosRecipe: BrandRecipe = brandRecipeSchema.parse({
     dos: ['Short, declarative lines', 'Address the reader ("you")', 'Confidence without hype'],
     donts: ['Corporate filler', 'Exclamation marks', 'Softeners like "maybe" / "just"'],
   },
+  // Discipline hits — type lands with force, fast and tight.
+  motion: {
+    style: 'punch',
+    pace: 'punchy',
+    description: 'Type lands with force — each line punches in fast and tight, like a rep completed.',
+  },
 });
 
 /**
@@ -256,6 +262,12 @@ export const detailMastersRecipe: BrandRecipe = brandRecipeSchema.parse({
     description: 'Sophisticated, premium, plain. Sells trust and ease for detailing shop owners.',
     dos: ['Benefit-led headlines', 'Concrete outcomes (no-shows, rebookings)', 'Calm confidence'],
     donts: ['Techy jargon', 'Hype', 'Exclamation marks'],
+  },
+  // Premium and unhurried — elements glide up like a showroom reveal.
+  motion: {
+    style: 'rise',
+    pace: 'calm',
+    description: 'Unhurried and premium — each element glides up, like a car easing into the showroom light.',
   },
 });
 

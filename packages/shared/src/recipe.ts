@@ -48,6 +48,20 @@ export const recipeComponentSchema = z.object({
 export type RecipeComponent = z.infer<typeof recipeComponentSchema>;
 
 /**
+ * The brand's MOTION signature — how its posts move when exported as video.
+ * Authored once per brand, exactly like the visual signature: `style` is the
+ * character of each element's entrance, `pace` sets the tempo. Optional and
+ * backwards-compatible — a recipe without it uses the balanced rise default.
+ */
+export const recipeMotionSchema = z.object({
+  style: z.enum(['rise', 'fade', 'slide', 'punch']).catch('rise'),
+  pace: z.enum(['calm', 'balanced', 'punchy']).catch('balanced'),
+  /** One line describing the brand's motion, for the UI + the recipe screen. */
+  description: z.string().max(200).default(''),
+});
+export type RecipeMotion = z.infer<typeof recipeMotionSchema>;
+
+/**
  * Per-format tuning for a recipe. Every Instagram format is 1080px WIDE
  * (1080×1080 square, 1080×1350 post, 1080×1920 story), so a brand's type scale
  * and horizontal rhythm carry across all of them — only VERTICAL metrics differ
@@ -103,6 +117,9 @@ export const brandRecipeSchema = z.object({
    *  backwards-compatible — a recipe without it renders every format from the
    *  base stylesheet (correct width, base vertical metrics). */
   formats: z.record(z.string(), recipeFormatVariantSchema).optional(),
+
+  /** How this brand MOVES in video exports (optional; defaults to a balanced rise). */
+  motion: recipeMotionSchema.optional(),
 
   composition: z
     .object({
@@ -191,4 +208,76 @@ export function recipeStylesheetFor(recipe: BrandRecipe, format: string): string
 export function recipePatternsFor(recipe: BrandRecipe, format: string): string[] {
   const fmt = recipe.formats?.[format]?.patterns;
   return fmt && fmt.length ? fmt : recipe.composition.patterns;
+}
+
+// ── Motion ──────────────────────────────────────────────────────────────────
+
+/** Tempo per pace: entrance duration + the stagger step between elements (s). */
+const PACE: Record<RecipeMotion['pace'], { dur: number; step: number }> = {
+  calm: { dur: 0.9, step: 0.26 },
+  balanced: { dur: 0.72, step: 0.2 },
+  punchy: { dur: 0.5, step: 0.13 },
+};
+
+/** The `from` state per style — the character of each element's entrance. */
+const STYLE_FROM: Record<RecipeMotion['style'], string> = {
+  rise: 'opacity:0; transform: translateY(28px);',
+  fade: 'opacity:0;',
+  slide: 'opacity:0; transform: translateX(-44px);',
+  punch: 'opacity:0; transform: scale(0.92);',
+};
+
+/** Reveal order — element groups keyed by the recipe's component classes. */
+const ORDER: string[][] = [
+  ['.logo', '.logo-row', '.wordmark', '.monogram'],
+  ['.eyebrow'],
+  ['.headline', '.quote'],
+  ['.stat', '.rule'],
+  ['.tagline', '.body', '.panel'],
+  ['.attr'],
+  ['.cta'],
+  ['.handle'],
+];
+
+const LEAD_IN = 0.12;
+
+export const DEFAULT_MOTION: RecipeMotion = { style: 'rise', pace: 'balanced', description: '' };
+
+/** How long a slide's full reveal takes, in ms (what the video capture window needs). */
+export function recipeMotionMs(recipe?: BrandRecipe): number {
+  const m = recipe?.motion ?? DEFAULT_MOTION;
+  const { dur, step } = PACE[m.pace];
+  return Math.round((LEAD_IN + (ORDER.length - 1) * step + dur) * 1000);
+}
+
+/**
+ * Build the brand's motion stylesheet — the reveal choreography, scoped to
+ * `.cb-slide.cb-motion`. Keyed on the recipe's own component classes so every
+ * brand animates on-brand with no per-slide authoring.
+ */
+export function recipeMotionCss(recipe?: BrandRecipe): string {
+  const m = recipe?.motion ?? DEFAULT_MOTION;
+  const { dur, step } = PACE[m.pace];
+  const ease = m.pace === 'punchy' ? 'cubic-bezier(0.2,1.5,0.4,1)' : 'cubic-bezier(0.16,1,0.3,1)';
+
+  const lines: string[] = [
+    // NOTE: no base `opacity: 0` — `animation-fill-mode: both` supplies the
+    // from-state, and a redundant base opacity leaks into the PAINTED output
+    // when frames are captured from a paused, seeked animation.
+    `.cb-slide.cb-motion > * { animation: cb-enter ${dur}s ${ease} both; }`,
+    `.cb-slide.cb-motion > .fill { animation: none; }`,
+    `@keyframes cb-enter { from { ${STYLE_FROM[m.style]} } to { opacity:1; transform: none; } }`,
+  ];
+  ORDER.forEach((group, i) => {
+    const delay = (LEAD_IN + i * step).toFixed(2);
+    const sel = group.map((c) => `.cb-slide.cb-motion > ${c}`).join(', ');
+    lines.push(`${sel} { animation-delay: ${delay}s; }`);
+  });
+  // The brand's accent word warms in just after its headline lands.
+  const accentDelay = (LEAD_IN + 2 * step + dur * 0.65).toFixed(2);
+  lines.push(
+    `.cb-slide.cb-motion .headline .em, .cb-slide.cb-motion .headline .it { display:inline-block; animation: cb-accent ${(dur * 1.1).toFixed(2)}s ease-out ${accentDelay}s both; }`,
+    `@keyframes cb-accent { from { opacity:0.25; filter: saturate(0.4); } to { opacity:1; filter:none; } }`,
+  );
+  return lines.join('\n');
 }

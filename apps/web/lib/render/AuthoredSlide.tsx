@@ -6,11 +6,11 @@ import {
   recipeCssVars,
   recipeFontFamilies,
   recipeStylesheetFor,
+  recipeMotionCss,
   type BrandRecipe,
   type Format,
 } from '@contentbuilder/shared';
 import { ensureGoogleFonts } from './fontLoader';
-import { MOTION_CSS } from './motion';
 
 /**
  * Renders an AI-authored slide: the brand recipe's stylesheet + `--cb-*` tokens
@@ -59,7 +59,9 @@ export function AuthoredSlide({
   ].filter(Boolean);
   const varRule = vars.length ? `.${scope}{${vars.join(';')}}` : '';
   // Motion mode: append the (scoped) reveal choreography + tag the slide `cb-motion`.
-  const motionCss = motion ? '\n' + MOTION_CSS.replace(/\.cb-slide/g, `.${scope} .cb-slide`) : '';
+  const motionCss = motion
+    ? '\n' + recipeMotionCss(recipe).replace(/\.cb-slide/g, `.${scope} .cb-slide`)
+    : '';
   const wrapperStyle = { position: 'absolute', inset: 0, ...recipeCssVars(recipe.tokens) } as CSSProperties;
   const bgClass = `${authored.bg ? ` ${authored.bg.replace(/[^a-zA-Z0-9_-]/g, '')}` : ''}${motion ? ' cb-motion' : ''}`;
 

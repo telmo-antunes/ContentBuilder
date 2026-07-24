@@ -31,7 +31,7 @@ const ALLOWED_FONTS = [
   'Merriweather', 'Lora', 'Source Serif 4',
 ];
 
-const ENUMS = `Use EXACTLY these enum values: typography.displayCase ∈ {upper|title|sentence}; typography.density ∈ {roomy|balanced|dense}; composition.align ∈ {flush-left|center|flush-right}; imagery.photoRole ∈ {hero|accent|none}. typography.displayWeight is a number 300–900.`;
+const ENUMS = `Use EXACTLY these enum values: typography.displayCase ∈ {upper|title|sentence}; typography.density ∈ {roomy|balanced|dense}; composition.align ∈ {flush-left|center|flush-right}; imagery.photoRole ∈ {hero|accent|none}; motion.style ∈ {rise|fade|slide|punch}; motion.pace ∈ {calm|balanced|punchy}. typography.displayWeight is a number 300–900.`;
 
 const SYSTEM = `You are an elite brand & art director. From a business's brand evidence you author its complete DESIGN SYSTEM — a "recipe" that EVERY future Instagram post is composed against, authored ONCE. Output STRICT JSON only (no prose, no fences), matching the shape of the worked examples EXACTLY.
 
@@ -44,6 +44,7 @@ WHAT REFERENCE-GRADE MEANS (both examples do ALL of this):
 4. A RICH component vocabulary — 8–12 classes (eyebrow, headline + a .sm variant, body, a tagline or quote, a rule, a cta button, a handle, a stat or a panel, a logo/wordmark, a .fill spacer), each listed in "components" with a one-line use.
 5. ONE rationed accent. Generous negative space. Bottom-anchor with a .fill flex-grow spacer.
 6. PER-FORMAT tuning in "formats" — keys "1080x1920" (story) and "1080x1080" (square). Every IG format is 1080 WIDE, so only VERTICAL metrics change: append a small override stylesheet (safe-area padding for stories ~210px top / ~240px bottom + a size bump; tighter padding + smaller sizes for square). Copy the examples' "formats" approach.
+7. A MOTION signature in "motion" — how the brand MOVES when a post is exported as video. Pick the style + pace that match its character (e.g. a disciplined, forceful brand punches in punchy; a premium, unhurried one rises calm; an editorial one fades balanced), and describe it in one evocative line. This is the brand's motion identity, as deliberate as its visual signature.
 
 HARD RULES:
 - Colours: derive ground/ink/accent from the brand palette; high contrast, text legible on the ground.
@@ -54,7 +55,7 @@ HARD RULES:
 
 const CRITIQUE_SYSTEM = `You are a ruthless design director reviewing a junior's brand recipe against a reference bar. Output STRICT JSON only — the SAME recipe shape, nothing else.
 
-Judge the recipe you are given on: (1) is the background CINEMATIC and layered, or a flat/timid gradient? (2) is there a real, named SIGNATURE move applied consistently? (3) is the display type feed-huge (80–120px) or timid? (4) is the component vocabulary rich (8–12 classes) or thin? (5) are per-format "formats" overrides present for story + square? (6) is ONE accent rationed with real negative space?
+Judge the recipe you are given on: (1) is the background CINEMATIC and layered, or a flat/timid gradient? (2) is there a real, named SIGNATURE move applied consistently? (3) is the display type feed-huge (80–120px) or timid? (4) is the component vocabulary rich (8–12 classes) or thin? (5) are per-format "formats" overrides present for story + square? (6) is ONE accent rationed with real negative space? (7) does "motion" carry a style+pace that genuinely matches the brand's character, with an evocative one-line description?
 
 If ANY answer is below reference-grade, output an IMPROVED full recipe JSON that fixes it (keep the brand's colours/fonts/voice — improve the CRAFT). If it is already excellent, output it unchanged. Same JSON shape, ${ENUMS} STRICT JSON only, no prose.`;
 
@@ -70,6 +71,7 @@ function exemplarJson(r: BrandRecipe): string {
     imagery: r.imagery,
     voice: r.voice,
     formats: r.formats,
+    motion: r.motion,
   });
 }
 

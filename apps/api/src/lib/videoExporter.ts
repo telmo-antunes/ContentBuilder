@@ -19,8 +19,7 @@ import { getStorage } from '../storage';
 
 const FPS = 30;
 const FRAME_MS = 1000 / FPS;
-/** The reveal window (kept ~in sync with the web motion layer) + a readable hold. */
-const MOTION_MS = 2600;
+/** How long the settled slide is held (readable) before the next one. */
 const HOLD_MS = 1300;
 
 interface ExportableProject {
@@ -85,15 +84,26 @@ export async function renderProjectToVideo(
   const page = await browser.newPage();
   await page.setViewport({ width, height, deviceScaleFactor: 1 });
   const frames: Buffer[] = [];
-  const revealFrames = Math.ceil(MOTION_MS / FRAME_MS);
   const holdFrames = Math.round(HOLD_MS / FRAME_MS);
 
   try {
     for (const slide of ordered) {
       const url = `${base}/render?projectId=${project._id}&slideId=${encodeURIComponent(slide.id)}&motion=1`;
       await gotoAndSettle(page, url, slide.id);
-      // Freeze the timeline so we can seek it deterministically.
-      await page.evaluate(() => (globalThis as any).document.getAnimations().forEach((a: any) => a.pause()));
+      // Freeze the timeline so we can seek it deterministically, and read the
+      // reveal window from the page itself — so each BRAND's own motion
+      // signature (style + pace on recipe.motion) drives the capture length.
+      const motionMs: number = await page.evaluate(() => {
+        const doc = (globalThis as any).document;
+        const anims = doc.getAnimations();
+        anims.forEach((a: any) => a.pause());
+        return anims.reduce((max: number, a: any) => {
+          const t = a.effect?.getComputedTiming?.();
+          const end = Number(t?.endTime ?? 0);
+          return Number.isFinite(end) ? Math.max(max, end) : max;
+        }, 0);
+      });
+      const revealFrames = Math.max(1, Math.ceil(motionMs / FRAME_MS));
       const el = await page.$('[data-slide-root]');
       if (!el) throw new Error(`Render route produced no slide for ${slide.id}`);
 
@@ -101,7 +111,7 @@ export async function renderProjectToVideo(
       // window — a paused animation seeked past its end paints stale in headless
       // Chrome (elements silently vanish even though computed opacity is 1).
       for (let f = 0; f < revealFrames; f++) {
-        const t = Math.min(f * FRAME_MS, MOTION_MS);
+        const t = Math.min(f * FRAME_MS, motionMs);
         await page.evaluate(
           (ct: number) =>
             (globalThis as any).document.getAnimations().forEach((a: any) => {
