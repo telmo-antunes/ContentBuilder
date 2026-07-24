@@ -13,9 +13,7 @@ import {
   getProject,
   updateProject,
   getShareInfo,
-  listBusinesses,
   type ProjectDetail,
-  type BusinessSummary,
 } from '../../../lib/api';
 import { api } from '../../../lib/config';
 import { SlideRenderer } from '../../../../lib/render/SlideRenderer';
@@ -50,7 +48,6 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [sel, setSel] = useState(0);
-  const [brands, setBrands] = useState<BusinessSummary[]>([]);
   // Surgical editing of the selected AUTHORED slide (copy / order / emphasis),
   // kept in the recipe's own markup so nothing about the brand design degrades.
   const [editId, setEditId] = useState<string | null>(null);
@@ -66,12 +63,6 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
       alive = false;
     };
   }, [projectId]);
-
-  useEffect(() => {
-    listBusinesses()
-      .then(setBrands)
-      .catch(() => {});
-  }, []);
 
   // ── Authored-slide editing ────────────────────────────────────────────────
   const startEdit = useCallback((slide: Slide) => {
@@ -221,28 +212,6 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
         </div>
       ) : (
         <div className="studio">
-          {/* ── brand switcher ── */}
-          <aside className="studio-brandlist">
-            <h4>Your brands</h4>
-            {brands.map((b) => (
-              <Link
-                key={b._id}
-                href={`/businesses/${b._id}`}
-                className={`brow${b._id === project.businessId ? ' on' : ''}`}
-              >
-                <span
-                  className="bdot"
-                  style={{ background: b.kit?.colors.accent ?? b.kit?.colors.primary ?? 'var(--accent)' }}
-                />
-                <div style={{ minWidth: 0 }}>
-                  <div className="bnm">{b.name}</div>
-                  {b.profile?.category && <div className="bmt">{b.profile.category}</div>}
-                </div>
-                <span className="bco">{b.projectCount}</span>
-              </Link>
-            ))}
-          </aside>
-
           {/* ── main ── */}
           <div className="studio-main">
             <header className="studio-mast">

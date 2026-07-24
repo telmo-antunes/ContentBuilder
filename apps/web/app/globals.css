@@ -1849,10 +1849,9 @@ input[type='color'] {
 .bk-spec { padding: 26px 28px; border-radius: 18px; }
 .bk-spec .aa { font-size: 68px; }
 
-/* ═══ Studio — elevated (brand switcher + cinematic masthead) ══════════════ */
-.studio { grid-template-columns: 236px minmax(0, 1fr) 322px; }
-@media (max-width: 1180px) { .studio { grid-template-columns: 236px minmax(0, 1fr); } }
-@media (max-width: 900px) { .studio { grid-template-columns: 1fr; } .studio-brandlist { display: none; } }
+/* ═══ Studio — the project review/edit workspace ══════════════════════════ */
+.studio { grid-template-columns: minmax(0, 1fr) 322px; }
+@media (max-width: 900px) { .studio { grid-template-columns: 1fr; } }
 
 .studio-brandlist { border-right: 1px solid var(--border); padding: 6px 20px 40px 0; position: sticky; top: 12px; align-self: start; }
 .studio-brandlist h4 { font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--faint); font-weight: 700; margin: 0 0 14px 4px; }
