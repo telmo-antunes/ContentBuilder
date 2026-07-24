@@ -26,6 +26,7 @@ export function SlideRenderer({
   slideIndex,
   slideTotal,
   showCounter = false,
+  motion = false,
 }: {
   slide: RenderableSlide;
   brandKit: RenderBrandKit;
@@ -40,6 +41,8 @@ export function SlideRenderer({
   slideIndex?: number;
   slideTotal?: number;
   showCounter?: boolean;
+  /** Play the reveal choreography (animated/video export). */
+  motion?: boolean;
 }) {
   // Kits whose render fonts aren't bundled (real site fonts) load from Google
   // Fonts on demand — every render site (thumbs, review, export) goes through
@@ -86,6 +89,7 @@ export function SlideRenderer({
             format={format}
             logoUrl={brandKit.logo?.url}
             photoUrl={slide.authored.bg === 'photo' ? image?.url : undefined}
+            motion={motion}
           />
         ) : (
           // No recipe/markup yet — a neutral branded field rather than a crash.

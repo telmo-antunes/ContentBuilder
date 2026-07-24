@@ -10,6 +10,7 @@ import {
   type Format,
 } from '@contentbuilder/shared';
 import { ensureGoogleFonts } from './fontLoader';
+import { MOTION_CSS } from './motion';
 
 /**
  * Renders an AI-authored slide: the brand recipe's stylesheet + `--cb-*` tokens
@@ -26,6 +27,7 @@ export function AuthoredSlide({
   format,
   logoUrl,
   photoUrl,
+  motion = false,
 }: {
   recipe: BrandRecipe;
   authored: { html: string; bg?: string };
@@ -35,6 +37,8 @@ export function AuthoredSlide({
   /** A real photo for a photo-role slide; the recipe's `.photo` layers it as
    *  `var(--cb-photo)` under a legibility scrim. Absent → the recipe's fallback. */
   photoUrl?: string;
+  /** Play the reveal choreography (for animated/video export). Off = still PNG. */
+  motion?: boolean;
 }) {
   const scope = 'cbs' + useId().replace(/[^a-zA-Z0-9]/g, '');
 
@@ -54,12 +58,14 @@ export function AuthoredSlide({
     photoUrl ? `--cb-photo:url("${safeUrl(photoUrl)}")` : '',
   ].filter(Boolean);
   const varRule = vars.length ? `.${scope}{${vars.join(';')}}` : '';
+  // Motion mode: append the (scoped) reveal choreography + tag the slide `cb-motion`.
+  const motionCss = motion ? '\n' + MOTION_CSS.replace(/\.cb-slide/g, `.${scope} .cb-slide`) : '';
   const wrapperStyle = { position: 'absolute', inset: 0, ...recipeCssVars(recipe.tokens) } as CSSProperties;
-  const bgClass = authored.bg ? ` ${authored.bg.replace(/[^a-zA-Z0-9_-]/g, '')}` : '';
+  const bgClass = `${authored.bg ? ` ${authored.bg.replace(/[^a-zA-Z0-9_-]/g, '')}` : ''}${motion ? ' cb-motion' : ''}`;
 
   return (
     <div className={scope} style={wrapperStyle}>
-      <style dangerouslySetInnerHTML={{ __html: `${varRule}\n${scopedCss}` }} />
+      <style dangerouslySetInnerHTML={{ __html: `${varRule}\n${scopedCss}${motionCss}` }} />
       <div className={`cb-slide${bgClass}`} dangerouslySetInnerHTML={{ __html: authored.html }} />
     </div>
   );

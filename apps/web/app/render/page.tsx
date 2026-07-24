@@ -1,6 +1,6 @@
 import { api } from '../lib/config';
 import type { ProjectDetail } from '../lib/api';
-import { toRenderKit, resolveSlideImage, resolveImageLayout } from '../../lib/render/projectRender';
+import { toRenderKit, resolveSlideImage } from '../../lib/render/projectRender';
 import RenderStage from './RenderStage';
 
 // Always fetch fresh — this route is hit per-slide by the export pipeline.
@@ -9,9 +9,9 @@ export const dynamic = 'force-dynamic';
 export default async function RenderPage({
   searchParams,
 }: {
-  searchParams: { projectId?: string; slideId?: string; stashId?: string };
+  searchParams: { projectId?: string; slideId?: string; stashId?: string; motion?: string };
 }) {
-  const { projectId, slideId, stashId } = searchParams;
+  const { projectId, slideId, stashId, motion } = searchParams;
 
   // Server-side fetch straight to the API. When the opt-in APP_PASSWORD gate is
   // on, attach the shared credentials (this runs on the server; never shipped
@@ -34,16 +34,19 @@ export default async function RenderPage({
   if (!slide) return <div data-render-error>no slide</div>;
 
   const kit = toRenderKit(project.brandKit);
+  const image = resolveSlideImage(slide, project.media);
 
   return (
     <RenderStage
       authored={slide.authored}
+      image={image}
       format={project.format}
       kit={kit}
       theme={slide.overrides?.theme ?? project.settings?.theme ?? 'editorial'}
       slideIndex={idx}
       slideTotal={ordered.length}
       showCounter={Boolean(project.settings?.slideCounter) && project.type === 'carousel'}
+      motion={motion === '1'}
     />
   );
 }
