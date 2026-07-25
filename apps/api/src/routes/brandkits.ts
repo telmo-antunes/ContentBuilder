@@ -15,7 +15,6 @@ import { assignRolesAndVibe, brandColorQuality } from '../lib/vision';
 import { assertPublicHttpUrl } from '../lib/urlGuard';
 import { googleFontAvailable, resolveRenderFonts } from '../lib/fonts';
 import { authorRecipe, type RecipeEvidence } from '../lib/htmlDirector/authorRecipe';
-import { getStorage } from '../storage';
 import { harvestSiteImages } from '../lib/harvest';
 
 const hex = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Expected a #rrggbb color');

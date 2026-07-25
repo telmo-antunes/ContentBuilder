@@ -143,6 +143,17 @@ export const updateProjectSchema = z.object({
   slides: z.array(slideSchema).max(MAX_SLIDES_PER_PROJECT).optional(),
   settings: settingsSchema.optional(),
   caption: captionSchema.optional(),
-});
+  /** Editing a parked Ideas card before composing it. Type/format are only
+   *  honoured while the project has no slides — after that they're baked in. */
+  idea: z.string().trim().max(MAX_DRAFT_PARAGRAPH_CHARS).optional(),
+  type: asEnum(ASSET_TYPES).optional(),
+  format: z.string().optional(),
+}).refine(
+  (d) =>
+    d.type === undefined ||
+    d.format === undefined ||
+    (isFormat(d.format) && isValidTypeFormat(d.type as AssetType, d.format as Format)),
+  { message: 'Invalid type/format combination', path: ['format'] },
+);
 
 export type SlideInput = z.infer<typeof slideSchema>;

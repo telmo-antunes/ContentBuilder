@@ -135,6 +135,9 @@ export const createProject = (data: {
   title: string;
   type: AssetType;
   format: Format;
+  /** Save the prompt now and compose later (creates an Ideas card). */
+  idea?: string;
+  stage?: 'idea' | 'drafting' | 'ready' | 'shipped';
   slides?: Array<
     Pick<Slide, 'layoutType' | 'blocks' | 'imageNeed'> &
       Partial<Pick<Slide, 'order' | 'mediaAssetId' | 'overrides'>>
@@ -149,6 +152,11 @@ export const updateProject = (
     slides?: Slide[];
     settings?: ProjectSettings;
     caption?: Caption;
+    /** Re-editing a parked Ideas card before composing it. Type/format only
+     *  take effect while the project still has no slides. */
+    idea?: string;
+    type?: AssetType;
+    format?: Format;
   },
 ) => request<Project>(`/projects/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
 
@@ -194,6 +202,39 @@ export const authorBrandRecipe = (kitId: string, verify = false) =>
     { method: 'POST' },
     300_000,
   );
+
+// ── The Desk (board) ────────────────────────────────────────────────────────
+export interface BoardCard {
+  _id: string;
+  businessId: string;
+  title: string;
+  type: AssetType;
+  format: Format;
+  stage: 'idea' | 'drafting' | 'ready' | 'shipped';
+  idea: string;
+  slideCount: number;
+  authored: { html: string; bg?: string; role?: string } | null;
+  exportedAt: string | null;
+  postedAt: string | null;
+  updatedAt: string;
+}
+export interface BoardResponse {
+  cards: BoardCard[];
+  businesses: Array<{ _id: string; name: string }>;
+  kits: Record<string, BrandKit>;
+}
+/** The whole board in ONE call (cards + the kits needed to render thumbnails). */
+export const getBoard = () => request<BoardResponse>('/projects/board');
+
+export const setProjectStage = (
+  id: string,
+  stage: BoardCard['stage'],
+  posted?: boolean,
+) =>
+  request<Project>(`/projects/${id}/stage`, {
+    method: 'PATCH',
+    body: JSON.stringify({ stage, ...(posted === undefined ? {} : { posted }) }),
+  });
 
 // ── Stock photos ────────────────────────────────────────────────────────────
 export interface StockCandidate {

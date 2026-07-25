@@ -286,6 +286,13 @@ projectsRouter.patch(
     if (!project) throw new ApiError(404, 'Project not found');
 
     if (body.title !== undefined) project.set('title', body.title);
+    if (body.idea !== undefined) project.set('idea', body.idea);
+    // Only while it's still just a prompt — once slides exist they were laid
+    // out for this canvas, and swapping the canvas under them would break them.
+    if ((body.type !== undefined || body.format !== undefined) && !project.get('slides')?.length) {
+      if (body.type !== undefined) project.set('type', body.type);
+      if (body.format !== undefined) project.set('format', body.format);
+    }
     if (body.status !== undefined) project.set('status', body.status);
     if (body.slides !== undefined) {
       const normalized = normalizeSlides(body.slides);

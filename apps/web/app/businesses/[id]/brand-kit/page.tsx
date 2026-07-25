@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import type { BrandKit, BrandRecipe, MediaAsset } from '@contentbuilder/shared';
+import type { BrandKit, BrandRecipe } from '@contentbuilder/shared';
 import { BUNDLED_FONT_FAMILIES, contrastRatio } from '@contentbuilder/shared';
 import {
   getBrandKit,

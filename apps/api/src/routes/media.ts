@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import multer from 'multer';
 import { imageSize } from 'image-size';
-import { BusinessModel, MediaAssetModel, BrandKitModel } from '../models';
+import { BusinessModel, MediaAssetModel } from '../models';
 import { getStorage } from '../storage';
 import { z as zStock } from 'zod';
 import { ApiError, asyncHandler, parseBody, requireObjectId } from '../lib/http';

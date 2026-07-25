@@ -15,7 +15,10 @@ const NAV: { href: string; label: string; icon: ReactNode; match: (p: string) =>
     // Studio owns home, brands, and existing projects — but NOT the New-post
     // route (that's its own nav item), so exactly one icon is ever active.
     match: (p) =>
-      p === '/' || p.startsWith('/businesses') || (p.startsWith('/projects') && p !== '/projects/new'),
+      p === '/' ||
+      p.startsWith('/brands') ||
+      p.startsWith('/businesses') ||
+      (p.startsWith('/projects') && p !== '/projects/new'),
     icon: (
       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6">
         <path d="M4 11.5L12 5l8 6.5" />

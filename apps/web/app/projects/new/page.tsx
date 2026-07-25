@@ -14,6 +14,8 @@ import {
 import {
   listBusinesses,
   createProject,
+  updateProject,
+  getProject,
   composeProjectAI,
   getHealth,
   type BusinessSummary,
@@ -25,6 +27,11 @@ function NewProjectForm() {
   const [businesses, setBusinesses] = useState<BusinessSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // Set when the Desk sent us here to pick up a parked Ideas card: we compose
+  // THAT project rather than creating a second one alongside it.
+  const ideaFrom = params.get('ideaFrom');
+  const [loadingIdea, setLoadingIdea] = useState(Boolean(ideaFrom));
 
   const [businessId, setBusinessId] = useState(params.get('businessId') ?? '');
   const [title, setTitle] = useState('');
@@ -47,6 +54,20 @@ function NewProjectForm() {
       .catch(() => setAiReady(false));
   }, []);
 
+  useEffect(() => {
+    if (!ideaFrom) return;
+    getProject(ideaFrom)
+      .then((p) => {
+        setBusinessId(String(p.businessId));
+        setTitle(p.title);
+        setType(p.type);
+        setFormat(p.format);
+        setIdea(p.idea ?? '');
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setLoadingIdea(false));
+  }, [ideaFrom]);
+
   const formats = ALLOWED_FORMATS[type];
   useEffect(() => {
     if (!formats.includes(format)) setFormat(defaultFormatFor(type));
@@ -61,7 +82,8 @@ function NewProjectForm() {
     Boolean(businessId && title.trim() && format) &&
     canCompose &&
     idea.trim().length > 0 &&
-    !ideaTooLong;
+    !ideaTooLong &&
+    !loadingIdea;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,9 +91,18 @@ function NewProjectForm() {
     setBusy(true);
     setError(null);
     try {
-      const project = await createProject({ businessId, title: title.trim(), type, format });
+      // Resuming a parked idea composes THAT card in place, rather than
+      // leaving a duplicate behind in the Ideas column.
+      let projectId: string;
+      if (ideaFrom) {
+        await updateProject(ideaFrom, { title: title.trim(), idea: idea.trim(), type, format });
+        projectId = ideaFrom;
+      } else {
+        const created = await createProject({ businessId, title: title.trim(), type, format, idea: idea.trim() });
+        projectId = created._id;
+      }
       try {
-        await composeProjectAI(project._id, idea.trim(), slideCount);
+        await composeProjectAI(projectId, idea.trim(), slideCount);
       } catch (err) {
         // Compose failed after the project was created — surface it inline; the
         // empty editor route no longer exists, so there's nowhere else to send them.
@@ -79,12 +110,14 @@ function NewProjectForm() {
         setBusy(false);
         return;
       }
-      router.push(`/projects/${project._id}/review`);
+      router.push(`/projects/${projectId}/review`);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setBusy(false);
     }
   };
+
+  if (loadingIdea) return <p className="muted">Opening your idea…</p>;
 
   if (businesses && businesses.length === 0) {
     return (
@@ -111,13 +144,25 @@ function NewProjectForm() {
         <Link href="/">← Studio</Link>
       </p>
       <header className="create-hero">
-        <p className="eyebrow">New post{selectedBiz ? ` · ${selectedBiz.name}` : ''}</p>
+        <p className="eyebrow">
+          {ideaFrom ? 'Parked idea' : 'New post'}
+          {selectedBiz ? ` · ${selectedBiz.name}` : ''}
+        </p>
         <h1>
-          What are we <span className="it">making</span> today?
+          {ideaFrom ? (
+            <>
+              Ready to <span className="it">make</span> this one?
+            </>
+          ) : (
+            <>
+              What are we <span className="it">making</span> today?
+            </>
+          )}
         </h1>
         <p className="lede">
-          Pick a brand, describe the idea, and the AI composes it into on-brand slides using the
-          brand&apos;s recipe.
+          {ideaFrom
+            ? 'Your saved prompt, as you left it. Edit anything, then compose it into slides.'
+            : 'Pick a brand, describe the idea, and the AI composes it into on-brand slides using the brand’s recipe.'}
         </p>
       </header>
 
@@ -128,7 +173,14 @@ function NewProjectForm() {
           <div className="grid-2">
             <div className="field" style={{ margin: 0 }}>
               <label htmlFor="np-biz">Brand</label>
-              <select id="np-biz" value={businessId} onChange={(e) => setBusinessId(e.target.value)}>
+              {/* A parked idea already belongs to a brand — offering a picker
+                  that can't persist the change would be a lie. */}
+              <select
+                id="np-biz"
+                value={businessId}
+                disabled={Boolean(ideaFrom)}
+                onChange={(e) => setBusinessId(e.target.value)}
+              >
                 {!businesses && <option>Loading…</option>}
                 {businesses?.map((b) => (
                   <option key={b._id} value={b._id}>
@@ -235,6 +287,36 @@ function NewProjectForm() {
         </div>
 
         <div className="row">
+          <button
+            className="btn"
+            type="button"
+            disabled={busy || !businessId || !title.trim()}
+            title="Save the prompt and compose it later from the desk"
+            onClick={async () => {
+              setBusy(true);
+              setError(null);
+              try {
+                if (ideaFrom) {
+                  await updateProject(ideaFrom, { title: title.trim(), idea: idea.trim(), type, format });
+                } else {
+                  await createProject({
+                    businessId,
+                    title: title.trim(),
+                    type,
+                    format,
+                    idea: idea.trim(),
+                    stage: 'idea',
+                  });
+                }
+                router.push('/');
+              } catch (err) {
+                setError(err instanceof Error ? err.message : String(err));
+                setBusy(false);
+              }
+            }}
+          >
+            {ideaFrom ? 'Keep as idea' : 'Save as idea'}
+          </button>
           <button className="btn primary" type="submit" disabled={!canSubmit || busy}>
             {busy ? 'Composing…' : 'Compose with AI ✦'}
           </button>

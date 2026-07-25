@@ -28,7 +28,7 @@ vi.mock('../lib/caption', () => ({
 
 import { createApp } from '../app';
 import { modelFor } from '../lib/ai';
-import { BusinessModel, BrandKitModel, MediaAssetModel, ProjectModel, SettingModel } from '../models';
+import { BusinessModel, BrandKitModel, MediaAssetModel, SettingModel } from '../models';
 
 let mongod: MongoMemoryServer;
 const app = () => createApp();
