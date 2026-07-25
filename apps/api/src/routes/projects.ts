@@ -11,7 +11,8 @@ import {
   recipePhotoQuery,
   type BrandRecipe,
 } from '@contentbuilder/shared';
-import { composeProject } from '../lib/htmlDirector/compose';
+import { composeProject, composeSlide } from '../lib/htmlDirector/compose';
+import { partsFromAuthored } from '../lib/htmlDirector/reparse';
 import { sanitizeAuthoredHtml } from '../lib/htmlSanitize';
 import { stockConfigured, searchStockPhotos, storeStockPhoto } from '../lib/stock';
 import { ProjectModel, ProjectVersionModel, BusinessModel, BrandKitModel, MediaAssetModel } from '../models';
@@ -285,6 +286,107 @@ projectsRouter.post(
     }
     project.set('slides', slides);
     project.set('status', 'draft');
+    await project.save();
+    res.json(project.toJSON());
+  }),
+);
+
+// ── Candidates for ONE slide ────────────────────────────────────────────────
+// Compose used to be all-or-nothing: dislike one slide and your options were
+// re-composing the whole deck (losing the rest) or editing by hand. These
+// endpoints make a single slide re-composable and instantly tweakable.
+
+/** Re-compose ONE slide into N alternatives. Nothing is saved — the user picks. */
+projectsRouter.post(
+  '/:id/slides/:slideId/variants',
+  asyncHandler(async (req, res) => {
+    const id = requireObjectId(req.params.id, 'Project');
+    if (!aiDraftConfigured()) throw new ApiError(400, 'AI is not configured.');
+    const project = await ProjectModel.findById(id);
+    if (!project) throw new ApiError(404, 'Project not found');
+
+    const slides = (project.get('slides') as Array<{ toObject?: () => SlideInput }>).map((x) =>
+      typeof x.toObject === 'function' ? x.toObject() : (x as SlideInput),
+    );
+    const idx = slides.findIndex((x) => x.id === req.params.slideId);
+    if (idx < 0) throw new ApiError(404, 'Slide not found');
+    const slide = slides[idx]!;
+    if (!slide.authored?.html) throw new ApiError(400, 'This slide is not AI-composed.');
+
+    const stored = (await approvedKitFor(String(project.get('businessId')))) as { recipe?: unknown } | null;
+    if (!stored?.recipe) throw new ApiError(400, 'This brand has no design recipe yet.');
+    const recipe = migrateRecipe(stored.recipe);
+
+    // The parts are recovered from the markup, so the COPY is preserved exactly
+    // and only the arrangement changes (a different composition variant).
+    const parts = partsFromAuthored(slide.authored.html);
+    const role = (slide.authored.role ?? 'statement') as never;
+    const count = Math.min(3, Math.max(2, Number(req.query.count) || 2));
+
+    const variants: Array<{ html: string; bg?: string; role?: string }> = [];
+    for (let v = 0; v < count; v++) {
+      try {
+        const out = await composeSlide(recipe, {
+          role,
+          parts,
+          format: project.get('format'),
+          photo: slide.authored.bg === 'photo',
+          // Offset the variant index so each candidate follows a different
+          // authored arrangement for this role.
+          index: idx + v + 1,
+        });
+        if (out.html) variants.push(out);
+      } catch (err) {
+        console.warn('[variants] one candidate failed:', err instanceof Error ? err.message : err);
+      }
+    }
+    if (!variants.length) throw new ApiError(502, 'No usable alternatives came back — try again.');
+    res.json({ variants });
+  }),
+);
+
+const tweakSchema = z.object({
+  tweak: z.enum(['bigger-headline', 'smaller-headline', 'invert', 'un-invert']),
+});
+
+/** Instant, deterministic slide tweaks — no AI, no waiting, fully reversible. */
+projectsRouter.post(
+  '/:id/slides/:slideId/tweak',
+  asyncHandler(async (req, res) => {
+    const id = requireObjectId(req.params.id, 'Project');
+    const { tweak } = parseBody(tweakSchema, req.body);
+    const project = await ProjectModel.findById(id);
+    if (!project) throw new ApiError(404, 'Project not found');
+
+    const slides = (project.get('slides') as Array<{ toObject?: () => SlideInput }>).map((x) =>
+      typeof x.toObject === 'function' ? x.toObject() : (x as SlideInput),
+    );
+    const idx = slides.findIndex((x) => x.id === req.params.slideId);
+    if (idx < 0) throw new ApiError(404, 'Slide not found');
+    const slide = slides[idx]!;
+    if (!slide.authored?.html) throw new ApiError(400, 'This slide is not AI-composed.');
+
+    let { html } = slide.authored;
+    let bg = slide.authored.bg;
+    switch (tweak) {
+      // The recipe's `.sm` headline variant IS the size control — toggle it.
+      case 'smaller-headline':
+        html = html.replace(/class="headline(?! sm)([^"]*)"/g, 'class="headline sm$1"');
+        break;
+      case 'bigger-headline':
+        html = html.replace(/class="headline sm([^"]*)"/g, 'class="headline$1"');
+        break;
+      // The recipe's inverse surface, applied per slide.
+      case 'invert':
+        bg = 'inverse';
+        break;
+      case 'un-invert':
+        bg = undefined;
+        break;
+    }
+
+    slides[idx] = { ...slide, authored: { ...slide.authored, html, ...(bg ? { bg } : { bg: undefined }) } };
+    project.set('slides', normalizeSlides(slides));
     await project.save();
     res.json(project.toJSON());
   }),

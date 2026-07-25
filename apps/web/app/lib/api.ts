@@ -167,6 +167,26 @@ export const composeProjectAI = (id: string, idea: string, slideCount?: number) 
     180_000,
   );
 
+/** Alternative arrangements for ONE slide — same copy, different composition.
+ *  Nothing is saved until the user applies one. */
+export const getSlideVariants = (projectId: string, slideId: string, count = 2) =>
+  request<{ variants: Array<{ html: string; bg?: string; role?: string }> }>(
+    `/projects/${projectId}/slides/${slideId}/variants?count=${count}`,
+    { method: 'POST' },
+    180_000,
+  );
+
+/** Instant deterministic slide tweaks (no AI): headline size, inverse surface. */
+export const tweakSlide = (
+  projectId: string,
+  slideId: string,
+  tweak: 'bigger-headline' | 'smaller-headline' | 'invert' | 'un-invert',
+) =>
+  request<Project>(`/projects/${projectId}/slides/${slideId}/tweak`, {
+    method: 'POST',
+    body: JSON.stringify({ tweak }),
+  });
+
 /** Author (or re-author) the brand's design recipe from its kit evidence (design tier). */
 export const authorBrandRecipe = (kitId: string, verify = false) =>
   request<{ _id: string; recipe?: unknown }>(

@@ -2009,3 +2009,15 @@ input[type='color'] {
 .bk-knobs-lbl { font-size: 9.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--faint); font-weight: 700; padding-bottom: 8px; }
 .bk-knobs label { display: flex; flex-direction: column; gap: 4px; font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); font-weight: 700; }
 .bk-knobs select { font-size: 12.5px; padding: 5px 8px; min-width: 128px; }
+
+/* Studio: instant adjustments + the arrangement picker. */
+.studio-klbl { font-size: 9.5px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--faint); margin-bottom: 10px; }
+.studio-variants { margin-top: 18px; }
+.sv-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.sv-card {
+  padding: 0; border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+  background: var(--bg); cursor: pointer; line-height: 0;
+  transition: transform var(--dur-2) var(--ease), border-color var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
+}
+.sv-card:hover:not(:disabled) { transform: translateY(-3px); border-color: var(--accent-2); box-shadow: var(--shadow-sm); }
+.sv-card:disabled { opacity: 0.5; cursor: default; }

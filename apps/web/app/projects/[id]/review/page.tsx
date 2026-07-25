@@ -13,6 +13,8 @@ import {
   getProject,
   updateProject,
   getShareInfo,
+  getSlideVariants,
+  tweakSlide,
   type ProjectDetail,
 } from '../../../lib/api';
 import { api } from '../../../lib/config';
@@ -60,6 +62,10 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
   // Slides whose composition exceeds the canvas — surfaced so a broken export
   // can't ship silently (authored slides had no text-fit guard at all).
   const [overflow, setOverflow] = useState<Record<string, boolean>>({});
+  // Alternative arrangements for the selected slide — shown side by side, applied
+  // only on click, so a single weak slide no longer means re-composing the deck.
+  const [variants, setVariants] = useState<Array<{ html: string; bg?: string; role?: string }> | null>(null);
+  const [working, setWorking] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -119,6 +125,60 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
       }
     },
     [editId, editEls, projectId],
+  );
+
+  /** Ask for alternative arrangements of the selected slide (copy untouched). */
+  const askVariants = useCallback(
+    async (slideId: string) => {
+      setWorking('variants');
+      setVariants(null);
+      try {
+        const res = await getSlideVariants(projectId, slideId, 2);
+        setVariants(res.variants);
+      } catch (e) {
+        toast(e instanceof Error ? e.message : 'Could not get alternatives', 'error');
+      } finally {
+        setWorking(null);
+      }
+    },
+    [projectId],
+  );
+
+  /** Apply one candidate to the slide. */
+  const applyVariant = useCallback(
+    async (slideId: string, v: { html: string; bg?: string; role?: string }, allSlides: Slide[]) => {
+      setWorking('apply');
+      try {
+        const next = allSlides.map((s) =>
+          s.id === slideId ? { ...s, authored: { ...s.authored, ...v } } : s,
+        );
+        const updated = await updateProject(projectId, { slides: next as Slide[] });
+        setProject((prev) => (prev ? { ...prev, slides: updated.slides } : prev));
+        setVariants(null);
+        toast('Arrangement applied', 'ok');
+      } catch {
+        toast('Could not apply that arrangement', 'error');
+      } finally {
+        setWorking(null);
+      }
+    },
+    [projectId],
+  );
+
+  /** Instant deterministic tweaks — no AI, no waiting. */
+  const applyTweak = useCallback(
+    async (slideId: string, tweak: 'bigger-headline' | 'smaller-headline' | 'invert' | 'un-invert') => {
+      setWorking(tweak);
+      try {
+        const updated = await tweakSlide(projectId, slideId, tweak);
+        setProject((prev) => (prev ? { ...prev, slides: updated.slides } : prev));
+      } catch {
+        toast('Could not apply that change', 'error');
+      } finally {
+        setWorking(null);
+      }
+    },
+    [projectId],
   );
 
   /** Save a fetched blob response as a download. */
@@ -529,14 +589,94 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                   </>
                 )}
 
-                <button
-                  className="btn"
-                  style={{ width: '100%', justifyContent: 'center', marginTop: 18 }}
-                  disabled={!selected?.authored?.html}
-                  onClick={() => selected && startEdit(selected)}
-                >
-                  ✎ Edit this slide
-                </button>
+                {/* Instant, reversible tweaks — deterministic, no AI, no waiting. */}
+                {selected?.authored?.html && (
+                  <>
+                    <div className="studio-divln" />
+                    <div className="k studio-klbl">Adjust</div>
+                    <div className="intents">
+                      <button
+                        className="btn sm"
+                        disabled={working !== null}
+                        onClick={() => applyTweak(selected.id, 'bigger-headline')}
+                      >
+                        Bigger headline
+                      </button>
+                      <button
+                        className="btn sm"
+                        disabled={working !== null}
+                        onClick={() => applyTweak(selected.id, 'smaller-headline')}
+                      >
+                        Smaller headline
+                      </button>
+                      <button
+                        className="btn sm"
+                        disabled={working !== null || !recipe?.surfaces?.inverse}
+                        title={
+                          recipe?.surfaces?.inverse
+                            ? 'Flip this slide to the brand’s light surface'
+                            : 'This brand has no inverse surface yet'
+                        }
+                        onClick={() =>
+                          applyTweak(
+                            selected.id,
+                            selected.authored?.bg === 'inverse' ? 'un-invert' : 'invert',
+                          )
+                        }
+                      >
+                        {selected.authored?.bg === 'inverse' ? 'Un-invert' : 'Invert'}
+                      </button>
+                    </div>
+                  </>
+                )}
+
+                {/* Candidates: same copy, different arrangement. Nothing saved until picked. */}
+                {variants && variants.length > 0 && (
+                  <div className="studio-variants">
+                    <div className="k studio-klbl">Pick an arrangement</div>
+                    <div className="sv-row">
+                      {variants.map((v, i) => (
+                        <button
+                          key={i}
+                          className="sv-card"
+                          disabled={working !== null}
+                          onClick={() => selected && applyVariant(selected.id, v, slides)}
+                          title="Apply this arrangement"
+                        >
+                          <ScaledSlide format={project.format} displayWidth={124}>
+                            <SlideRenderer
+                              slide={{ authored: v }}
+                              brandKit={kit}
+                              format={project.format}
+                              image={selected ? resolveSlideImage(selected, project.media) : null}
+                              forExport
+                            />
+                          </ScaledSlide>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="row" style={{ gap: 8, marginTop: 18 }}>
+                  <button
+                    className="btn"
+                    style={{ flex: 1, justifyContent: 'center' }}
+                    disabled={!selected?.authored?.html}
+                    onClick={() => selected && startEdit(selected)}
+                  >
+                    ✎ Edit
+                  </button>
+                  <button
+                    className="btn"
+                    style={{ flex: 1, justifyContent: 'center' }}
+                    disabled={!selected?.authored?.html || working !== null}
+                    title="Re-arrange this slide only — the copy is kept"
+                    onClick={() => selected && askVariants(selected.id)}
+                  >
+                    {working === 'variants' ? 'Thinking…' : '✦ Alternatives'}
+                  </button>
+                </div>
               </>
             )}
           </aside>
