@@ -30,7 +30,7 @@ export function AuthoredSlide({
   motion = false,
 }: {
   recipe: BrandRecipe;
-  authored: { html: string; bg?: string };
+  authored: { html: string; bg?: string; role?: string };
   /** The target canvas — selects the recipe's per-format vertical tuning. */
   format: Format;
   logoUrl?: string;
@@ -59,8 +59,9 @@ export function AuthoredSlide({
   ].filter(Boolean);
   const varRule = vars.length ? `.${scope}{${vars.join(';')}}` : '';
   // Motion mode: append the (scoped) reveal choreography + tag the slide `cb-motion`.
+  // Per-ROLE motion: the recipe can give a stat a pop and a quote a calm fade.
   const motionCss = motion
-    ? '\n' + recipeMotionCss(recipe).replace(/\.cb-slide/g, `.${scope} .cb-slide`)
+    ? '\n' + recipeMotionCss(recipe, authored.role).replace(/\.cb-slide/g, `.${scope} .cb-slide`)
     : '';
   const wrapperStyle = { position: 'absolute', inset: 0, ...recipeCssVars(recipe.tokens) } as CSSProperties;
   const bgClass = `${authored.bg ? ` ${authored.bg.replace(/[^a-zA-Z0-9_-]/g, '')}` : ''}${motion ? ' cb-motion' : ''}`;

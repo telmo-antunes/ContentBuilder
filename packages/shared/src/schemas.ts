@@ -101,6 +101,9 @@ export const slideSchema = z.object({
       /** Optional background-variant class applied to the slide root (e.g. 'photo',
        *  'statement') — the recipe stylesheet defines what each looks like. */
       bg: z.string().max(40).optional(),
+      /** The composer's slide ROLE (cover/statement/quote/stat/cta/…). Drives the
+       *  recipe's per-role motion in animated exports. */
+      role: z.string().max(24).optional(),
     })
     .optional(),
 });

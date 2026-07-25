@@ -53,7 +53,11 @@ export function normalizeSlides(slides: SlideInput[]) {
     // it here previously forced /compose to bypass this normaliser and made a
     // refine on an authored slide wipe its markup.
     authored: s.authored
-      ? { html: sanitizeAuthoredHtml(s.authored.html), ...(s.authored.bg ? { bg: s.authored.bg } : {}) }
+      ? {
+          html: sanitizeAuthoredHtml(s.authored.html),
+          ...(s.authored.bg ? { bg: s.authored.bg } : {}),
+          ...(s.authored.role ? { role: s.authored.role } : {}),
+        }
       : undefined,
   }));
 }

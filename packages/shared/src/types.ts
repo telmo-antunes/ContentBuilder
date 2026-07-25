@@ -239,7 +239,7 @@ export interface Slide {
    * When present, the renderer mounts it instead of the block layout; `blocks`
    * is retained for free-canvas conversion and back-compat.
    */
-  authored?: { html: string; bg?: string };
+  authored?: { html: string; bg?: string; role?: string };
 }
 
 export type ProjectStatus = 'draft' | 'rendered';

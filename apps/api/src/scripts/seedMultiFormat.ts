@@ -13,22 +13,22 @@ import { BusinessModel, BrandKitModel, ProjectModel } from '../models';
 import type { BrandRecipe } from '@contentbuilder/shared';
 import { dynatosRecipe, detailMastersRecipe } from '../lib/htmlDirector/recipes';
 
-type Frag = { html: string; bg?: string };
+type Frag = { html: string; bg?: string; role?: string };
 
 // A short, vertical story deck for Dynatós — the story override gives these big
 // type and Instagram-safe top/bottom padding.
 const DYN_STORY: Frag[] = [
-  { html: `<div class="logo"></div><div class="fill"></div><p class="eyebrow">The long game</p><h1 class="headline">Discipline is a<br/>daily vote.</h1><p class="tagline">Cast it before the world wakes up.</p>` },
-  { html: `<p class="eyebrow">Habit one</p><div class="fill"></div><h1 class="headline sm">Win the<br/>morning.</h1><div class="rule"></div><p class="tagline">The first hour decides the other twenty-three.</p>` },
-  { html: `<div class="logo"></div><div class="fill"></div><p class="eyebrow">Your move</p><h1 class="headline sm">DM me 'RESET'</h1><p class="tagline">for the daily checklist.</p><a class="cta">Start now</a><p class="handle">@dynatos</p>` },
+  { role: 'cover', html: `<div class="logo"></div><div class="fill"></div><p class="eyebrow">The long game</p><h1 class="headline">Discipline is a<br/>daily vote.</h1><p class="tagline">Cast it before the world wakes up.</p>` },
+  { role: 'statement', html: `<p class="eyebrow">Habit one</p><div class="fill"></div><h1 class="headline sm">Win the<br/>morning.</h1><div class="rule"></div><p class="tagline">The first hour decides the other twenty-three.</p>` },
+  { role: 'cta', html: `<div class="logo"></div><div class="fill"></div><p class="eyebrow">Your move</p><h1 class="headline sm">DM me 'RESET'</h1><p class="tagline">for the daily checklist.</p><a class="cta">Start now</a><p class="handle">@dynatos</p>` },
 ];
 
 // A compact square deck for DetailMasters — the square override tightens the
 // serif scale and the giant stat so a full composition fits 1080×1080.
 const DM_SQUARE: Frag[] = [
-  { bg: 'photo', html: `<div class="logo-row"><div class="monogram"></div><span class="wordmark"><b>detail</b><i>masters</i></span></div><div class="fill"></div><p class="eyebrow">The CRM for detailers</p><h1 class="headline">Run your shop <span class="it">on autopilot.</span></h1>` },
-  { html: `<p class="eyebrow">Results</p><h1 class="headline sm">Fewer no-shows</h1><div class="stat">40%</div><p class="body">Automatic reminders and deposits keep the bays full.</p>` },
-  { html: `<p class="eyebrow">Every job, one screen</p><h1 class="headline sm">Booked. Paid. <span class="it">Reviewed.</span></h1><div class="rule"></div><div class="panel"><div class="row"><span class="tick">✓</span><span>Ceramic coating · Sat</span><em>Deposit paid</em></div><div class="row"><span class="tick">◷</span><span>Interior detail · 14:30</span><em>Reminder sent</em></div></div>` },
+  { role: 'cover', bg: 'photo', html: `<div class="logo-row"><div class="monogram"></div><span class="wordmark"><b>detail</b><i>masters</i></span></div><div class="fill"></div><p class="eyebrow">The CRM for detailers</p><h1 class="headline">Run your shop <span class="it">on autopilot.</span></h1>` },
+  { role: 'stat', html: `<p class="eyebrow">Results</p><h1 class="headline sm">Fewer no-shows</h1><div class="stat">40%</div><p class="body">Automatic reminders and deposits keep the bays full.</p>` },
+  { role: 'feature', html: `<p class="eyebrow">Every job, one screen</p><h1 class="headline sm">Booked. Paid. <span class="it">Reviewed.</span></h1><div class="rule"></div><div class="panel"><div class="row"><span class="tick">✓</span><span>Ceramic coating · Sat</span><em>Deposit paid</em></div><div class="row"><span class="tick">◷</span><span>Interior detail · 14:30</span><em>Reminder sent</em></div></div>` },
 ];
 
 async function attach(
@@ -59,7 +59,7 @@ async function attach(
       layoutType: 'TextOnly',
       blocks: [],
       imageNeed: 'none',
-      authored: { html: f.html, ...(f.bg ? { bg: f.bg } : {}) },
+      authored: { html: f.html, ...(f.bg ? { bg: f.bg } : {}), ...(f.role ? { role: f.role } : {}) },
     })),
   });
   console.log(

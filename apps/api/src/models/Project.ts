@@ -107,7 +107,12 @@ const slideSchema = new Schema(
      *  When present, the renderer mounts this instead of the block layout. */
     authored: {
       type: new Schema(
-        { html: { type: String, required: true }, bg: { type: String, required: false } },
+        {
+          html: { type: String, required: true },
+          bg: { type: String, required: false },
+          /** The composer's slide role — drives per-role motion in video export. */
+          role: { type: String, required: false },
+        },
         { _id: false },
       ),
       required: false,

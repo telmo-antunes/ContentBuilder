@@ -7,6 +7,7 @@ import {
   recipePatternsFor,
   recipeMotionCss,
   recipeMotionMs,
+  motionForRole,
   RECIPE_VAR_PREFIX,
 } from './recipe';
 
@@ -152,5 +153,43 @@ describe('motion signature', () => {
     const r = brandRecipeSchema.parse({ ...minimal, motion: { style: 'zoom', pace: 'blazing' } });
     expect(r.motion?.style).toBe('rise');
     expect(r.motion?.pace).toBe('balanced');
+  });
+});
+
+describe('per-role motion', () => {
+  const r = brandRecipeSchema.parse({
+    ...minimal,
+    motion: {
+      style: 'punch',
+      pace: 'punchy',
+      description: 'forceful',
+      roles: { stat: { style: 'pop', pace: 'balanced' }, quote: { style: 'fade', pace: 'calm' } },
+    },
+  });
+
+  it('uses the role override when the recipe defines one', () => {
+    expect(motionForRole(r, 'stat')).toEqual({ style: 'pop', pace: 'balanced' });
+    expect(motionForRole(r, 'quote')).toEqual({ style: 'fade', pace: 'calm' });
+  });
+
+  it('falls back to the brand default for roles without an override', () => {
+    expect(motionForRole(r, 'statement')).toEqual({ style: 'punch', pace: 'punchy' });
+    expect(motionForRole(r, undefined)).toEqual({ style: 'punch', pace: 'punchy' });
+    expect(motionForRole(r, 'not-a-role')).toEqual({ style: 'punch', pace: 'punchy' });
+  });
+
+  it('emits different CSS + duration per role', () => {
+    expect(recipeMotionCss(r, 'stat')).toContain('scale(0.55)'); // pop
+    expect(recipeMotionCss(r, 'quote')).not.toContain('scale(');  // fade
+    // the calm quote takes longer than the balanced stat
+    expect(recipeMotionMs(r, 'quote')).toBeGreaterThan(recipeMotionMs(r, 'stat'));
+  });
+
+  it('drops unknown per-role enum values to safe defaults (AI drift)', () => {
+    const drift = brandRecipeSchema.parse({
+      ...minimal,
+      motion: { style: 'rise', pace: 'calm', roles: { stat: { style: 'explode', pace: 'ludicrous' } } },
+    });
+    expect(motionForRole(drift, 'stat')).toEqual({ style: 'rise', pace: 'balanced' });
   });
 });

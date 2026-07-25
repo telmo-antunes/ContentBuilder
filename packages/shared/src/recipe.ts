@@ -53,11 +53,30 @@ export type RecipeComponent = z.infer<typeof recipeComponentSchema>;
  * character of each element's entrance, `pace` sets the tempo. Optional and
  * backwards-compatible — a recipe without it uses the balanced rise default.
  */
+/** The slide roles the composer assigns — motion can differ per role. */
+export const SLIDE_ROLES = ['cover', 'statement', 'quote', 'feature', 'stat', 'list', 'cta'] as const;
+export type SlideRole = (typeof SLIDE_ROLES)[number];
+
+export const MOTION_STYLES = ['rise', 'fade', 'slide', 'punch', 'pop'] as const;
+export const MOTION_PACES = ['calm', 'balanced', 'punchy'] as const;
+
+/** A style+pace pair — the brand default, or one role's override. */
+const motionPairSchema = z.object({
+  style: z.enum(MOTION_STYLES).catch('rise'),
+  pace: z.enum(MOTION_PACES).catch('balanced'),
+});
+
 export const recipeMotionSchema = z.object({
-  style: z.enum(['rise', 'fade', 'slide', 'punch']).catch('rise'),
-  pace: z.enum(['calm', 'balanced', 'punchy']).catch('balanced'),
+  style: z.enum(MOTION_STYLES).catch('rise'),
+  pace: z.enum(MOTION_PACES).catch('balanced'),
   /** One line describing the brand's motion, for the UI + the recipe screen. */
   description: z.string().max(200).default(''),
+  /**
+   * Optional PER-ROLE overrides, keyed by slide role. Motion becomes editorial
+   * rather than decorative: a `stat` can pop while a `quote` fades in calmly and
+   * a `cta` punches. Roles without an entry use the brand default above.
+   */
+  roles: z.record(z.string(), motionPairSchema).optional(),
 });
 export type RecipeMotion = z.infer<typeof recipeMotionSchema>;
 
@@ -225,7 +244,12 @@ const STYLE_FROM: Record<RecipeMotion['style'], string> = {
   fade: 'opacity:0;',
   slide: 'opacity:0; transform: translateX(-44px);',
   punch: 'opacity:0; transform: scale(0.92);',
+  // A dramatic swell — reads best on a single hero element (a big stat).
+  pop: 'opacity:0; transform: scale(0.55);',
 };
+
+/** Styles that want an overshoot easing to land with character. */
+const OVERSHOOT = new Set<RecipeMotion['style']>(['punch', 'pop']);
 
 /** Reveal order — element groups keyed by the recipe's component classes. */
 const ORDER: string[][] = [
@@ -243,22 +267,40 @@ const LEAD_IN = 0.12;
 
 export const DEFAULT_MOTION: RecipeMotion = { style: 'rise', pace: 'balanced', description: '' };
 
-/** How long a slide's full reveal takes, in ms (what the video capture window needs). */
-export function recipeMotionMs(recipe?: BrandRecipe): number {
+/**
+ * The motion that applies to a slide: the role's override when the recipe
+ * defines one, else the brand default. This is what makes motion editorial —
+ * a `stat` slide can pop while a `quote` fades.
+ */
+export function motionForRole(
+  recipe?: BrandRecipe,
+  role?: string,
+): { style: RecipeMotion['style']; pace: RecipeMotion['pace'] } {
   const m = recipe?.motion ?? DEFAULT_MOTION;
-  const { dur, step } = PACE[m.pace];
+  const override = role ? m.roles?.[role] : undefined;
+  return { style: override?.style ?? m.style, pace: override?.pace ?? m.pace };
+}
+
+/** How long a slide's full reveal takes, in ms (what the video capture window needs). */
+export function recipeMotionMs(recipe?: BrandRecipe, role?: string): number {
+  const { dur, step } = PACE[motionForRole(recipe, role).pace];
   return Math.round((LEAD_IN + (ORDER.length - 1) * step + dur) * 1000);
 }
 
 /**
- * Build the brand's motion stylesheet — the reveal choreography, scoped to
+ * Build the motion stylesheet for a slide — the reveal choreography, scoped to
  * `.cb-slide.cb-motion`. Keyed on the recipe's own component classes so every
- * brand animates on-brand with no per-slide authoring.
+ * brand animates on-brand with no per-slide authoring, and tuned by the slide's
+ * ROLE when the recipe defines an override for it.
  */
-export function recipeMotionCss(recipe?: BrandRecipe): string {
-  const m = recipe?.motion ?? DEFAULT_MOTION;
+export function recipeMotionCss(recipe?: BrandRecipe, role?: string): string {
+  const m = motionForRole(recipe, role);
   const { dur, step } = PACE[m.pace];
-  const ease = m.pace === 'punchy' ? 'cubic-bezier(0.2,1.5,0.4,1)' : 'cubic-bezier(0.16,1,0.3,1)';
+  const ease = OVERSHOOT.has(m.style)
+    ? 'cubic-bezier(0.2,1.5,0.4,1)'
+    : m.pace === 'punchy'
+      ? 'cubic-bezier(0.2,1.2,0.4,1)'
+      : 'cubic-bezier(0.16,1,0.3,1)';
 
   const lines: string[] = [
     // NOTE: no base `opacity: 0` — `animation-fill-mode: both` supplies the

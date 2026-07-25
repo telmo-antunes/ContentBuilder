@@ -12,7 +12,7 @@ import { resolveTextColor, rgba } from './color';
 
 export interface RenderableSlide {
   /** AI-authored markup — the only kind of slide the app renders. */
-  authored?: { html: string; bg?: string };
+  authored?: { html: string; bg?: string; role?: string };
 }
 
 /** Mounts one AI-composed slide at exact pixel dimensions, styled by the brand recipe. */

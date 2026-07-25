@@ -20,7 +20,7 @@ export default function RenderStage({
   showCounter,
   motion = false,
 }: {
-  authored?: { html: string; bg?: string };
+  authored?: { html: string; bg?: string; role?: string };
   image?: LayoutImage | null;
   format: Format;
   kit: RenderBrandKit;

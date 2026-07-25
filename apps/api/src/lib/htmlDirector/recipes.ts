@@ -134,6 +134,16 @@ export const dynatosRecipe: BrandRecipe = brandRecipeSchema.parse({
     style: 'punch',
     pace: 'punchy',
     description: 'Type lands with force — each line punches in fast and tight, like a rep completed.',
+    roles: {
+      // The cover sets the tone with weight rather than speed.
+      cover: { style: 'rise', pace: 'balanced' },
+      // A quote is a pause for breath — let it settle in.
+      quote: { style: 'fade', pace: 'calm' },
+      // A number should hit hardest of all.
+      stat: { style: 'pop', pace: 'punchy' },
+      // The ask arrives decisively.
+      cta: { style: 'punch', pace: 'punchy' },
+    },
   },
 });
 
@@ -268,6 +278,15 @@ export const detailMastersRecipe: BrandRecipe = brandRecipeSchema.parse({
     style: 'rise',
     pace: 'calm',
     description: 'Unhurried and premium — each element glides up, like a car easing into the showroom light.',
+    roles: {
+      // A photo cover should simply appear, letting the image do the work.
+      cover: { style: 'fade', pace: 'calm' },
+      // The result number is the one moment allowed to show off.
+      stat: { style: 'pop', pace: 'balanced' },
+      // Feature rows read like a list being set down, one at a time.
+      feature: { style: 'slide', pace: 'balanced' },
+      cta: { style: 'rise', pace: 'balanced' },
+    },
   },
 });
 

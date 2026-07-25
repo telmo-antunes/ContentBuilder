@@ -139,7 +139,7 @@ export async function composeSlide(
   recipe: BrandRecipe,
   input: ComposeSlideInput,
   opts?: ComposeOptions,
-): Promise<{ html: string; bg?: string }> {
+): Promise<{ html: string; bg?: string; role?: string }> {
   const { system, user } = buildComposeMessages(recipe, input);
   const resp = await aiMessage({
     model: composeModel(opts),
@@ -157,7 +157,9 @@ export async function composeSlide(
   if (missing.length) {
     console.warn(`[compose] ${input.role}: parts not verbatim in output: ${missing.join(', ')}`);
   }
-  return { html: safe, bg: input.photo ? 'photo' : undefined };
+  // The role travels WITH the slide so the renderer can apply the recipe's
+  // per-role motion (a stat pops, a quote fades) in animated exports.
+  return { html: safe, bg: input.photo ? 'photo' : undefined, role: input.role };
 }
 
 /** Full path: idea → authored slides (role + authored markup). */
@@ -165,12 +167,12 @@ export async function composeProject(
   recipe: BrandRecipe,
   idea: string,
   opts?: ComposeOptions,
-): Promise<Array<{ role: SlideRole; authored: { html: string; bg?: string } }>> {
+): Promise<Array<{ role: SlideRole; authored: { html: string; bg?: string; role?: string } }>> {
   // Resolve the compose model once (Settings override → cheap tier) and thread
   // it through the parse + per-slide compose calls, so all share one lookup.
   const o: ComposeOptions = { ...opts, model: opts?.model ?? (await modelFor('compose')) };
   const inputs = await parseForCompose(recipe, idea, o);
-  const out: Array<{ role: SlideRole; authored: { html: string; bg?: string } }> = [];
+  const out: Array<{ role: SlideRole; authored: { html: string; bg?: string; role?: string } }> = [];
   for (const input of inputs) {
     const authored = await composeSlide(recipe, input, o);
     if (authored.html) out.push({ role: input.role, authored });
