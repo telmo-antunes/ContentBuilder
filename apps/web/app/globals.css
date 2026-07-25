@@ -1998,3 +1998,14 @@ input[type='color'] {
   color: #1b1206; background: var(--warn, #e0a23a);
   border-radius: 6px; padding: 3px 7px; box-shadow: var(--shadow-sm);
 }
+
+/* Recipe: "why this design" + the live tuning knobs. */
+.bk-why { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 12px; }
+.bk-why summary { cursor: pointer; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent-2); font-weight: 700; }
+.bk-why dl { margin: 12px 0 0; display: grid; gap: 10px; }
+.bk-why dt { font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); font-weight: 700; }
+.bk-why dd { margin: 3px 0 0; font-size: 13px; line-height: 1.5; color: var(--muted); max-width: 70ch; }
+.bk-knobs { display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+.bk-knobs-lbl { font-size: 9.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--faint); font-weight: 700; padding-bottom: 8px; }
+.bk-knobs label { display: flex; flex-direction: column; gap: 4px; font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); font-weight: 700; }
+.bk-knobs select { font-size: 12.5px; padding: 5px 8px; min-width: 128px; }

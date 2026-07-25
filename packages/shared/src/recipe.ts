@@ -427,6 +427,86 @@ export const DEFAULT_MOTION: RecipeMotion = {
   countStats: true,
 };
 
+// ── One brand, one truth ────────────────────────────────────────────────────
+
+/**
+ * Re-point a recipe's tokens at the brand kit's colours and fonts.
+ *
+ * Authored slides render from `recipe.tokens`, but the brand-kit editor writes
+ * `kit.colors` — with nothing joining them, changing your accent from gold to
+ * blue left every post gold. The most prominent control on the screen did
+ * nothing. This is the join: edit the brand, and the posts follow.
+ *
+ * Only the tokens the kit actually owns are touched, so authored nuance
+ * (accentAlt, line, radius, the stylesheet) survives. Contrast is re-checked
+ * afterwards, because a user-picked colour can easily be illegible.
+ */
+export function applyKitToRecipe(
+  recipe: BrandRecipe,
+  kit: {
+    colors?: { background?: string; text?: string; accent?: string; secondary?: string };
+    fonts?: { render?: { heading?: string; body?: string } };
+  },
+): { recipe: BrandRecipe; changed: string[] } {
+  const tokens = { ...recipe.tokens };
+  const changed: string[] = [];
+  const set = (key: keyof typeof tokens, value: string | undefined, label: string) => {
+    if (!value || tokens[key] === value) return;
+    (tokens as Record<string, unknown>)[key] = value;
+    changed.push(label);
+  };
+
+  set('ground', kit.colors?.background, 'ground');
+  set('ink', kit.colors?.text, 'ink');
+  set('accent', kit.colors?.accent, 'accent');
+  set('groundAlt', kit.colors?.secondary, 'groundAlt');
+  set('displayFamily', kit.fonts?.render?.heading, 'displayFamily');
+  set('bodyFamily', kit.fonts?.render?.body, 'bodyFamily');
+
+  if (!changed.length) return { recipe, changed };
+  // A hand-picked colour is exactly where legibility breaks, so re-gate.
+  const gated = ensureRecipeContrast({ ...recipe, tokens });
+  return { recipe: gated.recipe, changed: [...changed, ...gated.repairs.map((r) => `repaired ${r}`)] };
+}
+
+/** The recipe knobs a user may set directly, without a full re-author. */
+export interface RecipeKnobs {
+  accent?: string;
+  displayCase?: 'upper' | 'title' | 'sentence';
+  density?: 'roomy' | 'balanced' | 'dense';
+  motionStyle?: (typeof MOTION_STYLES)[number];
+  motionPace?: (typeof MOTION_PACES)[number];
+}
+
+/**
+ * Apply direct edits to a recipe. A colour or tempo tweak used to require a
+ * ~60s re-author that changed everything else too; these are instant, scoped,
+ * and preserve the rest of the design exactly.
+ */
+export function applyRecipeKnobs(recipe: BrandRecipe, knobs: RecipeKnobs): BrandRecipe {
+  let out: BrandRecipe = {
+    ...recipe,
+    tokens: { ...recipe.tokens, ...(knobs.accent ? { accent: knobs.accent } : {}) },
+    typography: {
+      ...recipe.typography,
+      ...(knobs.displayCase ? { displayCase: knobs.displayCase } : {}),
+      ...(knobs.density ? { density: knobs.density } : {}),
+    },
+  };
+  if (knobs.motionStyle || knobs.motionPace) {
+    const base = recipe.motion ?? DEFAULT_MOTION;
+    out = {
+      ...out,
+      motion: {
+        ...base,
+        ...(knobs.motionStyle ? { style: knobs.motionStyle } : {}),
+        ...(knobs.motionPace ? { pace: knobs.motionPace } : {}),
+      },
+    };
+  }
+  return knobs.accent ? ensureRecipeContrast(out).recipe : out;
+}
+
 // ── Versioning ──────────────────────────────────────────────────────────────
 
 /**

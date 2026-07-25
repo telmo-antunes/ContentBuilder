@@ -4,6 +4,9 @@ import {
   BUNDLED_FONT_FAMILIES,
   DEFAULT_RENDER_HEADING,
   DEFAULT_RENDER_BODY,
+  applyKitToRecipe,
+  applyRecipeKnobs,
+  migrateRecipe,
 } from '@contentbuilder/shared';
 import { BusinessModel, BrandKitModel } from '../models';
 import { ApiError, asyncHandler, parseBody, publicErrMessage, requireObjectId } from '../lib/http';
@@ -37,6 +40,19 @@ const patchKitSchema = z.object({
   styleDescriptor: z.string().max(200).optional(),
   voice: z.string().max(400).optional(),
   status: z.enum(['draft', 'approved']).optional(),
+  /**
+   * Direct recipe edits — instant and scoped, so a colour or tempo tweak no
+   * longer needs a full (~60s) re-author that would change everything else.
+   */
+  recipe: z
+    .object({
+      accent: hex.optional(),
+      displayCase: z.enum(['upper', 'title', 'sentence']).optional(),
+      density: z.enum(['roomy', 'balanced', 'dense']).optional(),
+      motionStyle: z.enum(['rise', 'fade', 'slide', 'punch', 'pop']).optional(),
+      motionPace: z.enum(['calm', 'balanced', 'punchy']).optional(),
+    })
+    .optional(),
 });
 
 /** Business-scoped: mounted at /businesses/:id */
@@ -289,6 +305,31 @@ brandKitRouter.patch(
     if (body.styleDescriptor !== undefined) kit.set('styleDescriptor', body.styleDescriptor);
     if (body.voice !== undefined) kit.set('voice', body.voice);
     if (body.status) kit.set('status', body.status);
+
+    // ONE BRAND, ONE TRUTH. Authored slides render from `recipe.tokens`, so a
+    // kit edit that didn't reach them was invisible on every post — the palette
+    // editor looked broken because it effectively was. Re-point the recipe here,
+    // then apply any direct knobs, then re-save.
+    const storedRecipe = kit.get('recipe');
+    if (storedRecipe) {
+      try {
+        let recipe = migrateRecipe(storedRecipe);
+        if (body.colors || body.fonts) {
+          const synced = applyKitToRecipe(recipe, {
+            colors: body.colors,
+            fonts: body.fonts,
+          });
+          recipe = synced.recipe;
+          if (synced.changed.length) {
+            console.warn(`[recipe] re-pointed from kit edit: ${synced.changed.join(', ')}`);
+          }
+        }
+        if (body.recipe) recipe = applyRecipeKnobs(recipe, body.recipe);
+        kit.set('recipe', recipe);
+      } catch (err) {
+        console.warn('[recipe] could not sync from kit edit:', err instanceof Error ? err.message : err);
+      }
+    }
 
     await kit.save();
 

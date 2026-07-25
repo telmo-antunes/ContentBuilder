@@ -403,6 +403,26 @@ function KitEditor({
     e.currentTarget.style.setProperty('--mx', '0');
     e.currentTarget.style.setProperty('--my', '0');
   };
+  /**
+   * Tune the recipe directly. Instant and scoped — a colour or tempo change used
+   * to require a full re-author, which also rewrote everything else.
+   */
+  const saveRecipeKnobs = async (knobs: Record<string, string>) => {
+    setBusy('knobs');
+    setError(null);
+    try {
+      const updated = (await patchBrandKit(kit._id, { recipe: knobs } as never)) as {
+        recipe?: BrandRecipe;
+      };
+      if (updated.recipe) setRecipe(updated.recipe);
+      toast('Recipe updated — every post follows', 'ok');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const authorRec = async () => {
     setBusy('recipe');
     setError(null);
@@ -552,6 +572,78 @@ function KitEditor({
                   <div className="k">Voice</div>
                   <div className="v">{recipe.voice.description || '—'}</div>
                 </div>
+              </div>
+
+              {/* WHY it chose this — recorded at author time. */}
+              {recipe.rationale && Object.values(recipe.rationale).some(Boolean) && (
+                <details className="bk-why">
+                  <summary>Why this design?</summary>
+                  <dl>
+                    {(['palette', 'type', 'signature', 'motion'] as const).map((k) =>
+                      recipe.rationale?.[k] ? (
+                        <div key={k}>
+                          <dt>{k}</dt>
+                          <dd>{recipe.rationale[k]}</dd>
+                        </div>
+                      ) : null,
+                    )}
+                  </dl>
+                </details>
+              )}
+
+              {/* Direct knobs — instant, scoped, no 60s re-author for a tweak. */}
+              <div className="bk-knobs">
+                <span className="bk-knobs-lbl">Tune</span>
+                <label>
+                  Case
+                  <select
+                    value={recipe.typography.displayCase}
+                    onChange={(e) => saveRecipeKnobs({ displayCase: e.target.value as 'upper' })}
+                    disabled={busy !== null}
+                  >
+                    <option value="upper">Uppercase</option>
+                    <option value="title">Title Case</option>
+                    <option value="sentence">Sentence case</option>
+                  </select>
+                </label>
+                <label>
+                  Density
+                  <select
+                    value={recipe.typography.density}
+                    onChange={(e) => saveRecipeKnobs({ density: e.target.value as 'roomy' })}
+                    disabled={busy !== null}
+                  >
+                    <option value="roomy">Roomy</option>
+                    <option value="balanced">Balanced</option>
+                    <option value="dense">Dense</option>
+                  </select>
+                </label>
+                <label>
+                  Motion
+                  <select
+                    value={recipe.motion?.style ?? 'rise'}
+                    onChange={(e) => saveRecipeKnobs({ motionStyle: e.target.value as 'rise' })}
+                    disabled={busy !== null}
+                  >
+                    <option value="rise">Rise</option>
+                    <option value="fade">Fade</option>
+                    <option value="slide">Slide</option>
+                    <option value="punch">Punch</option>
+                    <option value="pop">Pop</option>
+                  </select>
+                </label>
+                <label>
+                  Pace
+                  <select
+                    value={recipe.motion?.pace ?? 'balanced'}
+                    onChange={(e) => saveRecipeKnobs({ motionPace: e.target.value as 'calm' })}
+                    disabled={busy !== null}
+                  >
+                    <option value="calm">Calm</option>
+                    <option value="balanced">Balanced</option>
+                    <option value="punchy">Punchy</option>
+                  </select>
+                </label>
               </div>
             </>
           ) : (
