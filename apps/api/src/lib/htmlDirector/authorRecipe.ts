@@ -9,7 +9,12 @@
  * a self-critique/revise pass that holds the first draft to that bar. Output is
  * validated by brandRecipeSchema and its stylesheet is CSS-sanitised.
  */
-import { brandRecipeSchema, type BrandRecipe } from '@contentbuilder/shared';
+import {
+  brandRecipeSchema,
+  ensureRecipeContrast,
+  validateRecipeConsistency,
+  type BrandRecipe,
+} from '@contentbuilder/shared';
 import { aiMessageLarge, textOf, modelFor, withOpusReasoning } from '../ai';
 import { sanitizeRecipeCss } from '../cssSanitize';
 import { dynatosRecipe, detailMastersRecipe } from './recipes';
@@ -107,6 +112,27 @@ function parseRecipe(text: string): BrandRecipe {
   return brandRecipeSchema.parse(raw);
 }
 
+/**
+ * Deterministic quality gates applied to every authored recipe — no model, no
+ * judgement, no cost. Legibility is guaranteed rather than hoped for, and the
+ * recipe is held to its own promises (a component class the CSS never defines
+ * would render as an unstyled element on a real slide).
+ */
+function gate(recipe: BrandRecipe, label: string): BrandRecipe {
+  const contrast = ensureRecipeContrast(recipe);
+  for (const r of contrast.repairs) console.warn(`[recipe:${label}] contrast repair — ${r}`);
+  const consistency = validateRecipeConsistency(contrast.recipe);
+  if (consistency.dropped.length) {
+    console.warn(
+      `[recipe:${label}] dropped undefined component classes: ${consistency.dropped.join(', ')}`,
+    );
+  }
+  if (consistency.unlisted.length) {
+    console.warn(`[recipe:${label}] styled but unadvertised: ${consistency.unlisted.join(', ')}`);
+  }
+  return consistency.recipe;
+}
+
 /** First draft: author a recipe from evidence, shown TWO diverse reference examples. */
 async function authorOnce(model: string, evidence: RecipeEvidence, reasoning?: boolean): Promise<BrandRecipe> {
   const user = [
@@ -155,10 +181,10 @@ export async function authorRecipe(
   opts?: { model?: string; reasoning?: boolean; critique?: boolean },
 ): Promise<BrandRecipe> {
   const model = opts?.model ?? (await modelFor('recipe'));
-  const draft = await authorOnce(model, evidence, opts?.reasoning);
+  const draft = gate(await authorOnce(model, evidence, opts?.reasoning), 'draft');
   if (opts?.critique === false) return draft;
   try {
-    return await critiqueAndRevise(model, evidence, draft, opts?.reasoning);
+    return gate(await critiqueAndRevise(model, evidence, draft, opts?.reasoning), 'revised');
   } catch (err) {
     console.warn('[recipe] critique pass failed — shipping first draft:', err instanceof Error ? err.message : err);
     return draft;

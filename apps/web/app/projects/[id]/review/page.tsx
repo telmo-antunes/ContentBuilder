@@ -57,6 +57,9 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
   const [editId, setEditId] = useState<string | null>(null);
   const [editEls, setEditEls] = useState<AuthoredEl[]>([]);
   const [saving, setSaving] = useState(false);
+  // Slides whose composition exceeds the canvas — surfaced so a broken export
+  // can't ship silently (authored slides had no text-fit guard at all).
+  const [overflow, setOverflow] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     let alive = true;
@@ -383,8 +386,16 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                   }}
                 >
                   <span className="num">{i + 1}</span>
+                  {overflow[slide.id] && (
+                    <span className="ovf" title="This slide's content is taller than the canvas — shorten the copy.">
+                      ⚠ Overflows
+                    </span>
+                  )}
                   <ScaledSlide format={project.format} displayWidth={cardW}>
                     <SlideRenderer
+                      onOverflow={(o) =>
+                        setOverflow((m) => (m[slide.id] === o ? m : { ...m, [slide.id]: o }))
+                      }
                       slide={slide}
                       brandKit={kit}
                       format={project.format}

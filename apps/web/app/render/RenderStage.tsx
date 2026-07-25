@@ -44,6 +44,11 @@ export default function RenderStage({
         slideTotal={slideTotal}
         showCounter={showCounter}
         motion={motion}
+        // Publish the ground-truth overflow result on the DOM so the export /
+        // any headless pass driving this route can read it off the page.
+        onOverflow={(o) => {
+          if (typeof document !== 'undefined') document.body.dataset.overflow = o ? 'true' : 'false';
+        }}
       />
     </div>
   );

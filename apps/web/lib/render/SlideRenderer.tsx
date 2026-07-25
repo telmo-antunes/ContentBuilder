@@ -21,6 +21,7 @@ export function SlideRenderer({
   brandKit,
   format,
   image,
+  onOverflow,
   forExport = false,
   theme = 'editorial',
   slideIndex,
@@ -34,6 +35,7 @@ export function SlideRenderer({
   /** Accepted for call-site compatibility; authored slides carry their own art. */
   image?: LayoutImage | null;
   imageLayout?: ImageLayoutConfig;
+  /** Fires when the composition exceeds the canvas (a too-long headline). */
   onOverflow?: (overflow: boolean) => void;
   forExport?: boolean;
   theme?: ThemePreset;
@@ -90,6 +92,7 @@ export function SlideRenderer({
             logoUrl={brandKit.logo?.url}
             photoUrl={slide.authored.bg === 'photo' ? image?.url : undefined}
             motion={motion}
+            onOverflow={onOverflow}
           />
         ) : (
           // No recipe/markup yet — a neutral branded field rather than a crash.

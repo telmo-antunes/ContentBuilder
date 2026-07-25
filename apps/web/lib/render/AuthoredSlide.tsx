@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import {
   recipeCssVars,
@@ -29,6 +29,7 @@ export function AuthoredSlide({
   logoUrl,
   photoUrl,
   motion = false,
+  onOverflow,
 }: {
   recipe: BrandRecipe;
   authored: { html: string; bg?: string; role?: string };
@@ -40,13 +41,63 @@ export function AuthoredSlide({
   photoUrl?: string;
   /** Play the reveal choreography (for animated/video export). Off = still PNG. */
   motion?: boolean;
+  /** Reports whether the composition exceeds the canvas (see the effect below). */
+  onOverflow?: (overflow: boolean) => void;
 }) {
   const scope = 'cbs' + useId().replace(/[^a-zA-Z0-9]/g, '');
+  const slideRef = useRef<HTMLDivElement | null>(null);
 
   // Load the recipe's render fonts (display/body/accent) on every render site.
   useEffect(() => {
     ensureGoogleFonts(recipeFontFamilies(recipe.tokens));
   }, [recipe.tokens]);
+
+  /**
+   * OVERFLOW GUARD. Authored slides had none: the recipe hardcodes px type, so a
+   * long headline simply spilled off the canvas — silently, all the way into the
+   * exported PNG/MP4. Measure the composition against the frame once fonts and
+   * images have settled (both change metrics) and report it, so the Studio can
+   * warn and the export can be trusted.
+   */
+  useEffect(() => {
+    if (!onOverflow) return;
+    let alive = true;
+    const measure = () => {
+      const el = slideRef.current;
+      if (!el || !alive) return;
+      // Measure the CONTENT children against the padding box, in the slide's own
+      // LAYOUT space (offsetTop/offsetHeight) — deliberately not:
+      //  · scrollHeight — recipes bleed decoration off-canvas (a ghosted
+      //    monogram at `bottom:-110px`), inflating the scroll box on every slide;
+      //  · getBoundingClientRect — the studio renders slides inside a CSS
+      //    `transform: scale()`, so viewport rects are scaled while computed
+      //    padding is not, and mixing the two flags every slide.
+      const cs = getComputedStyle(el);
+      const padTop = parseFloat(cs.paddingTop || '0');
+      const padBottom = parseFloat(cs.paddingBottom || '0');
+      const contentBottom = el.clientHeight - padBottom;
+      const TOL = 2; // absorbs sub-pixel rounding
+      const over = Array.from(el.children).some((child) => {
+        if (!(child instanceof HTMLElement)) return false;
+        if (child.offsetHeight === 0) return false; // spacers / empty nodes
+        return (
+          child.offsetTop + child.offsetHeight > contentBottom + TOL ||
+          child.offsetTop < padTop - TOL
+        );
+      });
+      onOverflow(over);
+    };
+    measure();
+    const fonts = (document as Document & { fonts?: FontFaceSet }).fonts;
+    void fonts?.ready.then(measure).catch(() => {});
+    const imgs = Array.from(slideRef.current?.querySelectorAll('img') ?? []);
+    imgs.forEach((img) => img.addEventListener('load', measure, { once: true }));
+    const t = setTimeout(measure, 400);
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+  }, [onOverflow, authored.html, format]);
 
   // Base stylesheet + the format's vertical override (square/story), then scope
   // every .cb-slide rule to this instance so multiple slides can share a page.
@@ -73,13 +124,21 @@ export function AuthoredSlide({
         `.${scope} .cb-slide`,
       )
     : '';
-  const wrapperStyle = { position: 'absolute', inset: 0, ...recipeCssVars(recipe.tokens) } as CSSProperties;
+  const wrapperStyle = {
+    position: 'absolute',
+    inset: 0,
+    ...recipeCssVars(recipe.tokens, recipe.typography),
+  } as CSSProperties;
   const bgClass = `${authored.bg ? ` ${authored.bg.replace(/[^a-zA-Z0-9_-]/g, '')}` : ''}${motion ? ' cb-motion' : ''}`;
 
   return (
     <div className={scope} style={wrapperStyle}>
       <style dangerouslySetInnerHTML={{ __html: `${varRule}\n${scopedCss}${motionCss}` }} />
-      <div className={`cb-slide${bgClass}`} dangerouslySetInnerHTML={{ __html: html }} />
+      <div
+        ref={slideRef}
+        className={`cb-slide${bgClass}`}
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
     </div>
   );
 }

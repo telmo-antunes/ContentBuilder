@@ -56,7 +56,7 @@ export const dynatosRecipe: BrandRecipe = brandRecipeSchema.parse({
 .cb-slide .logo{ height:60px; width:420px; max-width:70%; background:var(--cb-logo, none) left center/contain no-repeat; align-self:flex-start; }
 .cb-slide .fill{ flex:1 1 auto; }
 .cb-slide .eyebrow{ font-family:var(--cb-display); font-weight:600; font-size:27px; letter-spacing:.26em; text-transform:uppercase; color:var(--cb-accent); }
-.cb-slide .headline{ font-family:var(--cb-display); font-weight:700; text-transform:uppercase; font-size:112px; line-height:.94; letter-spacing:.005em; color:var(--cb-ink); margin-top:26px; }
+.cb-slide .headline{ font-family:var(--cb-display); font-weight:var(--cb-display-weight,700); text-transform:var(--cb-display-case,uppercase); font-size:112px; line-height:.94; letter-spacing:var(--cb-display-tracking,.005em); color:var(--cb-ink); margin-top:calc(26px * var(--cb-step,1)); }
 .cb-slide .headline.sm{ font-size:82px; }
 .cb-slide .tagline{ font-family:var(--cb-accent-family); font-style:italic; color:var(--cb-accent); font-size:44px; line-height:1.28; margin-top:34px; max-width:24ch; }
 .cb-slide .rule{ height:6px; width:132px; background:var(--cb-accent); margin:36px 0; border-radius:3px; }
@@ -195,7 +195,7 @@ export const detailMastersRecipe: BrandRecipe = brandRecipeSchema.parse({
 .cb-slide .wordmark b{ color:var(--cb-ink); font-weight:600; } .cb-slide .wordmark i{ font-style:normal; color:var(--cb-accent); }
 .cb-slide .fill{ flex:1 1 auto; }
 .cb-slide .eyebrow{ font-size:25px; letter-spacing:.26em; text-transform:uppercase; color:var(--cb-accent); font-weight:600; }
-.cb-slide .headline{ font-family:var(--cb-display); font-weight:600; letter-spacing:-.01em; line-height:1.06; color:var(--cb-ink); font-size:88px; margin-top:30px; }
+.cb-slide .headline{ font-family:var(--cb-display); font-weight:var(--cb-display-weight,600); text-transform:var(--cb-display-case,none); letter-spacing:var(--cb-display-tracking,-.01em); line-height:1.06; color:var(--cb-ink); font-size:88px; margin-top:calc(30px * var(--cb-step,1)); }
 .cb-slide .headline.sm{ font-size:70px; }
 .cb-slide .headline .it{ font-family:var(--cb-accent-family); font-style:italic; font-weight:400; color:var(--cb-accent-alt); }
 .cb-slide .rule{ height:2px; width:132px; background:var(--cb-accent); opacity:.85; margin:34px 0; }

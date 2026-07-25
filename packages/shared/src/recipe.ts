@@ -16,6 +16,7 @@
  * validated with this zod schema at author time.
  */
 import { z } from 'zod';
+import { AA_LARGE, AA_TEXT, contrastRatio, hexToRgb, relativeLuminance } from './colorContrast';
 
 /** CSS custom-property prefix for every brand token the renderer injects. */
 export const RECIPE_VAR_PREFIX = '--cb';
@@ -188,7 +189,17 @@ function quoteFamily(f: string): string {
   return /^['"]/.test(f.trim()) ? f : `'${f}'`;
 }
 
-export function recipeCssVars(tokens: RecipeTokens): Record<string, string> {
+/** text-transform for each authored display case. */
+const CASE_TRANSFORM: Record<string, string> = {
+  upper: 'uppercase',
+  title: 'capitalize',
+  sentence: 'none',
+};
+
+/** A leading/spacing multiplier per density — the recipe's vertical rhythm. */
+const DENSITY_STEP: Record<string, string> = { roomy: '1.15', balanced: '1', dense: '0.86' };
+
+export function recipeCssVars(tokens: RecipeTokens, typography?: BrandRecipe['typography']): Record<string, string> {
   const vars: Record<string, string> = {
     [`${RECIPE_VAR_PREFIX}-ground`]: tokens.ground,
     [`${RECIPE_VAR_PREFIX}-ink`]: tokens.ink,
@@ -197,6 +208,16 @@ export function recipeCssVars(tokens: RecipeTokens): Record<string, string> {
     [`${RECIPE_VAR_PREFIX}-body`]: quoteFamily(tokens.bodyFamily),
     [`${RECIPE_VAR_PREFIX}-radius`]: `${tokens.radius}px`,
   };
+  // The typography block was authored, stored and displayed — but emitted NO
+  // CSS, so it drove nothing while stylesheets hardcoded their own type. These
+  // make it real: the stylesheet consumes them, so type is tunable without
+  // re-authoring, and there is one source of truth.
+  if (typography) {
+    vars[`${RECIPE_VAR_PREFIX}-display-case`] = CASE_TRANSFORM[typography.displayCase] ?? 'none';
+    vars[`${RECIPE_VAR_PREFIX}-display-weight`] = String(typography.displayWeight);
+    vars[`${RECIPE_VAR_PREFIX}-display-tracking`] = typography.displayTracking;
+    vars[`${RECIPE_VAR_PREFIX}-step`] = DENSITY_STEP[typography.density] ?? '1';
+  }
   if (tokens.groundAlt) vars[`${RECIPE_VAR_PREFIX}-ground-alt`] = tokens.groundAlt;
   if (tokens.inkMuted) vars[`${RECIPE_VAR_PREFIX}-ink-muted`] = tokens.inkMuted;
   if (tokens.accentAlt) vars[`${RECIPE_VAR_PREFIX}-accent-alt`] = tokens.accentAlt;
@@ -277,6 +298,112 @@ export const DEFAULT_MOTION: RecipeMotion = {
   description: '',
   countStats: true,
 };
+
+// ── Legibility ──────────────────────────────────────────────────────────────
+
+/** Nudge a hex toward white or black by `amount` (0–1). */
+function shift(hex: string, toward: 'light' | 'dark', amount: number): string {
+  const { r, g, b } = hexToRgb(hex);
+  const target = toward === 'light' ? 255 : 0;
+  const mix = (c: number) => Math.round(c + (target - c) * amount);
+  return `#${[mix(r), mix(g), mix(b)].map((c) => c.toString(16).padStart(2, '0')).join('')}`;
+}
+
+/**
+ * Guarantee the recipe is READABLE before it is ever composed against. The app
+ * measures contrast and shows it, but nothing previously stopped a recipe whose
+ * ink fails on its own ground — the model just had to get lucky. Here ink is
+ * held to AA body text and the accent to AA large text, repaired by walking the
+ * colour toward white or black (whichever the ground is further from) until it
+ * passes. Returns the repairs so they can be logged/surfaced.
+ */
+export function ensureRecipeContrast(recipe: BrandRecipe): {
+  recipe: BrandRecipe;
+  repairs: string[];
+} {
+  const ground = recipe.tokens.ground;
+  if (!/^#[0-9a-f]{6}$/i.test(ground)) return { recipe, repairs: [] };
+  const toward = relativeLuminance(ground) < 0.4 ? 'light' : 'dark';
+  const repairs: string[] = [];
+  const tokens = { ...recipe.tokens };
+
+  const fix = (key: 'ink' | 'inkMuted' | 'accent', min: number) => {
+    const start = tokens[key];
+    if (!start || !/^#[0-9a-f]{6}$/i.test(start)) return;
+    if (contrastRatio(start, ground) >= min) return;
+    for (let step = 1; step <= 10; step++) {
+      const candidate = shift(start, toward, step / 10);
+      if (contrastRatio(candidate, ground) >= min) {
+        tokens[key] = candidate;
+        repairs.push(
+          `${key} ${start} → ${candidate} (was ${contrastRatio(start, ground).toFixed(1)}:1, needs ${min}:1)`,
+        );
+        return;
+      }
+    }
+    // Nothing in between worked — fall back to the extreme, which always passes.
+    const extreme = toward === 'light' ? '#ffffff' : '#000000';
+    tokens[key] = extreme;
+    repairs.push(`${key} ${start} → ${extreme} (forced; could not reach ${min}:1)`);
+  };
+
+  fix('ink', AA_TEXT);
+  fix('inkMuted', AA_TEXT);
+  fix('accent', AA_LARGE);
+
+  return { recipe: repairs.length ? { ...recipe, tokens } : recipe, repairs };
+}
+
+// ── Self-consistency ────────────────────────────────────────────────────────
+
+/** Every class selector the stylesheet (plus any format overrides) defines. */
+function definedClasses(recipe: BrandRecipe): Set<string> {
+  const css = [
+    recipe.stylesheet,
+    ...Object.values(recipe.formats ?? {}).map((f) => f.stylesheet),
+  ]
+    .join('\n')
+    // Strip url(...) payloads first — inline SVG data URIs contain dotted names
+    // (www.w3.org) that would otherwise read as class selectors.
+    .replace(/url\([^)]*\)/gi, '');
+  const found = new Set<string>();
+  for (const m of css.matchAll(/\.([a-zA-Z][\w-]*)/g)) found.add(m[1]!);
+  return found;
+}
+
+/**
+ * Hold the recipe to its own promises. The composer may use ONLY the classes in
+ * `components`, so a class advertised there but never defined in the CSS yields
+ * an unstyled element on a real slide — a silent, ugly failure. Drop those, and
+ * report styled-but-unadvertised classes so the vocabulary can be completed.
+ * Deterministic: no model call, no judgement.
+ */
+export function validateRecipeConsistency(recipe: BrandRecipe): {
+  recipe: BrandRecipe;
+  dropped: string[];
+  unlisted: string[];
+} {
+  const defined = definedClasses(recipe);
+  const dropped: string[] = [];
+  const kept = recipe.components.filter((c) => {
+    // A component may name several classes ("headline sm"); the first must exist.
+    const first = c.className.trim().split(/\s+/)[0] ?? '';
+    if (defined.has(first)) return true;
+    dropped.push(c.className);
+    return false;
+  });
+
+  // Structural/base classes the composer never names directly.
+  const IGNORE = new Set(['cb-slide', 'cb-motion', 'cb-cnt', 'photo', 'inverse', 'sm', 'em', 'it', 'row', 'tick']);
+  const listed = new Set(recipe.components.flatMap((c) => c.className.trim().split(/\s+/)));
+  const unlisted = [...defined].filter((c) => !listed.has(c) && !IGNORE.has(c)).sort();
+
+  return {
+    recipe: dropped.length ? { ...recipe, components: kept } : recipe,
+    dropped,
+    unlisted,
+  };
+}
 
 // ── Counting a stat up ──────────────────────────────────────────────────────
 

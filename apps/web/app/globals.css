@@ -1990,3 +1990,11 @@ input[type='color'] {
 /* motion: brand cards + studio deck lift + settle */
 .brand-card, .studio-pcard, .rcard, .seed { transition: transform 0.24s var(--ease-out), box-shadow 0.24s var(--ease-out), border-color 0.24s var(--ease-out); }
 .studio-pcard.sel { box-shadow: 0 0 0 1px var(--accent-2), 0 18px 40px -22px rgba(0,0,0,0.6); }
+
+/* Overflow warning on a studio slide card — a composition taller than its canvas. */
+.studio-pcard .ovf {
+  position: absolute; top: 8px; right: 8px; z-index: 4;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
+  color: #1b1206; background: var(--warn, #e0a23a);
+  border-radius: 6px; padding: 3px 7px; box-shadow: var(--shadow-sm);
+}

@@ -10,8 +10,11 @@ import {
   motionForRole,
   parseCountUp,
   statCountUp,
+  ensureRecipeContrast,
+  validateRecipeConsistency,
   RECIPE_VAR_PREFIX,
 } from './recipe';
+import { contrastRatio } from './colorContrast';
 
 const minimal = {
   tokens: {
@@ -275,5 +278,88 @@ describe('count-up holds its final value', () => {
 
   it('emits no count CSS when the stat is not countable', () => {
     expect(recipeMotionCss(undefined, 'stat')).not.toContain('--cb-n');
+  });
+});
+
+describe('contrast gate (R4)', () => {
+  const withTokens = (t: Record<string, unknown>) =>
+    brandRecipeSchema.parse({ ...minimal, tokens: { ...minimal.tokens, ...t } });
+
+  it('leaves an already-legible recipe untouched', () => {
+    const r = withTokens({ ground: '#0f0b06', ink: '#ece4d3', accent: '#fcbc04' });
+    const out = ensureRecipeContrast(r);
+    expect(out.repairs).toEqual([]);
+    expect(out.recipe.tokens.ink).toBe('#ece4d3');
+  });
+
+  it('repairs ink that fails AA on its own ground', () => {
+    // near-black ink on a near-black ground — unreadable
+    const r = withTokens({ ground: '#101010', ink: '#1a1a1a' });
+    const out = ensureRecipeContrast(r);
+    expect(out.repairs.length).toBeGreaterThan(0);
+    expect(contrastRatio(out.recipe.tokens.ink, '#101010')).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('holds the accent to the large-text threshold', () => {
+    const r = withTokens({ ground: '#0f0b06', ink: '#ffffff', accent: '#141007' });
+    const out = ensureRecipeContrast(r);
+    expect(contrastRatio(out.recipe.tokens.accent, '#0f0b06')).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe('self-consistency (R9)', () => {
+  it('drops component classes the stylesheet never defines', () => {
+    const r = brandRecipeSchema.parse({
+      ...minimal,
+      stylesheet: '.cb-slide .headline{ font-size:100px } .cb-slide .eyebrow{ font-size:20px }',
+      components: [
+        { className: 'headline', use: 'the statement' },
+        { className: 'panel', use: 'a card that does not exist in the CSS' },
+      ],
+    });
+    const out = validateRecipeConsistency(r);
+    expect(out.dropped).toEqual(['panel']);
+    expect(out.recipe.components.map((c) => c.className)).toEqual(['headline']);
+  });
+
+  it('accepts a multi-class component when its first class is defined', () => {
+    const r = brandRecipeSchema.parse({
+      ...minimal,
+      stylesheet: '.cb-slide .headline{ font-size:100px }',
+      components: [{ className: 'headline sm', use: 'the small variant' }],
+    });
+    expect(validateRecipeConsistency(r).dropped).toEqual([]);
+  });
+
+  it('reports styled-but-unadvertised classes, ignoring SVG data-URI noise', () => {
+    const r = brandRecipeSchema.parse({
+      ...minimal,
+      stylesheet:
+        `.cb-slide{ background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3C/svg%3E") } .cb-slide .ghost{ opacity:.2 }`,
+      components: [],
+    });
+    const out = validateRecipeConsistency(r);
+    expect(out.unlisted).toContain('ghost');
+    expect(out.unlisted).not.toContain('org'); // url() payloads are stripped
+    expect(out.unlisted).not.toContain('w3');
+  });
+});
+
+describe('typography drives the CSS (R3)', () => {
+  it('emits display case/weight/tracking + a density step', () => {
+    const r = brandRecipeSchema.parse({
+      ...minimal,
+      typography: { displayCase: 'upper', displayWeight: 800, displayTracking: '0.02em', density: 'roomy' },
+    });
+    const vars = recipeCssVars(r.tokens, r.typography);
+    expect(vars['--cb-display-case']).toBe('uppercase');
+    expect(vars['--cb-display-weight']).toBe('800');
+    expect(vars['--cb-display-tracking']).toBe('0.02em');
+    expect(Number(vars['--cb-step'])).toBeGreaterThan(1); // roomy stretches the rhythm
+  });
+
+  it('omits them when no typography is passed (back-compat)', () => {
+    const r = brandRecipeSchema.parse(minimal);
+    expect(recipeCssVars(r.tokens)).not.toHaveProperty('--cb-display-case');
   });
 });
