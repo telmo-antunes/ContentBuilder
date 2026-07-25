@@ -406,9 +406,14 @@ export function recipeMotionCss(recipe?: BrandRecipe, role?: string, countTo?: n
     const statDelay = LEAD_IN + 3 * step; // .stat sits in the 4th reveal group
     lines.push(
       `@property --cb-n { syntax: '<integer>'; initial-value: 0; inherits: false; }`,
-      `.cb-slide .cb-cnt { counter-reset: cbn var(--cb-n, ${countTo}); }`,
+      // The FINAL value lives on the base rule, NOT on `.cb-motion`: the video
+      // capture removes `.cb-motion` for the settled/hold frames, and a target
+      // scoped to that class would fall back to the registered initial-value (0)
+      // — the number would count up and then snap back to zero for the rest of
+      // the clip. The animation (fill `both`) drives 0→N while it is active.
+      `.cb-slide .cb-cnt { --cb-n: ${countTo}; counter-reset: cbn var(--cb-n); }`,
       `.cb-slide .cb-cnt::after { content: counter(cbn); }`,
-      `.cb-slide.cb-motion .cb-cnt { --cb-n: ${countTo}; animation: cb-count ${(dur * 1.7).toFixed(2)}s ease-out ${statDelay.toFixed(2)}s both; }`,
+      `.cb-slide.cb-motion .cb-cnt { animation: cb-count ${(dur * 1.7).toFixed(2)}s ease-out ${statDelay.toFixed(2)}s both; }`,
       `@keyframes cb-count { from { --cb-n: 0; } to { --cb-n: ${countTo}; } }`,
     );
   }

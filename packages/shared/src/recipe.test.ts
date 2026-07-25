@@ -253,3 +253,27 @@ describe('statCountUp — rewriting the slide', () => {
     expect(recipeMotionCss(undefined, 'stat')).not.toContain('cb-count');
   });
 });
+
+describe('count-up holds its final value', () => {
+  // The video capture removes `.cb-motion` for the settled/hold frames. If the
+  // count target were scoped to that class the number would fall back to the
+  // registered initial-value (0) and snap to zero for the rest of the clip.
+  const css = recipeMotionCss(undefined, 'stat', 40);
+
+  it('sets the final value on the BASE rule, not the .cb-motion rule', () => {
+    const base = css.split('\n').find((l) => l.includes('.cb-cnt {') && !l.includes('cb-motion'));
+    expect(base).toContain('--cb-n: 40');
+    const motionRule = css.split('\n').find((l) => l.includes('cb-motion .cb-cnt'));
+    expect(motionRule).toContain('animation:');
+    expect(motionRule).not.toContain('--cb-n:'); // must NOT own the target value
+  });
+
+  it('animates 0 → the target', () => {
+    expect(css).toContain('from { --cb-n: 0; }');
+    expect(css).toContain('to { --cb-n: 40; }');
+  });
+
+  it('emits no count CSS when the stat is not countable', () => {
+    expect(recipeMotionCss(undefined, 'stat')).not.toContain('--cb-n');
+  });
+});
