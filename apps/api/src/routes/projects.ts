@@ -139,6 +139,8 @@ projectsRouter.post(
       format: body.format,
       status: 'draft',
       slides: initialSlides,
+      ...(body.idea ? { idea: body.idea } : {}),
+      stage: body.stage ?? (initialSlides.length ? 'drafting' : 'idea'),
       settings: {
         // Default the theme from the business profile (profile → visual default).
         theme: body.settings?.theme ?? defaultThemeForCategory((business as any).profile?.category),
@@ -157,6 +159,105 @@ projectsRouter.get(
     const filter = businessId && Types.ObjectId.isValid(businessId) ? { businessId } : {};
     const docs = await ProjectModel.find(filter).sort({ updatedAt: -1 }).limit(500).lean();
     res.json(docs);
+  }),
+);
+
+// ── The Desk ────────────────────────────────────────────────────────────────
+
+/**
+ * Where a post sits when it has no explicit stage yet. Derived rather than
+ * migrated, so existing projects appear on the Desk immediately and nothing has
+ * to be rewritten in the database.
+ */
+function deriveStage(p: {
+  stage?: string;
+  renders?: unknown[];
+  slides?: Array<{ authored?: { html?: string } }>;
+}): string {
+  if (p.stage) return p.stage;
+  if (p.renders?.length) return 'shipped';
+  if (p.slides?.some((s) => s.authored?.html)) return 'ready';
+  return p.slides?.length ? 'drafting' : 'idea';
+}
+
+/**
+ * ONE call for the whole board. Deliberately lean: the dashboard used to do an
+ * N+1 (list per brand, then a full getProject per card, each joining the kit and
+ * every media asset). Here each card carries only its FIRST slide's markup, and
+ * the kits needed to render those thumbnails come back once in a map.
+ */
+projectsRouter.get(
+  '/board',
+  asyncHandler(async (_req, res) => {
+    const projects = await ProjectModel.find({})
+      .sort({ updatedAt: -1 })
+      .limit(300)
+      .select('businessId title type format status stage idea slides renders exportedAt postedAt updatedAt')
+      .lean();
+
+    const businessIds = [...new Set(projects.map((p) => String(p.businessId)))];
+    const [businesses, kits] = await Promise.all([
+      BusinessModel.find({ _id: { $in: businessIds } }).select('name').lean(),
+      BrandKitModel.find({ businessId: { $in: businessIds }, status: 'approved' })
+        .sort({ createdAt: -1 })
+        .select('businessId colors fonts logo logoTreatment recipe')
+        .lean(),
+    ]);
+
+    // Newest approved kit wins (regenerations leave older approved kits behind).
+    const kitByBusiness: Record<string, unknown> = {};
+    for (const k of kits) {
+      const key = String((k as Record<string, any>).businessId);
+      if (!kitByBusiness[key]) kitByBusiness[key] = { ...k, _id: String((k as Record<string, any>)._id) };
+    }
+
+    const cards = projects.map((p) => {
+      const slides = (p.slides ?? []) as Array<Record<string, any>>;
+      const first = [...slides].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))[0];
+      return {
+        _id: String(p._id),
+        businessId: String(p.businessId),
+        title: p.title,
+        type: p.type,
+        format: p.format,
+        stage: deriveStage(p as never),
+        idea: p.idea ?? '',
+        slideCount: slides.length,
+        authored: first?.authored ? { html: first.authored.html, bg: first.authored.bg, role: first.authored.role } : null,
+        exportedAt: p.exportedAt ?? null,
+        postedAt: p.postedAt ?? null,
+        updatedAt: p.updatedAt,
+      };
+    });
+
+    res.json({
+      cards,
+      businesses: businesses.map((b) => ({ _id: String(b._id), name: (b as Record<string, any>).name })),
+      kits: kitByBusiness,
+    });
+  }),
+);
+
+const stageSchema = z.object({
+  stage: z.enum(['idea', 'drafting', 'ready', 'shipped']),
+  /** The manual "it actually went live" tick — we cannot detect an Instagram post. */
+  posted: z.boolean().optional(),
+});
+
+projectsRouter.patch(
+  '/:id/stage',
+  asyncHandler(async (req, res) => {
+    const id = requireObjectId(req.params.id, 'Project');
+    const body = parseBody(stageSchema, req.body);
+    const project = await ProjectModel.findById(id);
+    if (!project) throw new ApiError(404, 'Project not found');
+    project.set('stage', body.stage);
+    if (body.posted === true) project.set('postedAt', new Date());
+    if (body.posted === false) project.set('postedAt', undefined);
+    // Leaving the shipped column un-ships it; the record shouldn't contradict.
+    if (body.stage !== 'shipped') project.set('postedAt', undefined);
+    await project.save();
+    res.json(project.toJSON());
   }),
 );
 
@@ -286,6 +387,10 @@ projectsRouter.post(
     }
     project.set('slides', slides);
     project.set('status', 'draft');
+    // Keep the prompt: it's what an Ideas card holds, and it lets you see what a
+    // finished post was actually asked to be.
+    project.set('idea', idea);
+    if (!project.get('stage') || project.get('stage') === 'idea') project.set('stage', 'ready');
     await project.save();
     res.json(project.toJSON());
   }),
@@ -537,6 +642,10 @@ projectsRouter.post(
 
     project.set('status', 'rendered');
     project.set('renders', rendered.map((r) => r.url));
+    // Exporting is the one lifecycle step the app can observe, so it advances the
+    // stage by itself. "Posted" stays manual — we can't see Instagram.
+    project.set('stage', 'shipped');
+    project.set('exportedAt', new Date());
     await project.save();
     // What was shipped should always be recoverable.
     await saveVersion(project, 'Exported').catch(() => {});

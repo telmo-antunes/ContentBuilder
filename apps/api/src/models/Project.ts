@@ -151,6 +151,13 @@ const projectSchema = new Schema(
       required: false,
     },
     status: { type: String, enum: ['draft', 'rendered'], default: 'draft' },
+    /** Workflow stage — the Desk's columns. Separate from `status` on purpose. */
+    stage: { type: String, enum: ['idea', 'drafting', 'ready', 'shipped'], index: true },
+    /** The prompt behind the post (an 'idea' card has this and no slides yet). */
+    idea: { type: String, required: false },
+    /** Set automatically on export; `postedAt` is the manual "it went live" tick. */
+    exportedAt: { type: Date, required: false },
+    postedAt: { type: Date, required: false },
     createdAt: { type: Date, default: () => new Date() },
     updatedAt: { type: Date, default: () => new Date() },
   },

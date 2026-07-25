@@ -12,6 +12,7 @@ import { LAYOUT_TYPES } from './layouts';
 import {
   ASSET_TYPES,
   MAX_SLIDES_PER_PROJECT,
+  MAX_DRAFT_PARAGRAPH_CHARS,
   isFormat,
   isValidTypeFormat,
   type AssetType,
@@ -127,6 +128,9 @@ export const createProjectSchema = z
     format: z.string(),
     slides: z.array(slideSchema).max(MAX_SLIDES_PER_PROJECT).optional(),
     settings: settingsSchema.optional(),
+    /** Save the prompt now, compose later — how an Ideas card is created. */
+    idea: z.string().trim().max(MAX_DRAFT_PARAGRAPH_CHARS).optional(),
+    stage: z.enum(['idea', 'drafting', 'ready', 'shipped']).optional(),
   })
   .refine((d) => isFormat(d.format) && isValidTypeFormat(d.type as AssetType, d.format as Format), {
     message: 'Invalid type/format combination',

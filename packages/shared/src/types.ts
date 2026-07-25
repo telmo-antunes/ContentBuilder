@@ -244,6 +244,14 @@ export interface Slide {
 
 export type ProjectStatus = 'draft' | 'rendered';
 
+/**
+ * Where a post sits in YOUR workflow — deliberately separate from `status`,
+ * which is a technical fact ("have PNGs been rendered"). Overloading status
+ * would entangle the export/compose paths with a user-facing lifecycle.
+ */
+export type ProjectStage = 'idea' | 'drafting' | 'ready' | 'shipped';
+export const PROJECT_STAGES: ProjectStage[] = ['idea', 'drafting', 'ready', 'shipped'];
+
 /** Per-project render settings (theme + carousel cohesion). */
 export interface ProjectSettings {
   theme?: ThemePreset;
@@ -270,6 +278,13 @@ export interface Project {
   campaignId?: string;
   settings?: ProjectSettings;
   status: ProjectStatus;
+  /** Workflow stage (see ProjectStage). Absent on pre-Desk projects — derive it. */
+  stage?: ProjectStage;
+  /** The prompt this post was asked to be. Kept so an idea can exist before it
+   *  is composed, and so you can see what a finished post was asked for. */
+  idea?: string;
+  exportedAt?: string;
+  postedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
