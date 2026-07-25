@@ -77,6 +77,12 @@ export const recipeMotionSchema = z.object({
    * a `cta` punches. Roles without an entry use the brand default above.
    */
   roles: z.record(z.string(), motionPairSchema).optional(),
+  /**
+   * Let a big number tick up to its value in video exports. ON by default —
+   * but only ever applied when the number ACTUALLY reads as a countable
+   * quantity (see `parseCountUp`), never blindly. Set false to opt a brand out.
+   */
+  countStats: z.boolean().default(true),
 });
 export type RecipeMotion = z.infer<typeof recipeMotionSchema>;
 
@@ -265,7 +271,77 @@ const ORDER: string[][] = [
 
 const LEAD_IN = 0.12;
 
-export const DEFAULT_MOTION: RecipeMotion = { style: 'rise', pace: 'balanced', description: '' };
+export const DEFAULT_MOTION: RecipeMotion = {
+  style: 'rise',
+  pace: 'balanced',
+  description: '',
+  countStats: true,
+};
+
+// ── Counting a stat up ──────────────────────────────────────────────────────
+
+/**
+ * Decide whether a stat should TICK UP to its value — and to what.
+ *
+ * This is the judgement, not a blanket effect: counting only reads well when the
+ * number is a single countable QUANTITY. It is deliberately refused when the
+ * text is really something else wearing a number:
+ *   "2024" a year · "#1" a rank · "1 in 5" a ratio · "24/7" an idiom ·
+ *   "14:30" a time · "40–60%" a range · "3" too small to be worth it ·
+ *   "$1.5M"/"12,000" formatted decimals & separators a counter can't render.
+ * Returns null whenever counting would look silly, which is most of the time.
+ */
+export function parseCountUp(raw: string): { to: number; prefix: string; suffix: string } | null {
+  const text = (raw ?? '').replace(/\s+/g, ' ').trim();
+  if (!text) return null;
+
+  // Exactly ONE run of digits — kills ratios, times, ranges, dates, "24/7".
+  const runs = text.match(/\d+/g) ?? [];
+  if (runs.length !== 1) return null;
+  // A digit next to a decimal point or thousands separator can't be countered.
+  if (/\d[.,]\d/.test(text)) return null;
+
+  const m = text.match(/^([^\d]*)(\d+)([^\d]*)$/);
+  if (!m) return null;
+  const prefix = (m[1] ?? '').trim();
+  const suffix = (m[3] ?? '').trim();
+  const to = Number(m[2]);
+  if (!Number.isFinite(to)) return null;
+
+  // Below ~5 the tick is over before it registers; not worth the motion.
+  if (to < 5) return null;
+  // Ranks/ordinals are positions, not amounts.
+  if (prefix.includes('#') || /^(st|nd|rd|th)$/i.test(suffix)) return null;
+  // A bare 4-digit number in calendar range reads as a year.
+  if (!prefix && !suffix && to >= 1000) return null;
+  // Anything wordier than a unit (%, +, x, k, M, $, €) is a phrase, not a stat.
+  if (prefix.length > 2 || suffix.length > 3) return null;
+
+  return { to, prefix, suffix };
+}
+
+/** The lone `.stat` element in an authored fragment, if there is exactly one. */
+const STAT_RE = /<([a-z][a-z0-9]*)\b([^>]*\bclass="[^"]*\bstat\b[^"]*"[^>]*)>([\s\S]*?)<\/\1>/i;
+
+/**
+ * Rewrite a `.stat` element so its number can tick up, IF counting suits it.
+ * Applied only in motion mode — the still PNG export keeps the plain text, so
+ * there is no way for this to affect image exports.
+ */
+export function statCountUp(
+  html: string,
+  recipe?: BrandRecipe,
+): { html: string; to: number } | null {
+  const motion = recipe?.motion ?? DEFAULT_MOTION;
+  if (motion.countStats === false) return null;
+  const m = html.match(STAT_RE);
+  if (!m) return null;
+  const inner = (m[3] ?? '').replace(/<[^>]+>/g, ''); // plain text only
+  const parsed = parseCountUp(inner);
+  if (!parsed) return null;
+  const replaced = `<${m[1]}${m[2]}>${parsed.prefix}<span class="cb-cnt"></span>${parsed.suffix}</${m[1]}>`;
+  return { html: html.replace(STAT_RE, replaced), to: parsed.to };
+}
 
 /**
  * The motion that applies to a slide: the role's override when the recipe
@@ -293,7 +369,7 @@ export function recipeMotionMs(recipe?: BrandRecipe, role?: string): number {
  * brand animates on-brand with no per-slide authoring, and tuned by the slide's
  * ROLE when the recipe defines an override for it.
  */
-export function recipeMotionCss(recipe?: BrandRecipe, role?: string): string {
+export function recipeMotionCss(recipe?: BrandRecipe, role?: string, countTo?: number): string {
   const m = motionForRole(recipe, role);
   const { dur, step } = PACE[m.pace];
   const ease = OVERSHOOT.has(m.style)
@@ -321,5 +397,20 @@ export function recipeMotionCss(recipe?: BrandRecipe, role?: string): string {
     `.cb-slide.cb-motion .headline .em, .cb-slide.cb-motion .headline .it { display:inline-block; animation: cb-accent ${(dur * 1.1).toFixed(2)}s ease-out ${accentDelay}s both; }`,
     `@keyframes cb-accent { from { opacity:0.25; filter: saturate(0.4); } to { opacity:1; filter:none; } }`,
   );
+
+  // A countable stat ticks up to its value. Driven by an ANIMATED registered
+  // custom property + counter(), so it lives on the CSS timeline and stays
+  // seekable — which is what keeps deterministic frame capture working (a
+  // JS-driven counter could not be stepped frame-by-frame).
+  if (typeof countTo === 'number' && countTo > 0) {
+    const statDelay = LEAD_IN + 3 * step; // .stat sits in the 4th reveal group
+    lines.push(
+      `@property --cb-n { syntax: '<integer>'; initial-value: 0; inherits: false; }`,
+      `.cb-slide .cb-cnt { counter-reset: cbn var(--cb-n, ${countTo}); }`,
+      `.cb-slide .cb-cnt::after { content: counter(cbn); }`,
+      `.cb-slide.cb-motion .cb-cnt { --cb-n: ${countTo}; animation: cb-count ${(dur * 1.7).toFixed(2)}s ease-out ${statDelay.toFixed(2)}s both; }`,
+      `@keyframes cb-count { from { --cb-n: 0; } to { --cb-n: ${countTo}; } }`,
+    );
+  }
   return lines.join('\n');
 }

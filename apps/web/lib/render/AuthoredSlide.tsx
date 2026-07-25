@@ -7,6 +7,7 @@ import {
   recipeFontFamilies,
   recipeStylesheetFor,
   recipeMotionCss,
+  statCountUp,
   type BrandRecipe,
   type Format,
 } from '@contentbuilder/shared';
@@ -59,9 +60,18 @@ export function AuthoredSlide({
   ].filter(Boolean);
   const varRule = vars.length ? `.${scope}{${vars.join(';')}}` : '';
   // Motion mode: append the (scoped) reveal choreography + tag the slide `cb-motion`.
+  // In motion mode a countable stat is rewritten so it can tick up (the still
+  // export keeps the plain text, so image rendering is untouched).
+  const count = motion ? statCountUp(authored.html, recipe) : null;
+  const html = count?.html ?? authored.html;
   // Per-ROLE motion: the recipe can give a stat a pop and a quote a calm fade.
   const motionCss = motion
-    ? '\n' + recipeMotionCss(recipe, authored.role).replace(/\.cb-slide/g, `.${scope} .cb-slide`)
+    ? '\n' +
+      recipeMotionCss(recipe, authored.role, count?.to).replace(
+        // `@property`/`@keyframes` are global at-rules — only scope selectors.
+        /\.cb-slide/g,
+        `.${scope} .cb-slide`,
+      )
     : '';
   const wrapperStyle = { position: 'absolute', inset: 0, ...recipeCssVars(recipe.tokens) } as CSSProperties;
   const bgClass = `${authored.bg ? ` ${authored.bg.replace(/[^a-zA-Z0-9_-]/g, '')}` : ''}${motion ? ' cb-motion' : ''}`;
@@ -69,7 +79,7 @@ export function AuthoredSlide({
   return (
     <div className={scope} style={wrapperStyle}>
       <style dangerouslySetInnerHTML={{ __html: `${varRule}\n${scopedCss}${motionCss}` }} />
-      <div className={`cb-slide${bgClass}`} dangerouslySetInnerHTML={{ __html: authored.html }} />
+      <div className={`cb-slide${bgClass}`} dangerouslySetInnerHTML={{ __html: html }} />
     </div>
   );
 }

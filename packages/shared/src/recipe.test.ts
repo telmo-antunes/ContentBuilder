@@ -8,6 +8,8 @@ import {
   recipeMotionCss,
   recipeMotionMs,
   motionForRole,
+  parseCountUp,
+  statCountUp,
   RECIPE_VAR_PREFIX,
 } from './recipe';
 
@@ -191,5 +193,63 @@ describe('per-role motion', () => {
       motion: { style: 'rise', pace: 'calm', roles: { stat: { style: 'explode', pace: 'ludicrous' } } },
     });
     expect(motionForRole(drift, 'stat')).toEqual({ style: 'rise', pace: 'balanced' });
+  });
+});
+
+describe('parseCountUp — when a stat should tick up', () => {
+  it('counts a plain quantity, keeping its unit', () => {
+    expect(parseCountUp('40%')).toEqual({ to: 40, prefix: '', suffix: '%' });
+    expect(parseCountUp('150+')).toEqual({ to: 150, prefix: '', suffix: '+' });
+    expect(parseCountUp('$29')).toEqual({ to: 29, prefix: '$', suffix: '' });
+    expect(parseCountUp('12x')).toEqual({ to: 12, prefix: '', suffix: 'x' });
+  });
+
+  it('refuses things that only LOOK like quantities', () => {
+    expect(parseCountUp('2024')).toBeNull();   // a year
+    expect(parseCountUp('#1')).toBeNull();     // a rank
+    expect(parseCountUp('1 in 5')).toBeNull(); // a ratio
+    expect(parseCountUp('24/7')).toBeNull();   // an idiom
+    expect(parseCountUp('14:30')).toBeNull();  // a time
+    expect(parseCountUp('40–60%')).toBeNull(); // a range
+    expect(parseCountUp('3rd')).toBeNull();    // an ordinal
+  });
+
+  it('refuses what a counter cannot render', () => {
+    expect(parseCountUp('$1.5M')).toBeNull();  // decimal
+    expect(parseCountUp('12,000')).toBeNull(); // grouped
+  });
+
+  it('refuses numbers too small to be worth animating, and phrases', () => {
+    expect(parseCountUp('3')).toBeNull();
+    expect(parseCountUp('40 bookings every week')).toBeNull();
+    expect(parseCountUp('')).toBeNull();
+    expect(parseCountUp('Zero')).toBeNull();
+  });
+});
+
+describe('statCountUp — rewriting the slide', () => {
+  const html = '<p class="eyebrow">Results</p><div class="stat">40%</div><p class="body">x</p>';
+
+  it('swaps the number for a counter span and reports the target', () => {
+    const out = statCountUp(html);
+    expect(out?.to).toBe(40);
+    expect(out?.html).toContain('<span class="cb-cnt"></span>%');
+    expect(out?.html).toContain('class="eyebrow"'); // rest untouched
+  });
+
+  it('leaves the slide alone when counting does not suit the number', () => {
+    expect(statCountUp('<div class="stat">2024</div>')).toBeNull();
+    expect(statCountUp('<p class="body">no stat here</p>')).toBeNull();
+  });
+
+  it('respects a brand opting out via motion.countStats', () => {
+    const off = brandRecipeSchema.parse({ ...minimal, motion: { style: 'rise', pace: 'calm', countStats: false } });
+    expect(statCountUp(html, off)).toBeNull();
+  });
+
+  it('emits seekable count CSS only when a target is given', () => {
+    expect(recipeMotionCss(undefined, 'stat', 40)).toContain('@keyframes cb-count');
+    expect(recipeMotionCss(undefined, 'stat', 40)).toContain("syntax: '<integer>'");
+    expect(recipeMotionCss(undefined, 'stat')).not.toContain('cb-count');
   });
 });

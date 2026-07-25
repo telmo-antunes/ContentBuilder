@@ -47,6 +47,8 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState<'zip' | 'video' | null>(null);
+  /** Timestamp of the last "play motion" press — remounts the slide to replay it. */
+  const [playing, setPlaying] = useState<number | null>(null);
   const [sel, setSel] = useState(0);
   // Surgical editing of the selected AUTHORED slide (copy / order / emphasis),
   // kept in the recipe's own markup so nothing about the brand design degrades.
@@ -368,19 +370,35 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
           <aside className="studio-inspector">
             <p className="studio-eyebrow">Slide {sel + 1} of {slides.length}</p>
             {selectedWorking && (
-              <div style={{ marginTop: 12, borderRadius: 12, overflow: 'hidden', border: '1px solid var(--border)' }}>
-                <ScaledSlide format={project.format} displayWidth={288}>
-                  <SlideRenderer
-                    slide={selectedWorking}
-                    brandKit={kit}
-                    format={project.format}
-                    image={resolveSlideImage(selectedWorking, project.media)}
-                    imageLayout={resolveImageLayout(selectedWorking, project.media)}
-                    theme={selectedWorking.overrides?.theme ?? project.settings?.theme ?? 'editorial'}
-                    forExport
-                  />
-                </ScaledSlide>
-              </div>
+              <>
+                <div style={{ marginTop: 12, borderRadius: 12, overflow: 'hidden', border: '1px solid var(--border)' }}>
+                  <ScaledSlide format={project.format} displayWidth={288}>
+                    <SlideRenderer
+                      // Remounting on `playing` restarts the CSS reveal, so the
+                      // button replays the exact motion the video will export.
+                      key={playing ? `motion-${playing}` : 'still'}
+                      slide={selectedWorking}
+                      brandKit={kit}
+                      format={project.format}
+                      image={resolveSlideImage(selectedWorking, project.media)}
+                      imageLayout={resolveImageLayout(selectedWorking, project.media)}
+                      theme={selectedWorking.overrides?.theme ?? project.settings?.theme ?? 'editorial'}
+                      forExport
+                      motion={playing !== null}
+                    />
+                  </ScaledSlide>
+                </div>
+                {authored && (
+                  <button
+                    className="btn sm ghost"
+                    style={{ width: '100%', justifyContent: 'center', marginTop: 8 }}
+                    onClick={() => setPlaying(Date.now())}
+                    title="Play the motion this slide will have in a video export"
+                  >
+                    ▶ Play motion
+                  </button>
+                )}
+              </>
             )}
 
             {editId && selectedWorking?.id === editId ? (

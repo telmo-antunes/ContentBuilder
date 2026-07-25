@@ -9,18 +9,30 @@ import { getBrowser } from './browser';
 import { getStorage } from '../storage';
 
 /**
- * Render a project to an animated MP4. Each slide is driven through the hidden
- * /render route in MOTION mode; its reveal choreography is captured
- * deterministically — pause every CSS animation, then step `currentTime`
- * frame-by-frame and screenshot each frame — so the video is jitter-free
- * regardless of render speed. Frames from all slides are concatenated and
- * encoded with the bundled ffmpeg (H.264/yuv420p, Instagram-ready).
+ * Render a project's slides to animated MP4s — ONE PER SLIDE.
+ *
+ * Per-slide is the correct shape for Instagram: in a carousel or a story the
+ * viewer decides when to advance, so the slides are independent clips (which is
+ * also why inter-slide transitions would be meaningless). Each clip plays its
+ * reveal choreography then holds the settled composition, and loops cleanly.
+ *
+ * Capture is DETERMINISTIC: every CSS animation is paused and its timeline is
+ * stepped frame-by-frame, so output is identical regardless of render speed.
  */
 
 const FPS = 30;
 const FRAME_MS = 1000 / FPS;
-/** How long the settled slide is held (readable) before the next one. */
-const HOLD_MS = 1300;
+/** How long the settled slide is held (readable) at the end of its clip. */
+const HOLD_MS = 1400;
+
+export interface RenderedClip {
+  /** Zero-padded filename: 01.mp4, 02.mp4, … */
+  name: string;
+  buffer: Buffer;
+  key: string;
+  url: string;
+  frames: number;
+}
 
 interface ExportableProject {
   _id: string;
@@ -54,45 +66,32 @@ async function gotoAndSettle(page: any, url: string, slideId: string): Promise<v
             }),
       ),
     );
-    // The recipe's fonts are injected CLIENT-side after mount, so a single
-    // fonts.ready can resolve BEFORE they're requested — then text paints in a
-    // fallback (or invisibly). Wait until each element's own family is loaded.
-    const els: any[] = Array.from(doc.querySelectorAll('.cb-slide *'));
-    const families = new Set<string>();
-    for (const el of els) {
-      const fam = getComputedStyle(el).fontFamily;
-      const size = getComputedStyle(el).fontSize || '16px';
-      if (fam) families.add(`${size} ${fam}`);
-    }
-    await Promise.all(
-      Array.from(families).map((f) => doc.fonts.load(f).catch(() => null)),
-    );
-    if (doc?.fonts?.ready) await doc.fonts.ready;
   });
-  await new Promise((r) => setTimeout(r, 450));
+  await new Promise((r) => setTimeout(r, 300));
 }
 
-export async function renderProjectToVideo(
-  project: ExportableProject,
-): Promise<{ buffer: Buffer; key: string; url: string; slides: number; frames: number }> {
+export async function renderSlidesToVideo(project: ExportableProject): Promise<RenderedClip[]> {
   if (!ffmpegPath) throw new Error('ffmpeg binary unavailable');
   const { width, height } = dimensionsFor(project.format);
   const browser = await getBrowser();
+  const storage = getStorage();
   const base = config.webUrl.replace(/\/+$/, '');
   const ordered = [...project.slides].sort((a, b) => a.order - b.order);
+  const holdFrames = Math.round(HOLD_MS / FRAME_MS);
 
   const page = await browser.newPage();
   await page.setViewport({ width, height, deviceScaleFactor: 1 });
-  const frames: Buffer[] = [];
-  const holdFrames = Math.round(HOLD_MS / FRAME_MS);
+  const out: RenderedClip[] = [];
 
   try {
-    for (const slide of ordered) {
+    for (let i = 0; i < ordered.length; i++) {
+      const slide = ordered[i]!;
       const url = `${base}/render?projectId=${project._id}&slideId=${encodeURIComponent(slide.id)}&motion=1`;
       await gotoAndSettle(page, url, slide.id);
-      // Freeze the timeline so we can seek it deterministically, and read the
-      // reveal window from the page itself — so each BRAND's own motion
-      // signature (style + pace on recipe.motion) drives the capture length.
+
+      // Freeze the timeline, and read the reveal window from the page itself —
+      // so each BRAND's motion signature (and a stat's count-up, which runs
+      // longer) drives this clip's length automatically.
       const motionMs: number = await page.evaluate(() => {
         const doc = (globalThis as any).document;
         const anims = doc.getAnimations();
@@ -107,9 +106,10 @@ export async function renderProjectToVideo(
       const el = await page.$('[data-slide-root]');
       if (!el) throw new Error(`Render route produced no slide for ${slide.id}`);
 
-      // Reveal: step the timeline frame-by-frame. Only seek WITHIN the active
-      // window — a paused animation seeked past its end paints stale in headless
-      // Chrome (elements silently vanish even though computed opacity is 1).
+      const frames: Buffer[] = [];
+      // Reveal: step the timeline. Only seek WITHIN the active window — a paused
+      // animation seeked past its end paints stale in headless Chrome (elements
+      // silently vanish even though computed opacity is 1).
       for (let f = 0; f < revealFrames; f++) {
         const t = Math.min(f * FRAME_MS, motionMs);
         await page.evaluate(
@@ -127,8 +127,8 @@ export async function renderProjectToVideo(
       }
 
       // Settled: drop the motion class so the slide renders in its plain static
-      // state — identical to the still PNG export, and immune to the paused-seek
-      // repaint quirk. This frame is also what we hold on.
+      // state — identical to the still PNG export, and immune to the stale-paint
+      // quirk above. This frame is also what the clip holds on.
       await page.evaluate(() => {
         const doc = (globalThis as any).document;
         doc.getAnimations().forEach((a: any) => {
@@ -143,12 +143,23 @@ export async function renderProjectToVideo(
       await new Promise((r) => setTimeout(r, 120));
       const settled = Buffer.from(await el.screenshot({ type: 'png' }));
       for (let h = 0; h < holdFrames; h++) frames.push(settled);
+
+      const name = `${String(i + 1).padStart(2, '0')}.mp4`;
+      const buffer = await encode(frames);
+      const stored = await storage.save(`renders/${project._id}/${name}`, buffer, {
+        contentType: 'video/mp4',
+      });
+      out.push({ name, buffer, key: stored.key, url: stored.url, frames: frames.length });
     }
   } finally {
     await page.close().catch(() => {});
   }
 
-  // Encode: write frames to a temp dir, run ffmpeg, read the MP4 back.
+  return out;
+}
+
+/** PNG frames → one Instagram-ready H.264 MP4. */
+async function encode(frames: Buffer[]): Promise<Buffer> {
   const dir = await mkdtemp(join(tmpdir(), 'cbvid-'));
   try {
     await Promise.all(
@@ -166,11 +177,7 @@ export async function renderProjectToVideo(
       '-movflags', '+faststart',
       outPath,
     ]);
-    const buffer = await readFile(outPath);
-    const stored = await getStorage().save(`renders/${project._id}/video.mp4`, buffer, {
-      contentType: 'video/mp4',
-    });
-    return { buffer, key: stored.key, url: stored.url, slides: ordered.length, frames: frames.length };
+    return await readFile(outPath);
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => {});
   }

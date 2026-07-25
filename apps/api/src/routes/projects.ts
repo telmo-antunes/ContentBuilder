@@ -17,7 +17,7 @@ import { ProjectModel, ProjectVersionModel, BusinessModel, BrandKitModel, MediaA
 import { ApiError, asyncHandler, parseBody, publicErrMessage, requireObjectId } from '../lib/http';
 import { createProjectSchema, slideSchema, updateProjectSchema, type SlideInput } from '../lib/validation';
 import { renderSlidesToPng, slugify } from '../lib/exporter';
-import { renderProjectToVideo } from '../lib/videoExporter';
+import { renderSlidesToVideo } from '../lib/videoExporter';
 import { generateCaption, type GeneratedCaption } from '../lib/caption';
 import { aiDraftConfigured, config } from '../config';
 
@@ -460,8 +460,9 @@ projectsRouter.post(
 interface VideoJob {
   state: 'running' | 'done' | 'error';
   projectId: string;
-  filename: string;
-  buffer?: Buffer;
+  /** One clip per slide — Instagram advances slides on the viewer's tap/swipe. */
+  clips?: Array<{ name: string; buffer: Buffer }>;
+  title: string;
   error?: string;
   startedAt: number;
 }
@@ -490,15 +491,19 @@ projectsRouter.post(
 
     sweepVideoJobs();
     const jobId = randomUUID();
-    const filename = `${slugify(project.get('title'))}.mp4`;
-    videoJobs.set(jobId, { state: 'running', projectId: String(id), filename, startedAt: Date.now() });
+    videoJobs.set(jobId, {
+      state: 'running',
+      projectId: String(id),
+      title: slugify(project.get('title')),
+      startedAt: Date.now(),
+    });
 
     // Fire and forget — the client polls. Never let a rejection escape.
     void (async () => {
       try {
-        const video = await renderProjectToVideo(project.toJSON() as never);
+        const clips = await renderSlidesToVideo(project.toJSON() as never);
         const job = videoJobs.get(jobId);
-        if (job) Object.assign(job, { state: 'done', buffer: video.buffer });
+        if (job) Object.assign(job, { state: 'done', clips });
       } catch (err) {
         const job = videoJobs.get(jobId);
         if (job) {
@@ -515,7 +520,8 @@ projectsRouter.post(
   }),
 );
 
-// Poll a video job. When done, the SAME url serves the MP4 as a download.
+// Poll a video job. When done, the SAME url serves the result as a download:
+// a lone slide streams as one MP4; several stream as a zip of per-slide clips.
 projectsRouter.get(
   '/:id/export-video/:jobId',
   asyncHandler(async (req, res) => {
@@ -526,8 +532,24 @@ projectsRouter.get(
       res.json({ state: 'running', elapsedMs: Date.now() - job.startedAt });
       return;
     }
-    res.setHeader('Content-Type', 'video/mp4');
-    res.setHeader('Content-Disposition', `attachment; filename="${job.filename}"`);
-    res.send(job.buffer);
+
+    const clips = job.clips ?? [];
+    if (clips.length === 1) {
+      res.setHeader('Content-Type', 'video/mp4');
+      res.setHeader('Content-Disposition', `attachment; filename="${job.title}.mp4"`);
+      res.send(clips[0]!.buffer);
+      return;
+    }
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${job.title}-video.zip"`);
+    const archive = new ZipArchive({ zlib: { level: 9 } });
+    archive.on('error', (err) => {
+      console.error('[video] archive error:', err);
+      res.destroy(err);
+    });
+    archive.pipe(res);
+    for (const clip of clips) archive.append(clip.buffer, { name: clip.name });
+    await archive.finalize();
   }),
 );
