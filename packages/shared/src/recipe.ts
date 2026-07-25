@@ -104,9 +104,32 @@ export const recipeFormatVariantSchema = z.object({
 });
 export type RecipeFormatVariant = z.infer<typeof recipeFormatVariantSchema>;
 
+/** The recipe shape this build writes. Bump when a change needs a migration. */
+export const RECIPE_VERSION = 2;
+
 export const brandRecipeSchema = z.object({
-  /** Bump when the recipe shape changes in a breaking way. */
-  version: z.literal(1).default(1),
+  /**
+   * Shape version. Deliberately a NUMBER, not a literal: recipes are stored
+   * documents that outlive the code that wrote them, and a literal made any
+   * schema change a hard parse failure for every brand. `migrateRecipe` upgrades
+   * older payloads on read; unknown/rejected values fall back to v1.
+   */
+  version: z.number().int().min(1).max(99).catch(1).default(RECIPE_VERSION),
+
+  /**
+   * WHY the recipe made its choices. The old art-direction brief captured this
+   * and was lost with the block director; without it neither a human nor a later
+   * refinement pass can tell intent from accident.
+   */
+  rationale: z
+    .object({
+      palette: z.string().max(300).default(''),
+      type: z.string().max(300).default(''),
+      signature: z.string().max(300).default(''),
+      motion: z.string().max(300).default(''),
+    })
+    .partial()
+    .optional(),
 
   tokens: recipeTokensSchema,
 
@@ -132,6 +155,21 @@ export const brandRecipeSchema = z.object({
    *  classes, written against the `--cb-*` tokens. Injected at render, scoped to
    *  the slide root. This is the "authored once" heart of the recipe. */
   stylesheet: z.string().max(24000).default(''),
+
+  /**
+   * The same stylesheet, LAYERED. A single blob can only be regenerated whole —
+   * "make the background bolder" meant re-authoring the entire design. Split it
+   * and a refinement can rewrite one layer while the rest stays byte-identical.
+   * Concatenated in order (background → type → components) when present;
+   * `stylesheet` remains the fallback, so old recipes are unaffected.
+   */
+  layers: z
+    .object({
+      background: z.string().max(10000).default(''),
+      type: z.string().max(10000).default(''),
+      components: z.string().max(14000).default(''),
+    })
+    .optional(),
 
   /** The class vocabulary the slide composer is allowed to use — its palette of
    *  brand components. Names must correspond to classes in `stylesheet`. */
@@ -163,8 +201,33 @@ export const brandRecipeSchema = z.object({
       treatment: z.string().max(280).catch(''),
       photoRole: z.enum(['hero', 'accent', 'none']).catch('none'),
       texture: z.string().max(120).catch('none'),
+      /**
+       * Concrete photo SUBJECTS — the stock-search terms. `treatment` is prose
+       * for the designer's eye; it made a poor query (the old code sliced its
+       * first clause off a sentence). Keep the two jobs separate.
+       */
+      subjects: z.array(z.string().max(60)).max(6).catch([]),
     })
     .default({}),
+
+  /**
+   * Alternate SURFACES. Every recipe is one ground, so a carousel has no way to
+   * breathe; flipping a single slide inverts the palette and gives the sequence
+   * rhythm. The composer opts in per slide (`bg: 'inverse'`); absent → no
+   * inverse slide is ever produced, so this is purely additive.
+   */
+  surfaces: z
+    .object({
+      inverse: z
+        .object({
+          ground: z.string(),
+          ink: z.string(),
+          accent: z.string().optional(),
+          inkMuted: z.string().optional(),
+        })
+        .optional(),
+    })
+    .optional(),
 
   voice: z
     .object({
@@ -246,14 +309,79 @@ export const RECIPE_FORMAT_DIMS: Record<string, { w: number; h: number; label: s
  * the later rules win by cascade order. Unknown/absent formats use the base.
  */
 export function recipeStylesheetFor(recipe: BrandRecipe, format: string): string {
+  // Layers win when present (background → type → components); otherwise the
+  // single authored blob. Either way the surface CSS is appended so an
+  // `.inverse` slide re-points its tokens last.
+  const l = recipe.layers;
+  const base =
+    l && (l.background || l.type || l.components)
+      ? [l.background, l.type, l.components].filter(Boolean).join('\n')
+      : recipe.stylesheet;
   const extra = recipe.formats?.[format]?.stylesheet?.trim();
-  return extra ? `${recipe.stylesheet}\n/* format ${format} */\n${extra}` : recipe.stylesheet;
+  const surface = recipeSurfaceCss(recipe);
+  return [base, extra ? `/* format ${format} */\n${extra}` : '', surface].filter(Boolean).join('\n');
+}
+
+/**
+ * CSS for the recipe's alternate surfaces. Re-points the colour tokens inside
+ * `.cb-slide.inverse`, so every component class keeps working unchanged — the
+ * whole slide simply inverts. Empty when the recipe defines no inverse.
+ */
+export function recipeSurfaceCss(recipe: BrandRecipe): string {
+  const inv = recipe.surfaces?.inverse;
+  if (!inv) return '';
+  const decls = [
+    `${RECIPE_VAR_PREFIX}-ground: ${inv.ground}`,
+    `${RECIPE_VAR_PREFIX}-ink: ${inv.ink}`,
+    inv.inkMuted ? `${RECIPE_VAR_PREFIX}-ink-muted: ${inv.inkMuted}` : '',
+    inv.accent ? `${RECIPE_VAR_PREFIX}-accent: ${inv.accent}` : '',
+  ].filter(Boolean);
+  // `background: none` clears the base ground art so the inverse reads clean;
+  // the recipe can still restyle `.cb-slide.inverse` for a bespoke treatment.
+  return `.cb-slide.inverse { ${decls.join('; ')}; background: ${inv.ground}; color: ${inv.ink}; }`;
+}
+
+/** The stock-photo query for a brand: its subjects, else a trimmed treatment. */
+export function recipePhotoQuery(recipe: BrandRecipe): string {
+  const subjects = recipe.imagery.subjects ?? [];
+  if (subjects.length) return subjects.slice(0, 3).join(' ').slice(0, 80).trim();
+  const first = (recipe.imagery.treatment || '').split(/[,;]| with | so | that /i)[0] ?? '';
+  return first.replace(/-/g, ' ').slice(0, 60).trim();
 }
 
 /** The composition patterns for a format (format-specific if given, else base). */
 export function recipePatternsFor(recipe: BrandRecipe, format: string): string[] {
   const fmt = recipe.formats?.[format]?.patterns;
   return fmt && fmt.length ? fmt : recipe.composition.patterns;
+}
+
+/**
+ * The patterns that apply to ONE role. Patterns are authored as
+ * `"<role>: a → b → c"`, so several entries sharing a role prefix are variants
+ * of it — which is how a brand gets more than one cover arrangement.
+ */
+export function recipePatternsForRole(recipe: BrandRecipe, format: string, role: string): string[] {
+  const all = recipePatternsFor(recipe, format);
+  const prefix = role.toLowerCase();
+  const mine = all.filter((p) => p.trim().toLowerCase().startsWith(prefix));
+  return mine.length ? mine : all;
+}
+
+/**
+ * Pick ONE variant for a slide. Without this every cover in every post used the
+ * single first pattern, so posts were internally identical — the "samey" problem
+ * one level up from the old engine. Rotating by slide index keeps variety inside
+ * the brand system and stays deterministic (same slide → same arrangement).
+ */
+export function recipePatternVariant(
+  recipe: BrandRecipe,
+  format: string,
+  role: string,
+  index = 0,
+): string | undefined {
+  const mine = recipePatternsForRole(recipe, format, role);
+  if (!mine.length) return undefined;
+  return mine[Math.abs(index) % mine.length];
 }
 
 // ── Motion ──────────────────────────────────────────────────────────────────
@@ -298,6 +426,39 @@ export const DEFAULT_MOTION: RecipeMotion = {
   description: '',
   countStats: true,
 };
+
+// ── Versioning ──────────────────────────────────────────────────────────────
+
+/**
+ * Upgrade a stored recipe payload to the current shape, then validate it.
+ * Recipes live in Mongo far longer than the code that authored them, so every
+ * read goes through here — a schema change becomes a migration step rather than
+ * a brand whose kit suddenly fails to parse.
+ *
+ * v1 → v2: `imagery.subjects` and the `layers`/`surfaces`/`rationale` blocks were
+ * added. All are optional, so v1 payloads are already valid — only the stamp
+ * moves. Real transformations belong here as they arise.
+ */
+export function migrateRecipe(raw: unknown): BrandRecipe {
+  const input = (raw ?? {}) as Record<string, unknown>;
+  const from = typeof input.version === 'number' ? input.version : 1;
+  const out: Record<string, unknown> = { ...input };
+
+  if (from < 2) {
+    // Derive photo subjects from the prose treatment so v1 brands get a usable
+    // stock query instead of the old first-clause slicing at call time.
+    const imagery = (out.imagery ?? {}) as Record<string, unknown>;
+    if (!Array.isArray(imagery.subjects) || imagery.subjects.length === 0) {
+      const treatment = String(imagery.treatment ?? '');
+      const head = treatment.split(/[,;]| with | so | that /i)[0] ?? '';
+      const terms = head.replace(/-/g, ' ').trim();
+      out.imagery = { ...imagery, subjects: terms ? [terms.slice(0, 60)] : [] };
+    }
+    out.version = 2;
+  }
+
+  return brandRecipeSchema.parse(out);
+}
 
 // ── Legibility ──────────────────────────────────────────────────────────────
 

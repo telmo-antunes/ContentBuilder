@@ -12,6 +12,12 @@ import {
   statCountUp,
   ensureRecipeContrast,
   validateRecipeConsistency,
+  recipeSurfaceCss,
+  recipePhotoQuery,
+  recipePatternVariant,
+  recipePatternsForRole,
+  migrateRecipe,
+  RECIPE_VERSION,
   RECIPE_VAR_PREFIX,
 } from './recipe';
 import { contrastRatio } from './colorContrast';
@@ -30,7 +36,7 @@ const minimal = {
 describe('brandRecipeSchema', () => {
   it('parses a minimal recipe and fills defaults', () => {
     const r = brandRecipeSchema.parse(minimal);
-    expect(r.version).toBe(1);
+    expect(r.version).toBe(RECIPE_VERSION);
     expect(r.tokens.radius).toBe(16); // default
     expect(r.typography.displayWeight).toBe(700);
     expect(r.composition.align).toBe('flush-left');
@@ -361,5 +367,113 @@ describe('typography drives the CSS (R3)', () => {
   it('omits them when no typography is passed (back-compat)', () => {
     const r = brandRecipeSchema.parse(minimal);
     expect(recipeCssVars(r.tokens)).not.toHaveProperty('--cb-display-case');
+  });
+});
+
+describe('structured imagery (R7)', () => {
+  it('prefers subjects over the prose treatment for the photo query', () => {
+    const r = brandRecipeSchema.parse({
+      ...minimal,
+      imagery: { treatment: 'Moody warm-lit portraits, with a dark overlay', subjects: ['gym portrait', 'sunrise run'] },
+    });
+    expect(recipePhotoQuery(r)).toBe('gym portrait sunrise run');
+  });
+
+  it('falls back to the treatment when no subjects are authored', () => {
+    const r = brandRecipeSchema.parse({
+      ...minimal,
+      imagery: { treatment: 'Cinematic premium-car photography, dusk-lit' },
+    });
+    expect(recipePhotoQuery(r)).toBe('Cinematic premium car photography');
+  });
+});
+
+describe('inverse surface (R8)', () => {
+  it('emits nothing when the recipe has no inverse', () => {
+    expect(recipeSurfaceCss(brandRecipeSchema.parse(minimal))).toBe('');
+  });
+
+  it('re-points the colour tokens inside .cb-slide.inverse', () => {
+    const r = brandRecipeSchema.parse({
+      ...minimal,
+      surfaces: { inverse: { ground: '#ece4d3', ink: '#171208', accent: '#8a6a06' } },
+    });
+    const css = recipeSurfaceCss(r);
+    expect(css).toContain('.cb-slide.inverse');
+    expect(css).toContain('--cb-ground: #ece4d3');
+    expect(css).toContain('--cb-ink: #171208');
+    // and it must reach the rendered stylesheet
+    expect(recipeStylesheetFor(r, '1080x1350')).toContain('.cb-slide.inverse');
+  });
+});
+
+describe('composition variants (R5)', () => {
+  const r = brandRecipeSchema.parse({
+    ...minimal,
+    composition: {
+      patterns: [
+        'cover: logo → headline',
+        'cover: headline → rule (blunter)',
+        'cta: logo → headline → cta',
+      ],
+    },
+  });
+
+  it('returns only the patterns for a role', () => {
+    expect(recipePatternsForRole(r, '1080x1350', 'cover')).toHaveLength(2);
+    expect(recipePatternsForRole(r, '1080x1350', 'cta')).toHaveLength(1);
+  });
+
+  it('rotates variants by slide index, deterministically', () => {
+    const a = recipePatternVariant(r, '1080x1350', 'cover', 0);
+    const b = recipePatternVariant(r, '1080x1350', 'cover', 1);
+    expect(a).not.toBe(b);                                            // real variety
+    expect(recipePatternVariant(r, '1080x1350', 'cover', 2)).toBe(a);  // wraps
+    expect(recipePatternVariant(r, '1080x1350', 'cover', 0)).toBe(a);  // stable
+  });
+
+  it('falls back to all patterns for an unknown role', () => {
+    expect(recipePatternsForRole(r, '1080x1350', 'nope')).toHaveLength(3);
+  });
+});
+
+describe('layered stylesheet (R6)', () => {
+  it('concatenates layers background → type → components', () => {
+    const r = brandRecipeSchema.parse({
+      ...minimal,
+      stylesheet: '.cb-slide{ ignored:1 }',
+      layers: { background: '.cb-slide{ bg:1 }', type: '.cb-slide .headline{ t:1 }', components: '.cb-slide .cta{ c:1 }' },
+    });
+    const css = recipeStylesheetFor(r, '1080x1350');
+    expect(css.indexOf('bg:1')).toBeLessThan(css.indexOf('t:1'));
+    expect(css.indexOf('t:1')).toBeLessThan(css.indexOf('c:1'));
+    expect(css).not.toContain('ignored'); // layers replace the blob
+  });
+
+  it('uses the single stylesheet when no layers are authored', () => {
+    const r = brandRecipeSchema.parse({ ...minimal, stylesheet: '.cb-slide{ solo:1 }' });
+    expect(recipeStylesheetFor(r, '1080x1350')).toContain('solo:1');
+  });
+});
+
+describe('versioning + migration (R10)', () => {
+  it('stamps new recipes with the current version', () => {
+    expect(brandRecipeSchema.parse(minimal).version).toBe(RECIPE_VERSION);
+  });
+
+  it('migrates a v1 payload and derives photo subjects from its prose', () => {
+    const v1 = { ...minimal, version: 1, imagery: { treatment: 'Cinematic premium-car photography, dusk-lit', photoRole: 'hero' } };
+    const out = migrateRecipe(v1);
+    expect(out.version).toBe(2);
+    expect(out.imagery.subjects).toEqual(['Cinematic premium car photography']);
+  });
+
+  it('does not clobber subjects that are already present', () => {
+    const out = migrateRecipe({ ...minimal, version: 1, imagery: { treatment: 'x', subjects: ['kept'] } });
+    expect(out.imagery.subjects).toEqual(['kept']);
+  });
+
+  it('survives a bogus version instead of throwing (documents outlive code)', () => {
+    expect(() => migrateRecipe({ ...minimal, version: 'banana' })).not.toThrow();
   });
 });

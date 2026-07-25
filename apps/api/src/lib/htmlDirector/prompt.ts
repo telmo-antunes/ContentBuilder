@@ -13,7 +13,7 @@
  * inside `.cb-slide`; the renderer injects the recipe stylesheet + `--cb-*`
  * tokens around it. The fragment is sanitised (allowlist) before it is stored.
  */
-import { RECIPE_FORMAT_DIMS, recipePatternsFor, type BrandRecipe } from '@contentbuilder/shared';
+import { RECIPE_FORMAT_DIMS, recipePatternsFor, recipePatternVariant, type BrandRecipe } from '@contentbuilder/shared';
 
 /** A slide's role — selects which composition pattern the composer follows. */
 export type SlideRole = 'cover' | 'statement' | 'quote' | 'feature' | 'stat' | 'list' | 'cta';
@@ -42,12 +42,19 @@ export interface ComposeSlideInput {
   format: string;
   /** true when this brand+slide should be photo-forward (cover with imagery). */
   photo?: boolean;
+  /** Position in the deck — rotates which composition VARIANT this role uses. */
+  index?: number;
 }
 
 /** Render the recipe into the compact spec the composer reasons over. */
-export function recipeSpecBlock(recipe: BrandRecipe, format: string): string {
+export function recipeSpecBlock(recipe: BrandRecipe, format: string, role?: string, index?: number): string {
   const comps = recipe.components.map((c) => `  .${c.className} — ${c.use}`).join('\n');
-  const patterns = recipePatternsFor(recipe, format).map((p) => `  - ${p}`).join('\n');
+  // When the role is known, lead with the ONE variant this slide should follow
+  // (a brand may author several arrangements per role); otherwise list them all.
+  const chosen = role ? recipePatternVariant(recipe, format, role, index) : undefined;
+  const patterns = chosen
+    ? `  - ${chosen}`
+    : recipePatternsFor(recipe, format).map((p) => `  - ${p}`).join('\n');
   return [
     `SIGNATURE MOVE (${recipe.signature.name}): ${recipe.signature.description}`,
     `ALIGNMENT: ${recipe.composition.align}`,
@@ -55,7 +62,7 @@ export function recipeSpecBlock(recipe: BrandRecipe, format: string): string {
     `COMPONENT CLASSES you may use (and nothing else):`,
     comps,
     ``,
-    `COMPOSITION PATTERNS (arrangement by slide role):`,
+    `COMPOSITION PATTERN to follow:`,
     patterns,
   ].join('\n');
 }
@@ -103,7 +110,7 @@ export function buildComposeMessages(
   const canvas = dims ? `${dims.w}×${dims.h} (${dims.label})` : input.format;
   const user = [
     `BRAND SPEC`,
-    recipeSpecBlock(recipe, input.format),
+    recipeSpecBlock(recipe, input.format, input.role, input.index),
     ``,
     `THIS SLIDE`,
     `  role: ${input.role}`,

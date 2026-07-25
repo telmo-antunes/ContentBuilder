@@ -7,7 +7,8 @@ import { z } from 'zod';
 import {
   MAX_DRAFT_PARAGRAPH_CHARS,
   defaultThemeForCategory,
-  brandRecipeSchema,
+  migrateRecipe,
+  recipePhotoQuery,
   type BrandRecipe,
 } from '@contentbuilder/shared';
 import { composeProject } from '../lib/htmlDirector/compose';
@@ -25,13 +26,6 @@ const composeSchema = z.object({
   idea: z.string().trim().min(1, 'An idea is required').max(MAX_DRAFT_PARAGRAPH_CHARS),
   slideCount: z.number().int().min(1).max(12).optional(),
 });
-
-/** A Pexels query for a brand's photo covers, from the recipe's imagery treatment
- *  (the subject usually leads the first clause). Empty string → skip the search. */
-function photoQueryFor(recipe: BrandRecipe): string {
-  const first = (recipe.imagery.treatment || '').split(/[,;]| with | so | that /i)[0] ?? '';
-  return first.replace(/-/g, ' ').slice(0, 60).trim();
-}
 
 export const projectsRouter = Router();
 
@@ -230,9 +224,17 @@ projectsRouter.post(
     if (!project) throw new ApiError(404, 'Project not found');
 
     const kit = await approvedKitFor(String(project.get('businessId')));
-    const parsedRecipe = kit && (kit as { recipe?: unknown }).recipe
-      ? brandRecipeSchema.safeParse((kit as { recipe?: unknown }).recipe)
-      : null;
+    // Stored recipes are migrated on read, so a brand authored against an older
+    // shape keeps working instead of failing to parse.
+    const stored = kit && (kit as { recipe?: unknown }).recipe;
+    let parsedRecipe: { success: true; data: BrandRecipe } | { success: false } | null = null;
+    if (stored) {
+      try {
+        parsedRecipe = { success: true, data: migrateRecipe(stored) };
+      } catch {
+        parsedRecipe = { success: false };
+      }
+    }
     if (!parsedRecipe?.success) {
       throw new ApiError(400, 'This brand has no design recipe yet — generate the brand recipe first.');
     }
@@ -256,7 +258,7 @@ projectsRouter.post(
     // photo — the recipe's `.photo` class layers it as var(--cb-photo) under a
     // scrim. Without a Pexels key this is a no-op and the gradient shows instead.
     const businessId = String(project.get('businessId'));
-    const query = photoQueryFor(parsedRecipe.data);
+    const query = recipePhotoQuery(parsedRecipe.data);
     const orientation = project.get('format') === '1080x1080' ? 'square' : 'portrait';
     const slides: Array<Record<string, unknown>> = [];
     for (let i = 0; i < composed.length; i++) {

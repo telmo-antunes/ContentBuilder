@@ -114,7 +114,9 @@ export const dynatosRecipe: BrandRecipe = brandRecipeSchema.parse({
     align: 'flush-left',
     patterns: [
       'cover: logo → fill → eyebrow → headline → tagline',
+      'cover: logo → fill → headline → rule → tagline (no eyebrow — a colder, blunter open)',
       'statement: eyebrow → fill → headline → rule → tagline',
+      'statement: fill → headline → tagline → fill (centred, nothing else)',
       'quote: fill → quote → attr → fill',
       'cta: logo → fill → eyebrow → headline → cta → handle',
     ],
@@ -123,6 +125,17 @@ export const dynatosRecipe: BrandRecipe = brandRecipeSchema.parse({
     treatment: 'Moody, warm-lit portraits of disciplined men; dark so gold + off-white type sits on top.',
     photoRole: 'accent',
     texture: 'faint warm grain',
+    subjects: ['moody gym portrait man', 'dark athletic training', 'sunrise discipline run'],
+  },
+  surfaces: {
+    // One bone-coloured slide mid-carousel breaks the dark run and resets the eye.
+    inverse: { ground: '#ece4d3', ink: '#171208', accent: '#8a6a06', inkMuted: '#5c5344' },
+  },
+  rationale: {
+    palette: 'Near-black ground with a single rationed gold: the site is dark and the gold is the only bright note, so it must stay scarce to keep meaning.',
+    type: 'Condensed uppercase display for force at thumbnail size; a serif italic accent supplies the warmth the caps refuse.',
+    signature: 'The gold italic-serif line is the brand\'s voice made visible — it lands the payoff after the headline shouts.',
+    motion: 'Discipline is repetition under load, so type arrives with force and no drift.',
   },
   voice: {
     description: 'Direct, masculine, motivational. Speaks to discipline and becoming a pillar for others.',
@@ -258,7 +271,9 @@ export const detailMastersRecipe: BrandRecipe = brandRecipeSchema.parse({
     align: 'flush-left',
     patterns: [
       'cover (add class "photo" to slide): logo-row → fill → eyebrow → headline(with .it) → body',
+      'cover (add class "photo" to slide): logo-row → fill → headline(with .it) → rule (quieter, image-led)',
       'feature: eyebrow → headline(.it) → rule → body → fill → panel',
+      'feature: eyebrow → headline(.it) → panel → fill → body',
       'stat: eyebrow → headline → stat → body',
       'cta: logo-row → fill → eyebrow → headline(.it) → cta → handle',
     ],
@@ -267,6 +282,17 @@ export const detailMastersRecipe: BrandRecipe = brandRecipeSchema.parse({
     treatment: 'Cinematic premium-car photography, dusk-lit, with a dark gradient overlay so serif type stays legible.',
     photoRole: 'hero',
     texture: 'subtle grain on photo covers',
+    subjects: ['luxury car detailing', 'polished car paint macro', 'car showroom dusk'],
+  },
+  surfaces: {
+    // A warm off-white slide reads as the "spec sheet" beat in a dark deck.
+    inverse: { ground: '#f2ece2', ink: '#171008', accent: '#8a6524', inkMuted: '#5f5749' },
+  },
+  rationale: {
+    palette: 'Bronze on near-black mirrors showroom lighting on dark paint — premium without shouting.',
+    type: 'Playfair throughout: the brand sells care and craft, and a serif carries that where a geometric sans would read as generic SaaS.',
+    signature: 'The gold italic half-headline echoes the site\'s own emphasis, so posts feel continuous with the product.',
+    motion: 'Nothing premium hurries; elements glide up as if easing into showroom light.',
   },
   voice: {
     description: 'Sophisticated, premium, plain. Sells trust and ease for detailing shop owners.',

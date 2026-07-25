@@ -10,7 +10,7 @@
  * validated by brandRecipeSchema and its stylesheet is CSS-sanitised.
  */
 import {
-  brandRecipeSchema,
+  migrateRecipe,
   ensureRecipeContrast,
   validateRecipeConsistency,
   type BrandRecipe,
@@ -109,7 +109,9 @@ function parseRecipe(text: string): BrandRecipe {
       if (v && typeof v.stylesheet === 'string') v.stylesheet = sanitizeRecipeCss(v.stylesheet);
     }
   }
-  return brandRecipeSchema.parse(raw);
+  // Route model output through the migrator as well, so a recipe authored
+  // against an older prompt/shape is normalised the same way a stored one is.
+  return migrateRecipe(raw);
 }
 
 /**

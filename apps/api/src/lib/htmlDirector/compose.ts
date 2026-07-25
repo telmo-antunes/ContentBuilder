@@ -126,11 +126,12 @@ export async function parseForCompose(
   });
   const parsed = parseResultSchema.parse(extractJson(textOf(resp)));
   const photoHero = recipe.imagery.photoRole === 'hero';
-  return parsed.slides.map((s) => ({
+  return parsed.slides.map((s, index) => ({
     role: s.role as SlideRole,
     parts: s.parts as ComposeParts,
     format,
     photo: s.role === 'cover' && photoHero,
+    index,
   }));
 }
 
