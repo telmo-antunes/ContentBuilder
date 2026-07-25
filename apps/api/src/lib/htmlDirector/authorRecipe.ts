@@ -18,6 +18,7 @@ import {
 import { aiMessageLarge, textOf, modelFor, withOpusReasoning } from '../ai';
 import { sanitizeRecipeCss } from '../cssSanitize';
 import { dynatosRecipe, detailMastersRecipe } from './recipes';
+import { verifyRecipeByRender } from './verifyRecipe';
 
 export interface RecipeEvidence {
   name: string;
@@ -180,15 +181,30 @@ async function critiqueAndRevise(
  */
 export async function authorRecipe(
   evidence: RecipeEvidence,
-  opts?: { model?: string; reasoning?: boolean; critique?: boolean },
+  opts?: { model?: string; reasoning?: boolean; critique?: boolean; verify?: boolean },
 ): Promise<BrandRecipe> {
   const model = opts?.model ?? (await modelFor('recipe'));
-  const draft = gate(await authorOnce(model, evidence, opts?.reasoning), 'draft');
-  if (opts?.critique === false) return draft;
-  try {
-    return gate(await critiqueAndRevise(model, evidence, draft, opts?.reasoning), 'revised');
-  } catch (err) {
-    console.warn('[recipe] critique pass failed — shipping first draft:', err instanceof Error ? err.message : err);
-    return draft;
+  let recipe = gate(await authorOnce(model, evidence, opts?.reasoning), 'draft');
+
+  if (opts?.critique !== false) {
+    try {
+      recipe = gate(await critiqueAndRevise(model, evidence, recipe, opts?.reasoning), 'revised');
+    } catch (err) {
+      console.warn(
+        '[recipe] critique pass failed — keeping the draft:',
+        err instanceof Error ? err.message : err,
+      );
+    }
   }
+
+  // RENDER-VERIFY: actually look at what the recipe produces. Requires the web
+  // renderer to be reachable, so it is opt-in (verify: true) and best-effort —
+  // it can only ever improve the recipe, never block it.
+  if (opts?.verify) {
+    const seen = await verifyRecipeByRender(recipe, { format: '1080x1350' });
+    console.warn(`[recipe] render-verify: ${seen.verdict} — ${seen.notes}`);
+    if (seen.verdict === 'revised') recipe = gate(seen.recipe, 'verified');
+  }
+
+  return recipe;
 }

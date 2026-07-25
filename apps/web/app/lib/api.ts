@@ -168,8 +168,12 @@ export const composeProjectAI = (id: string, idea: string, slideCount?: number) 
   );
 
 /** Author (or re-author) the brand's design recipe from its kit evidence (design tier). */
-export const authorBrandRecipe = (kitId: string) =>
-  request<{ _id: string; recipe?: unknown }>(`/brandkits/${kitId}/recipe`, { method: 'POST' }, 180_000);
+export const authorBrandRecipe = (kitId: string, verify = false) =>
+  request<{ _id: string; recipe?: unknown }>(
+    `/brandkits/${kitId}/recipe${verify ? '?verify=1' : ''}`,
+    { method: 'POST' },
+    300_000,
+  );
 
 // ── Stock photos ────────────────────────────────────────────────────────────
 export interface StockCandidate {

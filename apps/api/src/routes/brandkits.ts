@@ -193,11 +193,14 @@ businessBrandKitRouter.get(
  * the design system every AI-composed slide is built against. This is the heart
  * of onboarding: a kit without a recipe can't compose anything on-brand.
  */
-async function authorRecipeForKit(kit: {
-  get(key: string): any;
-  set(key: string, value: unknown): void;
-  save(): Promise<unknown>;
-}): Promise<void> {
+async function authorRecipeForKit(
+  kit: {
+    get(key: string): any;
+    set(key: string, value: unknown): void;
+    save(): Promise<unknown>;
+  },
+  opts?: { verify?: boolean },
+): Promise<void> {
   const biz = await BusinessModel.findById(kit.get('businessId')).lean<Record<string, any> | null>();
   const profile = biz?.profile ?? {};
   const evidence: RecipeEvidence = {
@@ -209,7 +212,7 @@ async function authorRecipeForKit(kit: {
     styleDescriptor: kit.get('styleDescriptor'),
     voice: kit.get('voice') || (Array.isArray(profile.tone) ? profile.tone.join(', ') : undefined),
   };
-  const recipe = await authorRecipe(evidence);
+  const recipe = await authorRecipe(evidence, { verify: opts?.verify });
   kit.set('recipe', recipe);
   await kit.save();
 }
@@ -236,7 +239,9 @@ brandKitRouter.post(
     const kit = await BrandKitModel.findById(kitId);
     if (!kit) throw new ApiError(404, 'Brand kit not found');
     try {
-      await authorRecipeForKit(kit);
+      // ?verify=1 adds the render-verify pass: the recipe's own output is
+      // rendered, screenshotted and revised if the pixels disagree with it.
+      await authorRecipeForKit(kit, { verify: req.query.verify === '1' });
     } catch (err) {
       throw new ApiError(502, `Recipe author failed: ${publicErrMessage(err, 'AI error')}.`);
     }
