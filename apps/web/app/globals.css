@@ -1916,6 +1916,19 @@ input[type='color'] {
 .slide-step-val { min-width: 66px; text-align: center; font-size: 13px; color: var(--text); font-variant-numeric: tabular-nums; }
 .slide-step-val .u { color: var(--faint); font-size: 12px; }
 
+/* ── Video export: a determinate 0→100% loader ─────────────────────────────── */
+.vid-prog { border: 1px solid var(--border); border-radius: 14px; background: var(--panel); padding: 14px 16px; margin-bottom: 18px; }
+.vid-prog-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.vid-prog-top .lbl { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent); font-weight: 700; }
+.vid-prog-top .pct { font-family: var(--display); font-size: 22px; color: var(--text); font-variant-numeric: tabular-nums; }
+.vid-prog-bar { height: 5px; border-radius: 3px; background: var(--panel-2); overflow: hidden; margin-top: 9px; }
+.vid-prog-bar > span {
+  display: block; height: 100%; border-radius: 3px;
+  background: linear-gradient(90deg, var(--accent-2), var(--accent));
+  transition: width 0.5s var(--ease-out);
+}
+.vid-prog-sub { color: var(--muted); font-size: 12px; line-height: 1.5; margin: 10px 0 0; max-width: 72ch; }
+
 /* ── "The AI is working" — an anticipatory, animated loading panel ─────────── */
 .work { position: relative; overflow: hidden; border-radius: 16px; border: 1px solid var(--border); background: var(--panel); isolation: isolate; }
 .work-bare { border: none; background: transparent; border-radius: 0; }

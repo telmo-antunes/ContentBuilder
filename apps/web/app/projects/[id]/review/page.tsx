@@ -49,6 +49,8 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
   const [exporting, setExporting] = useState<'zip' | 'video' | null>(null);
   /** Timestamp of the last "play motion" press — remounts the slide to replay it. */
   const [playing, setPlaying] = useState<number | null>(null);
+  /** Real 0–100 progress of a running video export. */
+  const [videoPct, setVideoPct] = useState(0);
   const [sel, setSel] = useState(0);
   // Surgical editing of the selected AUTHORED slide (copy / order / emphasis),
   // kept in the recipe's own markup so nothing about the brand design degrades.
@@ -154,21 +156,27 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
           throw new Error(msg?.error ?? `Video export failed (HTTP ${start.status})`);
         }
         const { jobId } = (await start.json()) as { jobId: string };
-        toast('Rendering your video — this takes a minute…');
+        setVideoPct(0);
+        toast('Rendering one video per slide…');
 
-        // Poll until the job produces the MP4 (or fails).
-        for (let i = 0; i < 150; i++) {
-          await new Promise((r) => setTimeout(r, 2500));
+        // Poll until the job produces the clips (or fails), tracking real progress.
+        for (let i = 0; i < 220; i++) {
+          await new Promise((r) => setTimeout(r, 1500));
           const poll = await fetch(api(`/projects/${projectId}/export-video/${jobId}`));
           if (!poll.ok) {
             const msg = await poll.json().catch(() => null);
             throw new Error(msg?.error ?? `Video export failed (HTTP ${poll.status})`);
           }
-          if (poll.headers.get('Content-Type')?.startsWith('video/')) {
-            await saveBlob(poll, 'project.mp4');
-            toast('Video downloaded', 'ok');
+          const type = poll.headers.get('Content-Type') ?? '';
+          // A zip (several slides) or a lone mp4 means it's finished.
+          if (type.startsWith('video/') || type.includes('zip')) {
+            setVideoPct(100);
+            await saveBlob(poll, type.includes('zip') ? 'videos.zip' : 'project.mp4');
+            toast(slides.length > 1 ? `${slides.length} slide videos downloaded` : 'Video downloaded', 'ok');
             return;
           }
+          const body = (await poll.json().catch(() => null)) as { percent?: number } | null;
+          if (typeof body?.percent === 'number') setVideoPct(body.percent);
         }
         throw new Error('Video export timed out.');
       } catch (e) {
@@ -245,9 +253,9 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                   className="btn"
                   onClick={() => runExport('video')}
                   disabled={exporting !== null}
-                  title="Render the slides as an animated MP4 (Reels / Stories)"
+                  title={`Render each slide as its own animated MP4 (${slides.length} clip${slides.length === 1 ? '' : 's'})`}
                 >
-                  {exporting === 'video' ? 'Rendering video…' : '🎬 Video'}
+                  {exporting === 'video' ? `Rendering… ${videoPct}%` : '🎬 Video'}
                 </button>
               )}
               <button className="btn primary" onClick={() => runExport('zip')} disabled={exporting !== null}>
@@ -257,6 +265,31 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
           )}
         </div>
       </div>
+
+      {/* Determinate loader — real render progress, one clip per slide. */}
+      {exporting === 'video' && (
+        <div className="vid-prog" role="status" aria-live="polite">
+          <div className="vid-prog-top">
+            <span className="lbl">
+              Rendering {slides.length} slide video{slides.length === 1 ? '' : 's'}
+            </span>
+            <span className="pct">{videoPct}%</span>
+          </div>
+          <div
+            className="vid-prog-bar"
+            role="progressbar"
+            aria-valuenow={videoPct}
+            aria-valuemin={0}
+            aria-valuemax={100}
+          >
+            <span style={{ width: `${Math.max(2, videoPct)}%` }} />
+          </div>
+          <p className="vid-prog-sub">
+            Each slide becomes its own MP4 — on Instagram the viewer decides when to advance, so the
+            clips stay independent. Capturing the motion frame by frame; this takes a minute.
+          </p>
+        </div>
+      )}
 
       {slides.length === 0 ? (
         <div className="empty">

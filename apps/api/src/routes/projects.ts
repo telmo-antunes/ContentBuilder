@@ -463,6 +463,8 @@ interface VideoJob {
   /** One clip per slide — Instagram advances slides on the viewer's tap/swipe. */
   clips?: Array<{ name: string; buffer: Buffer }>;
   title: string;
+  /** Real 0–100 render progress, for a determinate loader in the UI. */
+  percent: number;
   error?: string;
   startedAt: number;
 }
@@ -495,15 +497,19 @@ projectsRouter.post(
       state: 'running',
       projectId: String(id),
       title: slugify(project.get('title')),
+      percent: 0,
       startedAt: Date.now(),
     });
 
     // Fire and forget — the client polls. Never let a rejection escape.
     void (async () => {
       try {
-        const clips = await renderSlidesToVideo(project.toJSON() as never);
+        const clips = await renderSlidesToVideo(project.toJSON() as never, (percent) => {
+          const j = videoJobs.get(jobId);
+          if (j) j.percent = percent;
+        });
         const job = videoJobs.get(jobId);
-        if (job) Object.assign(job, { state: 'done', clips });
+        if (job) Object.assign(job, { state: 'done', percent: 100, clips });
       } catch (err) {
         const job = videoJobs.get(jobId);
         if (job) {
@@ -529,7 +535,7 @@ projectsRouter.get(
     if (!job || job.projectId !== req.params.id) throw new ApiError(404, 'Video job not found');
     if (job.state === 'error') throw new ApiError(502, `Video export failed: ${job.error}`);
     if (job.state === 'running') {
-      res.json({ state: 'running', elapsedMs: Date.now() - job.startedAt });
+      res.json({ state: 'running', percent: job.percent, elapsedMs: Date.now() - job.startedAt });
       return;
     }
 

@@ -70,7 +70,11 @@ async function gotoAndSettle(page: any, url: string, slideId: string): Promise<v
   await new Promise((r) => setTimeout(r, 300));
 }
 
-export async function renderSlidesToVideo(project: ExportableProject): Promise<RenderedClip[]> {
+export async function renderSlidesToVideo(
+  project: ExportableProject,
+  /** Called with real 0–100 progress so the UI can show a determinate loader. */
+  onProgress?: (percent: number) => void,
+): Promise<RenderedClip[]> {
   if (!ffmpegPath) throw new Error('ffmpeg binary unavailable');
   const { width, height } = dimensionsFor(project.format);
   const browser = await getBrowser();
@@ -83,11 +87,18 @@ export async function renderSlidesToVideo(project: ExportableProject): Promise<R
   await page.setViewport({ width, height, deviceScaleFactor: 1 });
   const out: RenderedClip[] = [];
 
+  // Progress is reported against the whole job: each slide is an equal share,
+  // split inside between loading, frame capture (the bulk), and encoding.
+  const report = (slideIndex: number, within: number) =>
+    onProgress?.(Math.min(99, Math.round(((slideIndex + within) / ordered.length) * 100)));
+
   try {
     for (let i = 0; i < ordered.length; i++) {
       const slide = ordered[i]!;
+      report(i, 0);
       const url = `${base}/render?projectId=${project._id}&slideId=${encodeURIComponent(slide.id)}&motion=1`;
       await gotoAndSettle(page, url, slide.id);
+      report(i, 0.08);
 
       // Freeze the timeline, and read the reveal window from the page itself —
       // so each BRAND's motion signature (and a stat's count-up, which runs
@@ -124,6 +135,8 @@ export async function renderSlidesToVideo(project: ExportableProject): Promise<R
           t,
         );
         frames.push(Buffer.from(await el.screenshot({ type: 'png' })));
+        // Frame capture is the bulk of the work — report it as it goes.
+        if (f % 4 === 0) report(i, 0.08 + 0.74 * ((f + 1) / revealFrames));
       }
 
       // Settled: drop the motion class so the slide renders in its plain static
@@ -145,7 +158,9 @@ export async function renderSlidesToVideo(project: ExportableProject): Promise<R
       for (let h = 0; h < holdFrames; h++) frames.push(settled);
 
       const name = `${String(i + 1).padStart(2, '0')}.mp4`;
+      report(i, 0.86); // encoding
       const buffer = await encode(frames);
+      report(i, 1);
       const stored = await storage.save(`renders/${project._id}/${name}`, buffer, {
         contentType: 'video/mp4',
       });
