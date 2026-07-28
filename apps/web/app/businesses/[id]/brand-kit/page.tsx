@@ -20,7 +20,7 @@ import { ScaledSlide } from '../../../../lib/render/SlideFrame';
 import type { RenderBrandKit } from '../../../../lib/render/types';
 import { confirm } from '../../../components/ConfirmDialog';
 import { toast } from '../../../components/Toast';
-import { ANALYZE_STAGES, RECIPE_STAGES } from '../../../components/useStagedProgress';
+import { ANALYZE_STAGES, REANALYZE_STAGES, RECIPE_STAGES } from '../../../components/useStagedProgress';
 import { WorkingPanel } from '../../../components/WorkingPanel';
 
 type ColorRoleKey = 'primary' | 'secondary' | 'accent' | 'background' | 'text';
@@ -828,16 +828,29 @@ function KitEditor({
             <span className="muted" style={{ fontSize: 12 }}>Approving replaces the current kit.</span>
           )}
         </div>
-        <div className="row">
-          {onReanalyze && (
-            <button className="btn ghost sm" onClick={onReanalyze} disabled={busy !== null}>
-              Re-analyze website
+        {/* Re-analysis takes 20-40s. The first-time panel is gated on there
+            being no kit yet, so this path — the one you take most often —
+            showed nothing at all but a disabled button. */}
+        {busy === 'analyze' ? (
+          <WorkingPanel
+            active
+            bare
+            stages={REANALYZE_STAGES}
+            title="Re-reading your brand"
+            sub="Your approved kit stays exactly as it is — this arrives as a draft you can compare and approve. ~20–40s."
+          />
+        ) : (
+          <div className="row">
+            {onReanalyze && (
+              <button className="btn ghost sm" onClick={onReanalyze} disabled={busy !== null}>
+                Re-analyze website
+              </button>
+            )}
+            <button className="btn ghost sm" onClick={onManual} disabled={busy !== null}>
+              Start fresh
             </button>
-          )}
-          <button className="btn ghost sm" onClick={onManual} disabled={busy !== null}>
-            Start fresh
-          </button>
-        </div>
+          </div>
+        )}
       </div>
     </>
   );
