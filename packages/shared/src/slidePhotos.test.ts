@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   SLOT_ATTR,
+  SLOT_SHAPES,
   authoredSlots,
   emptySlotCss,
   filledSlotCss,
@@ -49,12 +50,68 @@ describe('isSlotName', () => {
   });
 });
 
+/**
+ * The shape guarantee. A `max-height` on a `width:100%` element with an
+ * `aspect-ratio` does not shrink it, it RESHAPES it — which silently turned
+ * `tall` (3:4 portrait) into 1.34:1 landscape on every post. These assert the
+ * ratio survives on every canvas, by emulating what the browser resolves:
+ * width = min(column, max-width), then height = width / ratio.
+ */
+describe('slot shapes survive their height budget', () => {
+  const resolve = (css: string, cls: string, column: number, ratio: number) => {
+    const sel = cls ? `\\.cb-shot\\.${cls}` : '\\.cb-shot(?!\\.)';
+    const m = css.match(new RegExp(`${sel}\\{[^}]*max-width:(\\d+)px;max-height:(\\d+)px`));
+    if (!m) throw new Error(`no rule for .cb-shot${cls ? '.' + cls : ''}`);
+    const w = Math.min(column, Number(m[1]));
+    return { w, h: Math.min(w / ratio, Number(m[2])) };
+  };
+
+  for (const [label, canvasH, column] of [
+    ['post 4:5', 1350, 904],
+    ['story 9:16', 1920, 904],
+    ['square 1:1', 1080, 936],
+  ] as const) {
+    it(`holds every shape on ${label}`, () => {
+      const css = slideMediaCss(canvasH);
+      for (const [cls, { ratio }] of Object.entries(SLOT_SHAPES)) {
+        const { w, h } = resolve(css, cls, column, ratio);
+        expect(w / h).toBeCloseTo(ratio, 1);
+        // …and still fits the canvas it was budgeted against.
+        expect(h).toBeLessThanOrEqual(canvasH * 0.55);
+      }
+    });
+  }
+
+  it('caps the WIDTH, since capping the height is what broke the ratio', () => {
+    const css = slideMediaCss(1350);
+    expect(css).toMatch(/\.cb-shot\.tall\{[^}]*max-width:\d+px/);
+  });
+
+  it('sizes the budget against the canvas it is given', () => {
+    const post = slideMediaCss(1350);
+    const story = slideMediaCss(1920);
+    const w = (css: string) => Number(css.match(/\.cb-shot\.tall\{[^}]*max-width:(\d+)px/)![1]);
+    expect(w(story)).toBeGreaterThan(w(post));
+  });
+
+  it('centres pictures only for a centred brand', () => {
+    expect(slideMediaCss(1350, 'center')).toContain('margin-inline:auto');
+    expect(slideMediaCss(1350, 'flush-left')).not.toContain('margin-inline:auto');
+  });
+});
+
 describe('slot CSS', () => {
   it('scopes the fill rule to the instance and the slot', () => {
     const css = filledSlotCss('cbs1', 'hero', 'https://x/y.jpg', 'contain');
     expect(css).toContain(`.cbs1 .cb-slide [${SLOT_ATTR}="hero"]`);
     expect(css).toContain('background-image:url("https://x/y.jpg")');
     expect(css).toContain('background-size:contain');
+  });
+
+  it('centres the crop by default and honours a focal point when set', () => {
+    expect(filledSlotCss('cbs1', 'hero', 'u', 'cover')).toContain('background-position:50.0% 50.0%');
+    const off = filledSlotCss('cbs1', 'hero', 'u', 'cover', { x: 0.25, y: 0.1 });
+    expect(off).toContain('background-position:25.0% 10.0%');
   });
 
   it('gives an empty slot a visible target', () => {
@@ -92,6 +149,12 @@ describe('slidePhotoSchema', () => {
     });
     expect(r.frame).toEqual({ x: 0.1, y: 0.2, w: 0.5, h: 0.4 });
     expect(r.z).toBe(-1);
+  });
+
+  it('accepts a focal point and rejects one off the image', () => {
+    expect(slidePhotoSchema.parse({ ...base, placement: 'slot', slot: 'a', focal: { x: 0.2, y: 0.8 } }).focal)
+      .toEqual({ x: 0.2, y: 0.8 });
+    expect(() => slidePhotoSchema.parse({ ...base, focal: { x: 1.4, y: 0 } })).toThrow();
   });
 
   it('rejects a frame outside the canvas', () => {

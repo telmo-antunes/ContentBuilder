@@ -682,6 +682,7 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                       slide={selected}
                       media={project.media}
                       businessId={String(project.businessId)}
+                      format={project.format}
                       busy={working !== null || saving}
                       selectedFreeId={freeSel}
                       onSelectFree={setFreeSel}

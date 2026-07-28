@@ -45,6 +45,12 @@ export const slidePhotoSchema = z.object({
   /** placement 'free': where it sits on the canvas, as fractions [0..1]. */
   frame: frameSchema.optional(),
   fit: z.enum(['cover', 'contain']).catch('cover'),
+  /**
+   * Which part of the photo to keep when it is cropped to its box, as
+   * fractions [0..1]. Defaults to dead centre — which beheads a portrait in a
+   * wide slot, so it is settable per photo.
+   */
+  focal: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) }).optional(),
   /** placement 'free': negative sends it behind the composition. */
   z: z.number().min(-1).max(99).optional(),
   alt: z.string().max(160).optional(),

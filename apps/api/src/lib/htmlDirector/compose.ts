@@ -107,9 +107,30 @@ Rules:
 - Write in the brand voice provided. No hashtags, no emoji.
 - "image": set true when this slide would be genuinely STRONGER with a photograph — it shows a place, a product, a person, a result, a before/after. Set false when the slide is a pure typographic statement, a pulled quote, or a big number, where a photo would only decorate. Judge each slide on its own; a deck may have several, one, or none. The user supplies the actual photographs later, so ask for one only where it earns its place.`;
 
+/**
+ * How photo-forward this brand is, in words the parse step can act on.
+ *
+ * `imagery.photoRole` is authored per brand and was left reading by nothing
+ * when the old covers-only rule went away. This gives it a real job: it biases
+ * the per-slide "would a photograph earn its place here?" judgement, so a
+ * detailing shop is asked for pictures far more often than a brand whose whole
+ * identity is typographic.
+ */
+function photoGuidance(recipe: BrandRecipe): string {
+  switch (recipe.imagery.photoRole) {
+    case 'hero':
+      return 'PHOTOGRAPHY: this brand is carried by its images — most slides that show a place, a product, a person or a result should ask for one.';
+    case 'accent':
+      return 'PHOTOGRAPHY: this brand uses images sparingly, to support the type — ask for one only where it genuinely adds proof or atmosphere.';
+    default:
+      return 'PHOTOGRAPHY: this brand is typographic — set "image" to false unless a slide is meaningless without a picture.';
+  }
+}
+
 function parseUser(recipe: BrandRecipe, idea: string, count: number, handle?: string): string {
   return [
     `BRAND VOICE: ${recipe.voice.description || 'clear, confident'}`,
+    photoGuidance(recipe),
     recipe.voice.dos.length ? `DO: ${recipe.voice.dos.join('; ')}` : '',
     recipe.voice.donts.length ? `DON'T: ${recipe.voice.donts.join('; ')}` : '',
     handle ? `HANDLE: ${handle}` : '',

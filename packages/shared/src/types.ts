@@ -236,6 +236,8 @@ export interface SlidePhoto {
   /** 'free': where it sits on the canvas, as fractions [0..1]. */
   frame?: BlockFrame;
   fit?: ImageFit;
+  /** Which part of the photo survives the crop, as fractions [0..1]. */
+  focal?: { x: number; y: number };
   /** 'free': negative sends it behind the composition. */
   z?: number;
   alt?: string;

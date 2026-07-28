@@ -322,8 +322,10 @@ export function recipeStylesheetFor(recipe: BrandRecipe, format: string): string
   const surface = recipeSurfaceCss(recipe);
   // The image layer is app capability, not brand taste, so it ships with every
   // recipe rather than being authored per brand — but every value it picks
-  // comes from that brand's own tokens. Last, so a recipe can still override it.
-  return [base, extra ? `/* format ${format} */\n${extra}` : '', surface, slideMediaCss()]
+  // comes from that brand's own tokens, and its slot sizing is derived from THIS
+  // canvas (the height budget a shape may spend differs on 4:5 / 1:1 / 9:16).
+  const media = slideMediaCss(RECIPE_FORMAT_DIMS[format]?.h ?? 1350, recipe.composition?.align);
+  return [base, extra ? `/* format ${format} */\n${extra}` : '', surface, media]
     .filter(Boolean)
     .join('\n');
 }
@@ -345,6 +347,28 @@ export function recipeSurfaceCss(recipe: BrandRecipe): string {
   // `background: none` clears the base ground art so the inverse reads clean;
   // the recipe can still restyle `.cb-slide.inverse` for a bespoke treatment.
   return `.cb-slide.inverse { ${decls.join('; ')}; background: ${inv.ground}; color: ${inv.ink}; }`;
+}
+
+/**
+ * The reveal timing for one slide, for surfaces the `.cb-slide` scoping can't
+ * reach — specifically the free-overlay layers, which are SIBLINGS of the slide
+ * (they need full-canvas geometry, and `.cb-slide` has padding). Without this
+ * they popped in at frame 0 while everything around them animated.
+ */
+export function recipeMotionTiming(recipe?: BrandRecipe, role?: string) {
+  const m = motionForRole(recipe, role);
+  const { dur, step } = PACE[m.pace];
+  const ease = OVERSHOOT.has(m.style)
+    ? 'cubic-bezier(0.2,1.5,0.4,1)'
+    : m.pace === 'punchy'
+      ? 'cubic-bezier(0.2,1.2,0.4,1)'
+      : 'cubic-bezier(0.16,1,0.3,1)';
+  return {
+    dur,
+    ease,
+    /** An overlay sits on top of the composition, so it lands after it. */
+    delay: LEAD_IN + (ORDER.length - 1) * step,
+  };
 }
 
 /** The stock-photo query for a brand: its subjects, else a trimmed treatment. */
@@ -412,10 +436,19 @@ const STYLE_FROM: Record<RecipeMotion['style'], string> = {
 /** Styles that want an overshoot easing to land with character. */
 const OVERSHOOT = new Set<RecipeMotion['style']>(['punch', 'pop']);
 
-/** Reveal order — element groups keyed by the recipe's component classes. */
+/**
+ * Reveal order — element groups keyed by the recipe's component classes.
+ *
+ * `.cb-shot` (an image slot) belongs here explicitly: without an entry it
+ * matched only the base `.cb-motion > *` rule, inherited `animation-delay: 0`,
+ * and the photograph landed BEFORE the brand mark and the headline — backwards
+ * on every photo slide. It reveals just after the eyebrow, so the picture is
+ * the anchor the copy then lands against.
+ */
 const ORDER: string[][] = [
   ['.logo', '.logo-row', '.wordmark', '.monogram'],
   ['.eyebrow'],
+  ['.cb-shot'],
   ['.headline', '.quote'],
   ['.stat', '.rule'],
   ['.tagline', '.body', '.panel'],

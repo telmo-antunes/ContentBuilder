@@ -83,9 +83,10 @@ IMAGE SLOTS
 - A slot is exactly: <figure class="cb-shot" data-cb-slot="NAME"></figure> — always empty, no children, no <img> inside.
 - NAME is your own short lowercase label for what belongs there (e.g. "hero", "before", "after", "product"). Lowercase letters, digits and hyphens only. Each slot on a slide needs a different name.
 - Add a shape class when the composition wants one: "wide" (16:9), "tall" (3:4), "square" (1:1). With no shape class a slot is 4:3.
+- SHAPES COST DIFFERENT AMOUNTS OF THE CANVAS: "wide" ~38%, 4:3 ~34%, "square" ~38%, "tall" ~46%. Spend "tall" only when the picture IS the slide — and when you do, the copy must be an eyebrow and one short headline, nothing else. Pick the shape that suits the photograph AND leaves room for the words you were given.
 - Place the slot where the design needs the picture, in the flow of the composition — the recipe styles it, and the user's photo fills exactly that box.
 - Usually ONE slot. Use two only when the slide is genuinely a pair (a before and an after).
-- A slot takes REAL vertical space (a third to a half of the canvas). On a slide that has one, keep the copy to the essentials — an eyebrow and a headline, not a headline plus body plus a list.
+- A slot takes REAL vertical space (see the shape costs above). On a slide that has one, keep the copy to the essentials — an eyebrow and a headline, not a headline plus a rule plus a body paragraph.
 - When "image" is not set, do not emit a slot at all.
 
 Return only the fragment (the inner markup of .cb-slide).`;

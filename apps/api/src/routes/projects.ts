@@ -60,6 +60,7 @@ function normalizePhotos(s: SlideInput): SlidePhoto[] {
         ? { frame: p.frame ?? { x: 0.28, y: 0.34, w: 0.44, h: 0.32 }, z: p.z ?? 1 }
         : {}),
       fit: p.fit,
+      ...(p.focal ? { focal: p.focal } : {}),
       ...(p.alt ? { alt: p.alt } : {}),
     });
     if (out.length >= 24) break;

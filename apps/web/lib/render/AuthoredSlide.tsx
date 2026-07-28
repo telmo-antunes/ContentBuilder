@@ -11,6 +11,7 @@ import {
   recipeFontFamilies,
   recipeStylesheetFor,
   recipeMotionCss,
+  recipeMotionTiming,
   statCountUp,
   type BrandRecipe,
   type Format,
@@ -144,11 +145,22 @@ export function AuthoredSlide({
     .filter(isSlotName)
     .map((name) => {
       const p = photos?.slots[name];
-      if (p) return filledSlotCss(scope, name, safeUrl(p.url), p.fit);
+      if (p) return filledSlotCss(scope, name, safeUrl(p.url), p.fit, p.focal);
       return editing ? emptySlotCss(scope, name) : '';
     })
     .filter(Boolean)
     .join('\n');
+  /**
+   * BACKGROUND CROP. The recipe's own `.photo` rule paints `var(--cb-photo)`,
+   * usually through the `background` shorthand — which resets position. Doubling
+   * the class matches that rule's specificity, and this sheet is emitted after
+   * it, so source order decides. Only emitted when a focal point was actually
+   * chosen, so a recipe that positions its own art deliberately is left alone.
+   */
+  const bgFocal = photos?.background?.focal;
+  const bgFocalRule = bgFocal
+    ? `.${scope} .cb-slide.cb-slide{background-position:${(bgFocal.x * 100).toFixed(1)}% ${(bgFocal.y * 100).toFixed(1)}%}`
+    : '';
   // Per-ROLE motion: the recipe can give a stat a pop and a quote a calm fade.
   const motionCss = motion
     ? '\n' +
@@ -157,6 +169,19 @@ export function AuthoredSlide({
         /\.cb-slide/g,
         `.${scope} .cb-slide`,
       )
+    : '';
+  /**
+   * The free-overlay layers are SIBLINGS of `.cb-slide` (they need full-canvas
+   * geometry, and the slide has padding), so `.cb-slide.cb-motion > *` never
+   * reaches them — they used to appear at frame 0 with no reveal while
+   * everything around them animated. They reuse the same `cb-enter` keyframes,
+   * landing after the composition since they sit on top of it.
+   */
+  const freeMotionCss = motion
+    ? (() => {
+        const t = recipeMotionTiming(recipe, authored.role);
+        return `\n.${scope} .cb-free-layer.cb-motion > *{animation:cb-enter ${t.dur}s ${t.ease} ${t.delay.toFixed(2)}s both}`;
+      })()
     : '';
   const wrapperStyle = {
     position: 'absolute',
@@ -177,7 +202,10 @@ export function AuthoredSlide({
   const over = free.filter((p) => p.z >= 0);
   const layer = (items: typeof free, cls: 'under' | 'over') =>
     items.length ? (
-      <div className={`cb-free-layer ${cls}`} aria-hidden={cls === 'under' ? true : undefined}>
+      <div
+        className={`cb-free-layer ${cls}${motion ? ' cb-motion' : ''}`}
+        aria-hidden={cls === 'under' ? true : undefined}
+      >
         {items.map((p) => (
           <img
             key={p.id}
@@ -191,6 +219,7 @@ export function AuthoredSlide({
               width: `${(p.frame?.w ?? 0.4) * 100}%`,
               height: `${(p.frame?.h ?? 0.3) * 100}%`,
               objectFit: p.fit,
+              objectPosition: `${((p.focal?.x ?? 0.5) * 100).toFixed(1)}% ${((p.focal?.y ?? 0.5) * 100).toFixed(1)}%`,
             }}
           />
         ))}
@@ -199,7 +228,7 @@ export function AuthoredSlide({
 
   return (
     <div className={scope} style={wrapperStyle}>
-      <style dangerouslySetInnerHTML={{ __html: `${varRule}\n${scopedCss}\n${slotRules}${motionCss}` }} />
+      <style dangerouslySetInnerHTML={{ __html: `${varRule}\n${scopedCss}\n${slotRules}\n${bgFocalRule}${motionCss}${freeMotionCss}` }} />
       {layer(under, 'under')}
       <div
         ref={slideRef}

@@ -31,6 +31,11 @@ const slidePhotoSchema = new Schema(
     /** 'free': where it sits on the canvas, as fractions [0..1]. */
     frame: { type: frameSchema, required: false },
     fit: { type: String, enum: ['cover', 'contain'], required: false },
+    /** Which part of the photo survives the crop, as fractions [0..1]. */
+    focal: {
+      type: new Schema({ x: { type: Number }, y: { type: Number } }, { _id: false }),
+      required: false,
+    },
     /** 'free': negative sends it behind the composition. */
     z: { type: Number, required: false },
     alt: { type: String, required: false },

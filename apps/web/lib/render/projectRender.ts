@@ -31,6 +31,8 @@ export interface ResolvedPhoto {
   id: string;
   url: string;
   fit: 'cover' | 'contain';
+  /** Which part of the photo survives the crop; centre when unset. */
+  focal?: { x: number; y: number };
   frame?: { x: number; y: number; w: number; h: number };
   z: number;
   alt?: string;
@@ -64,6 +66,7 @@ export function resolveSlidePhotos(slide: Slide, media: MediaAsset[]): SlidePhot
       id: p.id,
       url: asset.url,
       fit: p.fit === 'contain' ? 'contain' : 'cover',
+      focal: p.focal,
       frame: p.frame,
       z: p.z ?? 1,
       alt: p.alt,

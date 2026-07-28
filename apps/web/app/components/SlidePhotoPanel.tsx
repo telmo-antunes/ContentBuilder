@@ -1,12 +1,18 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
-import { authoredSlots, type MediaAsset, type Slide, type SlidePhoto } from '@contentbuilder/shared';
+import {
+  SLOT_SHAPES,
+  authoredSlots,
+  dimensionsFor,
+  type Format,
+  type MediaAsset,
+  type Slide,
+  type SlidePhoto,
+} from '@contentbuilder/shared';
 import { uploadMedia } from '../lib/api';
+import FocalPicker from './FocalPicker';
 import { toast } from './Toast';
-
-/** Where a brand-new floating image lands before you drag it. */
-const NEW_FREE_FRAME = { x: 0.26, y: 0.32, w: 0.48, h: 0.36 };
 
 const uid = () =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -17,6 +23,43 @@ const uid = () =>
 function slotLabel(name: string): string {
   const s = name.replace(/[-_]+/g, ' ').trim();
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/**
+ * Where a new floating image lands — sized from the photo's OWN proportions.
+ *
+ * A fixed starting frame meant every upload was crop-distorted the instant it
+ * appeared: a panorama and a portrait both arrived as the same 4:3 box, and you
+ * had to fight the handles back to the shape the picture already was.
+ */
+function frameForAsset(asset: MediaAsset, format: Format) {
+  const { width: CW, height: CH } = dimensionsFor(format);
+  const ratio = asset.width && asset.height ? asset.width / asset.height : 4 / 3;
+  let w: number;
+  let h: number;
+  if (ratio >= 1) {
+    w = 0.62;                       // landscape: fix the long side, derive the short
+    h = (w * CW) / ratio / CH;
+  } else {
+    h = 0.46;                       // portrait: the other way round
+    w = (h * CH * ratio) / CW;
+  }
+  w = Math.min(0.92, w);
+  h = Math.min(0.92, h);
+  return { x: (1 - w) / 2, y: (1 - h) / 2, w, h };
+}
+
+/**
+ * Roughly how many device pixels this photo will be painted across, so we can
+ * say so when the file simply doesn't have them. Approximate on purpose — the
+ * point is to catch a 400px logo stretched over a hero, not to be exact.
+ */
+function renderedWidth(p: SlidePhoto, slideHtmlHasShape: string | undefined, format: Format): number {
+  const { width: CW, height: CH } = dimensionsFor(format);
+  if (p.placement === 'background') return CW;
+  if (p.placement === 'free') return Math.round((p.frame?.w ?? 0.5) * CW);
+  const shape = SLOT_SHAPES[(slideHtmlHasShape ?? '') as keyof typeof SLOT_SHAPES] ?? SLOT_SHAPES[''];
+  return Math.round(Math.min(CW * 0.86, CH * shape.budget * shape.ratio));
 }
 
 /**
@@ -36,6 +79,7 @@ export default function SlidePhotoPanel({
   slide,
   media,
   businessId,
+  format,
   busy,
   selectedFreeId,
   onSelectFree,
@@ -44,6 +88,7 @@ export default function SlidePhotoPanel({
   slide: Slide;
   media: MediaAsset[];
   businessId: string;
+  format: Format;
   busy: boolean;
   selectedFreeId: string | null;
   onSelectFree: (id: string | null) => void;
@@ -56,15 +101,25 @@ export default function SlidePhotoPanel({
   onChange: (photos: SlidePhoto[], uploaded?: MediaAsset) => void;
 }) {
   const [uploading, setUploading] = useState<string | null>(null);
+  /** Which photo's focal picker is open (only one at a time). */
+  const [focusing, setFocusing] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   /** What the pending file picker should do with the asset once it lands. */
-  const targetRef = useRef<{ kind: 'slot'; slot: string } | { kind: 'background' } | { kind: 'free' }>({
-    kind: 'free',
-  });
+  const targetRef = useRef<
+    { kind: 'slot'; slot: string } | { kind: 'background' } | { kind: 'free'; id?: string }
+  >({ kind: 'free' });
 
   const photos = useMemo(() => slide.photos ?? [], [slide.photos]);
-  const slots = useMemo(() => authoredSlots(slide.authored?.html ?? ''), [slide.authored?.html]);
-  const urlOf = (id: string) => media.find((m) => m._id === id)?.url;
+  const html = slide.authored?.html ?? '';
+  const slots = useMemo(() => authoredSlots(html), [html]);
+  const assetOf = (id: string) => media.find((m) => m._id === id);
+
+  /** The shape class the composer gave a slot, so we can size-check against it. */
+  const shapeOf = (name: string): string | undefined => {
+    const m = html.match(new RegExp(`class="([^"]*)"[^>]*data-cb-slot="${name}"`, 'i'))
+      ?? html.match(new RegExp(`data-cb-slot="${name}"[^>]*class="([^"]*)"`, 'i'));
+    return (m?.[1] ?? '').split(/\s+/).find((c) => c === 'wide' || c === 'tall' || c === 'square');
+  };
 
   const bySlot = useMemo(() => {
     const m: Record<string, SlidePhoto> = {};
@@ -86,34 +141,39 @@ export default function SlidePhotoPanel({
     try {
       const asset = await uploadMedia(businessId, file);
       const next = [...photos];
+      const upsert = (match: (p: SlidePhoto) => boolean, entry: Omit<SlidePhoto, 'id'>) => {
+        const i = next.findIndex(match);
+        // Replacing keeps the entry's identity and its focal point — you chose
+        // that crop for this hole, and it usually still applies to the new shot.
+        if (i >= 0) next[i] = { ...next[i]!, ...entry };
+        else next.push({ id: uid(), ...entry });
+      };
       if (target.kind === 'slot') {
-        // Replacing a slot's photo swaps the asset and keeps everything else.
-        const i = next.findIndex((p) => p.placement === 'slot' && p.slot === target.slot);
-        const entry: SlidePhoto = {
-          id: i >= 0 ? next[i]!.id : uid(),
-          mediaAssetId: asset._id,
-          placement: 'slot',
-          slot: target.slot,
-          fit: 'cover',
-        };
-        if (i >= 0) next[i] = entry;
-        else next.push(entry);
+        upsert(
+          (p) => p.placement === 'slot' && p.slot === target.slot,
+          { mediaAssetId: asset._id, placement: 'slot', slot: target.slot, fit: 'cover' },
+        );
       } else if (target.kind === 'background') {
-        const i = next.findIndex((p) => p.placement === 'background');
-        const entry: SlidePhoto = {
-          id: i >= 0 ? next[i]!.id : uid(),
+        upsert((p) => p.placement === 'background', {
           mediaAssetId: asset._id,
           placement: 'background',
           fit: 'cover',
-        };
-        if (i >= 0) next[i] = entry;
-        else next.push(entry);
+        });
+      } else if (target.id) {
+        // Replacing an existing overlay: keep where you put it, re-shape it to
+        // the new photo's proportions rather than stretching it into the old.
+        const i = next.findIndex((p) => p.id === target.id);
+        if (i >= 0) {
+          const f = frameForAsset(asset, format);
+          const cur = next[i]!.frame ?? f;
+          next[i] = { ...next[i]!, mediaAssetId: asset._id, frame: { ...cur, w: f.w, h: f.h } };
+        }
       } else {
         const entry: SlidePhoto = {
           id: uid(),
           mediaAssetId: asset._id,
           placement: 'free',
-          frame: NEW_FREE_FRAME,
+          frame: frameForAsset(asset, format),
           fit: 'cover',
           z: 1,
         };
@@ -129,34 +189,89 @@ export default function SlidePhotoPanel({
     }
   };
 
+  const patch = (id: string, p: Partial<SlidePhoto>) =>
+    onChange(photos.map((x) => (x.id === id ? { ...x, ...p } : x)));
+
   const remove = (id: string) => {
     if (selectedFreeId === id) onSelectFree(null);
+    if (focusing === id) setFocusing(null);
     onChange(photos.filter((p) => p.id !== id));
   };
 
   /** Promote an existing photo to the slide background (the old one steps down). */
-  const makeBackground = (p: SlidePhoto) => {
+  const makeBackground = (p: SlidePhoto) =>
     onChange([
       ...photos.filter((x) => x.id !== p.id && x.placement !== 'background'),
       { ...p, placement: 'background', slot: undefined, frame: undefined },
     ]);
-  };
-
-  const patchFree = (id: string, patch: Partial<SlidePhoto>) =>
-    onChange(photos.map((p) => (p.id === id ? { ...p, ...patch } : p)));
 
   const disabled = busy || uploading !== null;
 
-  const thumb = (id: string) => {
-    const url = urlOf(id);
-    return url ? (
-      <img className="sp-thumb" src={url} alt="" />
-    ) : (
-      <span className="sp-thumb sp-missing" title="This photo is no longer in the library">
-        ?
-      </span>
+  /** One photo's row: thumbnail (opens the crop), label, and its controls. */
+  const row = (
+    key: string,
+    p: SlidePhoto | undefined,
+    name: string,
+    sub: string,
+    controls: React.ReactNode,
+    onUpload: () => void,
+    uploadKey: string,
+    shape?: string,
+  ) => {
+    const asset = p ? assetOf(p.mediaAssetId) : undefined;
+    const need = p ? renderedWidth(p, shape, format) : 0;
+    const soft = Boolean(asset?.width && need && asset.width < need * 0.8);
+    const open = p && focusing === p.id;
+    return (
+      <div key={key}>
+        <div className={`sp-row${selectedFreeId && p?.id === selectedFreeId ? ' sel' : ''}`}>
+          {asset ? (
+            <button
+              className="sp-thumbbtn"
+              title="Choose what stays in frame"
+              disabled={disabled}
+              onClick={() => setFocusing(open ? null : p!.id)}
+            >
+              <img className="sp-thumb" src={asset.url} alt="" />
+            </button>
+          ) : (
+            <span className={`sp-thumb ${p ? 'sp-missing' : 'sp-empty'}`}>{p ? '?' : '＋'}</span>
+          )}
+          <div className="sp-meta">
+            <span className="sp-name">{name}</span>
+            <span className={`sp-sub${soft ? ' warn' : ''}`}>
+              {soft ? `Low resolution — ${asset!.width}px across a ${need}px box` : sub}
+            </span>
+          </div>
+          <div className="sp-ctl">
+            <button className="btn sm" disabled={disabled} onClick={onUpload}>
+              {uploading === uploadKey ? '…' : p ? 'Replace' : 'Upload'}
+            </button>
+            {controls}
+          </div>
+        </div>
+        {open && asset && (
+          <FocalPicker
+            url={asset.url}
+            value={p!.focal}
+            onChange={(focal) => patch(p!.id, { focal })}
+          />
+        )}
+      </div>
     );
   };
+
+  /** Cover/contain — the only honest answer when a photo and its hole disagree. */
+  const fitBtn = (p: SlidePhoto) => (
+    <button
+      className="btn sm ghost"
+      disabled={disabled}
+      title={p.fit === 'contain' ? 'Fill the box (crops)' : 'Fit the whole photo (letterboxes)'}
+      onClick={() => patch(p.id, { fit: p.fit === 'contain' ? 'cover' : 'contain' })}
+    >
+      {p.fit === 'contain' ? '⤢' : '⤡'}
+    </button>
+  );
 
   return (
     <div className="sp">
@@ -171,40 +286,33 @@ export default function SlidePhotoPanel({
       {slots.length > 0 && (
         <>
           <div className="k studio-klbl">Image slots</div>
-          {slots.map((name) => {
-            const p = bySlot[name];
-            return (
-              <div className="sp-row" key={name}>
-                {p ? thumb(p.mediaAssetId) : <span className="sp-thumb sp-empty">＋</span>}
-                <div className="sp-meta">
-                  <span className="sp-name">{slotLabel(name)}</span>
-                  <span className="sp-sub">{p ? 'Filled' : 'Empty — the AI left space here'}</span>
-                </div>
-                <div className="sp-ctl">
+          {slots.map((slotName) => {
+            const p = bySlot[slotName];
+            const shape = shapeOf(slotName);
+            return row(
+              slotName,
+              p,
+              slotLabel(slotName),
+              p ? `Filled · ${shape ?? '4:3'}` : 'Empty — the AI left space here',
+              p ? (
+                <>
+                  {fitBtn(p)}
                   <button
-                    className="btn sm"
+                    className="btn sm ghost"
                     disabled={disabled}
-                    onClick={() => pick({ kind: 'slot', slot: name })}
+                    title="Use this photo full-bleed behind the whole slide"
+                    onClick={() => makeBackground(p)}
                   >
-                    {uploading === name ? 'Uploading…' : p ? 'Replace' : 'Upload'}
+                    ⬒
                   </button>
-                  {p && (
-                    <>
-                      <button
-                        className="btn sm ghost"
-                        disabled={disabled}
-                        title="Use this photo full-bleed behind the whole slide"
-                        onClick={() => makeBackground(p)}
-                      >
-                        ⤢
-                      </button>
-                      <button className="btn sm ghost" disabled={disabled} onClick={() => remove(p.id)}>
-                        ✕
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
+                  <button className="btn sm ghost" disabled={disabled} onClick={() => remove(p.id)}>
+                    ✕
+                  </button>
+                </>
+              ) : null,
+              () => pick({ kind: 'slot', slot: slotName }),
+              slotName,
+              shape,
             );
           })}
         </>
@@ -213,76 +321,55 @@ export default function SlidePhotoPanel({
       <div className="k studio-klbl" style={{ marginTop: slots.length ? 14 : 0 }}>
         Background
       </div>
-      <div className="sp-row">
-        {background ? thumb(background.mediaAssetId) : <span className="sp-thumb sp-empty">＋</span>}
-        <div className="sp-meta">
-          <span className="sp-name">{background ? 'Full-bleed photo' : 'None'}</span>
-          <span className="sp-sub">
-            {background ? 'Behind the whole composition' : 'The brand’s own background is showing'}
-          </span>
-        </div>
-        <div className="sp-ctl">
-          <button className="btn sm" disabled={disabled} onClick={() => pick({ kind: 'background' })}>
-            {uploading === 'background' ? 'Uploading…' : background ? 'Replace' : 'Upload'}
+      {row(
+        'bg',
+        background ?? undefined,
+        background ? 'Full-bleed photo' : 'None',
+        background ? 'Behind the whole composition' : 'The brand’s own background is showing',
+        background ? (
+          <button className="btn sm ghost" disabled={disabled} onClick={() => remove(background.id)}>
+            ✕
           </button>
-          {background && (
-            <button className="btn sm ghost" disabled={disabled} onClick={() => remove(background.id)}>
-              ✕
-            </button>
-          )}
-        </div>
-      </div>
+        ) : null,
+        () => pick({ kind: 'background' }),
+        'background',
+      )}
 
       <div className="k studio-klbl" style={{ marginTop: 14 }}>
         Floating
       </div>
-      {free.map((p) => (
-        <div
-          className={`sp-row${selectedFreeId === p.id ? ' sel' : ''}`}
-          key={p.id}
-          onClick={() => onSelectFree(selectedFreeId === p.id ? null : p.id)}
-        >
-          {thumb(p.mediaAssetId)}
-          <div className="sp-meta">
-            <span className="sp-name">{selectedFreeId === p.id ? 'Dragging on the preview' : 'Floating image'}</span>
-            <span className="sp-sub">{(p.z ?? 1) < 0 ? 'Behind the text' : 'In front of the text'}</span>
-          </div>
-          <div className="sp-ctl">
+      {free.map((p) =>
+        row(
+          p.id,
+          p,
+          selectedFreeId === p.id ? 'Selected — drag it above' : 'Floating image',
+          (p.z ?? 1) < 0 ? 'Behind the text' : 'In front of the text',
+          <>
+            {fitBtn(p)}
             <button
               className="btn sm ghost"
               disabled={disabled}
               title={(p.z ?? 1) < 0 ? 'Bring in front of the text' : 'Send behind the text'}
-              onClick={(e) => {
-                e.stopPropagation();
-                patchFree(p.id, { z: (p.z ?? 1) < 0 ? 1 : -1 });
-              }}
+              onClick={() => patch(p.id, { z: (p.z ?? 1) < 0 ? 1 : -1 })}
             >
               {(p.z ?? 1) < 0 ? '↑' : '↓'}
             </button>
             <button
               className="btn sm ghost"
               disabled={disabled}
-              title={p.fit === 'contain' ? 'Fill the frame' : 'Fit the whole picture'}
-              onClick={(e) => {
-                e.stopPropagation();
-                patchFree(p.id, { fit: p.fit === 'contain' ? 'cover' : 'contain' });
-              }}
+              title={selectedFreeId === p.id ? 'Done positioning' : 'Position it on the preview'}
+              onClick={() => onSelectFree(selectedFreeId === p.id ? null : p.id)}
             >
-              {p.fit === 'contain' ? '⤢' : '⤡'}
+              ✥
             </button>
-            <button
-              className="btn sm ghost"
-              disabled={disabled}
-              onClick={(e) => {
-                e.stopPropagation();
-                remove(p.id);
-              }}
-            >
+            <button className="btn sm ghost" disabled={disabled} onClick={() => remove(p.id)}>
               ✕
             </button>
-          </div>
-        </div>
-      ))}
+          </>,
+          () => pick({ kind: 'free', id: p.id }),
+          p.id,
+        ),
+      )}
       <button
         className="btn sm"
         style={{ width: '100%', justifyContent: 'center', marginTop: free.length ? 8 : 0 }}
@@ -291,11 +378,6 @@ export default function SlidePhotoPanel({
       >
         {uploading === 'free' ? 'Uploading…' : '＋ Add floating image'}
       </button>
-      {free.length > 0 && (
-        <p className="muted" style={{ fontSize: 11, marginTop: 6, marginBottom: 0 }}>
-          Click one to select it, then drag it on the preview above. Pull the corner to resize.
-        </p>
-      )}
     </div>
   );
 }

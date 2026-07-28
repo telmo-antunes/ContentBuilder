@@ -55,47 +55,100 @@ export function authoredSlots(html: string): string[] {
 }
 
 /**
- * The app's image-layer CSS, injected with every recipe stylesheet.
+ * The shapes a slot can take, and how much of the canvas HEIGHT each may spend.
+ *
+ * The height budget is deliberately expressed as a fraction of the canvas
+ * rather than a fixed size, because the same recipe composes 4:5, 1:1 and 9:16.
+ */
+export const SLOT_SHAPES = {
+  '': { ratio: 4 / 3, budget: 0.34 },
+  // `wide` is budgeted to span the full text column on a 4:5 canvas.
+  wide: { ratio: 16 / 9, budget: 0.38 },
+  // `tall` is the expensive one — nearly half the slide. The composer is told
+  // so, because at 52% it reliably pushed a headline + rule + body off-canvas.
+  tall: { ratio: 3 / 4, budget: 0.46 },
+  square: { ratio: 1, budget: 0.38 },
+} as const;
+
+/**
+ * The app's image-layer CSS for one canvas, injected with every recipe
+ * stylesheet.
  *
  * This is structural capability, not brand taste — which is why it isn't
  * authored per brand. It still reads brand-ish, because every value it picks
  * comes from the recipe's own `--cb-*` tokens (radius, ink, body face).
+ *
+ * WHY THE CAP IS ON THE WIDTH. A slot needs a height limit or it runs off the
+ * canvas — at full column width a 3:4 slot computes to ~1200px, taller than a
+ * 4:5 slide's whole content box. But capping the HEIGHT of a `width:100%`
+ * element with an `aspect-ratio` doesn't shrink it, it RESHAPES it: the width
+ * stays, the height clamps, and the ratio becomes whatever is left over. That
+ * turned every shape into a lie — `tall` (3:4 portrait) rendered at 1.34:1,
+ * i.e. landscape.
+ *
+ * So the budget is converted into a `max-width` (budget x ratio). The width
+ * binds first, `aspect-ratio` derives the height from the width that survived,
+ * and the shape always holds. `max-height` stays as a belt-and-braces that
+ * should never actually bind.
  *
  * Per-slot appearance (filled vs. empty) is NOT here: the renderer emits one
  * rule per slot from what it knows, which avoids a `:not([filled])` selector
  * that would out-specify the fill rule and keep the dashed box on top of the
  * user's photo.
  */
-export function slideMediaCss(): string {
+export function slideMediaCss(canvasHeight = 1350, align?: string): string {
+  const shape = (cls: string, ratio: number, budget: number) => {
+    const maxH = Math.round(canvasHeight * budget);
+    const maxW = Math.round(maxH * ratio);
+    const sel = `.cb-slide .${SLOT_CLASS}${cls ? '.' + cls : ''}`;
+    return `${sel}{aspect-ratio:${ratio === 1 ? '1/1' : cls === 'wide' ? '16/9' : cls === 'tall' ? '3/4' : '4/3'};` +
+      `max-width:${maxW}px;max-height:${maxH}px}`;
+  };
   return [
     // ── in-flow slots ────────────────────────────────────────────────────
-    // The slide is a flex COLUMN, so a slot must behave like a good citizen of
-    // it: `flex: 0 1 auto` + `min-height: 0` let it yield rather than push the
-    // copy off the canvas, and each shape carries a cap because at full width
-    // an uncapped ratio is taller than the whole content box (a 3/4 slot across
-    // a 1080 canvas computes to ~1200px — more than a 4:5 slide even has).
+    // `flex: 0 0 auto` — a flex shrink would compress the height and break the
+    // ratio just as surely as a height cap does. The composer is told a slot
+    // costs real vertical space, and the overflow guard catches the rest.
     `.cb-slide .${SLOT_CLASS}{position:relative;display:block;width:100%;margin:0;` +
-      `flex:0 1 auto;min-height:0;overflow:hidden;border-radius:var(--cb-radius,0px);` +
+      `flex:0 0 auto;overflow:hidden;border-radius:var(--cb-radius,0px);` +
       `background-color:color-mix(in srgb, var(--cb-ink) 8%, transparent);` +
-      `background-position:50% 50%;background-size:cover;background-repeat:no-repeat;` +
-      `aspect-ratio:4/3;max-height:40%;}`,
-    `.cb-slide .${SLOT_CLASS}.wide{aspect-ratio:16/9;max-height:32%}`,
-    `.cb-slide .${SLOT_CLASS}.tall{aspect-ratio:3/4;max-height:50%}`,
-    `.cb-slide .${SLOT_CLASS}.square{aspect-ratio:1/1;max-height:44%}`,
+      `background-position:50% 50%;background-size:cover;background-repeat:no-repeat;}`,
+    // Centre-aligned brands centre their pictures too; flush brands don't.
+    align === 'center' ? `.cb-slide .${SLOT_CLASS}{margin-inline:auto}` : '',
+    align === 'flush-right' ? `.cb-slide .${SLOT_CLASS}{margin-inline-start:auto}` : '',
+    shape('', SLOT_SHAPES[''].ratio, SLOT_SHAPES[''].budget),
+    shape('wide', SLOT_SHAPES.wide.ratio, SLOT_SHAPES.wide.budget),
+    shape('tall', SLOT_SHAPES.tall.ratio, SLOT_SHAPES.tall.budget),
+    shape('square', SLOT_SHAPES.square.ratio, SLOT_SHAPES.square.budget),
     // ── free overlays ────────────────────────────────────────────────────
     // Two layers, so an overlay can sit above the type or be sent behind it.
     `.cb-free-layer{position:absolute;inset:0;pointer-events:none}`,
     `.cb-free-layer.over{z-index:6}`,
     `.cb-free-layer.under{z-index:0}`,
     `.cb-free-img{position:absolute;display:block;border-radius:var(--cb-radius,0px)}`,
-  ].join('\n');
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
-/** The rule that paints a user photo into one authored slot. */
-export function filledSlotCss(scope: string, slot: string, url: string, fit: 'cover' | 'contain'): string {
+/**
+ * The rule that paints a user photo into one authored slot.
+ *
+ * `focal` decides which part of the picture survives the crop — without it
+ * every photo is centred, which is fine for a car bonnet and decapitating for
+ * a person.
+ */
+export function filledSlotCss(
+  scope: string,
+  slot: string,
+  url: string,
+  fit: 'cover' | 'contain',
+  focal?: { x: number; y: number },
+): string {
+  const pos = `${((focal?.x ?? 0.5) * 100).toFixed(1)}% ${((focal?.y ?? 0.5) * 100).toFixed(1)}%`;
   return (
     `.${scope} .cb-slide [${SLOT_ATTR}="${slot}"]{` +
-    `background-image:url("${url}");background-size:${fit};}`
+    `background-image:url("${url}");background-size:${fit};background-position:${pos};}`
   );
 }
 
