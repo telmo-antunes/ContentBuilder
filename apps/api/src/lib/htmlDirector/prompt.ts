@@ -86,7 +86,7 @@ IMAGE SLOTS
 - SHAPES COST DIFFERENT AMOUNTS OF THE CANVAS: "wide" ~38%, 4:3 ~34%, "square" ~38%, "tall" ~46%. Spend "tall" only when the picture IS the slide — and when you do, the copy must be an eyebrow and one short headline, nothing else. Pick the shape that suits the photograph AND leaves room for the words you were given.
 - Place the slot where the design needs the picture, in the flow of the composition — the recipe styles it, and the user's photo fills exactly that box.
 - Usually ONE slot. Use two only when the slide is genuinely a pair (a before and an after).
-- A slot takes REAL vertical space (see the shape costs above). On a slide that has one, keep the copy to the essentials — an eyebrow and a headline, not a headline plus a rule plus a body paragraph.
+- A SLOT REPLACES CONTENT, IT DOES NOT ADD TO IT. The picture costs a third to a half of the canvas, so on a slide with a slot follow the pattern only as far as: the brand mark, an eyebrow, the headline, and the slot. DROP the pattern's optional furniture — panels, rules, secondary blocks — to pay for it. The composition patterns were written for slides with no photograph; a slot is a substitution, not an addition.
 - When "image" is not set, do not emit a slot at all.
 
 Return only the fragment (the inner markup of .cb-slide).`;

@@ -19,6 +19,7 @@ import { z } from 'zod';
 import { AA_LARGE, AA_TEXT, contrastRatio, hexToRgb, relativeLuminance } from './colorContrast';
 import { slideMediaCss } from './slidePhotos';
 import { AMBIENT_INTENSITIES, AMBIENT_STYLES, DEFAULT_AMBIENT, type AmbientSpec } from './slideMotion';
+import { enforceTypeFloor, typeBaseCss } from './typeFloor';
 
 /** CSS custom-property prefix for every brand token the renderer injects. */
 export const RECIPE_VAR_PREFIX = '--cb';
@@ -338,9 +339,19 @@ export function recipeStylesheetFor(recipe: BrandRecipe, format: string): string
   // comes from that brand's own tokens, and its slot sizing is derived from THIS
   // canvas (the height budget a shape may spend differs on 4:5 / 1:1 / 9:16).
   const media = slideMediaCss(RECIPE_FORMAT_DIMS[format]?.h ?? 1350, recipe.composition?.align);
-  return [base, extra ? `/* format ${format} */\n${extra}` : '', surface, media]
-    .filter(Boolean)
-    .join('\n');
+  /**
+   * LEGIBILITY FLOOR, applied to the authored CSS *and* the per-format
+   * override — every format is 1080px wide, so a phone shrinks all of them by
+   * the same ~2.75x and the floor is identical on 4:5, 1:1 and 9:16.
+   *
+   * Deliberately at RENDER rather than at author time: it repairs every brand
+   * already in the database on the next paint, with no re-authoring and no AI
+   * spend, and it keeps holding if a future model drifts back to small type.
+   */
+  const authored = enforceTypeFloor(
+    [base, extra ? `/* format ${format} */\n${extra}` : ''].filter(Boolean).join('\n'),
+  );
+  return [typeBaseCss(), authored, surface, media].filter(Boolean).join('\n');
 }
 
 /**

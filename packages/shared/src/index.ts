@@ -11,3 +11,4 @@ export * from './intents';
 export * from './recipe';
 export * from './slidePhotos';
 export * from './slideMotion';
+export * from './typeFloor';
