@@ -10,14 +10,14 @@
   "scripts": {
     "dev": "concurrently -n db,api,web -c green,blue,magenta \"npm:db\" \"npm:dev:api\" \"npm:dev:web\"",
     "db": "node scripts/start-mongo.mjs",
-    "dev:api": "npm run dev --workspace apps/api",
-    "dev:web": "npm run dev --workspace apps/web",
+    "dev:api": "npm --prefix apps/api run dev",
+    "dev:web": "npm --prefix apps/web run dev",
     "build": "npm run build --workspace apps/api && npm run build --workspace apps/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "vitest run",
     "test:watch": "vitest",
     "fonts": "node scripts/copy-fonts.mjs",
-    "seed": "npm run seed --workspace apps/api",
+    "seed": "npm --prefix apps/api run seed",
     "lint": "eslint ."
   },
   "devDependencies": {

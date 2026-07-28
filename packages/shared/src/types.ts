@@ -4,6 +4,7 @@ import type { AssetType, Format } from './formats';
 import type { BusinessProfile, BusinessGoal } from './profile';
 import type { ImageTreatment, LogoTreatment, ThemePreset } from './theme';
 import type { BrandRecipe } from './recipe';
+import type { PhotoMove } from './slideMotion';
 
 /**
  * Provider-agnostic media reference. Every stored asset (logo, upload,
@@ -238,6 +239,8 @@ export interface SlidePhoto {
   fit?: ImageFit;
   /** Which part of the photo survives the crop, as fractions [0..1]. */
   focal?: { x: number; y: number };
+  /** How this photo moves in a video export; 'auto' follows the brand. */
+  motion?: PhotoMove;
   /** 'free': negative sends it behind the composition. */
   z?: number;
   alt?: string;

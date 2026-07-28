@@ -18,6 +18,7 @@
 import { z } from 'zod';
 import { AA_LARGE, AA_TEXT, contrastRatio, hexToRgb, relativeLuminance } from './colorContrast';
 import { slideMediaCss } from './slidePhotos';
+import { AMBIENT_INTENSITIES, AMBIENT_STYLES, DEFAULT_AMBIENT, type AmbientSpec } from './slideMotion';
 
 /** CSS custom-property prefix for every brand token the renderer injects. */
 export const RECIPE_VAR_PREFIX = '--cb';
@@ -79,6 +80,18 @@ export const recipeMotionSchema = z.object({
    * a `cta` punches. Roles without an entry use the brand default above.
    */
   roles: z.record(z.string(), motionPairSchema).optional(),
+  /**
+   * The brand's AMBIENT character — the continuous drift that runs for the
+   * whole clip, under and behind the reveal. Authored per brand exactly like
+   * the reveal signature, so a premium brand breathes slowly and a punchy one
+   * pushes harder. Absent → a subtle parallax.
+   */
+  ambient: z
+    .object({
+      style: z.enum(AMBIENT_STYLES).catch('parallax'),
+      intensity: z.enum(AMBIENT_INTENSITIES).catch('subtle'),
+    })
+    .optional(),
   /**
    * Let a big number tick up to its value in video exports. ON by default —
    * but only ever applied when the number ACTUALLY reads as a countable
@@ -347,6 +360,12 @@ export function recipeSurfaceCss(recipe: BrandRecipe): string {
   // `background: none` clears the base ground art so the inverse reads clean;
   // the recipe can still restyle `.cb-slide.inverse` for a bespoke treatment.
   return `.cb-slide.inverse { ${decls.join('; ')}; background: ${inv.ground}; color: ${inv.ink}; }`;
+}
+
+/** The brand's ambient spec, falling back to a subtle parallax. */
+export function recipeAmbient(recipe?: BrandRecipe): AmbientSpec {
+  const a = recipe?.motion?.ambient;
+  return a ? { style: a.style, intensity: a.intensity } : DEFAULT_AMBIENT;
 }
 
 /**

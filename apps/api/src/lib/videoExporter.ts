@@ -139,12 +139,31 @@ export async function renderSlidesToVideo(
         if (f % 4 === 0) report(i, 0.08 + 0.74 * ((f + 1) / revealFrames));
       }
 
-      // Settled: drop the motion class so the slide renders in its plain static
-      // state — identical to the still PNG export, and immune to the stale-paint
-      // quirk above. This frame is also what the clip holds on.
+      /**
+       * Settled: drop the REVEAL so the slide renders in its plain static state
+       * — identical to the still PNG export, and immune to the stale-paint
+       * quirk above.
+       *
+       * The ambient drift must NOT be dropped with it. Cancelling every
+       * animation would snap a push-in back to its starting scale for the whole
+       * 1400ms hold — the same trap that made a counted stat fall back to zero.
+       * So ambient animations are seeked to their END and left in place, and the
+       * hold genuinely holds where the motion finished.
+       */
       await page.evaluate(() => {
         const doc = (globalThis as any).document;
         doc.getAnimations().forEach((a: any) => {
+          const name = String(a.animationName ?? '');
+          if (name.startsWith('cb-amb-')) {
+            try {
+              const t = a.effect?.getComputedTiming?.();
+              const end = Number(t?.endTime ?? 0);
+              if (Number.isFinite(end)) a.currentTime = end;
+            } catch {
+              /* leave it wherever it is rather than losing it */
+            }
+            return;
+          }
           try {
             a.cancel();
           } catch {

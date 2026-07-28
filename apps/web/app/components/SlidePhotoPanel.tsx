@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState } from 'react';
 import {
+  PHOTO_MOVES,
   SLOT_SHAPES,
   authoredSlots,
   dimensionsFor,
@@ -261,6 +262,38 @@ export default function SlidePhotoPanel({
     );
   };
 
+  /**
+   * How this photo DRIFTS in a video export. Cycles through the moves rather
+   * than opening a menu — there are eight, they're all one word, and seeing the
+   * current one is more useful than choosing from a list.
+   */
+  const MOVE_LABEL: Record<string, string> = {
+    auto: 'Auto',
+    none: 'Still',
+    in: 'Push in',
+    out: 'Pull out',
+    left: 'Pan left',
+    right: 'Pan right',
+    up: 'Pan up',
+    down: 'Pan down',
+  };
+  const moveBtn = (p: SlidePhoto) => {
+    const cur = p.motion ?? 'auto';
+    return (
+      <button
+        className="btn sm ghost"
+        disabled={disabled}
+        title={`Motion in video: ${MOVE_LABEL[cur]} — click to change`}
+        onClick={() => {
+          const i = PHOTO_MOVES.indexOf(cur as (typeof PHOTO_MOVES)[number]);
+          patch(p.id, { motion: PHOTO_MOVES[(i + 1) % PHOTO_MOVES.length] });
+        }}
+      >
+        {cur === 'auto' ? '⟳' : cur === 'none' ? '⊘' : MOVE_LABEL[cur]!.split(' ')[1] === 'in' ? '⊕' : '⊖'}
+      </button>
+    );
+  };
+
   /** Cover/contain — the only honest answer when a photo and its hole disagree. */
   const fitBtn = (p: SlidePhoto) => (
     <button
@@ -293,9 +326,10 @@ export default function SlidePhotoPanel({
               slotName,
               p,
               slotLabel(slotName),
-              p ? `Filled · ${shape ?? '4:3'}` : 'Empty — the AI left space here',
+              p ? `Filled · ${shape ?? '4:3'} · ${MOVE_LABEL[p.motion ?? 'auto']}` : 'Empty — the AI left space here',
               p ? (
                 <>
+                  {moveBtn(p)}
                   {fitBtn(p)}
                   <button
                     className="btn sm ghost"
@@ -325,11 +359,17 @@ export default function SlidePhotoPanel({
         'bg',
         background ?? undefined,
         background ? 'Full-bleed photo' : 'None',
-        background ? 'Behind the whole composition' : 'The brand’s own background is showing',
+        background
+          ? `Behind the whole composition · ${MOVE_LABEL[background.motion ?? 'auto']}`
+          : 'The brand’s own background is showing',
         background ? (
-          <button className="btn sm ghost" disabled={disabled} onClick={() => remove(background.id)}>
-            ✕
-          </button>
+          <>
+            {moveBtn(background)}
+            {fitBtn(background)}
+            <button className="btn sm ghost" disabled={disabled} onClick={() => remove(background.id)}>
+              ✕
+            </button>
+          </>
         ) : null,
         () => pick({ kind: 'background' }),
         'background',
@@ -343,8 +383,9 @@ export default function SlidePhotoPanel({
           p.id,
           p,
           selectedFreeId === p.id ? 'Selected — drag it above' : 'Floating image',
-          (p.z ?? 1) < 0 ? 'Behind the text' : 'In front of the text',
+          `${(p.z ?? 1) < 0 ? 'Behind the text' : 'In front of the text'} · ${MOVE_LABEL[p.motion ?? 'auto']}`,
           <>
+            {moveBtn(p)}
             {fitBtn(p)}
             <button
               className="btn sm ghost"

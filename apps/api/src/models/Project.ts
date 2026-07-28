@@ -36,6 +36,8 @@ const slidePhotoSchema = new Schema(
       type: new Schema({ x: { type: Number }, y: { type: Number } }, { _id: false }),
       required: false,
     },
+    /** How this photo drifts in a video export ('auto' follows the brand). */
+    motion: { type: String, required: false },
     /** 'free': negative sends it behind the composition. */
     z: { type: Number, required: false },
     alt: { type: String, required: false },

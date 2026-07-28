@@ -9,6 +9,7 @@ import { z } from 'zod';
 // so importing back through it would make evaluation order load-bearing.
 import { BLOCK_TYPES } from './blocks';
 import { LAYOUT_TYPES } from './layouts';
+import { PHOTO_MOVES } from './slideMotion';
 import {
   ASSET_TYPES,
   MAX_SLIDES_PER_PROJECT,
@@ -51,6 +52,11 @@ export const slidePhotoSchema = z.object({
    * wide slot, so it is settable per photo.
    */
   focal: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) }).optional(),
+  /**
+   * How this photo MOVES in a video export, overriding the brand's ambient
+   * character. 'auto' lets the brand and the focal point decide.
+   */
+  motion: z.enum(PHOTO_MOVES).catch('auto').optional(),
   /** placement 'free': negative sends it behind the composition. */
   z: z.number().min(-1).max(99).optional(),
   alt: z.string().max(160).optional(),

@@ -146,10 +146,51 @@ export function filledSlotCss(
   focal?: { x: number; y: number },
 ): string {
   const pos = `${((focal?.x ?? 0.5) * 100).toFixed(1)}% ${((focal?.y ?? 0.5) * 100).toFixed(1)}%`;
+  // The photo lives on ::before rather than on the element, so ambient motion
+  // can TRANSFORM it inside the slot's overflow clip. Painting it on the
+  // element itself would mean transforming the box (moving the hole, not the
+  // picture), and background-position/size can't express a smooth push-in.
+  // It also leaves ::after free for the recipe's own scrim or grain.
   return (
-    `.${scope} .cb-slide [${SLOT_ATTR}="${slot}"]{` +
-    `background-image:url("${url}");background-size:${fit};background-position:${pos};}`
+    `.${scope} .cb-slide [${SLOT_ATTR}="${slot}"]::before{` +
+    `content:"";position:absolute;inset:0;` +
+    `background-image:url("${url}");background-size:${fit};background-position:${pos};` +
+    `background-repeat:no-repeat;}`
   );
+}
+
+/**
+ * The user's background photo, as its own full-bleed layer.
+ *
+ * It used to be handed to the recipe as `var(--cb-photo)` for the recipe's own
+ * `.photo` rule to paint — except no recipe ever consumed it (the author prompt
+ * never mentioned it), so setting a background photo rendered NOTHING. It is an
+ * app-owned layer now, which both fixes that and makes it transformable.
+ *
+ * The scrim is app-owned too, and derived from the brand's own ground colour:
+ * legibility over a photograph can't be left to whatever the recipe happened to
+ * author, because the photo is user-supplied and could be any brightness.
+ */
+export function backgroundPhotoCss(
+  scope: string,
+  url: string,
+  fit: 'cover' | 'contain',
+  focal?: { x: number; y: number },
+): string {
+  const pos = `${((focal?.x ?? 0.5) * 100).toFixed(1)}% ${((focal?.y ?? 0.5) * 100).toFixed(1)}%`;
+  return [
+    `.${scope} .cb-bg-layer{position:absolute;inset:0;overflow:hidden;z-index:0}`,
+    `.${scope} .cb-bg-photo{position:absolute;inset:0;` +
+      `background-image:url("${url}");background-size:${fit};background-position:${pos};` +
+      `background-repeat:no-repeat}`,
+    `.${scope} .cb-bg-layer::after{content:"";position:absolute;inset:0;` +
+      `background:linear-gradient(180deg, color-mix(in srgb, var(--cb-ground) 25%, transparent) 0%, ` +
+      `color-mix(in srgb, var(--cb-ground) 30%, transparent) 45%, ` +
+      `color-mix(in srgb, var(--cb-ground) 88%, transparent) 100%)}`,
+    // The recipe's own slide background is opaque by design; with a photo behind
+    // it, it would simply hide it. The composition sits above both either way.
+    `.${scope} .cb-slide.cb-slide{background-image:none;background-color:transparent}`,
+  ].join('\n');
 }
 
 /**

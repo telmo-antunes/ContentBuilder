@@ -1,4 +1,4 @@
-import type { BrandKit, MediaAsset, Slide } from '@contentbuilder/shared';
+import type { BrandKit, MediaAsset, PhotoMove, Slide } from '@contentbuilder/shared';
 import type { ImageLayoutConfig, LayoutImage, RenderBrandKit } from './types';
 
 /** Neutral fallback kit (used only if a project somehow lacks an approved kit). */
@@ -33,6 +33,8 @@ export interface ResolvedPhoto {
   fit: 'cover' | 'contain';
   /** Which part of the photo survives the crop; centre when unset. */
   focal?: { x: number; y: number };
+  /** How it drifts in a video export; undefined follows the brand. */
+  move?: PhotoMove;
   frame?: { x: number; y: number; w: number; h: number };
   z: number;
   alt?: string;
@@ -67,6 +69,7 @@ export function resolveSlidePhotos(slide: Slide, media: MediaAsset[]): SlidePhot
       url: asset.url,
       fit: p.fit === 'contain' ? 'contain' : 'cover',
       focal: p.focal,
+      move: p.motion,
       frame: p.frame,
       z: p.z ?? 1,
       alt: p.alt,

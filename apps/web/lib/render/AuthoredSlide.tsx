@@ -4,12 +4,18 @@ import { useEffect, useId, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import {
   authoredSlots,
+  ambientArtCss,
+  ambientPhotoCss,
+  backgroundPhotoCss,
   emptySlotCss,
   filledSlotCss,
+  resolveMove,
+  SLOT_ATTR,
   isSlotName,
   recipeCssVars,
   recipeFontFamilies,
   recipeStylesheetFor,
+  recipeAmbient,
   recipeMotionCss,
   recipeMotionTiming,
   statCountUp,
@@ -122,6 +128,10 @@ export function AuthoredSlide({
   const bgPhoto = photos?.background?.url ?? photoUrl;
   const vars = [
     logoUrl ? `--cb-logo:url("${safeUrl(logoUrl)}")` : '',
+    // Still published for any recipe that wants it, but nothing depends on it:
+    // NO recipe ever consumed `--cb-photo` (the author prompt never mentioned
+    // it), so a background photo used to render as nothing at all. It is a real
+    // layer now — see `bgLayerCss` — which is also what lets it move.
     bgPhoto ? `--cb-photo:url("${safeUrl(bgPhoto)}")` : '',
   ].filter(Boolean);
   const varRule = vars.length ? `.${scope}{${vars.join(';')}}` : '';
@@ -150,16 +160,63 @@ export function AuthoredSlide({
     })
     .filter(Boolean)
     .join('\n');
+  const bg = photos?.background;
+  const bgLayerCss = bg
+    ? backgroundPhotoCss(scope, safeUrl(bg.url), bg.fit, bg.focal)
+    : '';
+
   /**
-   * BACKGROUND CROP. The recipe's own `.photo` rule paints `var(--cb-photo)`,
-   * usually through the `background` shorthand — which resets position. Doubling
-   * the class matches that rule's specificity, and this sheet is emitted after
-   * it, so source order decides. Only emitted when a focal point was actually
-   * chosen, so a recipe that positions its own art deliberately is left alone.
+   * AMBIENT MOTION — the continuous parallax drift, on its own timeline from
+   * the reveal. Each layer moves at its own depth, so the composition reads
+   * three-dimensional: the recipe's art barely stirs, the background photo
+   * drifts, a slot photo pushes in, an overlay moves most.
+   *
+   * The recipe's art is drifted with `background-position` and everything else
+   * with a transform, because the art is painted on `.cb-slide` — which also
+   * holds every word on the slide, and must not move.
    */
-  const bgFocal = photos?.background?.focal;
-  const bgFocalRule = bgFocal
-    ? `.${scope} .cb-slide.cb-slide{background-position:${(bgFocal.x * 100).toFixed(1)}% ${(bgFocal.y * 100).toFixed(1)}%}`
+  const ambient = recipeAmbient(recipe);
+  const ambientCss = motion
+    ? [
+        ambientArtCss(scope, ambient),
+        bg
+          ? ambientPhotoCss(
+              `.${scope} .cb-bg-photo`,
+              'cb-amb-bg',
+              resolveMove(bg.move, bg.focal, 0),
+              'background',
+              ambient,
+              bg.focal,
+            )
+          : '',
+        ...authoredSlots(html)
+          .filter(isSlotName)
+          .map((name, i) => {
+            const p = photos?.slots[name];
+            return p
+              ? ambientPhotoCss(
+                  `.${scope} .cb-slide [${SLOT_ATTR}="${name}"]::before`,
+                  `cb-amb-s${i}`,
+                  resolveMove(p.move, p.focal, i),
+                  'slot',
+                  ambient,
+                  p.focal,
+                )
+              : '';
+          }),
+        ...(photos?.free ?? []).map((p, i) =>
+          ambientPhotoCss(
+            `.${scope} .cb-free-img[data-p="${p.id}"]`,
+            `cb-amb-f${i}`,
+            resolveMove(p.move, p.focal, i),
+            'free',
+            ambient,
+            p.focal,
+          ),
+        ),
+      ]
+        .filter(Boolean)
+        .join('\n')
     : '';
   // Per-ROLE motion: the recipe can give a stat a pop and a quote a calm fade.
   const motionCss = motion
@@ -210,6 +267,7 @@ export function AuthoredSlide({
           <img
             key={p.id}
             className="cb-free-img"
+            data-p={p.id}
             src={p.url}
             alt={p.alt ?? ''}
             style={{
@@ -228,7 +286,12 @@ export function AuthoredSlide({
 
   return (
     <div className={scope} style={wrapperStyle}>
-      <style dangerouslySetInnerHTML={{ __html: `${varRule}\n${scopedCss}\n${slotRules}\n${bgFocalRule}${motionCss}${freeMotionCss}` }} />
+      {bg && (
+        <div className="cb-bg-layer" aria-hidden>
+          <div className="cb-bg-photo" />
+        </div>
+      )}
+      <style dangerouslySetInnerHTML={{ __html: `${varRule}\n${scopedCss}\n${slotRules}\n${bgLayerCss}${motionCss}${freeMotionCss}\n${ambientCss}` }} />
       {layer(under, 'under')}
       <div
         ref={slideRef}
