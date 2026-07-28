@@ -3,6 +3,7 @@
 import type { Format, ThemePreset } from '@contentbuilder/shared';
 import { SlideRenderer } from '../../lib/render/SlideRenderer';
 import type { LayoutImage, RenderBrandKit } from '../../lib/render/types';
+import type { SlidePhotoSet } from '../../lib/render/projectRender';
 
 /**
  * Chrome-less stage for a single slide, pinned at the viewport origin so the
@@ -12,6 +13,7 @@ import type { LayoutImage, RenderBrandKit } from '../../lib/render/types';
 export default function RenderStage({
   authored,
   image,
+  photos,
   format,
   kit,
   theme,
@@ -22,6 +24,8 @@ export default function RenderStage({
 }: {
   authored?: { html: string; bg?: string; role?: string };
   image?: LayoutImage | null;
+  /** The user's own photos: slot fills, a background, and free overlays. */
+  photos?: SlidePhotoSet;
   format: Format;
   kit: RenderBrandKit;
   theme: ThemePreset;
@@ -38,6 +42,7 @@ export default function RenderStage({
         brandKit={kit}
         format={format}
         image={image}
+        photos={photos}
         forExport
         theme={theme}
         slideIndex={slideIndex}

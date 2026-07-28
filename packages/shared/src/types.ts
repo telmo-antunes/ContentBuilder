@@ -224,6 +224,23 @@ export interface SlideDecoration {
   opacity?: number;
 }
 
+/** Where one of a slide's photos lands. See slidePhotos.ts for the layer model. */
+export type SlidePhotoPlacement = 'slot' | 'background' | 'free';
+
+export interface SlidePhoto {
+  id: string;
+  mediaAssetId: string;
+  placement: SlidePhotoPlacement;
+  /** 'slot': the authored placeholder this fills (its `data-cb-slot` name). */
+  slot?: string;
+  /** 'free': where it sits on the canvas, as fractions [0..1]. */
+  frame?: BlockFrame;
+  fit?: ImageFit;
+  /** 'free': negative sends it behind the composition. */
+  z?: number;
+  alt?: string;
+}
+
 export interface Slide {
   id: string;
   order: number;
@@ -231,6 +248,8 @@ export interface Slide {
   blocks: Block[];
   imageNeed: ImageNeed;
   mediaAssetId?: string;
+  /** The user's own photos on this slide (slot fills, background, overlays). */
+  photos?: SlidePhoto[];
   /** Stock-search phrase chosen by the AI art director (drives the stock picker). */
   imageQuery?: string;
   overrides?: SlideOverrides;

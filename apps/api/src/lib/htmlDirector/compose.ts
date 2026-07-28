@@ -10,13 +10,16 @@
  * model tier by default; the look comes entirely from the recipe.
  */
 import { z } from 'zod';
-import type { BrandRecipe } from '@contentbuilder/shared';
+import { SLOT_ATTR, SLOT_CLASS, authoredSlots, type BrandRecipe } from '@contentbuilder/shared';
 import { aiMessage, modelFor, textOf } from '../ai';
 import { config } from '../../config';
 import { sanitizeAuthoredHtml } from '../htmlSanitize';
 import { buildComposeMessages, type ComposeParts, type ComposeSlideInput, type SlideRole } from './prompt';
 
 const SLIDE_ROLES = ['cover', 'statement', 'quote', 'feature', 'stat', 'list', 'cta'] as const;
+
+/** Fallback slot appended when a photo slide came back without one. */
+const DEFAULT_SLOT = `<figure class="${SLOT_CLASS}" ${SLOT_ATTR}="photo"></figure>`;
 
 const partsSchema = z.object({
   eyebrow: z.string().optional(),
@@ -32,7 +35,14 @@ const partsSchema = z.object({
 });
 const parseResultSchema = z.object({
   slides: z
-    .array(z.object({ role: z.enum(SLIDE_ROLES), parts: partsSchema }))
+    .array(
+      z.object({
+        role: z.enum(SLIDE_ROLES),
+        parts: partsSchema,
+        /** Does this slide want a photograph? Drives the placeholder the user fills. */
+        image: z.boolean().catch(false).default(false),
+      }),
+    )
     .min(1)
     .max(12),
 });
@@ -89,12 +99,13 @@ function plain(s: string): string {
 }
 
 const PARSE_SYSTEM = `You are a social-carousel copywriter + editor. Turn the user's idea into a tight, scroll-stopping Instagram carousel, written in the brand's voice. Return STRICT JSON only (no prose, no fences):
-{"slides":[{"role":"cover|statement|quote|feature|stat|cta","parts":{...}}]}
+{"slides":[{"role":"cover|statement|quote|feature|stat|cta","image":true|false,"parts":{...}}]}
 Rules:
 - First slide role "cover" (a hook). Last slide role "cta". In between use statement / feature / stat / quote as the content wants.
 - parts keys (include only what a slide needs): eyebrow (2–4 word kicker), headline (the line — punchy), emphasis (the sub-phrase inside headline to accent), tagline (a short payoff line), body (1 short sentence), quote, attribution, stat (e.g. "40%"), cta (button text), handle.
 - Keep copy SHORT and legible at a glance — this is a poster, not an article. Headlines a few words; body one sentence.
-- Write in the brand voice provided. No hashtags, no emoji.`;
+- Write in the brand voice provided. No hashtags, no emoji.
+- "image": set true when this slide would be genuinely STRONGER with a photograph — it shows a place, a product, a person, a result, a before/after. Set false when the slide is a pure typographic statement, a pulled quote, or a big number, where a photo would only decorate. Judge each slide on its own; a deck may have several, one, or none. The user supplies the actual photographs later, so ask for one only where it earns its place.`;
 
 function parseUser(recipe: BrandRecipe, idea: string, count: number, handle?: string): string {
   return [
@@ -125,12 +136,15 @@ export async function parseForCompose(
     messages: [{ role: 'user', content: parseUser(recipe, idea, count, opts?.handle) }],
   });
   const parsed = parseResultSchema.parse(extractJson(textOf(resp)));
-  const photoHero = recipe.imagery.photoRole === 'hero';
+  // Which slides get an image PLACEHOLDER is the parse step's judgement, per
+  // slide — not "covers only, and only for photoRole: hero" as it used to be,
+  // which meant whole brands could never show a photograph anywhere. The user
+  // fills these afterwards; nothing is auto-attached.
   return parsed.slides.map((s, index) => ({
     role: s.role as SlideRole,
     parts: s.parts as ComposeParts,
     format,
-    photo: s.role === 'cover' && photoHero,
+    photo: s.image,
     index,
   }));
 }
@@ -158,9 +172,16 @@ export async function composeSlide(
   if (missing.length) {
     console.warn(`[compose] ${input.role}: parts not verbatim in output: ${missing.join(', ')}`);
   }
+  // Mechanical placeholder guard, the twin of the verbatim guard above: if this
+  // slide was meant to hold a photograph, it must LEAVE A HOLE for one. A model
+  // that forgets the slot would silently produce a slide the user can't put an
+  // image on, so append one rather than trusting the prompt.
+  const withSlot = input.photo && authoredSlots(safe).length === 0 ? safe + DEFAULT_SLOT : safe;
   // The role travels WITH the slide so the renderer can apply the recipe's
   // per-role motion (a stat pops, a quote fades) in animated exports.
-  return { html: safe, bg: input.photo ? 'photo' : undefined, role: input.role };
+  // `bg` is no longer set here: a full-bleed photo is the USER's choice now,
+  // and the renderer derives it from whether they set a background photo.
+  return { html: withSlot, role: input.role };
 }
 
 /** Full path: idea → authored slides (role + authored markup). */

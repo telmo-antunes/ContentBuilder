@@ -4,25 +4,39 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   FORMAT_LABELS,
+  authoredSlots,
   contrastRatio,
+  dimensionsFor,
+  type BlockFrame,
   type BrandRecipe,
   type Format,
+  type MediaAsset,
   type Slide,
+  type SlidePhoto,
 } from '@contentbuilder/shared';
 import {
   getProject,
   updateProject,
   getShareInfo,
   getSlideVariants,
+  saveSlidePhotos,
   tweakSlide,
   type ProjectDetail,
 } from '../../../lib/api';
 import { api } from '../../../lib/config';
 import { SlideRenderer } from '../../../../lib/render/SlideRenderer';
 import { ScaledSlide } from '../../../../lib/render/SlideFrame';
-import { toRenderKit, resolveSlideImage, resolveImageLayout } from '../../../../lib/render/projectRender';
+import {
+  toRenderKit,
+  resolveSlideImage,
+  resolveImageLayout,
+  resolveSlidePhotos,
+} from '../../../../lib/render/projectRender';
 import { parseAuthored, buildAuthored, type AuthoredEl } from '../../../../lib/authoredEdit';
 import { toast } from '../../../components/Toast';
+import SlidePhotoPanel from '../../../components/SlidePhotoPanel';
+import FreeImageOverlay from '../../../components/FreeImageOverlay';
+
 
 /** Text elements where the brand's signature emphasis (accent phrase) applies. */
 const EMPH_CLASSES = new Set(['headline', 'tagline', 'quote', 'body', 'lead', 'sub']);
@@ -66,6 +80,40 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
   // only on click, so a single weak slide no longer means re-composing the deck.
   const [variants, setVariants] = useState<Array<{ html: string; bg?: string; role?: string }> | null>(null);
   const [working, setWorking] = useState<string | null>(null);
+  /** The floating image currently grabbable on the preview. */
+  const [freeSel, setFreeSel] = useState<string | null>(null);
+
+  /**
+   * Persist a slide's photos. Applied to local state FIRST so the preview moves
+   * with the pointer, then written — a drag that waited on the network would
+   * feel broken. A failed write reloads the project so what you see is the
+   * truth rather than an optimistic lie.
+   */
+  const savePhotos = useCallback(
+    async (slideId: string, photos: SlidePhoto[], uploaded?: MediaAsset) => {
+      setProject((p) =>
+        p
+          ? {
+              ...p,
+              slides: p.slides.map((s) => (s.id === slideId ? { ...s, photos } : s)),
+              // A freshly uploaded asset isn't in the media list this page
+              // loaded with, and the renderer resolves photos BY asset — so
+              // without this the picture simply doesn't appear until a reload.
+              media: uploaded && !p.media.some((m) => m._id === uploaded._id)
+                ? [uploaded, ...p.media]
+                : p.media,
+            }
+          : p,
+      );
+      try {
+        await saveSlidePhotos(projectId, slideId, photos);
+      } catch (e) {
+        toast(e instanceof Error ? e.message : 'Could not save the photo', 'error');
+        getProject(projectId).then(setProject).catch(() => {});
+      }
+    },
+    [projectId],
+  );
 
   useEffect(() => {
     let alive = true;
@@ -277,6 +325,8 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
   }
 
   const kit = toRenderKit(project.brandKit);
+  const inspectorW = 288;
+  const inspectorScale = inspectorW / dimensionsFor(project.format).width;
   const recipe = (project.brandKit as { recipe?: BrandRecipe } | undefined)?.recipe;
   const slides = [...project.slides].sort((a, b) => a.order - b.order);
   const cardW = project.format === '1080x1920' ? 208 : 296;
@@ -290,6 +340,11 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
       ? slides.map((s) => (s.id === editId ? { ...s, authored: { ...s.authored, html: editingHtml } } : s))
       : slides;
   const selectedWorking = workingSlides[Math.min(sel, workingSlides.length - 1)];
+  /** Slots the composer left that still have no photo — a blank panel on export. */
+  const unfilledSlots = (s: Slide) => {
+    const filled = new Set((s.photos ?? []).filter((p) => p.placement === 'slot').map((p) => p.slot));
+    return authoredSlots(s.authored?.html ?? '').filter((n) => !filled.has(n)).length;
+  };
   const contrast =
     recipe && recipe.tokens.ink && recipe.tokens.ground
       ? contrastRatio(recipe.tokens.ink, recipe.tokens.ground)
@@ -446,6 +501,11 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                   }}
                 >
                   <span className="num">{i + 1}</span>
+                  {unfilledSlots(slide) > 0 && (
+                    <span className="needsphoto" title="This slide has an image slot you haven't filled — it exports as a blank panel.">
+                      ⬚ Needs photo
+                    </span>
+                  )}
                   {overflow[slide.id] && (
                     <span className="ovf" title="This slide's content is taller than the canvas — shorten the copy.">
                       ⚠ Overflows
@@ -461,6 +521,8 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                       format={project.format}
                       image={resolveSlideImage(slide, project.media)}
                       imageLayout={resolveImageLayout(slide, project.media)}
+                      photos={resolveSlidePhotos(slide, project.media)}
+                      editing
                       theme={slide.overrides?.theme ?? project.settings?.theme ?? 'editorial'}
                       forExport
                     />
@@ -476,7 +538,26 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
             {selectedWorking && (
               <>
                 <div style={{ marginTop: 12, borderRadius: 12, overflow: 'hidden', border: '1px solid var(--border)' }}>
-                  <ScaledSlide format={project.format} displayWidth={288}>
+                  <ScaledSlide
+                    format={project.format}
+                    displayWidth={inspectorW}
+                    overlay={
+                      <FreeImageOverlay
+                        photos={(selectedWorking.photos ?? []).filter((p) => p.placement === 'free')}
+                        canvasW={dimensionsFor(project.format).width}
+                        canvasH={dimensionsFor(project.format).height}
+                        scale={inspectorScale}
+                        selectedId={freeSel}
+                        onSelect={setFreeSel}
+                        onCommit={(id, frame: BlockFrame) =>
+                          void savePhotos(
+                            selectedWorking.id,
+                            (selectedWorking.photos ?? []).map((p) => (p.id === id ? { ...p, frame } : p)),
+                          )
+                        }
+                      />
+                    }
+                  >
                     <SlideRenderer
                       // Remounting on `playing` restarts the CSS reveal, so the
                       // button replays the exact motion the video will export.
@@ -486,6 +567,8 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                       format={project.format}
                       image={resolveSlideImage(selectedWorking, project.media)}
                       imageLayout={resolveImageLayout(selectedWorking, project.media)}
+                      photos={resolveSlidePhotos(selectedWorking, project.media)}
+                      editing
                       theme={selectedWorking.overrides?.theme ?? project.settings?.theme ?? 'editorial'}
                       forExport
                       motion={playing !== null}
@@ -589,6 +672,24 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                   </>
                 )}
 
+                {/* Your own photography: fill the AI's placeholders, set a
+                    background, or drop images anywhere on the canvas. */}
+                {selected?.authored?.html && (
+                  <>
+                    <div className="studio-divln" />
+                    <div className="k studio-klbl">Images</div>
+                    <SlidePhotoPanel
+                      slide={selected}
+                      media={project.media}
+                      businessId={String(project.businessId)}
+                      busy={working !== null || saving}
+                      selectedFreeId={freeSel}
+                      onSelectFree={setFreeSel}
+                      onChange={(photos, uploaded) => void savePhotos(selected.id, photos, uploaded)}
+                    />
+                  </>
+                )}
+
                 {/* Instant, reversible tweaks — deterministic, no AI, no waiting. */}
                 {selected?.authored?.html && (
                   <>
@@ -649,6 +750,7 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                               brandKit={kit}
                               format={project.format}
                               image={selected ? resolveSlideImage(selected, project.media) : null}
+                              photos={selected ? resolveSlidePhotos(selected, project.media) : undefined}
                               forExport
                             />
                           </ScaledSlide>

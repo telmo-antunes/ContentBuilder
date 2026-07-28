@@ -78,6 +78,16 @@ HARD RULES
 - The canvas (dimensions given below) is large and the stylesheet already sets big, legible type for it — do not fight it. Keep the fragment to the few elements the pattern calls for; embrace negative space. On a taller (story) canvas lean on the fill spacer to spread content; on a square canvas keep it to the essentials.
 - If a copy part is absent, omit its element (don't fabricate a placeholder).
 
+IMAGE SLOTS
+- When this slide is marked "image: true", leave a HOLE for a photograph the user will supply — never describe one, never link one, never invent a src.
+- A slot is exactly: <figure class="cb-shot" data-cb-slot="NAME"></figure> — always empty, no children, no <img> inside.
+- NAME is your own short lowercase label for what belongs there (e.g. "hero", "before", "after", "product"). Lowercase letters, digits and hyphens only. Each slot on a slide needs a different name.
+- Add a shape class when the composition wants one: "wide" (16:9), "tall" (3:4), "square" (1:1). With no shape class a slot is 4:3.
+- Place the slot where the design needs the picture, in the flow of the composition — the recipe styles it, and the user's photo fills exactly that box.
+- Usually ONE slot. Use two only when the slide is genuinely a pair (a before and an after).
+- A slot takes REAL vertical space (a third to a half of the canvas). On a slide that has one, keep the copy to the essentials — an eyebrow and a headline, not a headline plus body plus a list.
+- When "image" is not set, do not emit a slot at all.
+
 Return only the fragment (the inner markup of .cb-slide).`;
 
 /** Build the {system, user} messages for one slide compose call. */
@@ -115,7 +125,9 @@ export function buildComposeMessages(
     `THIS SLIDE`,
     `  role: ${input.role}`,
     `  canvas: ${canvas}`,
-    input.photo ? `  photo: true (add class "photo" to nothing — the renderer sets it; compose the photo-cover pattern)` : ``,
+    input.photo
+      ? `  image: true — this slide holds a photograph. Leave an EMPTY <figure class="cb-shot" data-cb-slot="…"> where it belongs (see IMAGE SLOTS). Treatment for reference: ${recipe.imagery.treatment || 'photographic'}`
+      : ``,
     `  copy parts (VERBATIM — arrange, do not change):`,
     partLines || '  (none)',
     rowLines,

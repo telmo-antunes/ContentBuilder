@@ -71,4 +71,43 @@ describe('sanitizeAuthoredHtml', () => {
     expect(sanitizeAuthoredHtml('')).toBe('');
     expect(sanitizeAuthoredHtml('<script>bad()</script>')).toBe('');
   });
+
+  // ── image placeholders (data-cb-slot) ────────────────────────────────────
+  // The slot name reaches a CSS attribute selector at render time, so it is
+  // re-validated here rather than trusted from model output.
+  describe('image slots', () => {
+    it('keeps a well-formed slot on a container tag', () => {
+      const out = sanitizeAuthoredHtml('<figure class="cb-shot" data-cb-slot="hero"></figure>');
+      expect(out).toBe('<figure class="cb-shot" data-cb-slot="hero"></figure>');
+    });
+
+    it('lowercases the slot name so it matches the render selector', () => {
+      expect(sanitizeAuthoredHtml('<figure data-cb-slot="Hero"></figure>')).toContain(
+        'data-cb-slot="hero"',
+      );
+    });
+
+    it('drops a slot name that could break out of the selector', () => {
+      const out = sanitizeAuthoredHtml('<figure data-cb-slot="a&quot;] , [b"></figure>');
+      expect(out).not.toContain('data-cb-slot');
+    });
+
+    it('drops a slot name with spaces or punctuation', () => {
+      expect(sanitizeAuthoredHtml('<figure data-cb-slot="two words"></figure>')).not.toContain(
+        'data-cb-slot',
+      );
+      expect(sanitizeAuthoredHtml('<div data-cb-slot="a.b"></div>')).not.toContain('data-cb-slot');
+    });
+
+    it('does not let the attribute ride on an arbitrary tag', () => {
+      // An <img> already takes a src; a slot there would be two competing sources.
+      expect(sanitizeAuthoredHtml('<img data-cb-slot="hero">')).not.toContain('data-cb-slot');
+      expect(sanitizeAuthoredHtml('<h1 data-cb-slot="hero">x</h1>')).not.toContain('data-cb-slot');
+    });
+
+    it('still refuses every other data- attribute', () => {
+      expect(sanitizeAuthoredHtml('<figure data-cb-other="x"></figure>')).not.toContain('data-cb-other');
+      expect(sanitizeAuthoredHtml('<figure data-evil="x"></figure>')).not.toContain('data-evil');
+    });
+  });
 });

@@ -20,6 +20,24 @@ const blockSchema = new Schema(
   { _id: false },
 );
 
+/** One of the user's photos on a slide — see shared/slidePhotos.ts. */
+const slidePhotoSchema = new Schema(
+  {
+    id: { type: String, required: true },
+    mediaAssetId: { type: Schema.Types.ObjectId, ref: 'MediaAsset', required: true },
+    placement: { type: String, enum: ['slot', 'background', 'free'], required: true },
+    /** 'slot': the authored placeholder this fills (its data-cb-slot name). */
+    slot: { type: String, required: false },
+    /** 'free': where it sits on the canvas, as fractions [0..1]. */
+    frame: { type: frameSchema, required: false },
+    fit: { type: String, enum: ['cover', 'contain'], required: false },
+    /** 'free': negative sends it behind the composition. */
+    z: { type: Number, required: false },
+    alt: { type: String, required: false },
+  },
+  { _id: false },
+);
+
 const slideSchema = new Schema(
   {
     id: { type: String, required: true },
@@ -28,6 +46,8 @@ const slideSchema = new Schema(
     blocks: { type: [blockSchema], default: [] },
     imageNeed: { type: String, enum: ['none', 'upload'], default: 'none' },
     mediaAssetId: { type: Schema.Types.ObjectId, ref: 'MediaAsset' },
+    /** The user's own photos on this slide (slot fills, background, overlays). */
+    photos: { type: [slidePhotoSchema], default: [] },
     /** The stock-search phrase the AI art director chose (prefills the editor's stock picker). */
     imageQuery: { type: String, required: false },
     overrides: {

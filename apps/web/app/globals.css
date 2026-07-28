@@ -1998,6 +1998,14 @@ input[type='color'] {
   color: #1b1206; background: var(--warn, #e0a23a);
   border-radius: 6px; padding: 3px 7px; box-shadow: var(--shadow-sm);
 }
+/* An unfilled image slot ships as a blank panel — quieter than the overflow
+   warning because it's a reminder, not a fault. */
+.studio-pcard .needsphoto {
+  position: absolute; top: 8px; left: 8px; z-index: 4;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
+  color: var(--text); background: var(--panel); border: 1px solid var(--border-strong);
+  border-radius: 6px; padding: 3px 7px; box-shadow: var(--shadow-sm);
+}
 
 /* Recipe: "why this design" + the live tuning knobs. */
 .bk-why { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 12px; }
@@ -2021,6 +2029,26 @@ input[type='color'] {
 }
 .sv-card:hover:not(:disabled) { transform: translateY(-3px); border-color: var(--accent-2); box-shadow: var(--shadow-sm); }
 .sv-card:disabled { opacity: 0.5; cursor: default; }
+
+/* ═══ Slide photos — slots, background, floating images ═══════════════════ */
+.sp { display: flex; flex-direction: column; gap: 6px; }
+.sp-row {
+  display: flex; align-items: center; gap: 9px;
+  padding: 6px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel);
+}
+.sp-row.sel { border-color: var(--accent); }
+.sp-thumb {
+  flex: 0 0 auto; width: 38px; height: 38px; border-radius: 6px; object-fit: cover;
+  border: 1px solid var(--border); background: var(--panel-2);
+  display: grid; place-items: center; font-size: 15px; color: var(--faint);
+}
+.sp-empty { border-style: dashed; }
+.sp-missing { color: var(--warn); }
+.sp-meta { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 1px; }
+.sp-name { font-size: 12px; color: var(--text); }
+.sp-sub { font-size: 10.5px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-ctl { display: flex; gap: 4px; flex: 0 0 auto; }
+.sp-ctl .btn.sm { padding: 3px 7px; font-size: 11px; }
 
 /* ═══ The Desk — the home screen as a workspace ════════════════════════════ */
 .desk-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; flex-wrap: wrap; }

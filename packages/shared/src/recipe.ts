@@ -17,6 +17,7 @@
  */
 import { z } from 'zod';
 import { AA_LARGE, AA_TEXT, contrastRatio, hexToRgb, relativeLuminance } from './colorContrast';
+import { slideMediaCss } from './slidePhotos';
 
 /** CSS custom-property prefix for every brand token the renderer injects. */
 export const RECIPE_VAR_PREFIX = '--cb';
@@ -319,7 +320,12 @@ export function recipeStylesheetFor(recipe: BrandRecipe, format: string): string
       : recipe.stylesheet;
   const extra = recipe.formats?.[format]?.stylesheet?.trim();
   const surface = recipeSurfaceCss(recipe);
-  return [base, extra ? `/* format ${format} */\n${extra}` : '', surface].filter(Boolean).join('\n');
+  // The image layer is app capability, not brand taste, so it ships with every
+  // recipe rather than being authored per brand — but every value it picks
+  // comes from that brand's own tokens. Last, so a recipe can still override it.
+  return [base, extra ? `/* format ${format} */\n${extra}` : '', surface, slideMediaCss()]
+    .filter(Boolean)
+    .join('\n');
 }
 
 /**

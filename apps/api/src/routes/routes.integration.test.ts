@@ -205,6 +205,131 @@ describe('projects', () => {
 
 });
 
+// ── A slide's photos ──────────────────────────────────────────────────────────
+describe('PUT /projects/:id/slides/:slideId/photos', () => {
+  /** A project with one authored slide declaring a single "hero" image slot. */
+  async function seedSlideWithSlot() {
+    const biz = await seedBusiness();
+    await seedApprovedKit(String(biz._id));
+    const created = await request(app())
+      .post('/projects')
+      .send({
+        businessId: String(biz._id),
+        title: 'P',
+        type: 'carousel',
+        format: '1080x1080',
+        slides: [
+          {
+            layoutType: 'TextOnly',
+            blocks: [],
+            imageNeed: 'none',
+            authored: { html: '<h1 class="headline">Hi</h1><figure class="cb-shot" data-cb-slot="hero"></figure>' },
+          },
+        ],
+      });
+    expect(created.status).toBe(201);
+    const asset = await MediaAssetModel.create({
+      businessId: biz._id,
+      type: 'upload',
+      key: 'a.png',
+      url: 'http://x/a.png',
+      width: 10,
+      height: 10,
+    });
+    return { biz, project: created.body, slideId: created.body.slides[0].id, asset };
+  }
+
+  it('fills a slot the slide actually declares', async () => {
+    const { project, slideId, asset } = await seedSlideWithSlot();
+    const res = await request(app())
+      .put(`/projects/${project._id}/slides/${slideId}/photos`)
+      .send({
+        photos: [
+          { id: 'p1', mediaAssetId: String(asset._id), placement: 'slot', slot: 'hero', fit: 'cover' },
+        ],
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.slides[0].photos).toHaveLength(1);
+    expect(res.body.slides[0].photos[0].slot).toBe('hero');
+  });
+
+  it('refuses a slot the markup never declared', async () => {
+    const { project, slideId, asset } = await seedSlideWithSlot();
+    // Otherwise the photo is stored and silently never renders.
+    const res = await request(app())
+      .put(`/projects/${project._id}/slides/${slideId}/photos`)
+      .send({
+        photos: [{ id: 'p1', mediaAssetId: String(asset._id), placement: 'slot', slot: 'nope' }],
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/no image slot named/i);
+  });
+
+  it('keeps only ONE background when several are sent', async () => {
+    const { biz, project, slideId, asset } = await seedSlideWithSlot();
+    const second = await MediaAssetModel.create({
+      businessId: biz._id,
+      type: 'upload',
+      key: 'b.png',
+      url: 'http://x/b.png',
+      width: 10,
+      height: 10,
+    });
+    const res = await request(app())
+      .put(`/projects/${project._id}/slides/${slideId}/photos`)
+      .send({
+        photos: [
+          { id: 'p1', mediaAssetId: String(asset._id), placement: 'background' },
+          { id: 'p2', mediaAssetId: String(second._id), placement: 'background' },
+        ],
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.slides[0].photos.filter((p: { placement: string }) => p.placement === 'background')).toHaveLength(1);
+  });
+
+  it('drops a photo belonging to another business', async () => {
+    const { project, slideId, asset } = await seedSlideWithSlot();
+    const otherBiz = await seedBusiness({ name: 'Other' });
+    const foreign = await MediaAssetModel.create({
+      businessId: otherBiz._id,
+      type: 'upload',
+      key: 'f.png',
+      url: 'http://x/f.png',
+      width: 10,
+      height: 10,
+    });
+    const res = await request(app())
+      .put(`/projects/${project._id}/slides/${slideId}/photos`)
+      .send({
+        photos: [
+          { id: 'p1', mediaAssetId: String(foreign._id), placement: 'background' },
+          { id: 'p2', mediaAssetId: String(asset._id), placement: 'slot', slot: 'hero' },
+        ],
+      });
+    expect(res.status).toBe(200);
+    const kept = res.body.slides[0].photos;
+    expect(kept).toHaveLength(1);
+    expect(String(kept[0].mediaAssetId)).toBe(String(asset._id));
+  });
+
+  it('gives a free overlay a frame when one is missing', async () => {
+    const { project, slideId, asset } = await seedSlideWithSlot();
+    const res = await request(app())
+      .put(`/projects/${project._id}/slides/${slideId}/photos`)
+      .send({ photos: [{ id: 'p1', mediaAssetId: String(asset._id), placement: 'free' }] });
+    expect(res.status).toBe(200);
+    expect(res.body.slides[0].photos[0].frame).toBeTruthy();
+  });
+
+  it('404s for a slide that is not on this project', async () => {
+    const { project, asset } = await seedSlideWithSlot();
+    const res = await request(app())
+      .put(`/projects/${project._id}/slides/does-not-exist/photos`)
+      .send({ photos: [{ id: 'p1', mediaAssetId: String(asset._id), placement: 'free' }] });
+    expect(res.status).toBe(404);
+  });
+});
+
 // ── Per-touchpoint model overrides ────────────────────────────────────────────
 describe('modelFor', () => {
   it('falls back to the env tier when no override is stored', async () => {

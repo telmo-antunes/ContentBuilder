@@ -6,15 +6,17 @@ import { ZipArchive } from 'archiver';
 import { z } from 'zod';
 import {
   MAX_DRAFT_PARAGRAPH_CHARS,
+  authoredSlots,
   defaultThemeForCategory,
+  isSlotName,
   migrateRecipe,
-  recipePhotoQuery,
+  slidePhotoSchema,
   type BrandRecipe,
+  type SlidePhoto,
 } from '@contentbuilder/shared';
 import { composeProject, composeSlide } from '../lib/htmlDirector/compose';
 import { partsFromAuthored } from '../lib/htmlDirector/reparse';
 import { sanitizeAuthoredHtml } from '../lib/htmlSanitize';
-import { stockConfigured, searchStockPhotos, storeStockPhoto } from '../lib/stock';
 import { ProjectModel, ProjectVersionModel, BusinessModel, BrandKitModel, MediaAssetModel } from '../models';
 import { ApiError, asyncHandler, parseBody, publicErrMessage, requireObjectId } from '../lib/http';
 import { createProjectSchema, slideSchema, updateProjectSchema, type SlideInput } from '../lib/validation';
@@ -30,6 +32,50 @@ const composeSchema = z.object({
 
 export const projectsRouter = Router();
 
+/**
+ * The user's photos for one slide, cleaned up: bad asset ids dropped, slot
+ * fills without a slot name demoted to free, at most ONE background, and every
+ * free overlay given a frame. A legacy slide's single `mediaAssetId` is
+ * migrated in as the background, so posts made before this existed keep their
+ * picture.
+ */
+function normalizePhotos(s: SlideInput): SlidePhoto[] {
+  const raw = s.photos ?? [];
+  const out: SlidePhoto[] = [];
+  let hasBackground = false;
+  for (const p of raw) {
+    if (!p.mediaAssetId || !Types.ObjectId.isValid(p.mediaAssetId)) continue;
+    let placement = p.placement;
+    if (placement === 'slot' && !(p.slot && isSlotName(p.slot))) placement = 'free';
+    if (placement === 'background') {
+      if (hasBackground) continue; // a slide has one background, not several
+      hasBackground = true;
+    }
+    out.push({
+      id: p.id || randomUUID(),
+      mediaAssetId: p.mediaAssetId,
+      placement,
+      ...(placement === 'slot' ? { slot: p.slot } : {}),
+      ...(placement === 'free'
+        ? { frame: p.frame ?? { x: 0.28, y: 0.34, w: 0.44, h: 0.32 }, z: p.z ?? 1 }
+        : {}),
+      fit: p.fit,
+      ...(p.alt ? { alt: p.alt } : {}),
+    });
+    if (out.length >= 24) break;
+  }
+  // Back-compat: the old single attached photo becomes the background.
+  if (!out.length && s.mediaAssetId && Types.ObjectId.isValid(s.mediaAssetId)) {
+    out.push({
+      id: randomUUID(),
+      mediaAssetId: s.mediaAssetId,
+      placement: 'background',
+      fit: 'cover',
+    });
+  }
+  return out;
+}
+
 /** Normalize incoming slides: ensure each has an id, and reindex `order`. */
 export function normalizeSlides(slides: SlideInput[]) {
   return slides.map((s, i) => ({
@@ -41,6 +87,7 @@ export function normalizeSlides(slides: SlideInput[]) {
     mediaAssetId:
       s.mediaAssetId && Types.ObjectId.isValid(s.mediaAssetId) ? s.mediaAssetId : undefined,
     imageQuery: s.imageQuery,
+    photos: normalizePhotos(s),
     overrides: s.overrides,
     // Preserve AI-authored markup (recipe-driven slides) through every
     // slide-persisting path, and re-sanitise it defensively — this is the one
@@ -73,6 +120,7 @@ async function scrubForeignMedia(
   const ids = new Set<string>();
   for (const s of slides) {
     if (s.mediaAssetId) ids.add(String(s.mediaAssetId));
+    for (const p of s.photos ?? []) ids.add(String(p.mediaAssetId));
     const o = s.overrides as Record<string, any> | undefined;
     if (o?.backgroundMediaAssetId && Types.ObjectId.isValid(o.backgroundMediaAssetId)) {
       ids.add(String(o.backgroundMediaAssetId));
@@ -89,6 +137,9 @@ async function scrubForeignMedia(
   );
   for (const s of slides) {
     if (s.mediaAssetId && !owned.has(String(s.mediaAssetId))) s.mediaAssetId = undefined;
+    // A photo pointing at another business's asset is dropped outright — there
+    // is no meaningful "partial" version of a picture on the wrong brand.
+    s.photos = (s.photos ?? []).filter((p) => owned.has(String(p.mediaAssetId)));
     const o = s.overrides as Record<string, any> | undefined;
     if (o?.backgroundMediaAssetId && !owned.has(String(o.backgroundMediaAssetId))) {
       delete o.backgroundMediaAssetId;
@@ -363,35 +414,19 @@ projectsRouter.post(
 
     if (project.get('slides')?.length) await saveVersion(project, 'Before AI compose').catch(() => {});
 
-    // Best-effort: give photo-role slides (authored.bg === 'photo') a real stock
-    // photo — the recipe's `.photo` class layers it as var(--cb-photo) under a
-    // scrim. Without a Pexels key this is a no-op and the gradient shows instead.
-    const businessId = String(project.get('businessId'));
-    const query = recipePhotoQuery(parsedRecipe.data);
-    const orientation = project.get('format') === '1080x1080' ? 'square' : 'portrait';
-    const slides: Array<Record<string, unknown>> = [];
-    for (let i = 0; i < composed.length; i++) {
-      const s = composed[i]!;
-      let mediaAssetId: string | undefined;
-      if (s.authored.bg === 'photo' && stockConfigured() && query) {
-        try {
-          const cands = await searchStockPhotos(query, orientation, 4);
-          const stored = cands.length ? await storeStockPhoto(businessId, cands[0]!) : null;
-          if (stored?._id) mediaAssetId = String(stored._id);
-        } catch {
-          /* best-effort — leave the gradient fallback */
-        }
-      }
-      slides.push({
-        id: randomUUID(),
-        order: i,
-        layoutType: 'TextOnly',
-        blocks: [],
-        imageNeed: 'none',
-        authored: s.authored,
-        ...(mediaAssetId ? { mediaAssetId } : {}),
-      });
-    }
+    // No stock photo is attached here any more. A slide the composer decided
+    // wants imagery carries an EMPTY `cb-shot` slot instead, and the user fills
+    // it with their own upload — a placeholder they replace beats a stock photo
+    // they have to notice and undo.
+    const slides = composed.map((s, i) => ({
+      id: randomUUID(),
+      order: i,
+      layoutType: 'TextOnly',
+      blocks: [],
+      imageNeed: 'none',
+      photos: [],
+      authored: s.authored,
+    }));
     project.set('slides', slides);
     project.set('status', 'draft');
     // Keep the prompt: it's what an Ideas card holds, and it lets you see what a
@@ -499,6 +534,47 @@ projectsRouter.post(
 
     slides[idx] = { ...slide, authored: { ...slide.authored, html, ...(bg ? { bg } : { bg: undefined }) } };
     project.set('slides', normalizeSlides(slides));
+    await project.save();
+    res.json(project.toJSON());
+  }),
+);
+
+// ── A slide's photos ────────────────────────────────────────────────────────
+// Replace the whole list in one call rather than offering add/move/remove verbs:
+// the editor already holds the slide's photos in hand, and one atomic write
+// can't leave a slide with two backgrounds or a half-applied drag.
+//
+// Uploading is NOT here — bytes go to POST /businesses/:id/media (which
+// content-sniffs and sanitises them), and the returned asset id is placed here.
+const slidePhotosSchema = z.object({ photos: z.array(slidePhotoSchema).max(24) });
+
+projectsRouter.put(
+  '/:id/slides/:slideId/photos',
+  asyncHandler(async (req, res) => {
+    const id = requireObjectId(req.params.id, 'Project');
+    const { photos } = parseBody(slidePhotosSchema, req.body);
+    const project = await ProjectModel.findById(id);
+    if (!project) throw new ApiError(404, 'Project not found');
+
+    const slides = (project.get('slides') as Array<{ toObject?: () => SlideInput }>).map((x) =>
+      typeof x.toObject === 'function' ? x.toObject() : (x as SlideInput),
+    );
+    const idx = slides.findIndex((x) => x.id === req.params.slideId);
+    if (idx < 0) throw new ApiError(404, 'Slide not found');
+
+    // A slot fill must name a slot this slide's markup actually declares —
+    // otherwise the photo would be stored and silently never render.
+    const declared = new Set(authoredSlots(slides[idx]!.authored?.html ?? ''));
+    for (const p of photos) {
+      if (p.placement === 'slot' && !declared.has(String(p.slot))) {
+        throw new ApiError(400, `This slide has no image slot named "${p.slot}".`);
+      }
+    }
+
+    slides[idx] = { ...slides[idx]!, photos };
+    const normalized = normalizeSlides(slides);
+    await scrubForeignMedia(normalized, String(project.get('businessId')));
+    project.set('slides', normalized);
     await project.save();
     res.json(project.toJSON());
   }),

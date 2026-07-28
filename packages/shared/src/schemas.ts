@@ -32,6 +32,24 @@ const frameSchema = z.object({
   h: z.number().min(0).max(1),
 });
 
+/**
+ * One photo on a slide. A slide holds as many as you like; `placement` decides
+ * how each one lands — see slidePhotos.ts for the layer model.
+ */
+export const slidePhotoSchema = z.object({
+  id: z.string().min(1).max(64),
+  mediaAssetId: z.string().min(1),
+  placement: z.enum(['slot', 'background', 'free']).catch('free'),
+  /** placement 'slot': the authored placeholder this fills (`data-cb-slot`). */
+  slot: z.string().max(40).optional(),
+  /** placement 'free': where it sits on the canvas, as fractions [0..1]. */
+  frame: frameSchema.optional(),
+  fit: z.enum(['cover', 'contain']).catch('cover'),
+  /** placement 'free': negative sends it behind the composition. */
+  z: z.number().min(-1).max(99).optional(),
+  alt: z.string().max(160).optional(),
+});
+
 export const blockSchema = z.object({
   type: asEnum(BLOCK_TYPES),
   text: z.string().default(''),
@@ -50,6 +68,12 @@ export const slideSchema = z.object({
   /** Stock-photo search phrase (AI-chosen or user-edited); the draft pipeline
    *  resolves it to media, and the editor's stock picker prefills from it. */
   imageQuery: z.string().max(80).optional(),
+  /**
+   * The user's own photos on this slide — slot fills, a background, and free
+   * overlays. Replaces the single `mediaAssetId` (kept above for back-compat;
+   * a legacy slide's asset is migrated into here as a background on save).
+   */
+  photos: z.array(slidePhotoSchema).max(24).default([]),
   overrides: z
     .object({
       focalPoint: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) }).optional(),

@@ -111,13 +111,26 @@ describe('per-format tuning', () => {
     expect(story.indexOf('padding:210px')).toBeGreaterThan(story.indexOf('padding:96px'));
   });
 
-  it('returns the base stylesheet unchanged for the base format (no override)', () => {
-    expect(recipeStylesheetFor(withFormats, '1080x1350')).toBe(withFormats.stylesheet);
+  it('adds no format override for the base format', () => {
+    const base = recipeStylesheetFor(withFormats, '1080x1350');
+    expect(base).toContain(withFormats.stylesheet);
+    expect(base).not.toContain('/* format');
   });
 
   it('returns the base stylesheet for a recipe with no formats at all', () => {
     const plain = brandRecipeSchema.parse({ ...minimal, stylesheet: '.cb-slide{}' });
-    expect(recipeStylesheetFor(plain, '1080x1920')).toBe('.cb-slide{}');
+    expect(recipeStylesheetFor(plain, '1080x1920')).toContain('.cb-slide{}');
+  });
+
+  it('always ships the image layer, so any brand can hold a photo', () => {
+    // The slot + overlay CSS is app capability rather than brand taste, but it
+    // is styled entirely from the brand's own tokens.
+    const plain = brandRecipeSchema.parse({ ...minimal, stylesheet: '.cb-slide{}' });
+    const css = recipeStylesheetFor(plain, '1080x1350');
+    expect(css).toContain('.cb-slide .cb-shot');
+    expect(css).toContain('var(--cb-radius');
+    // Appended LAST, so a recipe can still override the defaults.
+    expect(css.indexOf('.cb-shot')).toBeGreaterThan(css.indexOf('.cb-slide{}'));
   });
 
   it('uses format-specific patterns when present, else the base patterns', () => {

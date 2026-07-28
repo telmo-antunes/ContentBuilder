@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import type { Format, ThemePreset } from '@contentbuilder/shared';
 import type { ImageLayoutConfig, LayoutImage, RenderBrandKit } from './types';
+import type { SlidePhotoSet } from './projectRender';
 import { ensureGoogleFonts } from './fontLoader';
 import { SlideFrame } from './SlideFrame';
 import { AuthoredSlide } from './AuthoredSlide';
@@ -21,6 +22,8 @@ export function SlideRenderer({
   brandKit,
   format,
   image,
+  photos,
+  editing,
   onOverflow,
   forExport = false,
   theme = 'editorial',
@@ -35,6 +38,14 @@ export function SlideRenderer({
   /** Accepted for call-site compatibility; authored slides carry their own art. */
   image?: LayoutImage | null;
   imageLayout?: ImageLayoutConfig;
+  /** The user's own photos: slot fills, a background, and free overlays. */
+  photos?: SlidePhotoSet;
+  /**
+   * Show empty image slots as "Add photo" targets. Defaults to the opposite of
+   * `forExport` — but the Studio renders its previews WITH `forExport` (to kill
+   * transitions), so it sets this explicitly rather than inheriting it.
+   */
+  editing?: boolean;
   /** Fires when the composition exceeds the canvas (a too-long headline). */
   onOverflow?: (overflow: boolean) => void;
   forExport?: boolean;
@@ -91,6 +102,9 @@ export function SlideRenderer({
             format={format}
             logoUrl={brandKit.logo?.url}
             photoUrl={slide.authored.bg === 'photo' ? image?.url : undefined}
+            photos={photos}
+            // Empty-slot affordances belong to editing surfaces only.
+            editing={editing ?? !forExport}
             motion={motion}
             onOverflow={onOverflow}
           />

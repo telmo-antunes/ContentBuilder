@@ -7,6 +7,7 @@ import type {
   Project,
   ProjectSettings,
   Slide,
+  SlidePhoto,
   AssetType,
   Format,
 } from '@contentbuilder/shared';
@@ -162,6 +163,17 @@ export const updateProject = (
 
 export const deleteProject = (id: string) =>
   request<{ ok: boolean }>(`/projects/${id}`, { method: 'DELETE' });
+
+/**
+ * Replace a slide's photo list in one atomic write. Upload the bytes first with
+ * `uploadMedia` (which content-sniffs and sanitises them) and place the returned
+ * asset id here.
+ */
+export const saveSlidePhotos = (projectId: string, slideId: string, photos: SlidePhoto[]) =>
+  request<Project>(`/projects/${projectId}/slides/${slideId}/photos`, {
+    method: 'PUT',
+    body: JSON.stringify({ photos }),
+  });
 
 /** (Re)generate the social caption for a project's current slides, in the brand voice. */
 export const generateProjectCaption = (id: string) =>

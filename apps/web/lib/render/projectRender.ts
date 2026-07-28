@@ -26,6 +26,56 @@ export function toRenderKit(kit: BrandKit | null | undefined): RenderBrandKit {
   };
 }
 
+/** One of the user's photos, resolved to a URL the renderer can paint. */
+export interface ResolvedPhoto {
+  id: string;
+  url: string;
+  fit: 'cover' | 'contain';
+  frame?: { x: number; y: number; w: number; h: number };
+  z: number;
+  alt?: string;
+}
+
+/** A slide's photos, split into the three layers the renderer paints. */
+export interface SlidePhotoSet {
+  /** Full-bleed behind the composition. */
+  background?: ResolvedPhoto;
+  /** Slot name → the photo filling that authored placeholder. */
+  slots: Record<string, ResolvedPhoto>;
+  /** Absolutely-positioned overlays, in paint order. */
+  free: ResolvedPhoto[];
+}
+
+const EMPTY_PHOTOS: SlidePhotoSet = { slots: {}, free: [] };
+
+/**
+ * Resolve a slide's photos into the three render layers. Photos whose asset is
+ * missing are skipped rather than rendered as broken images — an asset can be
+ * deleted from the library while a slide still points at it.
+ */
+export function resolveSlidePhotos(slide: Slide, media: MediaAsset[]): SlidePhotoSet {
+  const photos = slide.photos ?? [];
+  if (!photos.length) return EMPTY_PHOTOS;
+  const out: SlidePhotoSet = { slots: {}, free: [] };
+  for (const p of photos) {
+    const asset = media.find((m) => m._id === p.mediaAssetId);
+    if (!asset?.url) continue;
+    const resolved: ResolvedPhoto = {
+      id: p.id,
+      url: asset.url,
+      fit: p.fit === 'contain' ? 'contain' : 'cover',
+      frame: p.frame,
+      z: p.z ?? 1,
+      alt: p.alt,
+    };
+    if (p.placement === 'background') out.background = resolved;
+    else if (p.placement === 'slot' && p.slot) out.slots[p.slot] = resolved;
+    else if (p.frame) out.free.push(resolved);
+  }
+  out.free.sort((a, b) => a.z - b.z);
+  return out;
+}
+
 /** Resolve a slide's attached image (by mediaAssetId) into a LayoutImage. */
 export function resolveSlideImage(slide: Slide, media: MediaAsset[]): LayoutImage | null {
   if (!slide.mediaAssetId) return null;
