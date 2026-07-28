@@ -57,6 +57,10 @@ export const slidePhotoSchema = z.object({
    * character. 'auto' lets the brand and the focal point decide.
    */
   motion: z.enum(PHOTO_MOVES).catch('auto').optional(),
+  /** placement 'slot': resize the hole the composer left, without rewriting
+   *  its markup. `shape` re-proportions it, `size` scales its budget. */
+  shape: z.enum(['standard', 'wide', 'square', 'tall']).optional(),
+  size: z.enum(['sm', 'md', 'lg']).optional(),
   /** placement 'free': negative sends it behind the composition. */
   z: z.number().min(-1).max(99).optional(),
   alt: z.string().max(160).optional(),

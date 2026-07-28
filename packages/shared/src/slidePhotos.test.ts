@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   SLOT_ATTR,
+  SLOT_CLASS,
   SLOT_SHAPES,
   authoredSlots,
+  slotOverrideCss,
   emptySlotCss,
   filledSlotCss,
   isSlotName,
@@ -185,5 +187,41 @@ describe('slideSchema photos', () => {
     });
     expect(r.photos).toHaveLength(1);
     expect(r.photos[0]!.placement).toBe('background');
+  });
+});
+
+/**
+ * A resize is emitted as an override on top of the base shape rule, so it has
+ * to WIN the cascade. It first shipped without `.cb-shot` in the selector,
+ * which made it (0,3,0) against the base rule's (0,4,0) — the CSS was emitted,
+ * parsed, and silently ignored, and the size controls did nothing at all.
+ */
+describe('slotOverrideCss', () => {
+  const specificity = (sel: string) => (sel.match(/\.[a-z-]+/g) ?? []).length + (sel.match(/\[/g) ?? []).length;
+
+  it('out-specifies the base shape rule it has to override', () => {
+    const override = slotOverrideCss('cbs1', 'hero', 'tall', 'md', 1350);
+    const base = `.cbs1 .cb-slide .${SLOT_CLASS}.tall`;
+    expect(specificity(override.split('{')[0]!)).toBeGreaterThanOrEqual(specificity(base));
+    expect(override).toContain(`.${SLOT_CLASS}[${SLOT_ATTR}="hero"]`);
+  });
+
+  it('emits nothing when the photo has no resize of its own', () => {
+    expect(slotOverrideCss('cbs1', 'hero', undefined, undefined, 1350)).toBe('');
+  });
+
+  it('keeps the requested ratio at every size step', () => {
+    for (const size of ['sm', 'md', 'lg'] as const) {
+      const css = slotOverrideCss('cbs1', 'hero', 'tall', size, 1350);
+      const [, w, h] = css.match(/max-width:(\d+)px;max-height:(\d+)px/)!;
+      expect(Number(w) / Number(h)).toBeCloseTo(3 / 4, 1);
+    }
+  });
+
+  it('actually changes the size between steps', () => {
+    const w = (size: 'sm' | 'md' | 'lg') =>
+      Number(slotOverrideCss('cbs1', 'hero', 'square', size, 1350).match(/max-width:(\d+)px/)![1]);
+    expect(w('sm')).toBeLessThan(w('md'));
+    expect(w('md')).toBeLessThan(w('lg'));
   });
 });

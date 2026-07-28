@@ -9,12 +9,14 @@ import {
   backgroundPhotoCss,
   emptySlotCss,
   filledSlotCss,
+  slotOverrideCss,
   resolveMove,
   SLOT_ATTR,
   isSlotName,
   recipeCssVars,
   recipeFontFamilies,
   recipeStylesheetFor,
+  RECIPE_FORMAT_DIMS,
   recipeAmbient,
   recipeMotionCss,
   recipeMotionTiming,
@@ -155,8 +157,10 @@ export function AuthoredSlide({
     .filter(isSlotName)
     .map((name) => {
       const p = photos?.slots[name];
-      if (p) return filledSlotCss(scope, name, safeUrl(p.url), p.fit, p.focal);
-      return editing ? emptySlotCss(scope, name) : '';
+      if (!p) return editing ? emptySlotCss(scope, name) : '';
+      // A resize rides on the photo, so the authored markup is never rewritten.
+      const resize = slotOverrideCss(scope, name, p.shape, p.size, RECIPE_FORMAT_DIMS[format]?.h ?? 1350);
+      return [resize, filledSlotCss(scope, name, safeUrl(p.url), p.fit, p.focal)].filter(Boolean).join('\n');
     })
     .filter(Boolean)
     .join('\n');

@@ -2032,25 +2032,43 @@ input[type='color'] {
 
 /* ═══ Slide photos — slots, background, floating images ═══════════════════ */
 .sp { display: flex; flex-direction: column; gap: 6px; }
-.sp-row {
-  display: flex; align-items: center; gap: 9px;
-  padding: 6px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel);
+
+
+/* ── Slide photos: cards that open, with written labels ─────────────────── */
+.spc-group { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); font-weight: 700; margin: 14px 0 6px; }
+.spc-group:first-child { margin-top: 0; }
+.spc {
+  border: 1px solid var(--border); border-radius: 10px; background: var(--panel);
+  margin-bottom: 6px; overflow: hidden;
+  transition: border-color var(--dur-2) var(--ease);
 }
-.sp-row.sel { border-color: var(--accent); }
-.sp-thumb {
-  flex: 0 0 auto; width: 38px; height: 38px; border-radius: 6px; object-fit: cover;
-  border: 1px solid var(--border); background: var(--panel-2);
-  display: grid; place-items: center; font-size: 15px; color: var(--faint);
+.spc.open { border-color: var(--border-strong); background: var(--panel-2); }
+.spc.sel { border-color: var(--accent); }
+.spc-head { display: flex; align-items: center; gap: 9px; padding: 8px; }
+.spc-thumb { flex: 0 0 auto; width: 40px; height: 40px; border-radius: 7px; object-fit: cover; border: 1px solid var(--border); background: var(--bg); }
+.spc-blank { display: grid; place-items: center; color: var(--faint); font-size: 17px; border-style: dashed; }
+.spc-id { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 1px; }
+.spc-title { font-size: 12.5px; color: var(--text); }
+.spc-status { font-size: 10.5px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.spc-status.warn { color: var(--warn); }
+.spc-body { padding: 2px 10px 12px; display: flex; flex-direction: column; gap: 12px; border-top: 1px solid var(--border); margin-top: 2px; padding-top: 12px; }
+.spc-field { display: flex; flex-direction: column; gap: 5px; }
+.spc-label { font-size: 11px; color: var(--muted); font-weight: 600; }
+.spc-hint { font-size: 10.5px; color: var(--faint); line-height: 1.45; }
+/* Options read as words; the chosen one is filled, not merely outlined. */
+.spc-seg { display: flex; flex-wrap: wrap; gap: 4px; }
+.spc-opt {
+  padding: 5px 9px; border-radius: 7px; border: 1px solid var(--border);
+  background: var(--bg); color: var(--muted); font-size: 11.5px; cursor: pointer;
+  transition: all var(--dur-2) var(--ease);
 }
-.sp-empty { border-style: dashed; }
-.sp-missing { color: var(--warn); }
-.sp-thumbbtn { flex: 0 0 auto; padding: 0; border: 0; background: none; cursor: pointer; line-height: 0; border-radius: 6px; }
-.sp-thumbbtn:hover .sp-thumb { border-color: var(--accent); }
-.sp-thumbbtn:disabled { cursor: default; opacity: 0.6; }
-.sp-meta { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 1px; }
-.sp-name { font-size: 12px; color: var(--text); }
-.sp-sub { font-size: 10.5px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sp-sub.warn { color: var(--warn); }
+.spc-opt:hover:not(:disabled) { border-color: var(--border-strong); color: var(--text); }
+.spc-opt.on { background: var(--accent); border-color: var(--accent); color: #10201d; font-weight: 600; }
+.spc-opt:disabled { opacity: 0.5; cursor: default; }
+.spc-select { width: 100%; font-size: 12px; padding: 6px 8px; }
+.spc-actions { display: flex; flex-wrap: wrap; gap: 5px; padding-top: 2px; border-top: 1px solid var(--border); margin-top: 2px; padding-top: 10px; }
+.btn.sm.danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 35%, var(--border)); }
+.btn.sm.danger:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 12%, transparent); }
 
 /* Crop chooser: the whole photo, with a draggable crosshair. */
 .fp { margin: 4px 0 8px; padding: 8px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel-2); }
@@ -2061,8 +2079,6 @@ input[type='color'] {
   border: 2px solid #fff; background: var(--accent); box-shadow: 0 0 0 1px rgba(0,0,0,0.5); pointer-events: none;
 }
 .fp-hint { font-size: 10.5px; color: var(--faint); margin: 6px 0 0; line-height: 1.4; }
-.sp-ctl { display: flex; gap: 4px; flex: 0 0 auto; }
-.sp-ctl .btn.sm { padding: 3px 7px; font-size: 11px; }
 
 /* ═══ The Desk — the home screen as a workspace ════════════════════════════ */
 .desk-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; flex-wrap: wrap; }

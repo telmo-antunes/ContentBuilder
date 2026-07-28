@@ -38,6 +38,9 @@ const slidePhotoSchema = new Schema(
     },
     /** How this photo drifts in a video export ('auto' follows the brand). */
     motion: { type: String, required: false },
+    /** 'slot': resize the authored hole without rewriting its markup. */
+    shape: { type: String, enum: ['standard', 'wide', 'square', 'tall'], required: false },
+    size: { type: String, enum: ['sm', 'md', 'lg'], required: false },
     /** 'free': negative sends it behind the composition. */
     z: { type: Number, required: false },
     alt: { type: String, required: false },

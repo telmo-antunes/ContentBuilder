@@ -35,6 +35,9 @@ export interface ResolvedPhoto {
   focal?: { x: number; y: number };
   /** How it drifts in a video export; undefined follows the brand. */
   move?: PhotoMove;
+  /** 'slot': a resize of the authored hole. */
+  shape?: 'standard' | 'wide' | 'square' | 'tall';
+  size?: 'sm' | 'md' | 'lg';
   frame?: { x: number; y: number; w: number; h: number };
   z: number;
   alt?: string;
@@ -70,6 +73,8 @@ export function resolveSlidePhotos(slide: Slide, media: MediaAsset[]): SlidePhot
       fit: p.fit === 'contain' ? 'contain' : 'cover',
       focal: p.focal,
       move: p.motion,
+      shape: p.shape,
+      size: p.size,
       frame: p.frame,
       z: p.z ?? 1,
       alt: p.alt,

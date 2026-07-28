@@ -47,14 +47,20 @@ export type AmbientIntensity = (typeof AMBIENT_INTENSITIES)[number];
  * Amplitude per intensity. `scale` is the extra zoom over the whole clip;
  * `shift` is the lateral drift as a percentage of the layer's own box.
  *
- * These are deliberately small. Ambient motion that you NOTICE is ambient
- * motion that is too strong — the effect should register as the image being
- * alive, not as the image moving.
+ * CALIBRATION. These began far too timid, on the theory that ambient motion
+ * you NOTICE is too strong. Measured, the old `subtle` moved a background
+ * photo 3.5% over seven seconds — 0.75 px/second in a preview, well below what
+ * an eye can detect. It was not subtle, it was invisible, and the feature read
+ * as broken.
+ *
+ * The bar is a documentary slow zoom: unmistakably alive when you look, never
+ * demanding when you don't. Roughly 9–24% over seven seconds, which is what
+ * archive footage has always used.
  */
 export const AMBIENT_AMPLITUDE: Record<AmbientIntensity, { scale: number; shift: number }> = {
-  subtle: { scale: 0.04, shift: 1.2 },
-  medium: { scale: 0.075, shift: 2.2 },
-  strong: { scale: 0.115, shift: 3.4 },
+  subtle: { scale: 0.09, shift: 2.6 },
+  medium: { scale: 0.15, shift: 4.4 },
+  strong: { scale: 0.24, shift: 7 },
 };
 
 /** How long one ambient move takes. Also the floor for a clip's length. */
@@ -69,7 +75,8 @@ export interface AmbientSpec {
   intensity: AmbientIntensity;
 }
 
-export const DEFAULT_AMBIENT: AmbientSpec = { style: 'parallax', intensity: 'subtle' };
+/** Recipes authored before ambient existed fall back to this. */
+export const DEFAULT_AMBIENT: AmbientSpec = { style: 'parallax', intensity: 'medium' };
 
 /**
  * Resolve `auto` into a real move.
@@ -98,9 +105,6 @@ export function ambientTransforms(
   const useScale = spec.style !== 'drift';
   const usePan = spec.style !== 'push';
   const shift = usePan ? amp.shift * depth : 0;
-  // Whatever we pan, we must first zoom past — otherwise the drift walks the
-  // edge of the image into frame and shows the box behind it.
-  const zoom = (useScale ? amp.scale * depth : 0) + (shift * 2) / 100;
   const pan: Record<string, [number, number]> = {
     in: [0, 0],
     out: [0, 0],
@@ -110,6 +114,12 @@ export function ambientTransforms(
     down: [0, shift],
   };
   const [dx, dy] = pan[move] ?? [0, 0];
+  // Whatever we pan, we must first zoom past — otherwise the drift walks the
+  // edge of the image into frame and shows the box behind it. Charged against
+  // the ACTUAL pan, not the configured one: `in` and `out` never pan, and
+  // billing them for coverage they don't use inflated a push-in to 36%.
+  const cover = (Math.max(Math.abs(dx), Math.abs(dy)) * 2) / 100;
+  const zoom = (useScale ? amp.scale * depth : 0) + cover;
   const at = (s: number, x: number, y: number) =>
     `scale(${(1 + s).toFixed(4)}) translate(${x.toFixed(3)}%, ${y.toFixed(3)}%)`;
   // `out` starts zoomed and relaxes; everything else closes in.

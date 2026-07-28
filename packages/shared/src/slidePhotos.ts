@@ -159,6 +159,43 @@ export function filledSlotCss(
   );
 }
 
+/** How much a size step scales the shape's height budget. */
+export const SLOT_SIZE_SCALE = { sm: 0.72, md: 1, lg: 1.28 } as const;
+
+/**
+ * Resize one slot, without touching the authored markup.
+ *
+ * The composer picks a shape when it writes the slide, and that used to be
+ * final — there was no way to say "this photo should be bigger". Rather than
+ * rewriting the stored HTML (which would fight the editor and the re-compose
+ * path), the choice rides on the photo and is emitted as a per-slot override.
+ * Same geometry rule as the base sizing: the budget is spent as a max-WIDTH so
+ * the aspect ratio always survives the clamp.
+ */
+export function slotOverrideCss(
+  scope: string,
+  slot: string,
+  shape: 'standard' | 'wide' | 'square' | 'tall' | undefined,
+  size: 'sm' | 'md' | 'lg' | undefined,
+  canvasHeight: number,
+): string {
+  if (!shape && !size) return '';
+  const key = (shape === 'standard' ? '' : shape) ?? '';
+  const spec = SLOT_SHAPES[key as keyof typeof SLOT_SHAPES] ?? SLOT_SHAPES[''];
+  const maxH = Math.round(canvasHeight * spec.budget * SLOT_SIZE_SCALE[size ?? 'md']);
+  const maxW = Math.round(maxH * spec.ratio);
+  const ratio =
+    spec.ratio === 1 ? '1/1' : key === 'wide' ? '16/9' : key === 'tall' ? '3/4' : '4/3';
+  // `.cb-shot` is in the selector deliberately. Without it this is (0,3,0) and
+  // loses to the base shape rule `.cb-slide .cb-shot.tall` at (0,4,0) — the
+  // override would be emitted, parsed, and silently never applied. With it the
+  // two tie, and this sheet is written after the base, so order decides.
+  return (
+    `.${scope} .cb-slide .${SLOT_CLASS}[${SLOT_ATTR}="${slot}"]{` +
+    `aspect-ratio:${ratio};max-width:${maxW}px;max-height:${maxH}px}`
+  );
+}
+
 /**
  * The user's background photo, as its own full-bleed layer.
  *

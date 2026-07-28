@@ -2,7 +2,6 @@
 
 import { useMemo, useRef, useState } from 'react';
 import {
-  PHOTO_MOVES,
   SLOT_SHAPES,
   authoredSlots,
   dimensionsFor,
@@ -102,8 +101,8 @@ export default function SlidePhotoPanel({
   onChange: (photos: SlidePhoto[], uploaded?: MediaAsset) => void;
 }) {
   const [uploading, setUploading] = useState<string | null>(null);
-  /** Which photo's focal picker is open (only one at a time). */
-  const [focusing, setFocusing] = useState<string | null>(null);
+  /** Which photo's card is open (one at a time — the panel is narrow). */
+  const [expanded, setExpanded] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   /** What the pending file picker should do with the asset once it lands. */
   const targetRef = useRef<
@@ -195,7 +194,7 @@ export default function SlidePhotoPanel({
 
   const remove = (id: string) => {
     if (selectedFreeId === id) onSelectFree(null);
-    if (focusing === id) setFocusing(null);
+    if (expanded === id) setExpanded(null);
     onChange(photos.filter((p) => p.id !== id));
   };
 
@@ -208,103 +207,215 @@ export default function SlidePhotoPanel({
 
   const disabled = busy || uploading !== null;
 
-  /** One photo's row: thumbnail (opens the crop), label, and its controls. */
-  const row = (
-    key: string,
-    p: SlidePhoto | undefined,
-    name: string,
-    sub: string,
-    controls: React.ReactNode,
-    onUpload: () => void,
-    uploadKey: string,
-    shape?: string,
-  ) => {
-    const asset = p ? assetOf(p.mediaAssetId) : undefined;
-    const need = p ? renderedWidth(p, shape, format) : 0;
-    const soft = Boolean(asset?.width && need && asset.width < need * 0.8);
-    const open = p && focusing === p.id;
-    return (
-      <div key={key}>
-        <div className={`sp-row${selectedFreeId && p?.id === selectedFreeId ? ' sel' : ''}`}>
-          {asset ? (
-            <button
-              className="sp-thumbbtn"
-              title="Choose what stays in frame"
-              disabled={disabled}
-              onClick={() => setFocusing(open ? null : p!.id)}
-            >
-              <img className="sp-thumb" src={asset.url} alt="" />
-            </button>
-          ) : (
-            <span className={`sp-thumb ${p ? 'sp-missing' : 'sp-empty'}`}>{p ? '?' : '＋'}</span>
-          )}
-          <div className="sp-meta">
-            <span className="sp-name">{name}</span>
-            <span className={`sp-sub${soft ? ' warn' : ''}`}>
-              {soft ? `Low resolution — ${asset!.width}px across a ${need}px box` : sub}
-            </span>
-          </div>
-          <div className="sp-ctl">
-            <button className="btn sm" disabled={disabled} onClick={onUpload}>
-              {uploading === uploadKey ? '…' : p ? 'Replace' : 'Upload'}
-            </button>
-            {controls}
-          </div>
-        </div>
-        {open && asset && (
-          <FocalPicker
-            url={asset.url}
-            value={p!.focal}
-            onChange={(focal) => patch(p!.id, { focal })}
-          />
-        )}
+  /** Plain-language names for every movement a photo can have in a video. */
+  const MOVES: Array<{ v: string; t: string }> = [
+    { v: 'auto', t: 'Automatic' },
+    { v: 'none', t: 'Hold still' },
+    { v: 'in', t: 'Slowly zoom in' },
+    { v: 'out', t: 'Slowly zoom out' },
+    { v: 'left', t: 'Drift left' },
+    { v: 'right', t: 'Drift right' },
+    { v: 'up', t: 'Drift up' },
+    { v: 'down', t: 'Drift down' },
+  ];
+
+  /** A labelled row of choices. Words, not glyphs — the old controls were a
+   *  line of symbols nobody could read without hovering each one. */
+  const Choice = ({
+    label,
+    hint,
+    value,
+    options,
+    onPick,
+  }: {
+    label: string;
+    hint?: string;
+    value: string;
+    options: Array<{ v: string; t: string }>;
+    onPick: (v: string) => void;
+  }) => (
+    <div className="spc-field">
+      <span className="spc-label">{label}</span>
+      <div className="spc-seg">
+        {options.map((o) => (
+          <button
+            key={o.v}
+            type="button"
+            className={`spc-opt${value === o.v ? ' on' : ''}`}
+            disabled={disabled}
+            onClick={() => onPick(o.v)}
+          >
+            {o.t}
+          </button>
+        ))}
       </div>
-    );
-  };
+      {hint && <span className="spc-hint">{hint}</span>}
+    </div>
+  );
 
   /**
-   * How this photo DRIFTS in a video export. Cycles through the moves rather
-   * than opening a menu — there are eight, they're all one word, and seeing the
-   * current one is more useful than choosing from a list.
+   * One photo, as a card that opens.
+   *
+   * Collapsed it says what the picture is and what it is doing; opened it
+   * shows every control with a written label. Nothing is a bare symbol.
    */
-  const MOVE_LABEL: Record<string, string> = {
-    auto: 'Auto',
-    none: 'Still',
-    in: 'Push in',
-    out: 'Pull out',
-    left: 'Pan left',
-    right: 'Pan right',
-    up: 'Pan up',
-    down: 'Pan down',
-  };
-  const moveBtn = (p: SlidePhoto) => {
-    const cur = p.motion ?? 'auto';
+  const card = (opts: {
+    key: string;
+    photo?: SlidePhoto;
+    title: string;
+    status: string;
+    uploadKey: string;
+    onUpload: () => void;
+    slotShape?: string;
+    kind: 'slot' | 'background' | 'free';
+  }) => {
+    const { photo: p, kind } = opts;
+    const asset = p ? assetOf(p.mediaAssetId) : undefined;
+    const need = p ? renderedWidth(p, opts.slotShape, format) : 0;
+    const soft = Boolean(asset?.width && need && asset.width < need * 0.8);
+    const open = p ? expanded === p.id : false;
     return (
-      <button
-        className="btn sm ghost"
-        disabled={disabled}
-        title={`Motion in video: ${MOVE_LABEL[cur]} — click to change`}
-        onClick={() => {
-          const i = PHOTO_MOVES.indexOf(cur as (typeof PHOTO_MOVES)[number]);
-          patch(p.id, { motion: PHOTO_MOVES[(i + 1) % PHOTO_MOVES.length] });
-        }}
-      >
-        {cur === 'auto' ? '⟳' : cur === 'none' ? '⊘' : MOVE_LABEL[cur]!.split(' ')[1] === 'in' ? '⊕' : '⊖'}
-      </button>
+      <article className={`spc${open ? ' open' : ''}${selectedFreeId && p?.id === selectedFreeId ? ' sel' : ''}`} key={opts.key}>
+        <div className="spc-head">
+          {asset ? (
+            <img className="spc-thumb" src={asset.url} alt="" />
+          ) : (
+            <span className="spc-thumb spc-blank">{p ? '?' : '+'}</span>
+          )}
+          <div className="spc-id">
+            <span className="spc-title">{opts.title}</span>
+            <span className={`spc-status${soft ? ' warn' : ''}`}>
+              {soft ? `Too low-res — ${asset!.width}px wide for a ${need}px space` : opts.status}
+            </span>
+          </div>
+          {p ? (
+            <button
+              className="btn sm"
+              disabled={disabled}
+              onClick={() => setExpanded(open ? null : p.id)}
+            >
+              {open ? 'Done' : 'Edit'}
+            </button>
+          ) : (
+            <button className="btn sm primary" disabled={disabled} onClick={opts.onUpload}>
+              {uploading === opts.uploadKey ? 'Uploading…' : 'Add photo'}
+            </button>
+          )}
+        </div>
+
+        {open && p && asset && (
+          <div className="spc-body">
+            <div className="spc-field">
+              <span className="spc-label">What stays in frame</span>
+              <FocalPicker url={asset.url} value={p.focal} onChange={(focal) => patch(p.id, { focal })} />
+            </div>
+
+            <Choice
+              label="How it fills the space"
+              value={p.fit === 'contain' ? 'contain' : 'cover'}
+              options={[
+                { v: 'cover', t: 'Fill it (crops)' },
+                { v: 'contain', t: 'Show all of it' },
+              ]}
+              onPick={(v) => patch(p.id, { fit: v as 'cover' | 'contain' })}
+            />
+
+            {kind === 'slot' && (
+              <>
+                <Choice
+                  label="Size"
+                  value={p.size ?? 'md'}
+                  options={[
+                    { v: 'sm', t: 'Small' },
+                    { v: 'md', t: 'Medium' },
+                    { v: 'lg', t: 'Large' },
+                  ]}
+                  onPick={(v) => patch(p.id, { size: v as 'sm' | 'md' | 'lg' })}
+                />
+                <Choice
+                  label="Shape"
+                  hint="A taller shape takes more of the slide, leaving less room for words."
+                  value={p.shape ?? (opts.slotShape || 'standard')}
+                  options={[
+                    { v: 'standard', t: '4:3' },
+                    { v: 'wide', t: 'Wide' },
+                    { v: 'square', t: 'Square' },
+                    { v: 'tall', t: 'Tall' },
+                  ]}
+                  onPick={(v) => patch(p.id, { shape: v as SlidePhoto['shape'] })}
+                />
+              </>
+            )}
+
+            {kind === 'free' && (
+              <>
+                <Choice
+                  label="Layer"
+                  value={(p.z ?? 1) < 0 ? 'behind' : 'front'}
+                  options={[
+                    { v: 'front', t: 'In front of the text' },
+                    { v: 'behind', t: 'Behind the text' },
+                  ]}
+                  onPick={(v) => patch(p.id, { z: v === 'behind' ? -1 : 1 })}
+                />
+                <div className="spc-field">
+                  <span className="spc-label">Position and size</span>
+                  <button
+                    className={`btn sm${selectedFreeId === p.id ? ' primary' : ''}`}
+                    disabled={disabled}
+                    onClick={() => onSelectFree(selectedFreeId === p.id ? null : p.id)}
+                  >
+                    {selectedFreeId === p.id ? 'Finish positioning' : 'Move and resize it'}
+                  </button>
+                  <span className="spc-hint">
+                    {selectedFreeId === p.id
+                      ? 'Drag the picture on the preview above; drag its bottom-right corner to resize.'
+                      : 'Turn this on to drag the picture around the slide.'}
+                  </span>
+                </div>
+              </>
+            )}
+
+            <div className="spc-field">
+              <span className="spc-label">Movement in video</span>
+              <select
+                className="spc-select"
+                disabled={disabled}
+                value={p.motion ?? 'auto'}
+                onChange={(e) => patch(p.id, { motion: e.target.value as SlidePhoto['motion'] })}
+              >
+                {MOVES.map((m) => (
+                  <option key={m.v} value={m.v}>
+                    {m.t}
+                  </option>
+                ))}
+              </select>
+              <span className="spc-hint">
+                Automatic drifts toward whatever you framed above. Only affects video exports.
+              </span>
+            </div>
+
+            <div className="spc-actions">
+              <button className="btn sm" disabled={disabled} onClick={opts.onUpload}>
+                {uploading === opts.uploadKey ? 'Uploading…' : 'Swap photo'}
+              </button>
+              {kind !== 'background' && (
+                <button className="btn sm" disabled={disabled} onClick={() => makeBackground(p)}>
+                  Make it the background
+                </button>
+              )}
+              <button className="btn sm danger" disabled={disabled} onClick={() => remove(p.id)}>
+                Remove
+              </button>
+            </div>
+          </div>
+        )}
+      </article>
     );
   };
 
-  /** Cover/contain — the only honest answer when a photo and its hole disagree. */
-  const fitBtn = (p: SlidePhoto) => (
-    <button
-      className="btn sm ghost"
-      disabled={disabled}
-      title={p.fit === 'contain' ? 'Fill the box (crops)' : 'Fit the whole photo (letterboxes)'}
-      onClick={() => patch(p.id, { fit: p.fit === 'contain' ? 'cover' : 'contain' })}
-    >
-      {p.fit === 'contain' ? '⤢' : '⤡'}
-    </button>
-  );
+  const moveName = (p?: SlidePhoto) =>
+    MOVES.find((m) => m.v === (p?.motion ?? 'auto'))!.t.toLowerCase();
 
   return (
     <div className="sp">
@@ -318,106 +429,56 @@ export default function SlidePhotoPanel({
 
       {slots.length > 0 && (
         <>
-          <div className="k studio-klbl">Image slots</div>
+          <div className="spc-group">Spaces the AI left for photos</div>
           {slots.map((slotName) => {
             const p = bySlot[slotName];
             const shape = shapeOf(slotName);
-            return row(
-              slotName,
-              p,
-              slotLabel(slotName),
-              p ? `Filled · ${shape ?? '4:3'} · ${MOVE_LABEL[p.motion ?? 'auto']}` : 'Empty — the AI left space here',
-              p ? (
-                <>
-                  {moveBtn(p)}
-                  {fitBtn(p)}
-                  <button
-                    className="btn sm ghost"
-                    disabled={disabled}
-                    title="Use this photo full-bleed behind the whole slide"
-                    onClick={() => makeBackground(p)}
-                  >
-                    ⬒
-                  </button>
-                  <button className="btn sm ghost" disabled={disabled} onClick={() => remove(p.id)}>
-                    ✕
-                  </button>
-                </>
-              ) : null,
-              () => pick({ kind: 'slot', slot: slotName }),
-              slotName,
-              shape,
-            );
+            return card({
+              key: slotName,
+              photo: p,
+              title: slotLabel(slotName),
+              status: p ? `In place · ${moveName(p)}` : 'Empty — add your photo here',
+              uploadKey: slotName,
+              onUpload: () => pick({ kind: 'slot', slot: slotName }),
+              slotShape: shape,
+              kind: 'slot',
+            });
           })}
         </>
       )}
 
-      <div className="k studio-klbl" style={{ marginTop: slots.length ? 14 : 0 }}>
-        Background
-      </div>
-      {row(
-        'bg',
-        background ?? undefined,
-        background ? 'Full-bleed photo' : 'None',
-        background
-          ? `Behind the whole composition · ${MOVE_LABEL[background.motion ?? 'auto']}`
+      <div className="spc-group">Background</div>
+      {card({
+        key: 'bg',
+        photo: background ?? undefined,
+        title: background ? 'Behind everything' : 'No background photo',
+        status: background
+          ? `Fills the whole slide · ${moveName(background)}`
           : 'The brand’s own background is showing',
-        background ? (
-          <>
-            {moveBtn(background)}
-            {fitBtn(background)}
-            <button className="btn sm ghost" disabled={disabled} onClick={() => remove(background.id)}>
-              ✕
-            </button>
-          </>
-        ) : null,
-        () => pick({ kind: 'background' }),
-        'background',
-      )}
+        uploadKey: 'background',
+        onUpload: () => pick({ kind: 'background' }),
+        kind: 'background',
+      })}
 
-      <div className="k studio-klbl" style={{ marginTop: 14 }}>
-        Floating
-      </div>
+      <div className="spc-group">Photos you place yourself</div>
       {free.map((p) =>
-        row(
-          p.id,
-          p,
-          selectedFreeId === p.id ? 'Selected — drag it above' : 'Floating image',
-          `${(p.z ?? 1) < 0 ? 'Behind the text' : 'In front of the text'} · ${MOVE_LABEL[p.motion ?? 'auto']}`,
-          <>
-            {moveBtn(p)}
-            {fitBtn(p)}
-            <button
-              className="btn sm ghost"
-              disabled={disabled}
-              title={(p.z ?? 1) < 0 ? 'Bring in front of the text' : 'Send behind the text'}
-              onClick={() => patch(p.id, { z: (p.z ?? 1) < 0 ? 1 : -1 })}
-            >
-              {(p.z ?? 1) < 0 ? '↑' : '↓'}
-            </button>
-            <button
-              className="btn sm ghost"
-              disabled={disabled}
-              title={selectedFreeId === p.id ? 'Done positioning' : 'Position it on the preview'}
-              onClick={() => onSelectFree(selectedFreeId === p.id ? null : p.id)}
-            >
-              ✥
-            </button>
-            <button className="btn sm ghost" disabled={disabled} onClick={() => remove(p.id)}>
-              ✕
-            </button>
-          </>,
-          () => pick({ kind: 'free', id: p.id }),
-          p.id,
-        ),
+        card({
+          key: p.id,
+          photo: p,
+          title: 'Placed photo',
+          status: `${(p.z ?? 1) < 0 ? 'Behind the text' : 'In front of the text'} · ${moveName(p)}`,
+          uploadKey: p.id,
+          onUpload: () => pick({ kind: 'free', id: p.id }),
+          kind: 'free',
+        }),
       )}
       <button
         className="btn sm"
-        style={{ width: '100%', justifyContent: 'center', marginTop: free.length ? 8 : 0 }}
+        style={{ width: '100%', justifyContent: 'center', marginTop: 6 }}
         disabled={disabled}
         onClick={() => pick({ kind: 'free' })}
       >
-        {uploading === 'free' ? 'Uploading…' : '＋ Add floating image'}
+        {uploading === 'free' ? 'Uploading…' : 'Add a photo anywhere on the slide'}
       </button>
     </div>
   );

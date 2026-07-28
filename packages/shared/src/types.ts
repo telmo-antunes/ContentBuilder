@@ -241,6 +241,9 @@ export interface SlidePhoto {
   focal?: { x: number; y: number };
   /** How this photo moves in a video export; 'auto' follows the brand. */
   motion?: PhotoMove;
+  /** 'slot': override the shape/size of the hole the composer authored. */
+  shape?: 'standard' | 'wide' | 'square' | 'tall';
+  size?: 'sm' | 'md' | 'lg';
   /** 'free': negative sends it behind the composition. */
   z?: number;
   alt?: string;
