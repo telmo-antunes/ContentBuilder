@@ -10,6 +10,7 @@
  * validated by brandRecipeSchema and its stylesheet is CSS-sanitised.
  */
 import {
+  clampText,
   migrateRecipe,
   ensureRecipeContrast,
   validateRecipeConsistency,
@@ -122,6 +123,19 @@ function parseRecipe(text: string): BrandRecipe {
   if (raw.formats && typeof raw.formats === 'object') {
     for (const v of Object.values(raw.formats) as Array<{ stylesheet?: unknown }>) {
       if (v && typeof v.stylesheet === 'string') v.stylesheet = sanitizeRecipeCss(v.stylesheet);
+    }
+  }
+  // The voice block is free text, and its zod limits REJECT rather than trim —
+  // a model that writes one sentence too many would fail the entire recipe
+  // parse over prose. Clamp it here so length can never cost a brand its
+  // design system, and so what survives ends on a word.
+  if (raw.voice && typeof raw.voice === 'object') {
+    const v = raw.voice as { description?: unknown; dos?: unknown; donts?: unknown };
+    if (typeof v.description === 'string') v.description = clampText(v.description, 400);
+    for (const k of ['dos', 'donts'] as const) {
+      if (Array.isArray(v[k])) {
+        v[k] = (v[k] as unknown[]).slice(0, 10).map((x) => clampText(String(x ?? ''), 120));
+      }
     }
   }
   // Route model output through the migrator as well, so a recipe authored

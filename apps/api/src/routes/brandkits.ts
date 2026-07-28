@@ -7,6 +7,7 @@ import {
   applyKitToRecipe,
   applyRecipeKnobs,
   migrateRecipe,
+  VOICE_MAX,
 } from '@contentbuilder/shared';
 import { BusinessModel, BrandKitModel } from '../models';
 import { ApiError, asyncHandler, parseBody, publicErrMessage, requireObjectId } from '../lib/http';
@@ -37,7 +38,7 @@ const patchKitSchema = z.object({
   logo: z.object({ sourceUrl: z.string().optional(), key: z.string(), url: z.string() }).optional(),
   logoTreatment: z.enum(['original', 'mono']).optional(),
   styleDescriptor: z.string().max(200).optional(),
-  voice: z.string().max(400).optional(),
+  voice: z.string().max(VOICE_MAX).optional(),
   status: z.enum(['draft', 'approved']).optional(),
   /**
    * Direct recipe edits — instant and scoped, so a colour or tempo tweak no

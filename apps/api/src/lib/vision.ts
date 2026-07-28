@@ -1,4 +1,5 @@
 import { aiVisionConfigured } from '../config';
+import { STYLE_DESCRIPTOR_MAX, VOICE_MAX, clampText } from '@contentbuilder/shared';
 import { aiMessage, modelFor, textOf } from './ai';
 import { recordUsage } from './usage';
 import type { PaletteColor, DomRoles, Extraction } from './analyze';
@@ -211,8 +212,8 @@ async function readTypeAndVibe(
     });
     const json = parseJson(textOf(resp)) ?? {};
     const tp = PERSONALITIES.includes(json.typePersonality as TypePersonality) ? (json.typePersonality as TypePersonality) : undefined;
-    const desc = typeof json.styleDescriptor === 'string' ? json.styleDescriptor.trim().slice(0, 200) : '';
-    const voice = typeof json.voice === 'string' ? json.voice.trim().slice(0, 240) : '';
+    const desc = clampText(String(json.styleDescriptor ?? ''), STYLE_DESCRIPTOR_MAX);
+    const voice = clampText(String(json.voice ?? ''), VOICE_MAX);
     return { styleDescriptor: desc, typePersonality: tp, voice };
   } catch (err) {
     console.warn('[vision] type/vibe call failed:', err instanceof Error ? err.message : err);
@@ -291,8 +292,8 @@ export async function assignRolesAndVibe(
     const typePersonality = PERSONALITIES.includes(json.typePersonality as TypePersonality)
       ? (json.typePersonality as TypePersonality)
       : undefined;
-    const styleDescriptor = typeof json.styleDescriptor === 'string' ? json.styleDescriptor.trim().slice(0, 200) : '';
-    const voice = typeof json.voice === 'string' ? json.voice.trim().slice(0, 240) : '';
+    const styleDescriptor = clampText(String(json.styleDescriptor ?? ''), STYLE_DESCRIPTOR_MAX);
+    const voice = clampText(String(json.voice ?? ''), VOICE_MAX);
 
     return { colors, styleDescriptor, typePersonality, voice, fonts: fontsForPersonality(typePersonality) ?? undefined, provenance: 'vision' };
   } catch (err) {
