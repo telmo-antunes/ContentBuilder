@@ -77,6 +77,7 @@ HARD RULES
 - Follow the COMPOSITION PATTERN that matches this slide's ROLE. Use a <div class="fill"></div> spacer where the pattern bottom-anchors content.
 - The canvas (dimensions given below) is large and the stylesheet already sets big, legible type for it — do not fight it. Keep the fragment to the few elements the pattern calls for; embrace negative space. On a taller (story) canvas lean on the fill spacer to spread content; on a square canvas keep it to the essentials.
 - If a copy part is absent, omit its element (don't fabricate a placeholder).
+- ROWS are an enumeration, and must READ as one — never concatenate them into a paragraph. Lay each entry out as its own line using the brand's list vocabulary (a .panel wrapping one element per row, or whatever list/row/item class this brand defines). An entry's "note" is secondary detail: set it beside or beneath its text, quieter. Keep the rows visually parallel — same class, same rhythm, one per line.
 
 IMAGE SLOTS
 - When this slide is marked "image: true", leave a HOLE for a photograph the user will supply — never describe one, never link one, never invent a src.

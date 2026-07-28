@@ -32,6 +32,16 @@ const partsSchema = z.object({
   stat: z.string().optional(),
   cta: z.string().optional(),
   handle: z.string().optional(),
+  /**
+   * An enumeration, one entry per item. The composer has always known how to
+   * lay these out (see `rowLines` in prompt.ts) but this key did not exist on
+   * the parse schema, so Zod stripped any list the model produced and every
+   * enumeration arrived as a run-on paragraph instead.
+   */
+  rows: z
+    .array(z.object({ text: z.string(), note: z.string().optional() }))
+    .max(6)
+    .optional(),
 });
 const parseResultSchema = z.object({
   slides: z
@@ -99,10 +109,12 @@ function plain(s: string): string {
 }
 
 const PARSE_SYSTEM = `You are a social-carousel copywriter + editor. Turn the user's idea into a tight, scroll-stopping Instagram carousel, written in the brand's voice. Return STRICT JSON only (no prose, no fences):
-{"slides":[{"role":"cover|statement|quote|feature|stat|cta","image":true|false,"parts":{...}}]}
+{"slides":[{"role":"cover|statement|quote|feature|stat|list|cta","image":true|false,"parts":{...}}]}
 Rules:
-- First slide role "cover" (a hook). Last slide role "cta". In between use statement / feature / stat / quote as the content wants.
-- parts keys (include only what a slide needs): eyebrow (2–4 word kicker), headline (the line — punchy), emphasis (the sub-phrase inside headline to accent), tagline (a short payoff line), body (1 short sentence), quote, attribution, stat (e.g. "40%"), cta (button text), handle.
+- First slide role "cover" (a hook). Last slide role "cta". In between use statement / feature / stat / quote / list as the content wants.
+- USE "list" WHEN THE CONTENT ENUMERATES. If a slide is "four things", "three ways", "what you get" — anything that is a set of parallel items — give it role "list" and put the items in "rows" (2–5 of them), NOT in "body". Never write a paragraph that is secretly a list: "Cash in the bank. Repeat visits secured. Slow weeks funded." is three rows, not one body. If your headline announces a number, the slide almost certainly wants rows.
+- rows entries are {"text": "the item", "note": "optional half-line of detail"}. Keep text under 42 characters — these are scanned, not read.
+- parts keys (include only what a slide needs): eyebrow (2–4 word kicker), headline (the line — punchy), emphasis (the sub-phrase inside headline to accent), tagline (a short payoff line), body (1 short sentence), rows (a list — see below), quote, attribution, stat (e.g. "40%"), cta (button text), handle.
 - This is a POSTER read on a phone at arm's length, not an article. Hard budgets: eyebrow <= 22 characters, headline <= 60, body <= 90, cta <= 24. Going over does not get truncated — it pushes the design off the canvas.
 - A slide marked "image": true gets an eyebrow and a headline ONLY. Omit "body" entirely on those slides — a photograph and a paragraph cannot share one poster, and the picture takes nearly half the canvas.
 - Write in the brand voice provided. No hashtags, no emoji.

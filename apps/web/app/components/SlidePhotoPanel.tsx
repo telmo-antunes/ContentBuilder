@@ -360,17 +360,33 @@ export default function SlidePhotoPanel({
                 />
                 <div className="spc-field">
                   <span className="spc-label">Position and size</span>
-                  <button
-                    className={`btn sm${selectedFreeId === p.id ? ' primary' : ''}`}
-                    disabled={disabled}
-                    onClick={() => onSelectFree(selectedFreeId === p.id ? null : p.id)}
-                  >
-                    {selectedFreeId === p.id ? 'Finish positioning' : 'Move and resize it'}
-                  </button>
+                  <div className="spc-seg">
+                    <button
+                      className="spc-opt"
+                      disabled={disabled}
+                      onClick={() => onSelectFree(p.id)}
+                    >
+                      Show me on the preview
+                    </button>
+                    {asset.width > 0 && asset.height > 0 && (
+                      <button
+                        className="spc-opt"
+                        disabled={disabled}
+                        title="Reset the box to the photo's own proportions"
+                        onClick={() => {
+                          const f = frameForAsset(asset, format);
+                          const cur = p.frame ?? f;
+                          patch(p.id, { frame: { ...cur, w: f.w, h: f.h } });
+                        }}
+                      >
+                        Match the photo&apos;s shape
+                      </button>
+                    )}
+                  </div>
                   <span className="spc-hint">
-                    {selectedFreeId === p.id
-                      ? 'Drag the picture on the preview above; drag its bottom-right corner to resize.'
-                      : 'Turn this on to drag the picture around the slide.'}
+                    Click the picture on the preview to select it, then drag it to move. Drag any
+                    corner to resize — corners keep its proportions, hold Shift to stretch. Arrow
+                    keys nudge it; Escape deselects.
                   </span>
                 </div>
               </>
