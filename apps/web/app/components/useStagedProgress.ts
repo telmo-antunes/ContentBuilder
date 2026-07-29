@@ -44,6 +44,21 @@ export const ANALYZE_STAGES: ProgressStage[] = [
   { label: 'Assembling the kit…', atMs: 38000 },
 ];
 
+/**
+ * Re-analysing an existing brand. Same pipeline as the first pass, plus the
+ * image harvest that `POST /analyze` runs — and it ends by saying the kit
+ * arrives as a draft, because the approved one is NOT replaced until you
+ * approve, and that is the first question anyone has while waiting.
+ */
+export const REANALYZE_STAGES: ProgressStage[] = [
+  { label: 'Re-opening your site…', atMs: 0 },
+  { label: 'Re-sampling the colours…', atMs: 9000 },
+  { label: 'Re-reading the typography…', atMs: 18000 },
+  { label: 'Listening for the brand voice…', atMs: 27000 },
+  { label: 'Collecting photos from your site…', atMs: 36000 },
+  { label: 'Assembling a fresh draft…', atMs: 45000 },
+];
+
 export const RECIPE_STAGES: ProgressStage[] = [
   { label: 'Studying your brand…', atMs: 0 },
   { label: 'Rationing the palette…', atMs: 9000 },
