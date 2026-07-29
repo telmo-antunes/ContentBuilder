@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   FORMAT_LABELS,
@@ -15,13 +15,20 @@ import {
   type SlidePhoto,
 } from '@contentbuilder/shared';
 import {
+  cancelVideoExport,
+  generateProjectCaption,
+  getHealth,
   getProject,
   updateProject,
   getShareInfo,
   getSlideVariants,
+  listProjectVersions,
+  restoreProjectVersion,
+  saveProjectVersion,
   saveSlidePhotos,
   tweakSlide,
   type ProjectDetail,
+  type ProjectVersion,
 } from '../../../lib/api';
 import { api } from '../../../lib/config';
 import { SlideRenderer } from '../../../../lib/render/SlideRenderer';
@@ -29,13 +36,18 @@ import { ScaledSlide } from '../../../../lib/render/SlideFrame';
 import {
   toRenderKit,
   resolveSlideImage,
-  resolveImageLayout,
   resolveSlidePhotos,
 } from '../../../../lib/render/projectRender';
 import { parseAuthored, buildAuthored, type AuthoredEl } from '../../../../lib/authoredEdit';
 import { toast } from '../../../components/Toast';
+import { confirm } from '../../../components/ConfirmDialog';
+import { ErrorState } from '../../../components/ErrorState';
+import { Icon } from '../../../components/Icon';
+import { Skeleton } from '../../../components/Skeleton';
+import DeckScroller from '../../../components/DeckScroller';
 import SlidePhotoPanel from '../../../components/SlidePhotoPanel';
 import FreeImageOverlay from '../../../components/FreeImageOverlay';
+import CanvasCopyEditor from '../../../components/CanvasCopyEditor';
 
 
 /** Text elements where the brand's signature emphasis (accent phrase) applies. */
@@ -72,6 +84,8 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
   // kept in the recipe's own markup so nothing about the brand design degrades.
   const [editId, setEditId] = useState<string | null>(null);
   const [editEls, setEditEls] = useState<AuthoredEl[]>([]);
+  /** The element selected on EITHER edit surface — canvas or inspector list. */
+  const [canvasEl, setCanvasEl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   // Slides whose composition exceeds the canvas — surfaced so a broken export
   // can't ship silently (authored slides had no text-fit guard at all).
@@ -82,6 +96,24 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
   const [working, setWorking] = useState<string | null>(null);
   /** The floating image currently grabbable on the preview. */
   const [freeSel, setFreeSel] = useState<string | null>(null);
+  /** Whether the AI caption writer is configured (gates "Regenerate"). */
+  const [aiReady, setAiReady] = useState(false);
+  // The caption editor's working copy — kept apart from the project so typing
+  // doesn't thrash the whole tree, synced back whenever the server answers.
+  const [capText, setCapText] = useState('');
+  const [capTags, setCapTags] = useState('');
+  const [capDirty, setCapDirty] = useState(false);
+  const [capBusy, setCapBusy] = useState<'save' | 'regen' | null>(null);
+  // Version history drawer.
+  const [histOpen, setHistOpen] = useState(false);
+  const [histVersions, setHistVersions] = useState<ProjectVersion[] | null>(null);
+  const [histLabel, setHistLabel] = useState('');
+  const [histBusy, setHistBusy] = useState<string | null>(null);
+  /** The LAN /share link surfaced after a PNG export ("Send to phone"). */
+  const [phoneShare, setPhoneShare] = useState<string | null>(null);
+  /** The running video job, so the Cancel button can reach it. */
+  const [videoJob, setVideoJob] = useState<string | null>(null);
+  const videoCancelRef = useRef(false);
 
   /**
    * Persist a slide's photos. Applied to local state FIRST so the preview moves
@@ -115,24 +147,41 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
     [projectId],
   );
 
-  useEffect(() => {
-    let alive = true;
+  const load = useCallback(() => {
+    setError(null);
     getProject(projectId)
-      .then((p) => alive && setProject(p))
-      .catch((e) => alive && setError(e instanceof Error ? e.message : 'Failed to load project'));
-    return () => {
-      alive = false;
-    };
+      .then(setProject)
+      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load project'));
   }, [projectId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useEffect(() => {
+    getHealth()
+      .then((h) => setAiReady(Boolean(h.ai?.draft)))
+      .catch(() => setAiReady(false));
+  }, []);
+
+  // Mirror the saved caption into the editor whenever the server state changes,
+  // unless the user is mid-edit — their typing must never be clobbered.
+  useEffect(() => {
+    if (!project || capDirty) return;
+    setCapText(project.caption?.text ?? '');
+    setCapTags((project.caption?.hashtags ?? []).join(' '));
+  }, [project, capDirty]);
 
   // ── Authored-slide editing ────────────────────────────────────────────────
   const startEdit = useCallback((slide: Slide) => {
     setEditId(slide.id);
     setEditEls(parseAuthored(slide.authored?.html ?? ''));
+    setCanvasEl(null);
   }, []);
   const cancelEdit = useCallback(() => {
     setEditId(null);
     setEditEls([]);
+    setCanvasEl(null);
   }, []);
   const patchEl = useCallback((key: string, patch: Partial<AuthoredEl>) => {
     setEditEls((els) => els.map((e) => (e.key === key ? { ...e, ...patch } : e)));
@@ -166,6 +215,7 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
         toast('Slide updated', 'ok');
         setEditId(null);
         setEditEls([]);
+        setCanvasEl(null);
       } catch {
         toast('Could not save the slide', 'error');
       } finally {
@@ -174,6 +224,13 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
     },
     [editId, editEls, projectId],
   );
+
+  // Canvas → list sync: selecting an element on the slide brings its row in
+  // the inspector list into view (the highlight itself is a class, below).
+  useEffect(() => {
+    if (!canvasEl || !editId) return;
+    document.querySelector(`[data-aed-key="${canvasEl}"]`)?.scrollIntoView({ block: 'nearest' });
+  }, [canvasEl, editId]);
 
   /** Ask for alternative arrangements of the selected slide (copy untouched). */
   const askVariants = useCallback(
@@ -229,6 +286,137 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
     [projectId],
   );
 
+  /**
+   * Move a slide left/right in the deck. Optimistic — the deck reorders under
+   * the pointer — with a rollback to the previous order if the write fails.
+   */
+  const moveSlide = useCallback(
+    async (from: number, dir: -1 | 1) => {
+      if (!project) return;
+      const sorted = [...project.slides].sort((a, b) => a.order - b.order);
+      const to = from + dir;
+      if (to < 0 || to >= sorted.length) return;
+      const next = [...sorted];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved!);
+      const renumbered = next.map((s, i) => ({ ...s, order: i }));
+      const prevSlides = project.slides;
+      setProject((p) => (p ? { ...p, slides: renumbered } : p));
+      setSel(to); // selection follows the slide you moved
+      try {
+        const updated = await updateProject(projectId, { slides: renumbered as Slide[] });
+        setProject((p) => (p ? { ...p, slides: updated.slides } : p));
+      } catch {
+        setProject((p) => (p ? { ...p, slides: prevSlides } : p));
+        setSel(from);
+        toast('Could not reorder — the deck was put back', 'error');
+      }
+    },
+    [project, projectId],
+  );
+
+  // ── Caption ───────────────────────────────────────────────────────────────
+  /** "#one two,#three" → ['#one','#two','#three'] — loose in, tidy out. */
+  const parseTags = (raw: string) =>
+    raw
+      .split(/[\s,]+/)
+      .map((t) => t.trim())
+      .filter(Boolean)
+      .map((t) => (t.startsWith('#') ? t : `#${t}`))
+      .slice(0, 30);
+
+  const saveCaption = useCallback(async () => {
+    setCapBusy('save');
+    try {
+      const updated = await updateProject(projectId, {
+        caption: { text: capText, hashtags: parseTags(capTags) },
+      });
+      setProject((p) => (p ? { ...p, caption: updated.caption } : p));
+      setCapDirty(false);
+      toast('Caption saved', 'ok');
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not save the caption', 'error');
+    } finally {
+      setCapBusy(null);
+    }
+  }, [projectId, capText, capTags]);
+
+  const regenCaption = useCallback(async () => {
+    setCapBusy('regen');
+    try {
+      const updated = await generateProjectCaption(projectId);
+      setProject((p) => (p ? { ...p, caption: updated.caption } : p));
+      setCapText(updated.caption?.text ?? '');
+      setCapTags((updated.caption?.hashtags ?? []).join(' '));
+      setCapDirty(false);
+      toast('Caption rewritten in the brand voice', 'ok');
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not write a caption', 'error');
+    } finally {
+      setCapBusy(null);
+    }
+  }, [projectId]);
+
+  // ── Version history ───────────────────────────────────────────────────────
+  const refreshVersions = useCallback(async () => {
+    try {
+      const r = await listProjectVersions(projectId);
+      setHistVersions(r.versions);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not load the history', 'error');
+      setHistVersions([]);
+    }
+  }, [projectId]);
+
+  const openHistory = useCallback(() => {
+    setHistOpen(true);
+    setHistVersions(null);
+    void refreshVersions();
+  }, [refreshVersions]);
+
+  const saveSnapshot = useCallback(async () => {
+    setHistBusy('save');
+    try {
+      await saveProjectVersion(projectId, histLabel.trim() || undefined);
+      setHistLabel('');
+      toast('Snapshot saved', 'ok');
+      await refreshVersions();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not save a snapshot', 'error');
+    } finally {
+      setHistBusy(null);
+    }
+  }, [projectId, histLabel, refreshVersions]);
+
+  const restoreVersion = useCallback(
+    async (versionId: string) => {
+      const ok = await confirm({
+        title: 'Restore this version?',
+        message: 'Restore this version? Current state is snapshotted first, so you can always come back.',
+        confirmText: 'Restore',
+      });
+      if (!ok) return;
+      setHistBusy(versionId);
+      try {
+        await restoreProjectVersion(projectId, versionId);
+        const fresh = await getProject(projectId);
+        setProject(fresh);
+        setSel(0);
+        setEditId(null);
+        setEditEls([]);
+        setCanvasEl(null);
+        setVariants(null);
+        toast('Version restored', 'ok');
+        await refreshVersions();
+      } catch (e) {
+        toast(e instanceof Error ? e.message : 'Could not restore that version', 'error');
+      } finally {
+        setHistBusy(null);
+      }
+    },
+    [projectId, refreshVersions],
+  );
+
   /** Save a fetched blob response as a download. */
   const saveBlob = useCallback(async (res: Response, fallback: string) => {
     const blob = await res.blob();
@@ -258,6 +446,11 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
           if (!res.ok) throw new Error(`Export failed (HTTP ${res.status})`);
           await saveBlob(res, 'project.zip');
           toast('ZIP downloaded', 'ok');
+          // The export just created the renders /share needs — surface the
+          // phone hand-off link now that the page has something to show.
+          getShareInfo(projectId)
+            .then((info) => setPhoneShare(info.shareUrl || null))
+            .catch(() => {});
           return;
         }
 
@@ -268,13 +461,20 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
         }
         const { jobId } = (await start.json()) as { jobId: string };
         setVideoPct(0);
+        setVideoJob(jobId);
+        videoCancelRef.current = false;
         toast('Rendering one video per slide…');
 
         // Poll until the job produces the clips (or fails), tracking real progress.
         for (let i = 0; i < 220; i++) {
           await new Promise((r) => setTimeout(r, 1500));
+          // Cancelled from the button — it already told the server and toasted.
+          if (videoCancelRef.current) return;
           const poll = await fetch(api(`/projects/${projectId}/export-video/${jobId}`));
           if (!poll.ok) {
+            if (poll.status === 410) {
+              throw new Error('That export has expired on the server — start a new one.');
+            }
             const msg = await poll.json().catch(() => null);
             throw new Error(msg?.error ?? `Video export failed (HTTP ${poll.status})`);
           }
@@ -283,10 +483,17 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
           if (type.startsWith('video/') || type.includes('zip')) {
             setVideoPct(100);
             await saveBlob(poll, type.includes('zip') ? 'videos.zip' : 'project.mp4');
-            toast(slides.length > 1 ? `${slides.length} slide videos downloaded` : 'Video downloaded', 'ok');
+            toast(type.includes('zip') ? 'Slide videos downloaded' : 'Video downloaded', 'ok');
             return;
           }
-          const body = (await poll.json().catch(() => null)) as { percent?: number } | null;
+          const body = (await poll.json().catch(() => null)) as
+            | { state?: string; percent?: number }
+            | null;
+          if (body?.state === 'cancelled') {
+            // Cancelled from elsewhere (another tab) — stop cleanly.
+            if (!videoCancelRef.current) toast('Video export cancelled');
+            return;
+          }
           if (typeof body?.percent === 'number') setVideoPct(body.percent);
         }
         throw new Error('Video export timed out.');
@@ -294,32 +501,62 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
         toast(e instanceof Error ? e.message : 'Export failed', 'error');
       } finally {
         setExporting(null);
+        setVideoJob(null);
       }
     },
     [projectId, saveBlob],
   );
 
+  /** Stop the running video job: stop polling at once, then tell the server. */
+  const cancelVideo = useCallback(async () => {
+    if (!videoJob) return;
+    videoCancelRef.current = true;
+    toast('Video export cancelled');
+    try {
+      await cancelVideoExport(projectId, videoJob);
+    } catch {
+      // The poll loop has already stopped; a failed cancel just lets the
+      // server-side job run to completion unobserved.
+    }
+  }, [projectId, videoJob]);
+
   const share = useCallback(async () => {
     try {
       const info = await getShareInfo(projectId);
-      await navigator.clipboard.writeText(info.url);
-      toast('Interactive preview link copied', 'ok');
+      await navigator.clipboard.writeText(info.previewUrl || info.url);
+      toast('Interactive preview link copied — opens on any device on your Wi-Fi', 'ok');
     } catch {
       toast('Could not get a share link', 'error');
     }
   }, [projectId]);
 
+  // NOTE: the layout's <main class="container container-wide"> already provides
+  // the page frame — no nested .container (it doubled the padding).
   if (error) {
-    return (
-      <div className="container">
-        <div className="error-box">{error}</div>
-      </div>
-    );
+    return <ErrorState message={error} onRetry={load} />;
   }
   if (!project) {
+    // The Studio's shape while it loads: masthead, deck strip, inspector.
     return (
-      <div className="container">
-        <p className="muted">Loading…</p>
+      <div role="status" aria-label="Loading the studio">
+        <Skeleton shape="line" w={140} h={12} style={{ marginBottom: 18 }} />
+        <div className="studio">
+          <div className="studio-main">
+            <Skeleton shape="block" h={180} style={{ borderRadius: 20, marginBottom: 26 }} />
+            <Skeleton shape="line" w={180} h={16} style={{ margin: '30px 0 16px' }} />
+            <div className="row" style={{ gap: 16, flexWrap: 'nowrap', overflow: 'hidden' }}>
+              {[0, 1, 2].map((i) => (
+                <Skeleton key={i} shape="block" w={296} h={370} style={{ flex: '0 0 auto' }} />
+              ))}
+            </div>
+          </div>
+          <aside className="studio-inspector">
+            <Skeleton shape="line" w={100} h={10} />
+            <Skeleton shape="block" w={288} h={360} style={{ marginTop: 12 }} />
+            <Skeleton shape="line" w={180} h={12} style={{ marginTop: 16 }} />
+            <Skeleton shape="line" w={140} h={12} style={{ marginTop: 10 }} />
+          </aside>
+        </div>
       </div>
     );
   }
@@ -351,7 +588,7 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
       : null;
 
   return (
-    <div className="container">
+    <div>
       {/* top bar */}
       <div className="row" style={{ alignItems: 'center', marginBottom: 18 }}>
         <Link href={`/businesses/${project.businessId}`} style={{ fontSize: 13 }}>
@@ -361,10 +598,13 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
           {slides.length > 0 && (
             <>
               <a className="btn" href={`/preview/${projectId}`} target="_blank" rel="noopener noreferrer">
-                ▶ Preview
+                <Icon name="play" /> Preview
               </a>
               <button className="btn" onClick={share}>
                 Share
+              </button>
+              <button className="btn" onClick={openHistory} title="Snapshots of this project — save one or restore an earlier state">
+                <Icon name="history" /> History
               </button>
               {authored && (
                 <button
@@ -373,11 +613,23 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                   disabled={exporting !== null}
                   title={`Render each slide as its own animated MP4 (${slides.length} clip${slides.length === 1 ? '' : 's'})`}
                 >
-                  {exporting === 'video' ? `Rendering… ${videoPct}%` : '🎬 Video'}
+                  {exporting === 'video' ? (
+                    `Rendering… ${videoPct}%`
+                  ) : (
+                    <>
+                      <Icon name="video" /> Video
+                    </>
+                  )}
                 </button>
               )}
               <button className="btn primary" onClick={() => runExport('zip')} disabled={exporting !== null}>
-                {exporting === 'zip' ? 'Exporting…' : '⬇ Export'}
+                {exporting === 'zip' ? (
+                  'Exporting…'
+                ) : (
+                  <>
+                    <Icon name="download" /> Export
+                  </>
+                )}
               </button>
             </>
           )}
@@ -391,7 +643,14 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
             <span className="lbl">
               Rendering {slides.length} slide video{slides.length === 1 ? '' : 's'}
             </span>
-            <span className="pct">{videoPct}%</span>
+            <span className="row" style={{ gap: 12, alignItems: 'baseline' }}>
+              {videoJob && (
+                <button className="btn sm ghost" onClick={() => void cancelVideo()}>
+                  <Icon name="close" size={12} /> Cancel
+                </button>
+              )}
+              <span className="pct">{videoPct}%</span>
+            </span>
           </div>
           <div
             className="vid-prog-bar"
@@ -406,6 +665,35 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
             Each slide becomes its own MP4 — on Instagram the viewer decides when to advance, so the
             clips stay independent. Capturing the motion frame by frame; this takes a minute.
           </p>
+        </div>
+      )}
+
+      {/* Post-export hand-off: the /share page shows the PNGs this export just
+          made, with the native share sheet — open it on a phone to post. */}
+      {phoneShare && (
+        <div className="sendphone" role="status">
+          <Icon name="check" size={14} />
+          <span className="sendphone-msg">
+            Exported. To post from your phone, open{' '}
+            <a href={phoneShare} target="_blank" rel="noopener noreferrer">
+              {phoneShare.replace(/^https?:\/\//, '')}
+            </a>{' '}
+            on the same Wi-Fi.
+          </span>
+          <button
+            className="btn sm ghost"
+            onClick={() =>
+              void navigator.clipboard
+                .writeText(phoneShare)
+                .then(() => toast('Send-to-phone link copied', 'ok'))
+                .catch(() => toast('Could not copy the link', 'error'))
+            }
+          >
+            <Icon name="copy" size={13} /> Copy link
+          </button>
+          <button className="sendphone-x" aria-label="Dismiss" onClick={() => setPhoneShare(null)}>
+            <Icon name="close" size={12} />
+          </button>
         </div>
       )}
 
@@ -439,7 +727,15 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                   </div>
                   <div>
                     <div className="k">Status</div>
-                    <div className={`v${authored ? ' ok' : ''}`}>{authored ? 'On-brand ✓' : 'Draft'}</div>
+                    <div className={`v${authored ? ' ok' : ''}`}>
+                      {authored ? (
+                        <>
+                          On-brand <Icon name="check" size={12} />
+                        </>
+                      ) : (
+                        'Draft'
+                      )}
+                    </div>
                   </div>
                   <div>
                     <div className="k">Updated</div>
@@ -490,7 +786,7 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
               Click a slide to select it, then edit it on the right — copy, order, and the brand&apos;s accent, all kept in the recipe&apos;s own design.
             </p>
 
-            <div className="studio-deck">
+            <DeckScroller className="studio-deck">
               {workingSlides.map((slide, i) => (
                 <div
                   key={slide.id}
@@ -501,14 +797,40 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                   }}
                 >
                   <span className="num">{i + 1}</span>
+                  {workingSlides.length > 1 && (
+                    <span className="mv">
+                      <button
+                        title="Move this slide left"
+                        aria-label={`Move slide ${i + 1} left`}
+                        disabled={i === 0 || saving}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void moveSlide(i, -1);
+                        }}
+                      >
+                        <Icon name="chevron-left" size={13} />
+                      </button>
+                      <button
+                        title="Move this slide right"
+                        aria-label={`Move slide ${i + 1} right`}
+                        disabled={i === workingSlides.length - 1 || saving}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void moveSlide(i, 1);
+                        }}
+                      >
+                        <Icon name="chevron-right" size={13} />
+                      </button>
+                    </span>
+                  )}
                   {unfilledSlots(slide) > 0 && (
                     <span className="needsphoto" title="This slide has an image slot you haven't filled — it exports as a blank panel.">
-                      ⬚ Needs photo
+                      <Icon name="image" size={11} /> Needs photo
                     </span>
                   )}
                   {overflow[slide.id] && (
                     <span className="ovf" title="This slide's content is taller than the canvas — shorten the copy.">
-                      ⚠ Overflows
+                      <Icon name="warning" size={11} /> Overflows
                     </span>
                   )}
                   <ScaledSlide format={project.format} displayWidth={cardW}>
@@ -520,7 +842,6 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                       brandKit={kit}
                       format={project.format}
                       image={resolveSlideImage(slide, project.media)}
-                      imageLayout={resolveImageLayout(slide, project.media)}
                       photos={resolveSlidePhotos(slide, project.media)}
                       editing
                       theme={slide.overrides?.theme ?? project.settings?.theme ?? 'editorial'}
@@ -529,7 +850,67 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                   </ScaledSlide>
                 </div>
               ))}
-            </div>
+            </DeckScroller>
+
+            {/* The caption that ships with the post — editable here, rendered on
+                the preview and copied to the clipboard on the phone hand-off. */}
+            <section className="capcard">
+              <div className="capcard-head">
+                <span className="lab">Caption</span>
+                {capDirty && <span className="capcard-unsaved">Unsaved changes</span>}
+                <div className="row" style={{ marginLeft: 'auto', gap: 8 }}>
+                  <button
+                    className="btn sm"
+                    disabled={capBusy !== null || !aiReady}
+                    title={
+                      aiReady
+                        ? 'Write a fresh caption from the slides, in the brand voice'
+                        : 'AI is not configured — set ANTHROPIC_API_KEY to enable this'
+                    }
+                    onClick={() => void regenCaption()}
+                  >
+                    {capBusy === 'regen' ? (
+                      'Writing…'
+                    ) : (
+                      <>
+                        <Icon name="sparkle" size={13} /> Regenerate
+                      </>
+                    )}
+                  </button>
+                  <button
+                    className="btn sm primary"
+                    disabled={capBusy !== null || !capDirty}
+                    onClick={() => void saveCaption()}
+                  >
+                    {capBusy === 'save' ? 'Saving…' : 'Save caption'}
+                  </button>
+                </div>
+              </div>
+              <textarea
+                className="capcard-text"
+                rows={Math.min(8, Math.max(3, Math.ceil((capText.length + 1) / 60)))}
+                maxLength={2400}
+                placeholder="Write the caption that goes with this post…"
+                value={capText}
+                onChange={(e) => {
+                  setCapText(e.target.value);
+                  setCapDirty(true);
+                }}
+              />
+              <input
+                className="capcard-tags"
+                placeholder="#hashtags separated by spaces or commas"
+                value={capTags}
+                onChange={(e) => {
+                  setCapTags(e.target.value);
+                  setCapDirty(true);
+                }}
+              />
+              <p className="capcard-hint">
+                Shown under the interactive preview, and copied to the clipboard with the images on
+                the phone hand-off page.
+              </p>
+            </section>
           </div>
 
           {/* ── inspector ── */}
@@ -537,25 +918,39 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
             <p className="studio-eyebrow">Slide {sel + 1} of {slides.length}</p>
             {selectedWorking && (
               <>
+                {/* In Edit mode the preview IS the editing surface: the copy on
+                    the slide is directly editable in place, so the photo drag
+                    overlay (which owns every pointer event) steps aside. */}
+                <CanvasCopyEditor
+                  enabled={editId === selectedWorking.id}
+                  els={editEls}
+                  html={editingHtml ?? ''}
+                  epoch={playing}
+                  active={canvasEl}
+                  onActivate={setCanvasEl}
+                  onCommit={(key, text) => patchEl(key, { text })}
+                >
                 <div style={{ marginTop: 12, borderRadius: 12, overflow: 'hidden', border: '1px solid var(--border)' }}>
                   <ScaledSlide
                     format={project.format}
                     displayWidth={inspectorW}
                     overlay={
-                      <FreeImageOverlay
-                        photos={(selectedWorking.photos ?? []).filter((p) => p.placement === 'free')}
-                        canvasW={dimensionsFor(project.format).width}
-                        canvasH={dimensionsFor(project.format).height}
-                        scale={inspectorScale}
-                        selectedId={freeSel}
-                        onSelect={setFreeSel}
-                        onCommit={(id, frame: BlockFrame) =>
-                          void savePhotos(
-                            selectedWorking.id,
-                            (selectedWorking.photos ?? []).map((p) => (p.id === id ? { ...p, frame } : p)),
-                          )
-                        }
-                      />
+                      editId === selectedWorking.id ? undefined : (
+                        <FreeImageOverlay
+                          photos={(selectedWorking.photos ?? []).filter((p) => p.placement === 'free')}
+                          canvasW={dimensionsFor(project.format).width}
+                          canvasH={dimensionsFor(project.format).height}
+                          scale={inspectorScale}
+                          selectedId={freeSel}
+                          onSelect={setFreeSel}
+                          onCommit={(id, frame: BlockFrame) =>
+                            void savePhotos(
+                              selectedWorking.id,
+                              (selectedWorking.photos ?? []).map((p) => (p.id === id ? { ...p, frame } : p)),
+                            )
+                          }
+                        />
+                      )
                     }
                   >
                     <SlideRenderer
@@ -566,7 +961,6 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                       brandKit={kit}
                       format={project.format}
                       image={resolveSlideImage(selectedWorking, project.media)}
-                      imageLayout={resolveImageLayout(selectedWorking, project.media)}
                       photos={resolveSlidePhotos(selectedWorking, project.media)}
                       editing
                       theme={selectedWorking.overrides?.theme ?? project.settings?.theme ?? 'editorial'}
@@ -575,6 +969,7 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                     />
                   </ScaledSlide>
                 </div>
+                </CanvasCopyEditor>
                 {authored && (
                   <button
                     className="btn sm ghost"
@@ -582,7 +977,7 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                     onClick={() => setPlaying(Date.now())}
                     title="Play the motion this slide will have in a video export"
                   >
-                    ▶ Play motion
+                    <Icon name="play" /> Play motion
                   </button>
                 )}
               </>
@@ -595,17 +990,29 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                   <span className="muted" style={{ fontSize: 11 }}>copy · order · accent</span>
                 </div>
                 <p className="muted" style={{ fontSize: 11.5, marginTop: 2 }}>
-                  Edits stay in the brand&apos;s design — the styling never changes.
+                  Click any text on the slide above to edit it in place — Enter commits, Escape
+                  reverts. Edits stay in the brand&apos;s design; the styling never changes.
                 </p>
                 <div className="aed-list">
                   {editEls.map((el, i) => (
-                    <div className="aed-row" key={el.key}>
+                    <div
+                      className={`aed-row${el.key === canvasEl ? ' sync' : ''}`}
+                      key={el.key}
+                      data-aed-key={el.key}
+                      onClick={(e) => {
+                        // Row → canvas sync: clicking the row (not its form
+                        // fields or buttons) focuses the element on the slide.
+                        const t = e.target as HTMLElement;
+                        if (/^(TEXTAREA|INPUT|BUTTON|SELECT)$/.test(t.tagName) || t.closest('button')) return;
+                        if (el.kind === 'text') setCanvasEl(el.key);
+                      }}
+                    >
                       <div className="aed-rowtop">
                         <span className="aed-tag">{el.label}</span>
                         <div className="aed-ctl">
-                          <button title="Move up" disabled={i === 0} onClick={() => moveEl(el.key, -1)}>↑</button>
-                          <button title="Move down" disabled={i === editEls.length - 1} onClick={() => moveEl(el.key, 1)}>↓</button>
-                          <button title="Remove" className="del" onClick={() => removeEl(el.key)}>✕</button>
+                          <button title="Move up" aria-label="Move up" disabled={i === 0} onClick={() => moveEl(el.key, -1)}><Icon name="arrow-up" size={12} /></button>
+                          <button title="Move down" aria-label="Move down" disabled={i === editEls.length - 1} onClick={() => moveEl(el.key, 1)}><Icon name="arrow-down" size={12} /></button>
+                          <button title="Remove" aria-label="Remove" className="del" onClick={() => removeEl(el.key)}><Icon name="close" size={12} /></button>
                         </div>
                       </div>
                       {el.kind === 'text' ? (
@@ -665,7 +1072,7 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                       <div className="studio-tok">
                         <span className="lab">Contrast</span>
                         <span className="val" style={{ color: contrast >= 4.5 ? 'var(--accent)' : 'var(--warn)' }}>
-                          {contrast.toFixed(1)} : 1 {contrast >= 4.5 ? '✓' : '⚠'}
+                          {contrast.toFixed(1)} : 1 <Icon name={contrast >= 4.5 ? 'check' : 'warning'} size={12} />
                         </span>
                       </div>
                     )}
@@ -768,7 +1175,7 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                     disabled={!selected?.authored?.html}
                     onClick={() => selected && startEdit(selected)}
                   >
-                    ✎ Edit
+                    <Icon name="edit" /> Edit
                   </button>
                   <button
                     className="btn"
@@ -777,11 +1184,90 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                     title="Re-arrange this slide only — the copy is kept"
                     onClick={() => selected && askVariants(selected.id)}
                   >
-                    {working === 'variants' ? 'Thinking…' : '✦ Alternatives'}
+                    {working === 'variants' ? (
+                      'Thinking…'
+                    ) : (
+                      <>
+                        <Icon name="sparkle" /> Alternatives
+                      </>
+                    )}
                   </button>
                 </div>
               </>
             )}
+          </aside>
+        </div>
+      )}
+
+      {/* Version history — snapshots of the deck, restorable at any time. */}
+      {histOpen && (
+        <div className="vh-scrim" role="presentation" onClick={() => setHistOpen(false)}>
+          <aside
+            className="vh"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Version history"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <header className="vh-head">
+              <Icon name="history" size={15} />
+              <h3>History</h3>
+              <button className="vh-x" aria-label="Close history" onClick={() => setHistOpen(false)}>
+                <Icon name="close" size={14} />
+              </button>
+            </header>
+            <p className="vh-sub">
+              Snapshots of the whole deck. Exports save one automatically; restoring snapshots the
+              current state first, so nothing is ever lost.
+            </p>
+            <div className="vh-save">
+              <input
+                placeholder="Label this snapshot (optional)"
+                maxLength={80}
+                value={histLabel}
+                onChange={(e) => setHistLabel(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && histBusy === null) void saveSnapshot();
+                }}
+              />
+              <button
+                className="btn sm primary"
+                disabled={histBusy !== null}
+                onClick={() => void saveSnapshot()}
+              >
+                {histBusy === 'save' ? 'Saving…' : 'Save snapshot'}
+              </button>
+            </div>
+            <div className="vh-list">
+              {histVersions === null ? (
+                <>
+                  <Skeleton shape="block" h={52} style={{ borderRadius: 10 }} />
+                  <Skeleton shape="block" h={52} style={{ borderRadius: 10 }} />
+                </>
+              ) : histVersions.length === 0 ? (
+                <p className="vh-empty">
+                  No snapshots yet. Save one above, or export — exports snapshot automatically.
+                </p>
+              ) : (
+                histVersions.map((v) => (
+                  <div className="vh-row" key={v._id}>
+                    <div className="vh-meta">
+                      <span className="vh-lab">{v.label}</span>
+                      <span className="vh-when">
+                        {timeAgo(v.createdAt)} · {v.slideCount} slide{v.slideCount === 1 ? '' : 's'}
+                      </span>
+                    </div>
+                    <button
+                      className="btn sm"
+                      disabled={histBusy !== null}
+                      onClick={() => void restoreVersion(v._id)}
+                    >
+                      {histBusy === v._id ? 'Restoring…' : 'Restore'}
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
           </aside>
         </div>
       )}

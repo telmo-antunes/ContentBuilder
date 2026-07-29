@@ -3,5 +3,5 @@ export { BrandKitModel } from './BrandKit';
 export { MediaAssetModel } from './MediaAsset';
 export { ProjectModel } from './Project';
 export { ProjectVersionModel } from './ProjectVersion';
-export { CampaignModel } from './Campaign';
+export { VideoJobModel, VIDEO_JOB_ACTIVE_STATES } from './VideoJob';
 export { SettingModel } from './Setting';

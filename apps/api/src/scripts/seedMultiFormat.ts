@@ -56,8 +56,6 @@ async function attach(
     slides: frags.map((f, i) => ({
       id: randomUUID(),
       order: i + 1,
-      layoutType: 'TextOnly',
-      blocks: [],
       imageNeed: 'none',
       authored: { html: f.html, ...(f.bg ? { bg: f.bg } : {}), ...(f.role ? { role: f.role } : {}) },
     })),

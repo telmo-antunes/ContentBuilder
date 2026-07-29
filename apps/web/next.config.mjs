@@ -20,6 +20,10 @@ const nextConfig = {
     const apiUrl = (process.env.API_URL || 'http://localhost:4000').replace(/\/+$/, '');
     return [{ source: '/api/:path*', destination: `${apiUrl}/:path*` }];
   },
+  // The brand directory merged into the home Desk — keep old /brands links alive.
+  async redirects() {
+    return [{ source: '/brands', destination: '/', permanent: false }];
+  },
 };
 
 export default nextConfig;

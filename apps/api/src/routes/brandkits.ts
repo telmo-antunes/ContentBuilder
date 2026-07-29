@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import { z } from 'zod';
 import {
@@ -7,6 +8,7 @@ import {
   applyKitToRecipe,
   applyRecipeKnobs,
   migrateRecipe,
+  type RecipeCandidate,
 } from '@contentbuilder/shared';
 import { BusinessModel, BrandKitModel } from '../models';
 import { ApiError, asyncHandler, parseBody, publicErrMessage, requireObjectId } from '../lib/http';
@@ -208,17 +210,19 @@ businessBrandKitRouter.get(
  * the design system every AI-composed slide is built against. This is the heart
  * of onboarding: a kit without a recipe can't compose anything on-brand.
  */
-async function authorRecipeForKit(
-  kit: {
-    get(key: string): any;
-    set(key: string, value: unknown): void;
-    save(): Promise<unknown>;
-  },
-  opts?: { verify?: boolean },
-): Promise<void> {
+/** A loaded kit document, as far as the recipe flows need it. */
+interface KitDoc {
+  get(key: string): any;
+  set(key: string, value: unknown): void;
+  save(): Promise<unknown>;
+  toJSON(): Record<string, unknown>;
+}
+
+/** Assemble the author's evidence from the kit + its business profile. */
+async function kitEvidence(kit: KitDoc): Promise<RecipeEvidence> {
   const biz = await BusinessModel.findById(kit.get('businessId')).lean<Record<string, any> | null>();
   const profile = biz?.profile ?? {};
-  const evidence: RecipeEvidence = {
+  return {
     name: biz?.name ?? 'Brand',
     category: profile.category,
     colors: kit.get('colors'),
@@ -227,10 +231,41 @@ async function authorRecipeForKit(
     styleDescriptor: kit.get('styleDescriptor'),
     voice: kit.get('voice') || (Array.isArray(profile.tone) ? profile.tone.join(', ') : undefined),
   };
+}
+
+async function authorRecipeForKit(kit: KitDoc, opts?: { verify?: boolean }): Promise<void> {
+  const evidence = await kitEvidence(kit);
   const recipe = await authorRecipe(evidence, { verify: opts?.verify });
   kit.set('recipe', recipe);
   await kit.save();
 }
+
+/**
+ * The creative directions that make candidates meaningfully DIFFERENT design
+ * systems rather than the same one re-rolled. Order matters: a 2-candidate run
+ * gets faithful + bolder; a 3-candidate run adds the quiet editorial take.
+ * `note` is the one-line label stored with (and shown against) each candidate.
+ */
+const CANDIDATE_DIRECTIONS: ReadonlyArray<{ note: string; nudge: string }> = [
+  {
+    note: 'Faithful — the straightforward expression of the brand',
+    nudge:
+      'The straightforward, faithful expression of this brand — the design system its own senior designer would reach for first. No stunts: the evidence, executed at reference grade.',
+  },
+  {
+    note: 'Bolder — the signature move pushed louder and more graphic',
+    nudge:
+      'Push the signature move BOLDER and more graphic: display type at the top of the scale, a more dramatic layered background, the accent spent with more conviction. Confident and head-turning, still disciplined.',
+  },
+  {
+    note: 'Quieter — editorial restraint, space and type do the work',
+    nudge:
+      'A quieter, more editorial take: generous negative space, restrained ornament, a calmer background, typography carrying the identity. Refined and understated rather than loud.',
+  },
+];
+
+/** Sensible cap: each candidate is a full (draft + critique) author run. */
+const MAX_CANDIDATES = CANDIDATE_DIRECTIONS.length;
 
 export const brandKitRouter = Router();
 
@@ -260,6 +295,105 @@ brandKitRouter.post(
     } catch (err) {
       throw new ApiError(502, `Recipe author failed: ${publicErrMessage(err, 'AI error')}.`);
     }
+    res.json(kit.toJSON());
+  }),
+);
+
+const candidatesSchema = z.object({
+  count: z.coerce.number().int().min(2).max(MAX_CANDIDATES).default(2),
+});
+
+/**
+ * One candidates run per kit at a time. Authoring 2–3 recipes concurrently is
+ * the most expensive request in the app, and a double-click (or an impatient
+ * re-fire) would silently double the AI spend. A module-level Set is enough for
+ * this single-process API; entries are always released in `finally`.
+ */
+const candidatesInFlight = new Set<string>();
+
+// Author 2–3 CANDIDATE design systems concurrently — each with its own creative
+// direction — so the user picks a recipe visually instead of taking one blind.
+// Candidates skip the render-verify pass (too slow to run 2–3×); the critique
+// pass runs per candidate as in the normal pipeline. Partial success is fine:
+// whatever authored cleanly is stored and returned; only a total wipe-out errors.
+brandKitRouter.post(
+  '/:kitId/recipe/candidates',
+  asyncHandler(async (req, res) => {
+    const kitId = requireObjectId(req.params.kitId, 'Brand kit');
+    const { count } = parseBody(candidatesSchema, {
+      count: (req.body as Record<string, unknown> | undefined)?.count ?? req.query.count ?? undefined,
+    });
+    const kit = await BrandKitModel.findById(kitId);
+    if (!kit) throw new ApiError(404, 'Brand kit not found');
+    if (candidatesInFlight.has(kitId)) {
+      throw new ApiError(409, 'A candidates run is already in progress for this kit — wait for it to finish.');
+    }
+    candidatesInFlight.add(kitId);
+    try {
+      const evidence = await kitEvidence(kit);
+      const directions = CANDIDATE_DIRECTIONS.slice(0, count);
+      const settled = await Promise.allSettled(
+        directions.map((d) => authorRecipe(evidence, { direction: d.nudge })),
+      );
+      const candidates: RecipeCandidate[] = [];
+      const failures: unknown[] = [];
+      settled.forEach((result, i) => {
+        const direction = directions[i]!;
+        if (result.status === 'fulfilled') {
+          candidates.push({
+            id: randomUUID(),
+            recipe: result.value,
+            note: direction.note,
+            createdAt: new Date().toISOString(),
+          });
+        } else {
+          console.warn(
+            `[recipe] candidate "${direction.note}" failed:`,
+            result.reason instanceof Error ? result.reason.message : result.reason,
+          );
+          failures.push(result.reason);
+        }
+      });
+      if (!candidates.length) {
+        throw new ApiError(502, `Recipe candidates failed: ${publicErrMessage(failures[0], 'AI error')}.`);
+      }
+      kit.set('recipeCandidates', candidates);
+      await kit.save();
+      res.json({ candidates });
+    } finally {
+      candidatesInFlight.delete(kitId);
+    }
+  }),
+);
+
+const selectCandidateSchema = z.object({ candidateId: z.string().min(1) });
+
+// Promote ONE candidate to the kit's live recipe. Mirrors the PATCH path: the
+// kit's colours/fonts stay the single truth, so the promoted recipe is
+// re-pointed at them (applyKitToRecipe) before it goes live. Clears the
+// candidate list — the choice is made.
+brandKitRouter.post(
+  '/:kitId/recipe/select',
+  asyncHandler(async (req, res) => {
+    const kitId = requireObjectId(req.params.kitId, 'Brand kit');
+    const { candidateId } = parseBody(selectCandidateSchema, req.body);
+    const kit = await BrandKitModel.findById(kitId);
+    if (!kit) throw new ApiError(404, 'Brand kit not found');
+    const candidates = (kit.get('recipeCandidates') ?? []) as RecipeCandidate[];
+    const chosen = candidates.find((c) => c.id === candidateId);
+    if (!chosen) {
+      throw new ApiError(404, 'Recipe candidate not found — it may have been replaced by a newer run.');
+    }
+    const synced = applyKitToRecipe(migrateRecipe(chosen.recipe), {
+      colors: kit.get('colors'),
+      fonts: kit.get('fonts'),
+    });
+    if (synced.changed.length) {
+      console.warn(`[recipe] candidate re-pointed at kit on select: ${synced.changed.join(', ')}`);
+    }
+    kit.set('recipe', synced.recipe);
+    kit.set('recipeCandidates', undefined);
+    await kit.save();
     res.json(kit.toJSON());
   }),
 );

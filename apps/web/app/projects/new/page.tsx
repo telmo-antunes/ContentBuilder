@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import type { AssetType, Format } from '@contentbuilder/shared';
@@ -20,6 +20,25 @@ import {
   getHealth,
   type BusinessSummary,
 } from '../../lib/api';
+import { ErrorState } from '../../components/ErrorState';
+import { Icon } from '../../components/Icon';
+import { Skeleton } from '../../components/Skeleton';
+import { toast } from '../../components/Toast';
+
+/** The composer's shape while it loads: centered hero, two form cards. */
+function ComposerSkeleton() {
+  return (
+    <div className="create-wrap" role="status" aria-label="Loading">
+      <div className="create-hero" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
+        <Skeleton shape="line" w={90} h={10} />
+        <Skeleton shape="block" w={340} h={44} />
+        <Skeleton shape="line" w={280} h={12} />
+      </div>
+      <Skeleton shape="block" h={150} style={{ marginBottom: 14 }} />
+      <Skeleton shape="block" h={240} />
+    </div>
+  );
+}
 
 function NewProjectForm() {
   const router = useRouter();
@@ -41,7 +60,8 @@ function NewProjectForm() {
   const [slideCount, setSlideCount] = useState(5);
   const [aiReady, setAiReady] = useState(false);
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setError(null);
     listBusinesses()
       .then((all) => {
         const approved = all.filter((b) => b.hasApprovedKit);
@@ -52,21 +72,24 @@ function NewProjectForm() {
     getHealth()
       .then((h) => setAiReady(Boolean(h.ai?.draft)))
       .catch(() => setAiReady(false));
-  }, []);
+    if (ideaFrom) {
+      setLoadingIdea(true);
+      getProject(ideaFrom)
+        .then((p) => {
+          setBusinessId(String(p.businessId));
+          setTitle(p.title);
+          setType(p.type);
+          setFormat(p.format);
+          setIdea(p.idea ?? '');
+        })
+        .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+        .finally(() => setLoadingIdea(false));
+    }
+  }, [ideaFrom]);
 
   useEffect(() => {
-    if (!ideaFrom) return;
-    getProject(ideaFrom)
-      .then((p) => {
-        setBusinessId(String(p.businessId));
-        setTitle(p.title);
-        setType(p.type);
-        setFormat(p.format);
-        setIdea(p.idea ?? '');
-      })
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
-      .finally(() => setLoadingIdea(false));
-  }, [ideaFrom]);
+    load();
+  }, [load]);
 
   const formats = ALLOWED_FORMATS[type];
   useEffect(() => {
@@ -89,7 +112,6 @@ function NewProjectForm() {
     e.preventDefault();
     if (!canSubmit) return;
     setBusy(true);
-    setError(null);
     try {
       // Resuming a parked idea composes THAT card in place, rather than
       // leaving a duplicate behind in the Ideas column.
@@ -104,20 +126,20 @@ function NewProjectForm() {
       try {
         await composeProjectAI(projectId, idea.trim(), slideCount);
       } catch (err) {
-        // Compose failed after the project was created — surface it inline; the
-        // empty editor route no longer exists, so there's nowhere else to send them.
-        setError(err instanceof Error ? err.message : 'Compose failed. Please try again.');
+        // Compose failed after the project was created — the card is parked in
+        // Ideas, so the toast plus the untouched form is a safe place to retry.
+        toast(err instanceof Error ? err.message : 'Compose failed. Please try again.', 'error');
         setBusy(false);
         return;
       }
       router.push(`/projects/${projectId}/review`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      toast(err instanceof Error ? err.message : String(err), 'error');
       setBusy(false);
     }
   };
 
-  if (loadingIdea) return <p className="muted">Opening your idea…</p>;
+  if (loadingIdea) return <ComposerSkeleton />;
 
   if (businesses && businesses.length === 0) {
     return (
@@ -166,7 +188,7 @@ function NewProjectForm() {
         </p>
       </header>
 
-      {error && <div className="error-box">{error}</div>}
+      {error && <ErrorState message={error} onRetry={load} />}
 
       <form onSubmit={submit}>
         <div className="card" style={{ marginBottom: 14 }}>
@@ -232,7 +254,7 @@ function NewProjectForm() {
         <div className="card" style={{ marginBottom: 14 }}>
           {aiReady && selectedBiz && !profileReady && (
             <p className="muted" style={{ fontSize: 12, marginTop: 0, marginBottom: 10 }}>
-              ✦ AI compose unlocks once you{' '}
+              <Icon name="sparkle" size={12} /> AI compose unlocks once you{' '}
               <Link href={`/businesses/${selectedBiz._id}`}>complete {selectedBiz.name}&apos;s profile</Link>.
             </p>
           )}
@@ -249,7 +271,7 @@ function NewProjectForm() {
                 disabled={slideCount <= 2}
                 onClick={() => setSlideCount((n) => Math.max(2, n - 1))}
               >
-                −
+                <Icon name="minus" size={14} />
               </button>
               <span className="slide-step-val">
                 {slideCount} <span className="u">slide{slideCount === 1 ? '' : 's'}</span>
@@ -261,7 +283,7 @@ function NewProjectForm() {
                 disabled={slideCount >= 12}
                 onClick={() => setSlideCount((n) => Math.min(12, n + 1))}
               >
-                +
+                <Icon name="plus" size={14} />
               </button>
             </div>
           </div>
@@ -294,7 +316,6 @@ function NewProjectForm() {
             title="Save the prompt and compose it later from the desk"
             onClick={async () => {
               setBusy(true);
-              setError(null);
               try {
                 if (ideaFrom) {
                   await updateProject(ideaFrom, { title: title.trim(), idea: idea.trim(), type, format });
@@ -310,7 +331,7 @@ function NewProjectForm() {
                 }
                 router.push('/');
               } catch (err) {
-                setError(err instanceof Error ? err.message : String(err));
+                toast(err instanceof Error ? err.message : String(err), 'error');
                 setBusy(false);
               }
             }}
@@ -318,7 +339,13 @@ function NewProjectForm() {
             {ideaFrom ? 'Keep as idea' : 'Save as idea'}
           </button>
           <button className="btn primary" type="submit" disabled={!canSubmit || busy}>
-            {busy ? 'Composing…' : 'Compose with AI ✦'}
+            {busy ? (
+              'Composing…'
+            ) : (
+              <>
+                <Icon name="sparkle" /> Compose with AI
+              </>
+            )}
           </button>
           {!aiReady && (
             <span className="muted" style={{ fontSize: 13 }}>
@@ -333,7 +360,7 @@ function NewProjectForm() {
 
 export default function NewProjectPage() {
   return (
-    <Suspense fallback={<p className="muted">Loading…</p>}>
+    <Suspense fallback={<ComposerSkeleton />}>
       <NewProjectForm />
     </Suspense>
   );

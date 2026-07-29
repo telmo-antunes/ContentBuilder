@@ -7,13 +7,8 @@ export interface GeneratedCaption {
   hashtags: string[];
 }
 
-interface CaptionBlock {
-  type: string;
-  text?: string;
-  items?: string[];
-}
 interface CaptionSlide {
-  blocks?: CaptionBlock[];
+  authored?: { html?: string };
 }
 interface CaptionContext {
   title?: string;
@@ -23,14 +18,26 @@ interface CaptionContext {
   profile?: { offer?: string; audience?: string; goal?: string; category?: string; tone?: string[] };
 }
 
+/** Collapse authored markup to its visible text. */
+function visibleText(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 /** Pull the on-slide copy (verbatim) so the caption is grounded in the actual post. */
 function slideCopy(slides: CaptionSlide[] = []): string {
   const lines: string[] = [];
   for (const s of slides) {
-    for (const b of s.blocks ?? []) {
-      if (b.text && b.text.trim()) lines.push(b.text.trim());
-      for (const it of b.items ?? []) if (it.trim()) lines.push(`• ${it.trim()}`);
-    }
+    const text = s.authored?.html ? visibleText(s.authored.html) : '';
+    if (text) lines.push(text);
   }
   return lines.join('\n').slice(0, 3000);
 }

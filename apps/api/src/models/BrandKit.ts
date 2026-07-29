@@ -49,30 +49,22 @@ const brandKitSchema = new Schema(
       logo: { type: String, default: 'dom' },
     },
     status: { type: String, enum: ['draft', 'approved'], default: 'draft', index: true },
-    /**
-     * AI-designed signature compositions for THIS brand (FreePosition skeletons:
-     * frames + decorations, no copy). Shape is validated by zod at generation
-     * time (templates.ts) — Mixed here so the composition vocabulary can evolve
-     * without a migration.
-     */
-    templatePack: { type: [Schema.Types.Mixed], default: undefined },
-    /**
-     * The written art-direction brief the director produced (brief, background
-     * concept, do/don't). Mixed — zod validates at generation time.
-     */
-    artDirection: { type: Schema.Types.Mixed, default: undefined },
-    /**
-     * The brand's OWN layout system (posts + stories, each with its matched
-     * background asset) — generated as ONE package on approval. Mixed for the
-     * same reason as templatePack: zod validates at generation time.
-     */
-    layoutLibrary: { type: Schema.Types.Mixed, default: undefined },
+    // Pre-recipe kits may still carry `templatePack`/`artDirection`/`layoutLibrary`
+    // in storage; those fields are retired — Mongoose strict mode ignores them on
+    // read, so old documents load cleanly without surfacing the legacy data.
     /**
      * The brand's design system (tokens + authored stylesheet + composition +
      * imagery + voice) for the HTML-authoring generation path. Mixed — zod
      * (brandRecipeSchema) validates at author time.
      */
     recipe: { type: Schema.Types.Mixed, default: undefined },
+    /**
+     * Pending recipe CANDIDATES from a multi-take author run — 2–3 alternative
+     * design systems ({ id, recipe, note, createdAt }) the user picks between.
+     * Selecting one promotes its recipe to `recipe` and clears this. Mixed for
+     * the same reason as `recipe`: zod validates the recipes at author time.
+     */
+    recipeCandidates: { type: [Schema.Types.Mixed], default: undefined },
     createdAt: { type: Date, default: () => new Date() },
   },
   baseSchemaOptions,

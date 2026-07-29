@@ -13,7 +13,6 @@ import { config } from '../config';
 const settingsSchema = z.object({
   visionModel: z.string().max(120).optional(),
   captionModel: z.string().max(120).optional(),
-  photoFitModel: z.string().max(120).optional(),
   recipeModel: z.string().max(120).optional(),
   composeModel: z.string().max(120).optional(),
 });
@@ -29,7 +28,6 @@ settingsRouter.get(
       settings: {
         visionModel: (doc?.visionModel as string) ?? '',
         captionModel: (doc?.captionModel as string) ?? '',
-        photoFitModel: (doc?.photoFitModel as string) ?? '',
         recipeModel: (doc?.recipeModel as string) ?? '',
         composeModel: (doc?.composeModel as string) ?? '',
       },

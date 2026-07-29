@@ -8,10 +8,13 @@
  * file-sharing isn't available.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import type { Project } from '@contentbuilder/shared';
 import { getProject, type ProjectDetail } from '../../lib/api';
+import { ErrorState } from '../../components/ErrorState';
+import { Icon } from '../../components/Icon';
+import { Skeleton } from '../../components/Skeleton';
 import { toRenderKit } from '../../../lib/render/projectRender';
 
 /** Route stored absolute media URLs through the same-origin /api proxy so they
@@ -33,11 +36,16 @@ export default function SharePage() {
   const [status, setStatus] = useState<string | null>(null);
   const [canShareFiles, setCanShareFiles] = useState(false);
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setError(null);
     getProject(id)
       .then((p) => setProject(p))
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
   }, [id]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   useEffect(() => {
     const n = navigator as Navigator & { canShare?: (d: { files?: File[] }) => boolean };
@@ -67,7 +75,7 @@ export default function SharePage() {
       if (captionText) await navigator.clipboard?.writeText(captionText).catch(() => {});
       setStatus(captionText ? 'Caption copied — pick Instagram in the share sheet' : null);
       await navigator.share({ files, title: project?.title ?? 'Post' });
-      setStatus('Shared ✓ — paste the caption in Instagram');
+      setStatus('Shared — paste the caption in Instagram');
     } catch (e) {
       if ((e as Error).name !== 'AbortError') {
         setStatus(null);
@@ -80,11 +88,35 @@ export default function SharePage() {
 
   const copyCaption = async () => {
     await navigator.clipboard?.writeText(captionText);
-    setStatus('Caption copied ✓');
+    setStatus('Caption copied');
   };
 
-  if (error && !project) return <div className="error-box" style={{ margin: 16 }}>{error}</div>;
-  if (!project) return <p className="muted" style={{ margin: 16 }}>Loading…</p>;
+  if (error && !project) {
+    return (
+      <div style={{ margin: 16 }}>
+        <ErrorState message={error} onRetry={load} />
+      </div>
+    );
+  }
+  if (!project) {
+    // The hand-off page's shape while it loads: title, image strip, big button.
+    return (
+      <div
+        role="status"
+        aria-label="Loading"
+        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: '48px 20px' }}
+      >
+        <Skeleton shape="line" w={90} h={10} />
+        <Skeleton shape="block" w={260} h={34} />
+        <div className="row" style={{ gap: 10, flexWrap: 'nowrap', overflow: 'hidden', marginTop: 12 }}>
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} shape="block" w={152} h={190} style={{ flex: '0 0 auto' }} />
+          ))}
+        </div>
+        <Skeleton shape="block" w={320} h={48} style={{ marginTop: 8 }} />
+      </div>
+    );
+  }
 
   // Brand-tint the ambient field from the kit's palette — same family as the
   // interactive preview, so both client-facing surfaces feel like one product.
@@ -115,7 +147,8 @@ export default function SharePage() {
 
         {renders.length === 0 ? (
           <div className="empty" style={{ maxWidth: 460 }}>
-            No export yet — export the project from the editor first, then reopen this page.
+            No exported images yet. Open this project in the Studio and press <strong>Export</strong>{' '}
+            — that renders the PNGs this page shares — then reload this page.
           </div>
         ) : (
           <>
@@ -133,13 +166,13 @@ export default function SharePage() {
               <div className="sh-fallback">
                 <p className="pv-sub" style={{ marginTop: 0 }}>
                   This browser can&rsquo;t share files directly — open this page on your <strong>phone</strong>{' '}
-                  (copy the link from the editor&rsquo;s &ldquo;Post from your phone&rdquo; dialog), or save the
+                  (the Studio shows a &ldquo;send to phone&rdquo; link right after an export), or save the
                   images below.
                 </p>
                 <div className="row" style={{ gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
                   {renders.map((url, i) => (
                     <a key={url} className="btn sm ghost" href={url} download={`${String(i + 1).padStart(2, '0')}.png`}>
-                      ↓ Slide {i + 1}
+                      <Icon name="download" size={13} /> Slide {i + 1}
                     </a>
                   ))}
                 </div>
@@ -150,7 +183,9 @@ export default function SharePage() {
               <div className="pv-caption">
                 <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
                   <span className="pv-caption-lab">Caption</span>
-                  <button className="btn sm ghost" onClick={() => void copyCaption()}>Copy</button>
+                  <button className="btn sm ghost" onClick={() => void copyCaption()}>
+                    <Icon name="copy" size={13} /> Copy
+                  </button>
                 </div>
                 <p>{captionText}</p>
               </div>

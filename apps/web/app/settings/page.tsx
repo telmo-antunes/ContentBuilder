@@ -3,6 +3,9 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { getSettings, updateSettings, getUsage, type AiSettings, type SettingsResponse, type UsageSummary } from '../lib/api';
+import { ErrorState } from '../components/ErrorState';
+import { Icon } from '../components/Icon';
+import { Skeleton } from '../components/Skeleton';
 import { toast } from '../components/Toast';
 
 const usd = (n: number) => `$${n.toFixed(n < 1 ? 4 : 2)}`;
@@ -15,7 +18,8 @@ export default function SettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
 
-  useEffect(() => {
+  const load = () => {
+    setError(null);
     getSettings()
       .then((d) => {
         setData(d);
@@ -25,14 +29,15 @@ export default function SettingsPage() {
     getUsage()
       .then(setUsage)
       .catch(() => {});
-  }, []);
+  };
+
+  useEffect(load, []);
 
   const set = (patch: Partial<AiSettings>) => setForm((f) => (f ? { ...f, ...patch } : f));
 
   const onSave = async () => {
     if (!form) return;
     setSave('saving');
-    setError(null);
     try {
       await updateSettings(form);
       setSave('saved');
@@ -40,7 +45,7 @@ export default function SettingsPage() {
       setTimeout(() => setSave('idle'), 1500);
     } catch (e) {
       setSave('error');
-      setError(e instanceof Error ? e.message : String(e));
+      toast(e instanceof Error ? e.message : String(e), 'error');
     }
   };
 
@@ -48,11 +53,22 @@ export default function SettingsPage() {
     return (
       <div>
         <p className="muted"><Link href="/">← Studio</Link></p>
-        <div className="error-box">{error}</div>
+        <ErrorState message={error} onRetry={load} />
       </div>
     );
   }
-  if (!data || !form) return <p className="muted">Loading settings…</p>;
+  if (!data || !form) {
+    // The settings page's shape while it loads: heading, then the panels.
+    return (
+      <div style={{ maxWidth: 860 }} role="status" aria-label="Loading settings">
+        <Skeleton shape="line" w={70} h={12} style={{ marginBottom: 12 }} />
+        <Skeleton shape="block" w={220} h={34} style={{ marginBottom: 10 }} />
+        <Skeleton shape="line" w={420} h={12} style={{ marginBottom: 18 }} />
+        <Skeleton shape="block" h={280} style={{ marginBottom: 14 }} />
+        <Skeleton shape="block" h={90} />
+      </div>
+    );
+  }
 
   const labelStyle = { fontSize: 12, fontWeight: 600, marginBottom: 4, display: 'block' } as const;
 
@@ -64,8 +80,6 @@ export default function SettingsPage() {
         Every AI touchpoint's model is overridable here. Leave a field blank to use the environment
         default. Changes apply to the next generation.
       </p>
-
-      {error && <div className="error-box" style={{ fontSize: 13 }}>{error}</div>}
 
       <div className="panel" style={{ marginTop: 14 }}>
         <div className="section-label" style={{ marginTop: 0 }}>Models — every AI touchpoint</div>
@@ -91,7 +105,6 @@ export default function SettingsPage() {
               name: 'Analysis & imagery',
               fields: [
                 { key: 'visionModel', label: 'Brand analysis', hint: 'reads colors, type & voice from the site', ph: visionDefault },
-                { key: 'photoFitModel', label: 'Photo fit', hint: 'picks the stock photo that matches the copy', ph: visionDefault },
               ],
             },
             {
@@ -115,7 +128,7 @@ export default function SettingsPage() {
                         <label style={labelStyle}>
                           {f.label}
                           {(form[f.key] as string).trim() !== '' && (
-                            <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: 'var(--accent, #f5b657)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                            <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                               override active
                             </span>
                           )}
@@ -151,11 +164,11 @@ export default function SettingsPage() {
         <div className="section-label" style={{ marginTop: 0 }}>Stock photos (Pexels)</div>
         {data.stock?.configured ? (
           <p className="muted" style={{ fontSize: 13, margin: 0 }}>
-            ✓ Configured — AI drafts place fitting stock photos automatically on image slides.
+            <Icon name="check" size={13} /> Configured — the editor&apos;s stock picker searches Pexels for slide photos.
           </p>
         ) : (
           <p className="muted" style={{ fontSize: 13, margin: 0 }}>
-            Not configured — drafts leave image placeholders. Get a free key at{' '}
+            Not configured — the editor&apos;s stock picker is disabled. Get a free key at{' '}
             <a href="https://www.pexels.com/api/" target="_blank" rel="noreferrer">pexels.com/api</a>{' '}
             and add <code>PEXELS_API_KEY=…</code> to <code>.env</code> (restart the API).
           </p>

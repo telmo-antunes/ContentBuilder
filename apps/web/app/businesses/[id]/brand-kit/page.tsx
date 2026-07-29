@@ -1,10 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import type { BrandKit, BrandRecipe } from '@contentbuilder/shared';
-import { BUNDLED_FONT_FAMILIES, contrastRatio } from '@contentbuilder/shared';
+import { BUNDLED_FONT_FAMILIES, applyKitToRecipe, contrastRatio } from '@contentbuilder/shared';
 import {
   getBrandKit,
   getBusiness,
@@ -13,12 +13,19 @@ import {
   patchBrandKit,
   uploadMedia,
   authorBrandRecipe,
+  authorRecipeCandidates,
+  selectRecipeCandidate,
+  ApiClientError,
   type BusinessDetail,
+  type RecipeCandidate,
 } from '../../../lib/api';
 import { SlideRenderer } from '../../../../lib/render/SlideRenderer';
 import { ScaledSlide } from '../../../../lib/render/SlideFrame';
 import type { RenderBrandKit } from '../../../../lib/render/types';
 import { confirm } from '../../../components/ConfirmDialog';
+import { ErrorState } from '../../../components/ErrorState';
+import { Icon } from '../../../components/Icon';
+import { Skeleton } from '../../../components/Skeleton';
 import { toast } from '../../../components/Toast';
 import { ANALYZE_STAGES, RECIPE_STAGES } from '../../../components/useStagedProgress';
 import { WorkingPanel } from '../../../components/WorkingPanel';
@@ -72,12 +79,11 @@ export default function BrandKitPage() {
       return;
     }
     setBusy('analyze');
-    setError(null);
     try {
       const draft = await analyzeBusiness(id);
       setKit(draft);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      toast(e instanceof Error ? e.message : String(e), 'error');
     } finally {
       setBusy(null);
     }
@@ -95,12 +101,11 @@ export default function BrandKitPage() {
       return;
     }
     setBusy('manual');
-    setError(null);
     try {
       const draft = await createManualKit(id);
       setKit(draft);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      toast(e instanceof Error ? e.message : String(e), 'error');
     } finally {
       setBusy(null);
     }
@@ -113,8 +118,20 @@ export default function BrandKitPage() {
       </p>
       <h1>Brand kit{business ? ` — ${business.name}` : ''}</h1>
 
-      {error && <div className="error-box">{error}</div>}
-      {loading && <p className="muted">Loading…</p>}
+      {error && <ErrorState message={error} onRetry={() => void reload()} />}
+      {loading && (
+        // The atelier's shape while it loads: hero band, then the two columns.
+        <div role="status" aria-label="Loading the brand kit">
+          <Skeleton shape="block" h={240} style={{ borderRadius: 22, marginBottom: 30 }} />
+          <div className="bk-cols">
+            <div>
+              <Skeleton shape="block" h={220} style={{ marginBottom: 24 }} />
+              <Skeleton shape="block" h={160} />
+            </div>
+            <Skeleton shape="block" h={300} />
+          </div>
+        </div>
+      )}
 
       {!loading && !kit && busy === 'analyze' && (
         <div style={{ maxWidth: 640 }}>
@@ -178,7 +195,6 @@ export default function BrandKitPage() {
           onManual={startManual}
           busy={busy}
           setBusy={setBusy}
-          setError={setError}
           onApproved={() => router.push(`/businesses/${id}`)}
         />
       )}
@@ -274,7 +290,6 @@ function KitEditor({
   onManual,
   busy,
   setBusy,
-  setError,
   onApproved,
 }: {
   businessId: string;
@@ -285,7 +300,6 @@ function KitEditor({
   onManual: () => void;
   busy: string | null;
   setBusy: (s: string | null) => void;
-  setError: (s: string | null) => void;
   onApproved: () => void;
 }) {
   const [colors, setColors] = useState({ ...kit.colors });
@@ -298,6 +312,20 @@ function KitEditor({
   );
   const [logoTreatment, setLogoTreatment] = useState<'original' | 'mono'>(kit.logoTreatment ?? 'original');
   const [recipe, setRecipe] = useState<BrandRecipe | undefined>((kit as { recipe?: BrandRecipe }).recipe);
+  // Direction candidates — either just authored, or left on the kit by a
+  // previous run (the server keeps them until one is selected).
+  const [candidates, setCandidates] = useState<RecipeCandidate[] | null>(() => {
+    const list = kit.recipeCandidates;
+    return list && list.length ? list : null;
+  });
+  const [candCount, setCandCount] = useState<2 | 3>(2);
+  // What the server currently holds — the baseline unsaved edits are measured
+  // against for the "Now → After save" diff.
+  const [savedBase, setSavedBase] = useState(() => ({
+    colors: { ...kit.colors },
+    heading: kit.fonts.render.heading,
+    body: kit.fonts.render.body,
+  }));
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Reveal sections as they scroll into view (motion the eye follows down the page).
@@ -346,9 +374,8 @@ function KitEditor({
       return;
     }
     setBusy('save');
-    setError(null);
     try {
-      await patchBrandKit(kit._id, {
+      const updated = await patchBrandKit(kit._id, {
         colors,
         fonts: { render: { heading, body } },
         ...(logo ? { logo } : {}),
@@ -362,10 +389,15 @@ function KitEditor({
         onApproved();
       } else {
         toast('Brand kit saved');
+        // Re-baseline the diff and adopt the server's re-pointed recipe, so
+        // the "Now → After save" panel folds away once the save lands.
+        setSavedBase({ colors: { ...colors }, heading, body });
+        const rec = (updated as { recipe?: BrandRecipe }).recipe;
+        if (rec) setRecipe(rec);
         setBusy(null);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      toast(e instanceof Error ? e.message : String(e), 'error');
       setBusy(null);
     }
   };
@@ -377,7 +409,7 @@ function KitEditor({
       const asset = await uploadMedia(businessId, file);
       setLogo({ key: asset.key, url: asset.url });
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      toast(e instanceof Error ? e.message : String(e), 'error');
     } finally {
       setBusy(null);
     }
@@ -409,7 +441,6 @@ function KitEditor({
    */
   const saveRecipeKnobs = async (knobs: Record<string, string>) => {
     setBusy('knobs');
-    setError(null);
     try {
       const updated = (await patchBrandKit(kit._id, { recipe: knobs } as never)) as {
         recipe?: BrandRecipe;
@@ -417,7 +448,7 @@ function KitEditor({
       if (updated.recipe) setRecipe(updated.recipe);
       toast('Recipe updated — every post follows', 'ok');
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      toast(e instanceof Error ? e.message : String(e), 'error');
     } finally {
       setBusy(null);
     }
@@ -425,20 +456,61 @@ function KitEditor({
 
   const authorRec = async () => {
     setBusy('recipe');
-    setError(null);
     try {
       const res = await authorBrandRecipe(kit._id);
       setRecipe((res as { recipe?: BrandRecipe }).recipe);
       toast('Brand recipe designed — new posts compose against it');
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      toast(e instanceof Error ? e.message : String(e), 'error');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  /**
+   * Author 2–3 candidate design systems in parallel, each on its own creative
+   * direction, so the recipe is chosen visually instead of taken blind.
+   */
+  const authorCandidates = async () => {
+    setBusy('candidates');
+    try {
+      const res = await authorRecipeCandidates(kit._id, candCount);
+      setCandidates(res.candidates.length ? res.candidates : null);
+      if (res.candidates.length < candCount) {
+        toast(
+          `${res.candidates.length} of ${candCount} directions came back — the others failed. Pick from these, or run again.`,
+          'error',
+        );
+      } else {
+        toast(`${res.candidates.length} directions designed — pick the one that feels right`);
+      }
+    } catch (e) {
+      if (e instanceof ApiClientError && e.status === 409) {
+        toast('A directions run is already in progress for this kit — give it a minute.', 'error');
+      } else {
+        toast(e instanceof Error ? e.message : String(e), 'error');
+      }
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const chooseCandidate = async (candidateId: string) => {
+    setBusy(`select:${candidateId}`);
+    try {
+      const updated = await selectRecipeCandidate(kit._id, candidateId);
+      setRecipe(updated.recipe);
+      setCandidates(null);
+      toast('Direction chosen — every new post composes against it');
+    } catch (e) {
+      toast(e instanceof Error ? e.message : String(e), 'error');
     } finally {
       setBusy(null);
     }
   };
 
   // Recipe-authored sample: the same semantic markup a composed slide uses, so
-  // the preview renders through the real recipe (not a legacy block layout).
+  // the preview renders through the real recipe.
   const esc = (s: string) =>
     s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const previewSlide = {
@@ -451,6 +523,39 @@ function KitEditor({
   };
   const textOnBrand = readable(colors.background);
   const tint = (a: string) => (HEX.test(colors.text) ? colors.text + a : `rgba(20,18,14,${parseInt(a, 16) / 255})`);
+
+  // ── Kit-edit diff: what saving will do to every post, shown BEFORE saving ──
+  // applyKitToRecipe is the exact pure function the server runs on save, so the
+  // "After save" sample is a preview of the real consequence, not a guess.
+  const kitEditsDirty =
+    ROLES.some(([role]) => colors[role] !== savedBase.colors[role]) ||
+    heading !== savedBase.heading ||
+    body !== savedBase.body;
+  const kitDiff = useMemo(() => {
+    if (!recipe || !kitEditsDirty || !colorsValid) return null;
+    try {
+      const { recipe: after, changed } = applyKitToRecipe(recipe, {
+        colors: {
+          background: colors.background,
+          text: colors.text,
+          accent: colors.accent,
+          secondary: colors.secondary,
+        },
+        fonts: { render: { heading, body } },
+      });
+      return changed.length ? { after, changed } : null;
+    } catch {
+      return null; // an in-progress hex mid-edit should never crash the page
+    }
+  }, [recipe, kitEditsDirty, colorsValid, colors, heading, body]);
+  // "Now" renders the SAVED kit (not the live edits) against the live recipe.
+  const savedRenderKit: RenderBrandKit = {
+    colors: savedBase.colors,
+    fonts: { render: { heading: savedBase.heading, body: savedBase.body } },
+    logo: logo?.url ? { url: logo.url } : undefined,
+    logoTreatment,
+    recipe,
+  };
 
   return (
     <>
@@ -526,18 +631,121 @@ function KitEditor({
             ) : (
               <span className="badge">not designed yet</span>
             )}
-            <button className="btn sm primary" style={{ marginLeft: 'auto' }} onClick={authorRec} disabled={busy !== null}>
-              {busy === 'recipe' ? 'Designing…' : recipe ? 'Re-design ✦' : 'Design the recipe ✦'}
-            </button>
+            <div className="bk-recipe-cta">
+              <span className="bk-count" role="group" aria-label="How many directions to design">
+                {([2, 3] as const).map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    className={candCount === n ? 'on' : ''}
+                    aria-pressed={candCount === n}
+                    onClick={() => setCandCount(n)}
+                    disabled={busy !== null}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </span>
+              <button className="btn sm primary" onClick={authorCandidates} disabled={busy !== null}>
+                {busy === 'candidates' ? (
+                  'Designing…'
+                ) : (
+                  <>
+                    <Icon name="sparkle" size={13} /> Design {candCount} directions
+                  </>
+                )}
+              </button>
+              {recipe && (
+                <button
+                  className="btn ghost sm"
+                  onClick={authorRec}
+                  disabled={busy !== null}
+                  title="One straight re-author — no choice of directions"
+                >
+                  {busy === 'recipe' ? 'Redesigning…' : 'Redesign'}
+                </button>
+              )}
+            </div>
           </div>
-          {busy === 'recipe' ? (
+          {busy === 'recipe' || busy === 'candidates' ? (
             <WorkingPanel
               active
               bare
               stages={RECIPE_STAGES}
-              title="Designing the recipe"
-              sub="Authoring your brand's design system — palette rationing, a type system, a signature move, imagery and voice. This takes ~40–70s."
+              title={busy === 'candidates' ? `Designing ${candCount} directions` : 'Designing the recipe'}
+              sub={
+                busy === 'candidates'
+                  ? `Authoring ${candCount} complete design systems in parallel — one faithful, one bolder${candCount === 3 ? ', one quieter' : ''} — so you choose visually. This takes ~40–70s.`
+                  : "Authoring your brand's design system — palette rationing, a type system, a signature move, imagery and voice. This takes ~40–70s."
+              }
             />
+          ) : candidates ? (
+            <div className="bk-cands">
+              <p className="bk-cands-lead">
+                {candidates.length === 1
+                  ? 'One direction came back — a complete design system authored from this kit.'
+                  : `${candidates.length} directions, each a complete design system authored from this kit.`}{' '}
+                The samples below are live renders — pick the one that feels like the brand
+                {recipe ? ', or keep the current recipe' : ''}.
+              </p>
+              <div className="bk-cands-row">
+                {candidates.map((c) => {
+                  const [dirName, dirDetail] = c.note.split(/\s+—\s+/);
+                  const selecting = busy === `select:${c.id}`;
+                  return (
+                    <article key={c.id} className="bk-cand">
+                      <div className="bk-cand-slide">
+                        <ScaledSlide format="1080x1350" displayWidth={240}>
+                          <SlideRenderer
+                            slide={previewSlide}
+                            brandKit={{ ...renderKit, recipe: c.recipe }}
+                            format="1080x1350"
+                            forExport
+                          />
+                        </ScaledSlide>
+                      </div>
+                      <div className="bk-cand-note">
+                        <strong>{dirName || 'Direction'}</strong>
+                        {dirDetail && <span>{dirDetail}</span>}
+                      </div>
+                      <ul className="bk-cand-facts">
+                        <li>{c.recipe.signature.name}</li>
+                        <li>
+                          {c.recipe.tokens.displayFamily}
+                          {c.recipe.tokens.accentFamily ? ` · ${c.recipe.tokens.accentFamily}` : ''}
+                        </li>
+                        {c.recipe.motion?.style && (
+                          <li>
+                            {c.recipe.motion.style}
+                            {c.recipe.motion.pace ? ` · ${c.recipe.motion.pace}` : ''}
+                          </li>
+                        )}
+                      </ul>
+                      <button
+                        className="btn sm primary"
+                        onClick={() => void chooseCandidate(c.id)}
+                        disabled={busy !== null}
+                      >
+                        {selecting ? (
+                          'Applying…'
+                        ) : (
+                          <>
+                            <Icon name="check" size={13} /> Use this direction
+                          </>
+                        )}
+                      </button>
+                    </article>
+                  );
+                })}
+              </div>
+              {recipe && (
+                <div className="bk-cands-dismiss">
+                  <button className="btn ghost sm" onClick={() => setCandidates(null)} disabled={busy !== null}>
+                    Keep the current recipe
+                  </button>
+                </div>
+              )}
+            </div>
           ) : recipe ? (
             <>
               <p className="bk-recipe-quote">
@@ -812,6 +1020,41 @@ function KitEditor({
           </section>
         </div>
       </div>
+
+      {/* Unsaved edits × the recipe: the consequence of saving, shown first. */}
+      {kitDiff && (
+        <section className="bk-diff" aria-label="What saving will change">
+          <div className="bk-diff-copy">
+            <span className="bk-diff-lbl">Unsaved edits</span>
+            <p className="bk-diff-note">Saving updates every post to this.</p>
+            <p className="bk-diff-changed">
+              {kitDiff.changed.filter((c) => !c.startsWith('repaired ')).join(' · ') || 'recipe tokens'}
+            </p>
+          </div>
+          <div className="bk-diff-pair">
+            <figure>
+              <ScaledSlide format="1080x1350" displayWidth={150}>
+                <SlideRenderer slide={previewSlide} brandKit={savedRenderKit} format="1080x1350" forExport />
+              </ScaledSlide>
+              <figcaption>Now</figcaption>
+            </figure>
+            <span className="bk-diff-arrow" aria-hidden>
+              →
+            </span>
+            <figure>
+              <ScaledSlide format="1080x1350" displayWidth={150}>
+                <SlideRenderer
+                  slide={previewSlide}
+                  brandKit={{ ...renderKit, recipe: kitDiff.after }}
+                  format="1080x1350"
+                  forExport
+                />
+              </ScaledSlide>
+              <figcaption>After save</figcaption>
+            </figure>
+          </div>
+        </section>
+      )}
 
       {/* actions — sticky at the foot */}
       <div className="bk-actions">

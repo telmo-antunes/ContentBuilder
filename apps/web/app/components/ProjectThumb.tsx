@@ -3,7 +3,7 @@
 import type { MediaAsset, Project, ThemePreset } from '@contentbuilder/shared';
 import { SlideRenderer } from '../../lib/render/SlideRenderer';
 import { ScaledSlide } from '../../lib/render/SlideFrame';
-import { resolveSlideImage, resolveImageLayout } from '../../lib/render/projectRender';
+import { resolveSlideImage } from '../../lib/render/projectRender';
 import type { RenderBrandKit } from '../../lib/render/types';
 
 export type ProjectThumbData = Pick<Project, '_id' | 'title' | 'type' | 'format' | 'status' | 'slides'> & {
@@ -57,7 +57,6 @@ export function ProjectThumb({
           brandKit={kit}
           format={project.format}
           image={resolveSlideImage(first, media)}
-          imageLayout={resolveImageLayout(first, media)}
           theme={first.overrides?.theme ?? project.settings?.theme ?? 'editorial'}
           forExport
         />

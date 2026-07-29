@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Icon } from './Icon';
 
 /**
  * Tiny toast system, same imperative pattern as confirm(): call toast() from
@@ -40,7 +41,7 @@ export default function ToastHost() {
     <div className="toast-stack" role="status" aria-live="polite">
       {items.map((t) => (
         <div key={t.id} className={`toast ${t.kind}`}>
-          {t.kind === 'ok' ? '✓ ' : t.kind === 'error' ? '⚠ ' : ''}
+          {t.kind === 'ok' ? <Icon name="check" size={13} /> : t.kind === 'error' ? <Icon name="warning" size={13} /> : null}{' '}
           {t.message}
         </div>
       ))}

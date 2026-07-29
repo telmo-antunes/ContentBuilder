@@ -132,8 +132,6 @@ async function shootSamples(recipe: BrandRecipe, format: Format): Promise<Shot[]
     slides: slides.map((html, i) => ({
       id: randomUUID(),
       order: i,
-      layoutType: 'TextOnly',
-      blocks: [],
       imageNeed: 'none',
       authored: { html, role: i === 0 ? 'statement' : 'stat' },
     })),

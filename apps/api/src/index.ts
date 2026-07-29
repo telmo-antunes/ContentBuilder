@@ -2,10 +2,18 @@ import { config, logConfigStatus } from './config';
 import { connectDb, disconnectDb } from './db';
 import { createApp } from './app';
 import { closeBrowser } from './lib/browser';
+import { failInterruptedVideoJobs } from './lib/videoJobs';
 
 async function main() {
   logConfigStatus();
   await connectDb();
+
+  // A Puppeteer render can't survive a restart — fail mid-flight video jobs
+  // honestly (finished artifacts stay downloadable until the sweep).
+  const interrupted = await failInterruptedVideoJobs().catch(() => 0);
+  if (interrupted > 0) {
+    console.log(`[api] marked ${interrupted} interrupted video job(s) as failed`);
+  }
 
   const app = createApp();
   const server = app.listen(config.port, () => {

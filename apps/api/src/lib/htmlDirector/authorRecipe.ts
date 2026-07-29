@@ -151,7 +151,12 @@ function gate(recipe: BrandRecipe, label: string): BrandRecipe {
 }
 
 /** First draft: author a recipe from evidence, shown TWO diverse reference examples. */
-async function authorOnce(model: string, evidence: RecipeEvidence, reasoning?: boolean): Promise<BrandRecipe> {
+async function authorOnce(
+  model: string,
+  evidence: RecipeEvidence,
+  reasoning?: boolean,
+  direction?: string,
+): Promise<BrandRecipe> {
   const user = [
     `TWO WORKED EXAMPLES (different brands — match this JSON shape + quality bar; DO NOT copy their colours/fonts/voice/signature):`,
     `EXAMPLE A (dark, gold, condensed-caps coaching):`,
@@ -162,6 +167,11 @@ async function authorOnce(model: string, evidence: RecipeEvidence, reasoning?: b
     ``,
     `NOW AUTHOR THE RECIPE FOR THIS BRAND — output only the JSON object:`,
     evidenceBlock(evidence),
+    // A candidate run authors SEVERAL takes on the same evidence; the direction
+    // is what makes each take a different design, not the same one re-rolled.
+    ...(direction
+      ? [``, `DIRECTION FOR THIS TAKE (one of several candidate systems — commit to it): ${direction}`]
+      : []),
   ].join('\n');
   const params = { model, max_tokens: 7000, system: SYSTEM, messages: [{ role: 'user' as const, content: user }] };
   const resp = await aiMessageLarge(reasoning ? withOpusReasoning(params) : params);
@@ -174,9 +184,13 @@ async function critiqueAndRevise(
   evidence: RecipeEvidence,
   draft: BrandRecipe,
   reasoning?: boolean,
+  direction?: string,
 ): Promise<BrandRecipe> {
   const user = [
     `BRAND: ${evidence.name}${evidence.category ? ` (${evidence.category})` : ''}`,
+    // Without this the critique would sand a deliberately bold or quiet take
+    // back toward the middle — improve the craft, keep the direction.
+    ...(direction ? [`THIS TAKE'S INTENDED DIRECTION (preserve it while improving craft): ${direction}`] : []),
     `RECIPE TO REVIEW:`,
     JSON.stringify(draft),
     ``,
@@ -195,14 +209,29 @@ async function critiqueAndRevise(
  */
 export async function authorRecipe(
   evidence: RecipeEvidence,
-  opts?: { model?: string; reasoning?: boolean; critique?: boolean; verify?: boolean },
+  opts?: {
+    model?: string;
+    reasoning?: boolean;
+    critique?: boolean;
+    verify?: boolean;
+    /**
+     * A one-line creative direction appended to the prompt — used by the
+     * candidates flow to make several takes on the same evidence meaningfully
+     * DIFFERENT designs rather than temperature noise. Absent for the normal
+     * single-shot author.
+     */
+    direction?: string;
+  },
 ): Promise<BrandRecipe> {
   const model = opts?.model ?? (await modelFor('recipe'));
-  let recipe = gate(await authorOnce(model, evidence, opts?.reasoning), 'draft');
+  let recipe = gate(await authorOnce(model, evidence, opts?.reasoning, opts?.direction), 'draft');
 
   if (opts?.critique !== false) {
     try {
-      recipe = gate(await critiqueAndRevise(model, evidence, recipe, opts?.reasoning), 'revised');
+      recipe = gate(
+        await critiqueAndRevise(model, evidence, recipe, opts?.reasoning, opts?.direction),
+        'revised',
+      );
     } catch (err) {
       console.warn(
         '[recipe] critique pass failed — keeping the draft:',

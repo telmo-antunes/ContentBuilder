@@ -14,7 +14,11 @@ import {
 } from '../../lib/api';
 import ProfileCard from '../../components/ProfileCard';
 import { confirm } from '../../components/ConfirmDialog';
+import { ErrorState } from '../../components/ErrorState';
+import { Icon } from '../../components/Icon';
 import { OverflowMenu } from '../../components/OverflowMenu';
+import { Skeleton } from '../../components/Skeleton';
+import { toast } from '../../components/Toast';
 import { ProjectThumb, type ProjectThumbData } from '../../components/ProjectThumb';
 import { toRenderKit } from '../../../lib/render/projectRender';
 
@@ -70,7 +74,7 @@ export default function BusinessDetailPage() {
       await deleteProject(pid);
       reload();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      toast(e instanceof Error ? e.message : String(e), 'error');
     }
   };
 
@@ -85,7 +89,7 @@ export default function BusinessDetailPage() {
       });
       reload();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      toast(e instanceof Error ? e.message : String(e), 'error');
     }
   };
 
@@ -94,8 +98,25 @@ export default function BusinessDetailPage() {
       <p className="muted">
         <Link href="/">← Studio</Link>
       </p>
-      {error && <div className="error-box">{error}</div>}
-      {!biz && !error && <p className="muted">Loading…</p>}
+      {error && <ErrorState message={error} onRetry={() => void reload()} />}
+      {!biz && !error && (
+        // The brand room's shape while it loads: name, status row, profile
+        // card, then the project grid.
+        <div role="status" aria-label="Loading the brand">
+          <Skeleton shape="block" w={280} h={34} style={{ margin: '4px 0 14px' }} />
+          <div className="row" style={{ marginBottom: 16 }}>
+            <Skeleton shape="block" w={150} h={26} style={{ borderRadius: 'var(--radius-pill)' }} />
+            <Skeleton shape="line" w={180} h={12} />
+          </div>
+          <Skeleton shape="block" h={140} style={{ marginBottom: 20 }} />
+          <Skeleton shape="line" w={120} h={16} style={{ marginBottom: 14 }} />
+          <div className="project-grid">
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} shape="block" h={300} />
+            ))}
+          </div>
+        </div>
+      )}
 
       {biz && (
         <>
@@ -133,7 +154,7 @@ export default function BusinessDetailPage() {
                     aria-hidden="true"
                     style={{ color: biz.hasProfile ? 'var(--ok)' : 'var(--muted)' }}
                   >
-                    {biz.hasProfile ? '✓' : '○'}
+                    <Icon name={biz.hasProfile ? 'check' : 'circle'} size={12} />
                   </span>
                   <span style={biz.hasProfile ? { color: 'var(--muted)' } : undefined}>
                     1. Business profile{biz.hasProfile ? '' : ' — fill it in below'}
@@ -141,7 +162,7 @@ export default function BusinessDetailPage() {
                 </li>
                 <li className="row" style={{ gap: 8, alignItems: 'baseline' }}>
                   <span aria-hidden="true" style={{ color: 'var(--muted)' }}>
-                    ○
+                    <Icon name="circle" size={12} />
                   </span>
                   <span>
                     2. Approve a brand kit{' '}
@@ -152,7 +173,7 @@ export default function BusinessDetailPage() {
                 </li>
                 <li className="row" style={{ gap: 8, alignItems: 'baseline' }}>
                   <span aria-hidden="true" style={{ color: 'var(--muted)' }}>
-                    ○
+                    <Icon name="circle" size={12} />
                   </span>
                   <span className="muted">3. Create a project (unlocks after a kit is approved)</span>
                 </li>
@@ -194,11 +215,11 @@ export default function BusinessDetailPage() {
               )}
               {biz.hasApprovedKit ? (
                 <Link className="btn primary sm" href={`/projects/new?businessId=${biz._id}`}>
-                  + New project
+                  <Icon name="plus" size={13} /> New project
                 </Link>
               ) : (
                 <button className="btn sm" disabled title="Approve a brand kit first">
-                  + New project
+                  <Icon name="plus" size={13} /> New project
                 </button>
               )}
             </div>
@@ -216,7 +237,7 @@ export default function BusinessDetailPage() {
                     and writes the caption.
                   </p>
                   <Link className="btn primary" href={`/projects/new?businessId=${biz._id}`}>
-                    ✦ Draft your first post
+                    <Icon name="sparkle" /> Draft your first post
                   </Link>
                 </>
               ) : (

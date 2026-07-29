@@ -3,12 +3,16 @@
  * project shapes. The API validates requests with these; the Mongoose models
  * and the TS interfaces in types.ts mirror them (drift shows up here first).
  * Living in shared (not the API) so the web app and tests can validate too.
+ *
+ * Legacy tolerance: slides from the block/layout era (stored snapshots carrying
+ * `layoutType`, `blocks`, legacy `overrides.*`) still parse — zod object
+ * schemas STRIP unknown keys by default, so restoring an old version snapshot
+ * simply drops the retired fields instead of crashing. The render path only
+ * ever mounts `authored` markup.
  */
 import { z } from 'zod';
 // Direct sibling imports (never './index') — the index re-exports this module,
 // so importing back through it would make evaluation order load-bearing.
-import { BLOCK_TYPES } from './blocks';
-import { LAYOUT_TYPES } from './layouts';
 import { PHOTO_MOVES } from './slideMotion';
 import {
   ASSET_TYPES,
@@ -25,7 +29,7 @@ const asEnum = <T extends readonly string[]>(values: T) =>
 
 const themeEnum = z.enum(['editorial', 'bold', 'minimal', 'soft']);
 
-/** Block placement as fractions [0..1] of the canvas (FreePosition slides only). */
+/** A canvas rectangle as fractions [0..1] (free photo overlays). */
 const frameSchema = z.object({
   x: z.number().min(0).max(1),
   y: z.number().min(0).max(1),
@@ -66,23 +70,13 @@ export const slidePhotoSchema = z.object({
   alt: z.string().max(160).optional(),
 });
 
-export const blockSchema = z.object({
-  type: asEnum(BLOCK_TYPES),
-  text: z.string().default(''),
-  items: z.array(z.string()).optional(),
-  frame: frameSchema.optional(),
-  z: z.number().optional(),
-});
-
 export const slideSchema = z.object({
   id: z.string().optional(),
   order: z.number().optional(),
-  layoutType: asEnum(LAYOUT_TYPES),
-  blocks: z.array(blockSchema).default([]),
   imageNeed: z.enum(['none', 'upload']).default('none'),
   mediaAssetId: z.string().nullable().optional(),
-  /** Stock-photo search phrase (AI-chosen or user-edited); the draft pipeline
-   *  resolves it to media, and the editor's stock picker prefills from it. */
+  /** Stock-photo search phrase (AI-chosen or user-edited); prefills the
+   *  editor's stock picker. */
   imageQuery: z.string().max(80).optional(),
   /**
    * The user's own photos on this slide — slot fills, a background, and free
@@ -95,46 +89,12 @@ export const slideSchema = z.object({
       focalPoint: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) }).optional(),
       imageTreatment: z.enum(['none', 'tint', 'duotone']).optional(),
       theme: themeEnum.optional(),
-      split: z.enum(['image-left', 'image-right', 'image-top', 'image-bottom']).optional(),
-      imageAspect: z.enum(['square', 'landscape', 'wide', 'portrait']).optional(),
-      imageSize: z.enum(['sm', 'md', 'lg']).optional(),
-      imageFit: z.enum(['cover', 'contain']).optional(),
-      imageZoom: z.number().min(1).max(5).optional(),
-      imageFrame: frameSchema.optional(),
-      imageBackground: z.boolean().optional(),
-      backgroundMediaAssetId: z.string().nullable().optional(),
-      imageObjects: z
-        .array(
-          z.object({
-            id: z.string(),
-            mediaAssetId: z.string().nullable().optional(),
-            frame: frameSchema,
-            fit: z.enum(['cover', 'contain']).optional(),
-            crop: z
-              .object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), zoom: z.number().min(1).max(5) })
-              .optional(),
-          }),
-        )
-        .optional(),
-      decorations: z
-        .array(
-          z.object({
-            kind: z.enum(['logo', 'rule', 'divider', 'scrim']),
-            frame: frameSchema,
-            z: z.number().optional(),
-            direction: z.enum(['to-top', 'to-bottom', 'to-left', 'to-right']).optional(),
-            opacity: z.number().min(0).max(1).optional(),
-          }),
-        )
-        .max(12)
-        .optional(),
     })
     .optional(),
   /**
    * AI-authored slide markup — semantic HTML that uses the brand recipe's
-   * component classes. When present, the renderer mounts this (sanitised, with
-   * the recipe stylesheet + brand tokens injected) instead of the block layout.
-   * `blocks` is kept alongside for free-canvas conversion and back-compat.
+   * component classes. The renderer mounts this (sanitised, with the recipe
+   * stylesheet + brand tokens injected); slides are authored-first.
    */
   authored: z
     .object({

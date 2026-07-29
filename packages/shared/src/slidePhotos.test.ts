@@ -174,13 +174,12 @@ describe('slidePhotoSchema', () => {
 
 describe('slideSchema photos', () => {
   it('defaults to an empty list so old slides still parse', () => {
-    const r = slideSchema.parse({ layoutType: 'TextOnly' });
+    const r = slideSchema.parse({});
     expect(r.photos).toEqual([]);
   });
 
   it('carries photos through', () => {
     const r = slideSchema.parse({
-      layoutType: 'TextOnly',
       photos: [
         { id: 'a', mediaAssetId: '65a000000000000000000001', placement: 'background', fit: 'cover' },
       ],

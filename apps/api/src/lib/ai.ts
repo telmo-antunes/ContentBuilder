@@ -48,24 +48,20 @@ export type AiFeature =
   // Onboarding: read the brand from its site (vision), then author its recipe.
   | 'vision'
   | 'recipe'
-  // Per-post: compose the idea into authored slides, write the caption, fit a photo.
+  // Per-post: compose the idea into authored slides, write the caption.
   | 'compose'
-  | 'caption'
-  | 'photofit';
+  | 'caption';
 
 const OVERRIDE_FIELD: Record<AiFeature, string> = {
   vision: 'visionModel',
   recipe: 'recipeModel',
   compose: 'composeModel',
   caption: 'captionModel',
-  photofit: 'photoFitModel',
 };
 
 const ENV_DEFAULT: Record<AiFeature, () => string> = {
   // Reading colors/type/voice off the homepage is a vision task → vision tier.
   vision: () => config.ai.modelLarge ?? config.ai.model!,
-  // Judging photos against copy is a vision task → vision tier.
-  photofit: () => config.ai.modelLarge ?? config.ai.model!,
   caption: premiumModel,
   // Authoring the brand recipe is design-critical → design tier; composing an
   // idea into authored slides is a mechanical parse+arrange → cheap tier.
@@ -94,9 +90,8 @@ export function withOpusReasoning<T extends Anthropic.MessageCreateParamsNonStre
 
 /**
  * Resolve the model for a touchpoint: the AI Settings override wins, else the
- * env-var tier for that feature. (The two DRAFT paths resolve their own
- * overrides in draft.ts — together that makes every AI call user-controllable.)
- * Skips the DB when disconnected (unit tests) so nothing buffers or hangs.
+ * env-var tier for that feature — every AI call is user-controllable. Skips the
+ * DB when disconnected (unit tests) so nothing buffers or hangs.
  */
 export async function modelFor(feature: AiFeature): Promise<string> {
   if (mongoose.connection.readyState === 1) {

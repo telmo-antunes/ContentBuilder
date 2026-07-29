@@ -1,22 +1,11 @@
 import type { BusinessCategory } from './profile';
 
 /**
- * Theme presets swap the decorative *language* of the layouts (background
- * treatment, eyebrow style, accent rule, panels) while staying brand-colored —
- * so the same content can read editorial vs bold vs minimal vs soft.
+ * Theme presets vary the render chrome (e.g. the slide-counter styling) while
+ * staying brand-colored. Stored per project (settings.theme) and per slide
+ * (overrides.theme).
  */
 export type ThemePreset = 'editorial' | 'bold' | 'minimal' | 'soft';
-
-export const THEME_PRESETS: ReadonlyArray<{ value: ThemePreset; label: string; hint: string }> = [
-  { value: 'editorial', label: 'Editorial', hint: 'Thin rules, generous whitespace, refined' },
-  { value: 'bold', label: 'Bold', hint: 'Filled accent blocks, big impact' },
-  { value: 'minimal', label: 'Minimal', hint: 'Stripped back, lots of air' },
-  { value: 'soft', label: 'Soft', hint: 'Rounded panels, gentle gradients' },
-];
-
-export function isThemePreset(v: unknown): v is ThemePreset {
-  return v === 'editorial' || v === 'bold' || v === 'minimal' || v === 'soft';
-}
 
 /** Sensible default theme for a business category (profile → visual default). */
 export function defaultThemeForCategory(category?: BusinessCategory): ThemePreset {

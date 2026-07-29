@@ -1,7 +1,5 @@
-import type { Block, BlockFrame, BlockType } from './blocks';
-import type { LayoutType } from './layouts';
 import type { AssetType, Format } from './formats';
-import type { BusinessProfile, BusinessGoal } from './profile';
+import type { BusinessProfile } from './profile';
 import type { ImageTreatment, LogoTreatment, ThemePreset } from './theme';
 import type { BrandRecipe } from './recipe';
 import type { PhotoMove } from './slideMotion';
@@ -49,6 +47,19 @@ export interface BrandProvenance {
 
 export type BrandKitStatus = 'draft' | 'approved';
 
+/**
+ * One candidate design system from a multi-take recipe author run — the user
+ * picks between 2–3 of these; selecting one promotes its recipe to the kit's
+ * live `recipe` and clears the list.
+ */
+export interface RecipeCandidate {
+  id: string;
+  recipe: BrandRecipe;
+  /** One-line label for the creative direction this candidate followed. */
+  note: string;
+  createdAt: string;
+}
+
 export interface BrandKit {
   _id: string;
   businessId: string;
@@ -63,74 +74,15 @@ export interface BrandKit {
   homepageScreenshot?: StoredMedia;
   provenance: BrandProvenance;
   status: BrandKitStatus;
-  /** LEGACY (pre-package): AI-designed post compositions. Superseded by layoutLibrary. */
-  templatePack?: BrandTemplateSkeleton[];
-  /** The written art-direction brief the director followed (shown on the kit screen). */
-  artDirection?: ArtDirection;
-  /** The brand's OWN layout system — posts + stories, each layout with its matched background. */
-  layoutLibrary?: LayoutLibrary;
   /**
    * The brand's design system — tokens + an authored stylesheet + composition,
    * imagery and voice — authored ONCE and applied to every AI-generated slide.
-   * This is what the new HTML-authoring generation path composes against.
+   * This is what the HTML-authoring generation path composes against.
    */
   recipe?: BrandRecipe;
+  /** Pending recipe candidates from a directions run (cleared on select). */
+  recipeCandidates?: RecipeCandidate[];
   createdAt: string;
-}
-
-/** One brand composition skeleton — a FreePosition layout without copy. */
-export interface BrandTemplateSkeleton {
-  name: string;
-  purpose: 'cover' | 'content' | 'list' | 'quote' | 'image-feature' | 'cta';
-  imageNeed: ImageNeed;
-  blocks: Array<{ type: BlockType; frame: BlockFrame; z?: number }>;
-  decorations?: SlideDecoration[];
-  imageFrame?: BlockFrame;
-  imageBackground?: boolean;
-}
-
-/**
- * Which intensity of the brand's background SYSTEM a layout sits on. The director
- * authors three variants per format; text-heavy layouts pick `canvas` (near
- * silent), normal copy `texture`, short-copy heroes `statement` (boldest).
- */
-export type BackgroundRole = 'canvas' | 'texture' | 'statement';
-
-/**
- * A brand layout: a composition skeleton PLUS its matched brand background
- * (an AI-authored or palette-rendered vector, stored as a media asset). Designed
- * together in one pass so structure and background feel like one system.
- */
-export interface BrandLayout extends BrandTemplateSkeleton {
-  /** The motif this layout's background was rendered from (for regenerate/swap UI). */
-  backgroundMotif?: string;
-  /** Which background-system intensity this layout uses (director path). */
-  backgroundRole?: BackgroundRole;
-  /** The stored background asset — lands in slide.overrides.backgroundMediaAssetId when applied. */
-  backgroundMediaAssetId?: string;
-}
-
-/**
- * The written art-direction brief the Brand Design Director produces from the
- * brand evidence (incl. the homepage screenshot). It is the coherence contract
- * every downstream call follows, and is shown to the user on the kit screen.
- */
-export interface ArtDirection {
-  /** 120–250 words: structural voice, typographic attitude, colour deployment, signature move. */
-  brief: string;
-  /** One paragraph describing the three-intensity background system. */
-  backgroundConcept: string;
-  do: string[];
-  dont: string[];
-  createdAt?: string;
-}
-
-/** The per-business layout system, generated as ONE package on kit approval. */
-export interface LayoutLibrary {
-  /** One-line design rationale from the director pass (shown in the kit UI). */
-  direction?: string;
-  post: BrandLayout[];
-  story: BrandLayout[];
 }
 
 export interface MediaAsset {
@@ -148,37 +100,27 @@ export interface MediaAsset {
 
 export type ImageNeed = 'none' | 'upload';
 
-/** SplitImageText: which edge the image occupies — sets orientation AND order. */
-export type SplitPlacement = 'image-left' | 'image-right' | 'image-top' | 'image-bottom';
-export const SPLIT_PLACEMENTS: readonly SplitPlacement[] = [
-  'image-left',
-  'image-right',
-  'image-top',
-  'image-bottom',
-];
-
-/** Aspect ratio of a framed in-post image (CenteredHero). */
-export type ImageAspect = 'square' | 'landscape' | 'wide' | 'portrait';
-export const IMAGE_ASPECTS: readonly ImageAspect[] = ['square', 'landscape', 'wide', 'portrait'];
-
-/** How large the framed image is within the slide (CenteredHero). */
-export type ImageSizePreset = 'sm' | 'md' | 'lg';
-export const IMAGE_SIZES: readonly ImageSizePreset[] = ['sm', 'md', 'lg'];
+/**
+ * A rectangle on the slide canvas, as fractions [0..1] of the canvas
+ * width/height — resolution-independent across all formats. Used for free
+ * photo overlays (SlidePhoto.frame).
+ */
+export interface BlockFrame {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
 
 /** How an image fills its slot: 'cover' crops to fill, 'contain' shows it whole. */
 export type ImageFit = 'cover' | 'contain';
 
-/** A positioned image element on a FreePosition card (its own uploaded media). */
-export interface ImageObject {
-  id: string;
-  mediaAssetId?: string;
-  frame: BlockFrame;
-  fit?: ImageFit;
-  /** Crop: pan focal point in [0..1] + zoom (≥1 zooms in within the frame). */
-  crop?: { x: number; y: number; zoom: number };
-}
-
-/** Optional per-slide manual tweaks. */
+/**
+ * Optional per-slide manual tweaks. Legacy block-era override fields
+ * (split/imageAspect/imageZoom/imageObjects/decorations/…) are gone: stored
+ * documents that still carry them are tolerated on read (Mongoose strict mode
+ * ignores them) and stripped at the wire boundary (zod drops unknown keys).
+ */
 export interface SlideOverrides {
   /** Image focal point as fractions [0..1] for object-position when cropping. */
   focalPoint?: { x: number; y: number };
@@ -186,43 +128,6 @@ export interface SlideOverrides {
   imageTreatment?: ImageTreatment;
   /** Per-slide theme; falls back to the project theme when unset. */
   theme?: ThemePreset;
-  /** SplitImageText: image placement (orientation + order). Defaults by format. */
-  split?: SplitPlacement;
-  /** CenteredHero: aspect ratio of the framed image (default 'square'). */
-  imageAspect?: ImageAspect;
-  /** CenteredHero: size of the framed image (default 'md'). */
-  imageSize?: ImageSizePreset;
-  /** How the image fills its slot (default 'cover'). 'contain' shows the whole image. */
-  imageFit?: ImageFit;
-  /** Zoom (≥1) for the slide's image; pairs with focalPoint for a crop. */
-  imageZoom?: number;
-  /** FreePosition: the canvas region (fractions) where the slide's image renders. */
-  imageFrame?: BlockFrame;
-  /** FreePosition: render the slide's image full-bleed behind the elements (legacy; ignores imageFrame). */
-  imageBackground?: boolean;
-  /** FreePosition: a full-bleed background image, independent of the region image + objects. */
-  backgroundMediaAssetId?: string;
-  /** FreePosition: additional positioned image elements, each with its own media. */
-  imageObjects?: ImageObject[];
-  /** FreePosition: brand chrome (logo, accent rule, divider, scrim) as positioned data. */
-  decorations?: SlideDecoration[];
-}
-
-export type DecorationKind = 'logo' | 'rule' | 'divider' | 'scrim';
-
-/**
- * A non-text, non-image slide element on the free canvas. Preset layouts draw
- * this chrome themselves; representing it as data is what lets any preset slide
- * convert to a free canvas without losing its logo/rules/scrims.
- */
-export interface SlideDecoration {
-  kind: DecorationKind;
-  frame: BlockFrame;
-  z?: number;
-  /** scrim: which way the gradient fades (dark edge → transparent). */
-  direction?: 'to-top' | 'to-bottom' | 'to-left' | 'to-right';
-  /** scrim: peak opacity of the dark edge (default 0.55). */
-  opacity?: number;
 }
 
 /** Where one of a slide's photos lands. See slidePhotos.ts for the layer model. */
@@ -252,8 +157,6 @@ export interface SlidePhoto {
 export interface Slide {
   id: string;
   order: number;
-  layoutType: LayoutType;
-  blocks: Block[];
   imageNeed: ImageNeed;
   mediaAssetId?: string;
   /** The user's own photos on this slide (slot fills, background, overlays). */
@@ -263,8 +166,8 @@ export interface Slide {
   overrides?: SlideOverrides;
   /**
    * AI-authored slide markup (semantic HTML using the brand recipe's classes).
-   * When present, the renderer mounts it instead of the block layout; `blocks`
-   * is retained for free-canvas conversion and back-compat.
+   * This is what the renderer mounts — slides are authored-first; a slide
+   * without markup renders as a neutral branded field.
    */
   authored?: { html: string; bg?: string; role?: string };
 }
@@ -301,8 +204,6 @@ export interface Project {
   slides: Slide[];
   /** Generated social caption for the post (optional until drafted). */
   caption?: Caption;
-  /** The campaign this post belongs to, if it was generated as part of a series. */
-  campaignId?: string;
   settings?: ProjectSettings;
   status: ProjectStatus;
   /** Workflow stage (see ProjectStage). Absent on pre-Desk projects — derive it. */
@@ -314,30 +215,4 @@ export interface Project {
   postedAt?: string;
   createdAt: string;
   updatedAt: string;
-}
-
-/** One post idea in a campaign — cheap to plan; drafted into a Project on demand. */
-export interface CampaignConcept {
-  id: string;
-  /** Short working title for the post. */
-  title: string;
-  /** One line: the angle/hook this post takes within the series. */
-  angle: string;
-  /** A paragraph ready to feed the draft engine (the post's raw copy source). */
-  paragraph: string;
-  /** Set once this concept has been drafted into a real project. */
-  projectId?: string;
-}
-
-/** A themed series of posts: a brief → a plan of concepts → drafts on demand. */
-export interface Campaign {
-  _id: string;
-  businessId: string;
-  name: string;
-  brief: string;
-  goal?: BusinessGoal;
-  type: AssetType;
-  format: Format;
-  concepts: CampaignConcept[];
-  createdAt: string;
 }

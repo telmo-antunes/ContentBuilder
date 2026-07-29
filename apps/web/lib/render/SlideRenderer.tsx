@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import type { Format, ThemePreset } from '@contentbuilder/shared';
-import type { ImageLayoutConfig, LayoutImage, RenderBrandKit } from './types';
+import type { LayoutImage, RenderBrandKit } from './types';
 import type { SlidePhotoSet } from './projectRender';
 import { ensureGoogleFonts } from './fontLoader';
 import { SlideFrame } from './SlideFrame';
@@ -37,7 +37,6 @@ export function SlideRenderer({
   format: Format;
   /** Accepted for call-site compatibility; authored slides carry their own art. */
   image?: LayoutImage | null;
-  imageLayout?: ImageLayoutConfig;
   /** The user's own photos: slot fills, a background, and free overlays. */
   photos?: SlidePhotoSet;
   /**

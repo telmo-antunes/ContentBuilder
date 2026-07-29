@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import AppChrome from './components/AppChrome';
+import AppMain from './components/AppMain';
 import ConfirmHost from './components/ConfirmDialog';
 import ToastHost from './components/Toast';
 
@@ -21,7 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <div className="app-shell">
           <AppChrome />
-          <main className="container">{children}</main>
+          <AppMain>{children}</AppMain>
         </div>
         <ConfirmHost />
         <ToastHost />

@@ -60,8 +60,6 @@ async function main() {
     slides: slides.map((s, i) => ({
       id: randomUUID(),
       order: i + 1,
-      layoutType: 'TextOnly',
-      blocks: [],
       imageNeed: 'none',
       authored: s.authored,
     })),

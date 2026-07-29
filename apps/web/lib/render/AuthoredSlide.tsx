@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useRef } from 'react';
+import { useEffect, useId, useMemo, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import {
   authoredSlots,
@@ -249,6 +249,18 @@ export function AuthoredSlide({
     inset: 0,
     ...recipeCssVars(recipe.tokens, recipe.typography),
   } as CSSProperties;
+  /**
+   * STABLE `__html` OBJECTS. This React's commit path re-applies
+   * `dangerouslySetInnerHTML` whenever the wrapper OBJECT is new — even for an
+   * identical string — so a fresh `{ __html }` every render meant the slide's
+   * DOM was rebuilt on every unrelated re-render. Invisible for a pure render,
+   * but it silently destroyed anything attached to the live DOM (the Studio's
+   * on-canvas copy editor wires listeners into these children). Memoising on
+   * the STRING makes the DOM stable until the markup truly changes.
+   */
+  const styleStr = `${varRule}\n${scopedCss}\n${slotRules}\n${bgLayerCss}${motionCss}${freeMotionCss}\n${ambientCss}`;
+  const styleHtmlObj = useMemo(() => ({ __html: styleStr }), [styleStr]);
+  const slideHtmlObj = useMemo(() => ({ __html: html }), [html]);
   // Setting a background photo puts the slide into the recipe's photo treatment
   // (its `.photo` rules layer `--cb-photo` under a legibility scrim), even
   // though the composer no longer decides that — the user does.
@@ -295,12 +307,12 @@ export function AuthoredSlide({
           <div className="cb-bg-photo" />
         </div>
       )}
-      <style dangerouslySetInnerHTML={{ __html: `${varRule}\n${scopedCss}\n${slotRules}\n${bgLayerCss}${motionCss}${freeMotionCss}\n${ambientCss}` }} />
+      <style dangerouslySetInnerHTML={styleHtmlObj} />
       {layer(under, 'under')}
       <div
         ref={slideRef}
         className={`cb-slide${bgClass}`}
-        dangerouslySetInnerHTML={{ __html: html }}
+        dangerouslySetInnerHTML={slideHtmlObj}
       />
       {layer(over, 'over')}
     </div>

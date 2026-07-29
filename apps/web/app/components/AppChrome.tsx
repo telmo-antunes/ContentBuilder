@@ -12,11 +12,11 @@ const NAV: { href: string; label: string; icon: ReactNode; match: (p: string) =>
   {
     href: '/',
     label: 'Studio',
-    // Studio owns home, brands, and existing projects — but NOT the New-post
+    // Studio owns the home Desk (which now includes the brand rail) plus the
+    // brand rooms and existing projects reached from it — but NOT the New-post
     // route (that's its own nav item), so exactly one icon is ever active.
     match: (p) =>
       p === '/' ||
-      p.startsWith('/brands') ||
       p.startsWith('/businesses') ||
       (p.startsWith('/projects') && p !== '/projects/new'),
     icon: (
@@ -37,10 +37,6 @@ const NAV: { href: string; label: string; icon: ReactNode; match: (p: string) =>
       </svg>
     ),
   },
-  // NOTE: /gallery is an internal engine reference (generic archetypes, no AI /
-  // no DB) — deliberately NOT in the product rail, since "layouts" in this
-  // product means a brand's OWN recipe compositions, not generic ones. Still
-  // reachable by URL for engineering.
   {
     href: '/settings',
     label: 'Settings',

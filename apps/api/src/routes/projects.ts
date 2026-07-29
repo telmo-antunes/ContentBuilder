@@ -17,11 +17,12 @@ import {
 import { composeProject, composeSlide } from '../lib/htmlDirector/compose';
 import { partsFromAuthored } from '../lib/htmlDirector/reparse';
 import { sanitizeAuthoredHtml } from '../lib/htmlSanitize';
-import { ProjectModel, ProjectVersionModel, BusinessModel, BrandKitModel, MediaAssetModel } from '../models';
+import { ProjectModel, ProjectVersionModel, BusinessModel, BrandKitModel, MediaAssetModel, VideoJobModel, VIDEO_JOB_ACTIVE_STATES } from '../models';
 import { ApiError, asyncHandler, parseBody, publicErrMessage, requireObjectId } from '../lib/http';
 import { createProjectSchema, slideSchema, updateProjectSchema, type SlideInput } from '../lib/validation';
 import { renderSlidesToPng, slugify } from '../lib/exporter';
-import { renderSlidesToVideo } from '../lib/videoExporter';
+import { runVideoJob, sweepExpiredVideoJobs } from '../lib/videoJobs';
+import { getStorage } from '../storage';
 import { generateCaption, type GeneratedCaption } from '../lib/caption';
 import { aiDraftConfigured, config } from '../config';
 
@@ -85,8 +86,6 @@ export function normalizeSlides(slides: SlideInput[]) {
   return slides.map((s, i) => ({
     id: s.id ?? randomUUID(),
     order: i,
-    layoutType: s.layoutType,
-    blocks: s.blocks ?? [],
     imageNeed: s.imageNeed ?? 'none',
     mediaAssetId:
       s.mediaAssetId && Types.ObjectId.isValid(s.mediaAssetId) ? s.mediaAssetId : undefined,
@@ -125,13 +124,6 @@ async function scrubForeignMedia(
   for (const s of slides) {
     if (s.mediaAssetId) ids.add(String(s.mediaAssetId));
     for (const p of s.photos ?? []) ids.add(String(p.mediaAssetId));
-    const o = s.overrides as Record<string, any> | undefined;
-    if (o?.backgroundMediaAssetId && Types.ObjectId.isValid(o.backgroundMediaAssetId)) {
-      ids.add(String(o.backgroundMediaAssetId));
-    }
-    for (const obj of o?.imageObjects ?? []) {
-      if (obj?.mediaAssetId && Types.ObjectId.isValid(obj.mediaAssetId)) ids.add(String(obj.mediaAssetId));
-    }
   }
   if (ids.size === 0) return;
   const owned = new Set(
@@ -144,13 +136,6 @@ async function scrubForeignMedia(
     // A photo pointing at another business's asset is dropped outright — there
     // is no meaningful "partial" version of a picture on the wrong brand.
     s.photos = (s.photos ?? []).filter((p) => owned.has(String(p.mediaAssetId)));
-    const o = s.overrides as Record<string, any> | undefined;
-    if (o?.backgroundMediaAssetId && !owned.has(String(o.backgroundMediaAssetId))) {
-      delete o.backgroundMediaAssetId;
-    }
-    for (const obj of o?.imageObjects ?? []) {
-      if (obj?.mediaAssetId && !owned.has(String(obj.mediaAssetId))) obj.mediaAssetId = undefined;
-    }
   }
 }
 
@@ -425,8 +410,6 @@ projectsRouter.post(
     const slides = composed.map((s, i) => ({
       id: randomUUID(),
       order: i,
-      layoutType: 'TextOnly',
-      blocks: [],
       imageNeed: 'none',
       photos: [],
       authored: s.authored,
@@ -674,8 +657,14 @@ projectsRouter.get(
       if (lan) break;
     }
     const port = new URL(config.webUrl).port || '3000';
+    const base = lan ? `http://${lan}:${port}` : config.webUrl;
     res.json({
-      url: lan ? `http://${lan}:${port}/share/${id}` : `${config.webUrl}/share/${id}`,
+      // `url` is what the Studio's Share button copies: the interactive preview,
+      // which renders live and needs no export. `shareUrl` is the phone hand-off
+      // page (/share) that lists exported PNGs for the Web Share API.
+      url: `${base}/preview/${id}`,
+      previewUrl: `${base}/preview/${id}`,
+      shareUrl: `${base}/share/${id}`,
       onLan: Boolean(lan),
       hasRenders: ((project as Record<string, unknown>).renders as string[] | undefined)?.length ?? 0,
     });
@@ -755,29 +744,9 @@ projectsRouter.post(
 // ── Animated (video) export ─────────────────────────────────────────────────
 // Rendering a video takes ~1–2 min — far longer than a proxy/browser will hold a
 // request open — so it runs as a JOB: POST starts it, the client polls status,
-// then downloads the finished MP4.
-
-interface VideoJob {
-  state: 'running' | 'done' | 'error';
-  projectId: string;
-  /** One clip per slide — Instagram advances slides on the viewer's tap/swipe. */
-  clips?: Array<{ name: string; buffer: Buffer }>;
-  title: string;
-  /** Real 0–100 render progress, for a determinate loader in the UI. */
-  percent: number;
-  error?: string;
-  startedAt: number;
-}
-const videoJobs = new Map<string, VideoJob>();
-const VIDEO_JOB_TTL_MS = 30 * 60 * 1000;
-
-/** Drop finished jobs after a while so buffers don't accumulate. */
-function sweepVideoJobs(): void {
-  const now = Date.now();
-  for (const [id, job] of videoJobs) {
-    if (job.state !== 'running' && now - job.startedAt > VIDEO_JOB_TTL_MS) videoJobs.delete(id);
-  }
-}
+// then downloads the finished MP4. Jobs are DURABLE (VideoJobModel + the
+// StorageProvider), so finished exports survive a restart and buffers never
+// linger in process memory. Runner/recovery/sweep live in lib/videoJobs.ts.
 
 projectsRouter.post(
   '/:id/export-video',
@@ -791,71 +760,90 @@ projectsRouter.post(
       throw new ApiError(400, 'Video export needs AI-composed slides.');
     }
 
-    sweepVideoJobs();
-    const jobId = randomUUID();
-    videoJobs.set(jobId, {
-      state: 'running',
-      projectId: String(id),
-      title: slugify(project.get('title')),
+    // Opportunistic cleanup, like the old Map sweep — never blocks the start.
+    void sweepExpiredVideoJobs().catch(() => {});
+
+    const job = await VideoJobModel.create({
+      projectId: id,
+      state: 'queued',
       percent: 0,
-      startedAt: Date.now(),
+      title: slugify(project.get('title')),
     });
 
-    // Fire and forget — the client polls. Never let a rejection escape.
-    void (async () => {
-      try {
-        const clips = await renderSlidesToVideo(project.toJSON() as never, (percent) => {
-          const j = videoJobs.get(jobId);
-          if (j) j.percent = percent;
-        });
-        const job = videoJobs.get(jobId);
-        if (job) Object.assign(job, { state: 'done', percent: 100, clips });
-      } catch (err) {
-        const job = videoJobs.get(jobId);
-        if (job) {
-          Object.assign(job, {
-            state: 'error',
-            error: `${publicErrMessage(err, 'render error')}. Is the web server running?`,
-          });
-        }
-        console.error('[video] export failed:', err);
-      }
-    })();
+    // Fire and forget — the client polls. The runner writes every outcome to
+    // the job doc; this catch is only for the truly unexpected.
+    void runVideoJob(String(job._id), project.toJSON() as never).catch((err) =>
+      console.error('[video] job runner crashed:', err),
+    );
 
-    res.status(202).json({ jobId, state: 'running' });
+    res.status(202).json({ jobId: String(job._id), state: 'queued' });
   }),
 );
 
-// Poll a video job. When done, the SAME url serves the result as a download:
-// a lone slide streams as one MP4; several stream as a zip of per-slide clips.
+// Poll a video job. When done, the SAME url serves the result as a download
+// (streamed back out of the StorageProvider): a lone slide is one MP4; several
+// are a zip of per-slide clips.
 projectsRouter.get(
   '/:id/export-video/:jobId',
   asyncHandler(async (req, res) => {
-    const job = videoJobs.get(req.params.jobId ?? '');
-    if (!job || job.projectId !== req.params.id) throw new ApiError(404, 'Video job not found');
-    if (job.state === 'error') throw new ApiError(502, `Video export failed: ${job.error}`);
-    if (job.state === 'running') {
-      res.json({ state: 'running', percent: job.percent, elapsedMs: Date.now() - job.startedAt });
+    const projectId = requireObjectId(req.params.id, 'Project');
+    if (!Types.ObjectId.isValid(req.params.jobId ?? '')) {
+      throw new ApiError(404, 'Video job not found');
+    }
+    const job = await VideoJobModel.findById(req.params.jobId);
+    if (!job || String(job.get('projectId')) !== projectId) {
+      throw new ApiError(404, 'Video job not found');
+    }
+
+    const state = job.get('state') as string;
+    if (state === 'error') {
+      throw new ApiError(502, `Video export failed: ${job.get('error') ?? 'render error'}`);
+    }
+    if (state !== 'done') {
+      // Covers queued/rendering/encoding — and 'cancelled', which stays a JSON
+      // status so the client can stop polling.
+      res.json({
+        state,
+        percent: job.get('percent') ?? 0,
+        elapsedMs: Date.now() - new Date(job.get('createdAt')).getTime(),
+      });
       return;
     }
 
-    const clips = job.clips ?? [];
-    if (clips.length === 1) {
-      res.setHeader('Content-Type', 'video/mp4');
-      res.setHeader('Content-Disposition', `attachment; filename="${job.title}.mp4"`);
-      res.send(clips[0]!.buffer);
+    const artifact = job.get('artifact') as
+      | { key: string; contentType: string; filename: string }
+      | undefined;
+    const storage = getStorage();
+    if (!artifact || !(await storage.exists(artifact.key))) {
+      throw new ApiError(410, 'Video export has expired — start a new export.');
+    }
+    res.setHeader('Content-Type', artifact.contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${artifact.filename}"`);
+    res.send(await storage.read(artifact.key));
+  }),
+);
+
+// Cancel a running video job. The render loop polls the flag between frames
+// (and while ffmpeg runs), so the job settles to 'cancelled' within a second
+// or two; cancelling an already-terminal job is a harmless no-op.
+projectsRouter.post(
+  '/:id/export-video/:jobId/cancel',
+  asyncHandler(async (req, res) => {
+    const projectId = requireObjectId(req.params.id, 'Project');
+    if (!Types.ObjectId.isValid(req.params.jobId ?? '')) {
+      throw new ApiError(404, 'Video job not found');
+    }
+    const job = await VideoJobModel.findOneAndUpdate(
+      { _id: req.params.jobId, projectId, state: { $in: [...VIDEO_JOB_ACTIVE_STATES] } },
+      { $set: { state: 'cancelled', cancelRequested: true } },
+      { new: true },
+    );
+    if (job) {
+      res.json({ state: 'cancelled', percent: job.get('percent') ?? 0 });
       return;
     }
-
-    res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', `attachment; filename="${job.title}-video.zip"`);
-    const archive = new ZipArchive({ zlib: { level: 9 } });
-    archive.on('error', (err) => {
-      console.error('[video] archive error:', err);
-      res.destroy(err);
-    });
-    archive.pipe(res);
-    for (const clip of clips) archive.append(clip.buffer, { name: clip.name });
-    await archive.finalize();
+    const existing = await VideoJobModel.findOne({ _id: req.params.jobId, projectId });
+    if (!existing) throw new ApiError(404, 'Video job not found');
+    res.json({ state: existing.get('state'), percent: existing.get('percent') ?? 0 });
   }),
 );

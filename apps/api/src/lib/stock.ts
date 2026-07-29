@@ -1,19 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import { FORMAT_DIMENSIONS, type Format } from '@contentbuilder/shared';
 import { config } from '../config';
 import { MediaAssetModel } from '../models';
 import { getStorage } from '../storage';
-import { aiMessage, modelFor, textOf } from './ai';
-import { recordUsage } from './usage';
-import type { SlideInput } from './validation';
 
 /**
- * Stock photos via Pexels (free API). The AI draft emits a short `imageQuery`
- * per image slide; this searches Pexels, downloads the best hit and stores it
- * in the business's media library so the draft arrives with real imagery
- * instead of "Add image" placeholders. Everything is best-effort: no key, no
- * hit, or a network error simply leaves the placeholder (exactly today's
- * behaviour).
+ * Stock photos via Pexels (free API), powering the editor's stock picker: the
+ * media routes search for candidates and download the user's selection into
+ * the business's library. Everything is best-effort: no key, no hit, or a
+ * network error simply returns nothing.
  */
 
 export const STOCK_PHOTO_LABEL = 'Stock photo';
@@ -79,64 +73,6 @@ export async function searchStockPhotos(
 }
 
 /**
- * Parse the photo-fit judge's response into a 0-based candidate index.
- * Lenient (finds a "pick" number or the first bare integer); null when the
- * response is unusable — the caller falls back to candidate 0.
- */
-export function parsePickIndex(raw: string, count: number): number | null {
-  const pick = raw.match(/"pick"\s*:\s*(\d+)/)?.[1] ?? raw.match(/\b(\d+)\b/)?.[1];
-  if (!pick) return null;
-  const idx = Number(pick) - 1; // the judge speaks 1-based
-  return idx >= 0 && idx < count ? idx : null;
-}
-
-/**
- * The photo-fit judge (G-curation): ONE vision call looks at the candidate
- * thumbnails next to the slide's copy and picks the best match — subject,
- * quality, and composition fit for how the image will be used. Falls back to
- * candidate 0 on any failure (exactly the old first-hit behaviour).
- */
-export async function pickBestCandidate(
-  candidates: StockCandidate[],
-  context: { copy: string; usage: string; query: string },
-): Promise<number> {
-  if (candidates.length < 2 || !config.ai.apiKey) return 0;
-  try {
-    const model = await modelFor('photofit');
-    const resp = await aiMessage({
-      model,
-      max_tokens: 300,
-      system:
-        'You are an art director choosing ONE stock photo for a social-media slide. Judge each numbered candidate on: subject match to the copy, professional photo quality, and composition fit for the stated usage (a full-bleed background needs calm negative space where text stays legible; a framed feature image should be a clear, well-composed subject). Output ONLY JSON: { "pick": <candidate number> }.',
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text' as const,
-              text: `Slide copy: """${context.copy.slice(0, 400)}"""\nUsage: ${context.usage}\nSearch query: "${context.query}"\n\nCandidates:`,
-            },
-            ...candidates.flatMap((c, i) => [
-              { type: 'text' as const, text: `Candidate ${i + 1}${c.alt ? ` — ${c.alt.slice(0, 80)}` : ''}:` },
-              { type: 'image' as const, source: { type: 'url' as const, url: c.thumb } },
-            ]),
-          ],
-        },
-      ],
-    });
-    await recordUsage({
-      feature: 'photofit',
-      model,
-      inputTokens: resp.usage?.input_tokens,
-      outputTokens: resp.usage?.output_tokens,
-    });
-    return parsePickIndex(textOf(resp), candidates.length) ?? 0;
-  } catch {
-    return 0;
-  }
-}
-
-/**
  * Download a picked candidate into the business library. Returns the created
  * MediaAsset (lean), or null (best-effort).
  */
@@ -166,54 +102,4 @@ export async function storeStockPhoto(
   } catch {
     return null;
   }
-}
-
-/** How the slide will use its image — the judge weighs composition differently. */
-function usageFor(slide: SlideInput): string {
-  const bg = slide.layoutType === 'BackgroundImage' || slide.overrides?.imageBackground;
-  return bg
-    ? 'full-bleed background behind text (needs calm negative space for legibility)'
-    : 'framed feature image beside/above the copy (needs a clear, well-composed subject)';
-}
-
-/** The slide's visible copy, for the photo-fit judge. */
-function copyOf(slide: SlideInput): string {
-  return (slide.blocks ?? [])
-    .map((b) => b.text || (b.items ?? []).join(' · '))
-    .filter(Boolean)
-    .join(' — ');
-}
-
-/**
- * Give a fresh AI draft its imagery: every image slide that carries an
- * `imageQuery` (and no media yet) gets a Pexels photo placed as its
- * mediaAssetId — chosen by the photo-fit judge from the top candidates, not
- * blindly the first hit. Mutates `slides` in place; returns how many were
- * placed. Without a key this is a no-op (placeholders remain).
- */
-export async function resolveDraftImages(
-  businessId: string,
-  slides: SlideInput[],
-  format: Format,
-): Promise<number> {
-  if (!stockConfigured()) return 0;
-  const { width, height } = FORMAT_DIMENSIONS[format];
-  const orientation = height > width ? 'portrait' : width > height ? 'landscape' : 'square';
-  let placed = 0;
-  for (const s of slides) {
-    if (s.imageNeed !== 'upload' || s.mediaAssetId || !s.imageQuery) continue;
-    const candidates = await searchStockPhotos(s.imageQuery, orientation, 4);
-    if (candidates.length === 0) continue;
-    const idx = await pickBestCandidate(candidates, {
-      copy: copyOf(s),
-      usage: usageFor(s),
-      query: s.imageQuery,
-    });
-    const asset = await storeStockPhoto(businessId, candidates[idx] ?? candidates[0]!);
-    if (asset?._id) {
-      s.mediaAssetId = String(asset._id);
-      placed++;
-    }
-  }
-  return placed;
 }

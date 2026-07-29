@@ -8,8 +8,6 @@ export interface RenderCtx {
   forExport: boolean;
   /** Active theme preset driving the decorative language. */
   theme: ThemePreset;
-  /** Render `list` blocks as check rows (set by the Checklist layout). */
-  checklist?: boolean;
 }
 
 const Ctx = createContext<RenderCtx>({ forExport: false, theme: 'editorial' });

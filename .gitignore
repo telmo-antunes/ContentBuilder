@@ -39,3 +39,6 @@ Thumbs.db
 # misc
 coverage/
 .cache/
+
+# scratch verification scripts
+*.tmp.mts

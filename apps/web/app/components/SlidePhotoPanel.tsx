@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   SLOT_SHAPES,
   authoredSlots,
@@ -10,9 +10,23 @@ import {
   type Slide,
   type SlidePhoto,
 } from '@contentbuilder/shared';
-import { uploadMedia } from '../lib/api';
+import {
+  getSettings,
+  searchStockPhotos,
+  storeStockPhoto,
+  uploadMedia,
+  type StockCandidate,
+} from '../lib/api';
 import FocalPicker from './FocalPicker';
+import { Icon } from './Icon';
+import { Skeleton } from './Skeleton';
 import { toast } from './Toast';
+
+/** Where a picked photo (upload OR stock) lands on the slide. */
+type PhotoTarget =
+  | { kind: 'slot'; slot: string }
+  | { kind: 'background' }
+  | { kind: 'free'; id?: string };
 
 const uid = () =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -105,9 +119,26 @@ export default function SlidePhotoPanel({
   const [expanded, setExpanded] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   /** What the pending file picker should do with the asset once it lands. */
-  const targetRef = useRef<
-    { kind: 'slot'; slot: string } | { kind: 'background' } | { kind: 'free'; id?: string }
-  >({ kind: 'free' });
+  const targetRef = useRef<PhotoTarget>({ kind: 'free' });
+  // ── Stock photos (Pexels) ──────────────────────────────────────────────────
+  /** Whether the server has a Pexels key — the whole option hides without one. */
+  const [stockOk, setStockOk] = useState(false);
+  /** Open search panel + the placement the picked photo will fill. */
+  const [stockTarget, setStockTarget] = useState<PhotoTarget | null>(null);
+  const [stockQ, setStockQ] = useState('');
+  /** 'search' while querying; a candidate's URL while downloading that pick. */
+  const [stockBusy, setStockBusy] = useState<string | null>(null);
+  const [stockResults, setStockResults] = useState<StockCandidate[] | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    getSettings()
+      .then((s) => alive && setStockOk(Boolean(s.stock?.configured)))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const photos = useMemo(() => slide.photos ?? [], [slide.photos]);
   const html = slide.authored?.html ?? '';
@@ -134,53 +165,58 @@ export default function SlidePhotoPanel({
     fileRef.current?.click();
   };
 
+  /** Place a library asset (fresh upload or stored stock pick) at a target. */
+  const applyAsset = (asset: MediaAsset, target: PhotoTarget) => {
+    const next = [...photos];
+    const upsert = (match: (p: SlidePhoto) => boolean, entry: Omit<SlidePhoto, 'id'>) => {
+      const i = next.findIndex(match);
+      // Replacing keeps the entry's identity and its focal point — you chose
+      // that crop for this hole, and it usually still applies to the new shot.
+      if (i >= 0) next[i] = { ...next[i]!, ...entry };
+      else next.push({ id: uid(), ...entry });
+    };
+    if (target.kind === 'slot') {
+      upsert(
+        (p) => p.placement === 'slot' && p.slot === target.slot,
+        { mediaAssetId: asset._id, placement: 'slot', slot: target.slot, fit: 'cover' },
+      );
+    } else if (target.kind === 'background') {
+      upsert((p) => p.placement === 'background', {
+        mediaAssetId: asset._id,
+        placement: 'background',
+        fit: 'cover',
+      });
+    } else if (target.id) {
+      // Replacing an existing overlay: keep where you put it, re-shape it to
+      // the new photo's proportions rather than stretching it into the old.
+      const i = next.findIndex((p) => p.id === target.id);
+      if (i >= 0) {
+        const f = frameForAsset(asset, format);
+        const cur = next[i]!.frame ?? f;
+        next[i] = { ...next[i]!, mediaAssetId: asset._id, frame: { ...cur, w: f.w, h: f.h } };
+      }
+    } else {
+      const entry: SlidePhoto = {
+        id: uid(),
+        mediaAssetId: asset._id,
+        placement: 'free',
+        frame: frameForAsset(asset, format),
+        fit: 'cover',
+        z: 1,
+      };
+      next.push(entry);
+      onSelectFree(entry.id);
+    }
+    onChange(next, asset);
+  };
+
   const onFile = async (file: File | undefined) => {
     if (!file) return;
     const target = targetRef.current;
     setUploading(target.kind === 'slot' ? target.slot : target.kind);
     try {
       const asset = await uploadMedia(businessId, file);
-      const next = [...photos];
-      const upsert = (match: (p: SlidePhoto) => boolean, entry: Omit<SlidePhoto, 'id'>) => {
-        const i = next.findIndex(match);
-        // Replacing keeps the entry's identity and its focal point — you chose
-        // that crop for this hole, and it usually still applies to the new shot.
-        if (i >= 0) next[i] = { ...next[i]!, ...entry };
-        else next.push({ id: uid(), ...entry });
-      };
-      if (target.kind === 'slot') {
-        upsert(
-          (p) => p.placement === 'slot' && p.slot === target.slot,
-          { mediaAssetId: asset._id, placement: 'slot', slot: target.slot, fit: 'cover' },
-        );
-      } else if (target.kind === 'background') {
-        upsert((p) => p.placement === 'background', {
-          mediaAssetId: asset._id,
-          placement: 'background',
-          fit: 'cover',
-        });
-      } else if (target.id) {
-        // Replacing an existing overlay: keep where you put it, re-shape it to
-        // the new photo's proportions rather than stretching it into the old.
-        const i = next.findIndex((p) => p.id === target.id);
-        if (i >= 0) {
-          const f = frameForAsset(asset, format);
-          const cur = next[i]!.frame ?? f;
-          next[i] = { ...next[i]!, mediaAssetId: asset._id, frame: { ...cur, w: f.w, h: f.h } };
-        }
-      } else {
-        const entry: SlidePhoto = {
-          id: uid(),
-          mediaAssetId: asset._id,
-          placement: 'free',
-          frame: frameForAsset(asset, format),
-          fit: 'cover',
-          z: 1,
-        };
-        next.push(entry);
-        onSelectFree(entry.id);
-      }
-      onChange(next, asset);
+      applyAsset(asset, target);
     } catch (e) {
       toast(e instanceof Error ? e.message : 'Upload failed', 'error');
     } finally {
@@ -188,6 +224,58 @@ export default function SlidePhotoPanel({
       if (fileRef.current) fileRef.current.value = ''; // let the same file be picked twice
     }
   };
+
+  // ── Stock search (Pexels) ──────────────────────────────────────────────────
+  /** Match the slide's canvas so candidates already have roughly the right shape. */
+  const { width: fmtW, height: fmtH } = dimensionsFor(format);
+  const stockOrientation = fmtW === fmtH ? 'square' : fmtW < fmtH ? 'portrait' : 'landscape';
+
+  const openStock = (target: PhotoTarget) => {
+    setStockTarget(target);
+    setStockResults(null);
+    // The AI art director already chose a search phrase for this slide — start there.
+    setStockQ(slide.imageQuery ?? '');
+  };
+
+  const runStockSearch = async () => {
+    if (!stockQ.trim()) return;
+    setStockBusy('search');
+    setStockResults(null);
+    try {
+      const r = await searchStockPhotos(businessId, stockQ.trim(), stockOrientation);
+      setStockResults(r.candidates);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Stock search failed', 'error');
+      setStockResults([]);
+    } finally {
+      setStockBusy(null);
+    }
+  };
+
+  /** Download the pick into the brand library, then place it like an upload. */
+  const pickStock = async (c: StockCandidate) => {
+    if (!stockTarget) return;
+    setStockBusy(c.full);
+    try {
+      const asset = await storeStockPhoto(businessId, c);
+      applyAsset(asset, stockTarget);
+      setStockTarget(null);
+      toast('Stock photo added', 'ok');
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not add that photo', 'error');
+    } finally {
+      setStockBusy(null);
+    }
+  };
+
+  const stockTargetLabel = (t: PhotoTarget) =>
+    t.kind === 'slot'
+      ? `the “${slotLabel(t.slot)}” space`
+      : t.kind === 'background'
+        ? 'the background'
+        : t.id
+          ? 'this placed photo'
+          : 'a new placed photo';
 
   const patch = (id: string, p: Partial<SlidePhoto>) =>
     onChange(photos.map((x) => (x.id === id ? { ...x, ...p } : x)));
@@ -266,6 +354,8 @@ export default function SlidePhotoPanel({
     status: string;
     uploadKey: string;
     onUpload: () => void;
+    /** Open the Pexels search targeted at this placement (absent = hidden). */
+    onStock?: () => void;
     slotShape?: string;
     kind: 'slot' | 'background' | 'free';
   }) => {
@@ -297,9 +387,21 @@ export default function SlidePhotoPanel({
               {open ? 'Done' : 'Edit'}
             </button>
           ) : (
-            <button className="btn sm primary" disabled={disabled} onClick={opts.onUpload}>
-              {uploading === opts.uploadKey ? 'Uploading…' : 'Add photo'}
-            </button>
+            <span className="row" style={{ gap: 4, flexWrap: 'nowrap' }}>
+              {stockOk && opts.onStock && (
+                <button
+                  className="btn sm"
+                  disabled={disabled}
+                  title="Search Pexels stock photos for this space"
+                  onClick={opts.onStock}
+                >
+                  Stock
+                </button>
+              )}
+              <button className="btn sm primary" disabled={disabled} onClick={opts.onUpload}>
+                {uploading === opts.uploadKey ? 'Uploading…' : 'Add photo'}
+              </button>
+            </span>
           )}
         </div>
 
@@ -415,6 +517,11 @@ export default function SlidePhotoPanel({
               <button className="btn sm" disabled={disabled} onClick={opts.onUpload}>
                 {uploading === opts.uploadKey ? 'Uploading…' : 'Swap photo'}
               </button>
+              {stockOk && opts.onStock && (
+                <button className="btn sm" disabled={disabled} onClick={opts.onStock}>
+                  Search stock
+                </button>
+              )}
               {kind !== 'background' && (
                 <button className="btn sm" disabled={disabled} onClick={() => makeBackground(p)}>
                   Make it the background
@@ -456,6 +563,7 @@ export default function SlidePhotoPanel({
               status: p ? `In place · ${moveName(p)}` : 'Empty — add your photo here',
               uploadKey: slotName,
               onUpload: () => pick({ kind: 'slot', slot: slotName }),
+              onStock: () => openStock({ kind: 'slot', slot: slotName }),
               slotShape: shape,
               kind: 'slot',
             });
@@ -473,6 +581,7 @@ export default function SlidePhotoPanel({
           : 'The brand’s own background is showing',
         uploadKey: 'background',
         onUpload: () => pick({ kind: 'background' }),
+        onStock: () => openStock({ kind: 'background' }),
         kind: 'background',
       })}
 
@@ -485,6 +594,7 @@ export default function SlidePhotoPanel({
           status: `${(p.z ?? 1) < 0 ? 'Behind the text' : 'In front of the text'} · ${moveName(p)}`,
           uploadKey: p.id,
           onUpload: () => pick({ kind: 'free', id: p.id }),
+          onStock: () => openStock({ kind: 'free', id: p.id }),
           kind: 'free',
         }),
       )}
@@ -496,6 +606,86 @@ export default function SlidePhotoPanel({
       >
         {uploading === 'free' ? 'Uploading…' : 'Add a photo anywhere on the slide'}
       </button>
+      {stockOk && (
+        <button
+          className="btn sm"
+          style={{ width: '100%', justifyContent: 'center', marginTop: 6 }}
+          disabled={disabled}
+          onClick={() => openStock({ kind: 'free' })}
+        >
+          Search stock photos
+        </button>
+      )}
+
+      {/* Pexels search, aimed at whichever placement opened it. */}
+      {stockTarget && (
+        <section className="stk" aria-label="Stock photo search">
+          <div className="stk-head">
+            <span className="stk-lab">Stock photos</span>
+            <span className="stk-for">for {stockTargetLabel(stockTarget)}</span>
+            <button
+              className="stk-x"
+              aria-label="Close stock search"
+              onClick={() => setStockTarget(null)}
+            >
+              <Icon name="close" size={12} />
+            </button>
+          </div>
+          <form
+            className="stk-q"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void runStockSearch();
+            }}
+          >
+            <input
+              value={stockQ}
+              maxLength={80}
+              placeholder="What should the photo show?"
+              onChange={(e) => setStockQ(e.target.value)}
+            />
+            <button
+              className="btn sm primary"
+              type="submit"
+              disabled={stockBusy !== null || !stockQ.trim()}
+            >
+              {stockBusy === 'search' ? 'Searching…' : 'Search'}
+            </button>
+          </form>
+          {stockBusy === 'search' && (
+            <div className="stk-grid" role="status" aria-label="Searching stock photos">
+              {[0, 1, 2, 3, 4, 5].map((i) => (
+                <Skeleton key={i} shape="block" h={72} style={{ borderRadius: 8 }} />
+              ))}
+            </div>
+          )}
+          {stockBusy !== 'search' && stockResults?.length === 0 && (
+            <p className="spc-hint">Nothing found — try different words.</p>
+          )}
+          {stockBusy !== 'search' && stockResults && stockResults.length > 0 && (
+            <>
+              <div className="stk-grid">
+                {stockResults.map((c) => (
+                  <button
+                    key={c.full}
+                    type="button"
+                    className="stk-item"
+                    disabled={stockBusy !== null}
+                    title={c.alt || 'Use this photo'}
+                    onClick={() => void pickStock(c)}
+                  >
+                    <img src={c.thumb} alt={c.alt || ''} loading="lazy" />
+                    <span className="stk-credit">
+                      {stockBusy === c.full ? 'Adding…' : c.photographer}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <p className="spc-hint">Photos from Pexels — the photographer is credited on each.</p>
+            </>
+          )}
+        </section>
+      )}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Icon } from './Icon';
 
 export interface OverflowItem {
   label: ReactNode;
@@ -45,9 +46,9 @@ export function OverflowMenu({ items, label = 'More actions' }: { items: Overflo
         aria-label={label}
         title={label}
         onClick={() => setOpen((o) => !o)}
-        style={{ paddingInline: 10, fontWeight: 700, letterSpacing: 1 }}
+        style={{ paddingInline: 10 }}
       >
-        ⋯
+        <Icon name="ellipsis" />
       </button>
       {open && (
         <div
@@ -81,7 +82,7 @@ export function OverflowMenu({ items, label = 'More actions' }: { items: Overflo
                 justifyContent: 'flex-start',
                 textAlign: 'left',
                 width: '100%',
-                ...(item.danger ? { color: 'var(--danger, #f87171)' } : {}),
+                ...(item.danger ? { color: 'var(--danger)' } : {}),
               }}
             >
               {item.label}

@@ -13,9 +13,13 @@ import { useParams } from 'next/navigation';
 import type { ThemePreset } from '@contentbuilder/shared';
 import { dimensionsFor } from '@contentbuilder/shared';
 import { getProject, type ProjectDetail } from '../../lib/api';
+import { ErrorState } from '../../components/ErrorState';
+import { toast } from '../../components/Toast';
+import { Icon } from '../../components/Icon';
+import { Skeleton } from '../../components/Skeleton';
 import { SlideRenderer } from '../../../lib/render/SlideRenderer';
 import { ScaledSlide } from '../../../lib/render/SlideFrame';
-import { toRenderKit, resolveSlideImage, resolveImageLayout } from '../../../lib/render/projectRender';
+import { toRenderKit, resolveSlideImage } from '../../../lib/render/projectRender';
 
 export default function PreviewPage() {
   const { id } = useParams<{ id: string }>();
@@ -25,11 +29,16 @@ export default function PreviewPage() {
   const [displayWidth, setDisplayWidth] = useState(340);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setError(null);
     getProject(id)
       .then(setProject)
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
   }, [id]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const slides = project?.slides ?? [];
   const total = slides.length;
@@ -73,8 +82,28 @@ export default function PreviewPage() {
     return [c.text, (c.hashtags ?? []).join(' ')].filter(Boolean).join('\n\n');
   }, [project]);
 
-  if (error) return <div className="error-box" style={{ margin: 24 }}>{error}</div>;
-  if (!project || !kit) return <p className="muted" style={{ margin: 24 }}>Loading preview…</p>;
+  if (error) {
+    return (
+      <div style={{ margin: 24 }}>
+        <ErrorState message={error} onRetry={load} />
+      </div>
+    );
+  }
+  if (!project || !kit) {
+    // The preview's shape while it loads: title over a portrait stage.
+    return (
+      <div
+        role="status"
+        aria-label="Loading the preview"
+        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: '48px 20px' }}
+      >
+        <Skeleton shape="line" w={70} h={10} />
+        <Skeleton shape="block" w={260} h={34} />
+        <Skeleton shape="block" w={320} h={400} style={{ borderRadius: 16, marginTop: 12 }} />
+        <Skeleton shape="line" w={90} h={12} />
+      </div>
+    );
+  }
   if (total === 0) return <p className="muted" style={{ margin: 24 }}>This post has no slides yet.</p>;
 
   const { height, width } = dimensionsFor(project.format);
@@ -107,6 +136,17 @@ export default function PreviewPage() {
             {total} {isStory ? 'frame' : 'slide'}{total === 1 ? '' : 's'} ·{' '}
             <span className="pv-hint">swipe or use ← →</span>
           </p>
+          <button
+            className="btn sm ghost pv-copylink"
+            onClick={() =>
+              void navigator.clipboard
+                ?.writeText(window.location.href)
+                .then(() => toast('Link copied — anyone on this Wi-Fi can open it', 'ok'))
+                .catch(() => toast('Could not copy the link', 'error'))
+            }
+          >
+            <Icon name="copy" size={13} /> Copy link
+          </button>
         </header>
 
         {/* Swipeable stage: a track of all slides translated by index. */}
@@ -140,7 +180,6 @@ export default function PreviewPage() {
                       brandKit={kit}
                       format={project.format}
                       image={resolveSlideImage(s, project.media)}
-                      imageLayout={resolveImageLayout(s, project.media)}
                       theme={s.overrides?.theme ?? theme}
                       slideIndex={i}
                       slideTotal={total}
@@ -186,7 +225,7 @@ export default function PreviewPage() {
                 className="btn sm ghost"
                 onClick={() => void navigator.clipboard?.writeText(captionText)}
               >
-                Copy
+                <Icon name="copy" size={13} /> Copy
               </button>
             </div>
             <p>{captionText}</p>

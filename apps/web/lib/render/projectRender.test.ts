@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { BrandKit, MediaAsset, Slide } from '@contentbuilder/shared';
-import { toRenderKit, resolveSlideImage, resolveImageLayout } from './projectRender';
+import { toRenderKit, resolveSlideImage } from './projectRender';
 
 const kit = {
   _id: 'k1',
@@ -42,31 +42,16 @@ describe('resolveSlideImage', () => {
   it('returns null without a mediaAssetId', () => {
     expect(resolveSlideImage({ mediaAssetId: undefined } as Slide, media)).toBeNull();
   });
-  it('resolves the asset url and threads focal/treatment/zoom overrides', () => {
+  it('resolves the asset url and threads focal/treatment overrides', () => {
     const slide = {
       mediaAssetId: 'm1',
-      overrides: { focalPoint: { x: 0.3, y: 0.7 }, imageTreatment: 'tint', imageZoom: 1.5 },
+      overrides: { focalPoint: { x: 0.3, y: 0.7 }, imageTreatment: 'tint' },
     } as unknown as Slide;
     const img = resolveSlideImage(slide, media);
-    expect(img).toMatchObject({ url: 'http://x/a.png', treatment: 'tint', zoom: 1.5 });
+    expect(img).toMatchObject({ url: 'http://x/a.png', treatment: 'tint' });
     expect(img!.focalPoint).toEqual({ x: 0.3, y: 0.7 });
   });
   it('returns null when the asset is missing', () => {
     expect(resolveSlideImage({ mediaAssetId: 'gone' } as unknown as Slide, media)).toBeNull();
-  });
-});
-
-describe('resolveImageLayout', () => {
-  it('resolves a background media id to its url', () => {
-    const slide = { overrides: { backgroundMediaAssetId: 'm2' } } as unknown as Slide;
-    expect(resolveImageLayout(slide, media).backgroundUrl).toBe('http://x/b.png');
-  });
-  it('maps image objects with crop → focalPoint/zoom', () => {
-    const slide = {
-      overrides: { imageObjects: [{ id: 'o', mediaAssetId: 'm1', frame: { x: 0, y: 0, w: 0.5, h: 0.5 }, crop: { x: 0.2, y: 0.4, zoom: 2 } }] },
-    } as unknown as Slide;
-    const layout = resolveImageLayout(slide, media);
-    expect(layout.objects?.[0]).toMatchObject({ url: 'http://x/a.png', zoom: 2 });
-    expect(layout.objects?.[0]!.focalPoint).toEqual({ x: 0.2, y: 0.4 });
   });
 });

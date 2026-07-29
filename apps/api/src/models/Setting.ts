@@ -11,32 +11,14 @@ const { Schema, model, models } = mongoose;
 const settingSchema = new Schema(
   {
     key: { type: String, default: 'ai', unique: true },
-    designerModel: { type: String, default: '' },
-    freeModel: { type: String, default: '' },
-    // Per-touchpoint overrides for every non-draft AI call (see lib/ai.ts modelFor).
+    // Per-touchpoint overrides for every live AI call (see lib/ai.ts modelFor).
+    // Retired block-era override fields (designerModel, freeSystem, director*…)
+    // may linger in a stored doc; strict mode ignores them on read.
     visionModel: { type: String, default: '' },
-    critiqueModel: { type: String, default: '' },
     captionModel: { type: String, default: '' },
-    campaignModel: { type: String, default: '' },
-    backgroundModel: { type: String, default: '' },
-    templatesModel: { type: String, default: '' },
-    /** Brand Design Director (layouts + authored backgrounds) — the design tier. */
-    directorModel: { type: String, default: '' },
     /** HTML-authoring path: brand recipe author (design tier) + idea→slide compose (cheap tier). */
     recipeModel: { type: String, default: '' },
     composeModel: { type: String, default: '' },
-    /** Paragraph→content-unit parse for free drafts (mechanical → cheap tier). */
-    draftParseModel: { type: String, default: '' },
-    alternativesModel: { type: String, default: '' },
-    photoFitModel: { type: String, default: '' },
-    designerSystem: { type: String, default: '' },
-    templatesSystem: { type: String, default: '' },
-    freeSystem: { type: String, default: '' },
-    // Brand Design Director prompt overrides (blank → in-code default).
-    directorBriefSystem: { type: String, default: '' },
-    directorLayoutSystem: { type: String, default: '' },
-    directorBackgroundSystem: { type: String, default: '' },
-    freeMaxTokens: { type: Number, required: false },
     updatedAt: { type: Date, default: () => new Date() },
   },
   baseSchemaOptions,

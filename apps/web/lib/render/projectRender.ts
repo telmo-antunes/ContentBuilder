@@ -1,5 +1,5 @@
 import type { BrandKit, MediaAsset, PhotoMove, Slide } from '@contentbuilder/shared';
-import type { ImageLayoutConfig, LayoutImage, RenderBrandKit } from './types';
+import type { LayoutImage, RenderBrandKit } from './types';
 
 /** Neutral fallback kit (used only if a project somehow lacks an approved kit). */
 const FALLBACK_KIT: RenderBrandKit = {
@@ -96,30 +96,5 @@ export function resolveSlideImage(slide: Slide, media: MediaAsset[]): LayoutImag
     url: asset.url,
     focalPoint: slide.overrides?.focalPoint,
     treatment: slide.overrides?.imageTreatment,
-    zoom: slide.overrides?.imageZoom,
-  };
-}
-
-/** Image layout knobs for a slide (split orientation/order, aspect, size, fit). */
-export function resolveImageLayout(slide: Slide, media: MediaAsset[] = []): ImageLayoutConfig {
-  const objects = slide.overrides?.imageObjects?.map((o) => ({
-    frame: o.frame,
-    fit: o.fit,
-    url: o.mediaAssetId ? media.find((m) => m._id === o.mediaAssetId)?.url : undefined,
-    focalPoint: o.crop ? { x: o.crop.x, y: o.crop.y } : undefined,
-    zoom: o.crop?.zoom,
-  }));
-  return {
-    split: slide.overrides?.split,
-    aspect: slide.overrides?.imageAspect,
-    size: slide.overrides?.imageSize,
-    fit: slide.overrides?.imageFit,
-    imageFrame: slide.overrides?.imageFrame,
-    background: slide.overrides?.imageBackground,
-    backgroundUrl: slide.overrides?.backgroundMediaAssetId
-      ? media.find((m) => m._id === slide.overrides?.backgroundMediaAssetId)?.url
-      : undefined,
-    objects,
-    decorations: slide.overrides?.decorations,
   };
 }

@@ -25,6 +25,17 @@ const FRAME_MS = 1000 / FPS;
 /** How long the settled slide is held (readable) at the end of its clip. */
 const HOLD_MS = 1400;
 
+/** Thrown when a cancel request interrupts the render/encode loop. */
+export class VideoExportCancelled extends Error {
+  constructor() {
+    super('Video export cancelled');
+    this.name = 'VideoExportCancelled';
+  }
+}
+
+/** Polled between frames/slides and while ffmpeg runs; true aborts the job. */
+export type IsCancelled = () => boolean | Promise<boolean>;
+
 export interface RenderedClip {
   /** Zero-padded filename: 01.mp4, 02.mp4, … */
   name: string;
@@ -74,6 +85,8 @@ export async function renderSlidesToVideo(
   project: ExportableProject,
   /** Called with real 0–100 progress so the UI can show a determinate loader. */
   onProgress?: (percent: number) => void,
+  /** Checked per slide and per frame batch — a true return aborts the render. */
+  isCancelled?: IsCancelled,
 ): Promise<RenderedClip[]> {
   if (!ffmpegPath) throw new Error('ffmpeg binary unavailable');
   const { width, height } = dimensionsFor(project.format);
@@ -91,10 +104,14 @@ export async function renderSlidesToVideo(
   // split inside between loading, frame capture (the bulk), and encoding.
   const report = (slideIndex: number, within: number) =>
     onProgress?.(Math.min(99, Math.round(((slideIndex + within) / ordered.length) * 100)));
+  const throwIfCancelled = async () => {
+    if (isCancelled && (await isCancelled())) throw new VideoExportCancelled();
+  };
 
   try {
     for (let i = 0; i < ordered.length; i++) {
       const slide = ordered[i]!;
+      await throwIfCancelled();
       report(i, 0);
       const url = `${base}/render?projectId=${project._id}&slideId=${encodeURIComponent(slide.id)}&motion=1`;
       await gotoAndSettle(page, url, slide.id);
@@ -135,8 +152,12 @@ export async function renderSlidesToVideo(
           t,
         );
         frames.push(Buffer.from(await el.screenshot({ type: 'png' })));
-        // Frame capture is the bulk of the work — report it as it goes.
-        if (f % 4 === 0) report(i, 0.08 + 0.74 * ((f + 1) / revealFrames));
+        // Frame capture is the bulk of the work — report it as it goes, and
+        // give a cancel request a way in at the same cadence.
+        if (f % 4 === 0) {
+          await throwIfCancelled();
+          report(i, 0.08 + 0.74 * ((f + 1) / revealFrames));
+        }
       }
 
       /**
@@ -177,8 +198,9 @@ export async function renderSlidesToVideo(
       for (let h = 0; h < holdFrames; h++) frames.push(settled);
 
       const name = `${String(i + 1).padStart(2, '0')}.mp4`;
+      await throwIfCancelled();
       report(i, 0.86); // encoding
-      const buffer = await encode(frames);
+      const buffer = await encode(frames, isCancelled);
       report(i, 1);
       const stored = await storage.save(`renders/${project._id}/${name}`, buffer, {
         contentType: 'video/mp4',
@@ -193,40 +215,67 @@ export async function renderSlidesToVideo(
 }
 
 /** PNG frames → one Instagram-ready H.264 MP4. */
-async function encode(frames: Buffer[]): Promise<Buffer> {
+async function encode(frames: Buffer[], isCancelled?: IsCancelled): Promise<Buffer> {
   const dir = await mkdtemp(join(tmpdir(), 'cbvid-'));
   try {
     await Promise.all(
       frames.map((buf, i) => writeFile(join(dir, `${String(i).padStart(5, '0')}.png`), buf)),
     );
     const outPath = join(dir, 'out.mp4');
-    await runFfmpeg([
-      '-y',
-      '-framerate', String(FPS),
-      '-i', join(dir, '%05d.png'),
-      '-c:v', 'libx264',
-      '-pix_fmt', 'yuv420p',
-      '-preset', 'medium',
-      '-crf', '20',
-      '-movflags', '+faststart',
-      outPath,
-    ]);
+    await runFfmpeg(
+      [
+        '-y',
+        '-framerate', String(FPS),
+        '-i', join(dir, '%05d.png'),
+        '-c:v', 'libx264',
+        '-pix_fmt', 'yuv420p',
+        '-preset', 'medium',
+        '-crf', '20',
+        '-movflags', '+faststart',
+        outPath,
+      ],
+      isCancelled,
+    );
     return await readFile(outPath);
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => {});
   }
 }
 
-function runFfmpeg(args: string[]): Promise<void> {
+function runFfmpeg(args: string[], isCancelled?: IsCancelled): Promise<void> {
   return new Promise((resolve, reject) => {
     const proc = spawn(ffmpegPath as string, args, { stdio: ['ignore', 'ignore', 'pipe'] });
     let err = '';
+    let killed = false;
+    // A cancel request must reach a running encode too — poll and kill the child.
+    const watcher = isCancelled
+      ? setInterval(() => {
+          void Promise.resolve(isCancelled())
+            .then((cancelled) => {
+              if (cancelled && !killed) {
+                killed = true;
+                proc.kill('SIGKILL');
+              }
+            })
+            .catch(() => {});
+        }, 250)
+      : undefined;
+    const settle = (fn: () => void) => {
+      if (watcher) clearInterval(watcher);
+      fn();
+    };
     proc.stderr?.on('data', (d) => {
       err += String(d);
     });
-    proc.on('error', reject);
+    proc.on('error', (e) => settle(() => reject(e)));
     proc.on('close', (code) =>
-      code === 0 ? resolve() : reject(new Error(`ffmpeg exited ${code}: ${err.slice(-400)}`)),
+      settle(() =>
+        killed
+          ? reject(new VideoExportCancelled())
+          : code === 0
+            ? resolve()
+            : reject(new Error(`ffmpeg exited ${code}: ${err.slice(-400)}`)),
+      ),
     );
   });
 }

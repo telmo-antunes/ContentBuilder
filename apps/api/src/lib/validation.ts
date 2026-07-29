@@ -4,7 +4,6 @@
  * imports stay stable.
  */
 export {
-  blockSchema,
   slideSchema,
   captionSchema,
   createProjectSchema,

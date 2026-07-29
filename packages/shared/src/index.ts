@@ -1,5 +1,3 @@
-export * from './blocks';
-export * from './layouts';
 export * from './formats';
 export * from './fonts';
 export * from './types';
@@ -7,7 +5,6 @@ export * from './profile';
 export * from './theme';
 export * from './colorContrast';
 export * from './schemas';
-export * from './intents';
 export * from './recipe';
 export * from './slidePhotos';
 export * from './slideMotion';

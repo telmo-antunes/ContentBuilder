@@ -1,6 +1,6 @@
 /**
- * Surgical editing for AI-composed (authored) slides — WITHOUT the lossy
- * HTML→blocks conversion. An authored slide is a flat fragment of recipe-class
+ * Surgical editing for AI-composed (authored) slides, straight on the markup.
+ * An authored slide is a flat fragment of recipe-class
  * elements (`<p class="eyebrow">`, `<h1 class="headline">…`, `<div class="fill">`).
  * We parse it into an editable list, let the studio tweak copy / order / the
  * signature emphasis, then rebuild the SAME fragment shape — so the recipe CSS
