@@ -23,8 +23,9 @@ import { getStorage } from '../storage';
 
 const FPS = 30;
 const FRAME_MS = 1000 / FPS;
-/** How long the settled slide is held (readable) at the end of its clip. */
-const HOLD_MS = 1400;
+// The clip's length is the caller's choice now (see `opts.seconds`); the old
+// fixed 1400ms settled-hold is gone, since the drift spans the whole clip and
+// any remainder holds the settled frame automatically.
 
 /** Thrown when a cancel request interrupts the render/encode loop. */
 export class VideoExportCancelled extends Error {
