@@ -27,6 +27,7 @@ import { renderSlidesToPng, slugify } from '../lib/exporter';
 import { runVideoJob, sweepExpiredVideoJobs } from '../lib/videoJobs';
 import { getStorage } from '../storage';
 import { generateCaption, type GeneratedCaption } from '../lib/caption';
+import { postUpdateStatus } from '../lib/promptStatus';
 import { aiDraftConfigured, config } from '../config';
 
 const composeSchema = z.object({
@@ -94,6 +95,7 @@ export function normalizeSlides(slides: SlideInput[]) {
           html: sanitizeAuthoredHtml(s.authored.html),
           ...(s.authored.bg ? { bg: s.authored.bg } : {}),
           ...(s.authored.role ? { role: s.authored.role } : {}),
+          ...(s.authored.pv ? { pv: s.authored.pv } : {}),
         }
       : undefined,
   }));
@@ -302,7 +304,11 @@ projectsRouter.get(
       approvedKitFor(String(project.businessId)),
       MediaAssetModel.find({ businessId: project.businessId }).sort({ createdAt: -1 }).limit(500).lean(),
     ]);
-    res.json({ ...project, _id: String(project._id), brandKit, media });
+    // What a newer copywriter or composer would improve about THIS post, with
+    // the slides that prove it. Reported, never applied — recomposing rewrites
+    // words the user may have edited by hand.
+    const promptUpdates = postUpdateStatus(project.slides ?? [], (brandKit as any)?.recipe);
+    res.json({ ...project, _id: String(project._id), brandKit, media, promptUpdates });
   }),
 );
 

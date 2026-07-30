@@ -15,11 +15,9 @@ export default async function RenderPage({
     motion?: string;
     /** Render this export job's FROZEN snapshot instead of the live project. */
     srcJob?: string;
-    /** Clip length in seconds — the ambient drift is stretched to match. */
-    sec?: string;
   };
 }) {
-  const { projectId, slideId, motion, srcJob, sec } = searchParams;
+  const { projectId, slideId, motion, srcJob } = searchParams;
 
   // Server-side fetch straight to the API. When the opt-in APP_PASSWORD gate is
   // on, attach the shared credentials (this runs on the server; never shipped
@@ -64,7 +62,6 @@ export default async function RenderPage({
       slideTotal={ordered.length}
       showCounter={Boolean(project.settings?.slideCounter) && project.type === 'carousel'}
       motion={motion === '1'}
-      ambientSeconds={sec ? Number(sec) : undefined}
     />
   );
 }

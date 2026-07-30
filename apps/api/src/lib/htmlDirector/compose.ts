@@ -18,6 +18,7 @@ import {
   SLOT_CLASS,
   authoredSlots,
   clampText,
+  currentVersions,
   recipeEmphasisWrap,
   recipePatternVariant,
   type BrandRecipe,
@@ -346,7 +347,7 @@ function clampSlidesToBudgets(slides: ParsedSlide[], budgets: ComposeBudgets): P
 
 // ── The parse step ──────────────────────────────────────────────────────────
 
-const PARSE_SYSTEM = `You are a social-carousel copywriter + editor. Turn the user's idea into a tight, scroll-stopping Instagram carousel, written in the brand's voice. Deliver it by CALLING THE "write_slides" TOOL. (If you cannot call the tool, return the same object as STRICT JSON only — no prose, no fences.)
+export const PARSE_SYSTEM = `You are a social-carousel copywriter + editor. Turn the user's idea into a tight, scroll-stopping Instagram carousel, written in the brand's voice. Deliver it by CALLING THE "write_slides" TOOL. (If you cannot call the tool, return the same object as STRICT JSON only — no prose, no fences.)
 {"slides":[{"role":"cover|statement|quote|feature|stat|list|cta","image":true|false,"parts":{...}}]}
 Rules:
 - First slide role "cover" (a hook). Last slide role "cta". In between use statement / feature / stat / quote / list as the content wants.
@@ -741,6 +742,8 @@ export interface ComposedSlide {
   role?: string;
   /** Which path produced `html`. Never stored — telemetry for callers + the eval. */
   source: ComposePath;
+  /** Prompt versions in force when this slide was written and arranged. */
+  pv?: Record<string, number>;
 }
 
 /**
@@ -809,7 +812,12 @@ export async function composeSlide(
     const substituted = composeByFragment(recipe, input);
     if (substituted) {
       console.warn(`[compose] ${input.role}: composed from the recipe fragment — no model call`);
-      return { html: substituted.html, role: input.role, source: 'fragment' };
+      return {
+        html: substituted.html,
+        role: input.role,
+        source: 'fragment',
+        pv: currentVersions('post') as Record<string, number>,
+      };
     }
   }
 
@@ -901,7 +909,9 @@ export async function composeSlide(
   // per-role motion (a stat pops, a quote fades) in animated exports.
   // `bg` is no longer set here: a full-bleed photo is the USER's choice now,
   // and the renderer derives it from whether they set a background photo.
-  return { html: withSlot, role: input.role, source: 'ai' };
+  // Stamp WHAT MADE THIS SLIDE — the copywriter and the composer versions in
+  // force right now — so a post can later be told what a newer prompt improves.
+  return { html: withSlot, role: input.role, source: 'ai', pv: currentVersions('post') as Record<string, number> };
 }
 
 /** Full path: idea → authored slides (role + authored markup). */

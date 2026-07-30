@@ -1,10 +1,30 @@
 /**
- * AMBIENT MOTION — the slow, continuous drift that makes a still photograph
- * read as footage rather than a slideshow.
+ * AMBIENT MOTION — the slow opening move that makes a still photograph read as
+ * footage rather than a slideshow.
  *
  * This is a second, independent timeline from the REVEAL choreography in
  * recipe.ts. The reveal is short and staggered: each element enters once and is
- * done. Ambient motion runs for the whole clip and never lands.
+ * done. Ambient motion is longer and continuous, but it too RESOLVES.
+ *
+ * TWO RULES, both learned the hard way:
+ *
+ *  A. IT HAPPENS AT THE TOP, THEN STOPS. The move takes AMBIENT_SECONDS and the
+ *     rest of the clip holds. A drift stretched across a ten-second slide is
+ *     either invisible (too slow to see) or seasick (never settles); a move
+ *     that lands in three and then holds reads as a deliberate camera.
+ *
+ *  B. IT ALWAYS LANDS ON YOUR FRAMING. A photo is cropped to its box, so any
+ *     zoom or pan shows LESS of it — and whatever the move ends on is what the
+ *     slide holds for the remaining seconds, and what the still PNG shows.
+ *     So the move starts offset and arrives at rest: the tight, travelling
+ *     framing is the transient, and the composition you set in the editor is
+ *     the destination. Nothing important can be cropped away by motion,
+ *     because motion is never where the slide comes to rest.
+ *
+ *     This is enforced STRUCTURALLY rather than arithmetically: the keyframes
+ *     below declare only a `from`. CSS fills the missing `to` with the
+ *     element's own underlying value, so "the end" is not a number this module
+ *     can get wrong — it is the untransformed element.
  *
  * The layers move at DIFFERENT SPEEDS, which is what sells depth — far things
  * barely move, near things move most:
@@ -64,18 +84,18 @@ export const AMBIENT_AMPLITUDE: Record<AmbientIntensity, { scale: number; shift:
 };
 
 /**
- * How long one ambient move takes when nobody says otherwise. Also the floor
- * for a clip's length.
+ * How long the ambient move takes — and the whole of when it happens. It is
+ * NOT stretched to the clip: a twenty-second slide gets the same three-second
+ * opening and then eighteen seconds of the framing you chose.
  */
-export const AMBIENT_SECONDS = 7;
+export const AMBIENT_SECONDS = 3;
 
 /**
  * How long each slide holds in a video export.
  *
  * Ten seconds is the default because these are Instagram carousels read at
- * arm's length: the reveal takes ~2s, and what's left has to be long enough to
- * actually read the slide before it moves on. The ambient drift is stretched to
- * whatever this is, so a longer clip breathes rather than freezing on a still.
+ * arm's length: the reveal takes ~2s, the ambient move lands at 3s, and what's
+ * left has to be long enough to actually read the slide before it moves on.
  */
 export const VIDEO_SECONDS_DEFAULT = 10;
 export const VIDEO_SECONDS_MIN = 3;
@@ -87,9 +107,23 @@ export const clampVideoSeconds = (n: unknown): number => {
   return Math.min(VIDEO_SECONDS_MAX, Math.max(VIDEO_SECONDS_MIN, v));
 };
 
-/** Per-photo override. 'auto' lets the brand + the focal point decide. */
-export const PHOTO_MOVES = ['auto', 'none', 'in', 'out', 'left', 'right', 'up', 'down'] as const;
+/**
+ * Per-photo override. 'auto' lets the brand + the focal point decide.
+ *
+ * Every one of these is named for where the move STARTS, because they all end
+ * in the same place — the framing you set (rule B above). 'zoom' opens out of
+ * a close crop on the focal point; the four directions slide in from that side.
+ *
+ * `in` and `out` used to be separate options, and `in` ended zoomed: it shipped
+ * a crop nobody chose. There is no way to push in and still finish on the whole
+ * frame — a cover-filled photo has nothing wider to start from — so the two
+ * became one honest move.
+ */
+export const PHOTO_MOVES = ['auto', 'none', 'zoom', 'left', 'right', 'up', 'down'] as const;
 export type PhotoMove = (typeof PHOTO_MOVES)[number];
+
+/** Photos stored before the move vocabulary collapsed. */
+const LEGACY_MOVES: Record<string, PhotoMove> = { in: 'zoom', out: 'zoom' };
 
 export interface AmbientSpec {
   style: AmbientStyle;
@@ -99,18 +133,28 @@ export interface AmbientSpec {
 /** Recipes authored before ambient existed fall back to this. */
 export const DEFAULT_AMBIENT: AmbientSpec = { style: 'parallax', intensity: 'medium' };
 
+/** What `auto` cycles through when a photo has no focal point to aim at. */
+const AUTO_CYCLE = ['zoom', 'left', 'zoom', 'right'] as const;
+
 /**
  * Resolve `auto` into a real move.
  *
  * A photo with a focal point has already been told where its subject is, so
- * `auto` pushes IN toward it: the frame closes on the thing you said mattered.
- * Without a focal point there is nothing to aim at, so it alternates by index —
- * a deck where every picture pushes in the same way reads mechanically.
+ * `auto` opens out FROM it: the clip starts close on the thing you said
+ * mattered and widens to the whole frame. Without a focal point there is
+ * nothing to aim at, so it cycles by index — a deck where every picture moves
+ * the same way reads mechanically.
  */
-export function resolveMove(move: PhotoMove | undefined, focal?: { x: number; y: number }, index = 0): Exclude<PhotoMove, 'auto'> {
-  if (move && move !== 'auto') return move;
-  if (focal) return 'in';
-  return index % 2 === 0 ? 'in' : 'out';
+export function resolveMove(
+  /** Accepts the retired `in`/`out` too: stored photos still carry them. */
+  move: PhotoMove | 'in' | 'out' | undefined,
+  focal?: { x: number; y: number },
+  index = 0,
+): Exclude<PhotoMove, 'auto'> {
+  const m = move ? (LEGACY_MOVES[move] ?? move) : undefined;
+  if (m && m !== 'auto') return m as Exclude<PhotoMove, 'auto'>;
+  if (focal) return 'zoom';
+  return AUTO_CYCLE[index % AUTO_CYCLE.length]!;
 }
 
 /**
@@ -135,8 +179,7 @@ function ambientMotion(
   const usePan = spec.style !== 'push';
   const shift = usePan ? amp.shift * depth : 0;
   const pan: Record<string, [number, number]> = {
-    in: [0, 0],
-    out: [0, 0],
+    zoom: [0, 0],
     left: [-shift, 0],
     right: [shift, 0],
     up: [0, -shift],
@@ -145,131 +188,35 @@ function ambientMotion(
   const [dx, dy] = pan[move] ?? [0, 0];
   // Whatever we pan, we must first zoom past — otherwise the drift walks the
   // edge of the image into frame and shows the box behind it. Charged against
-  // the ACTUAL pan, not the configured one: `in` and `out` never pan, and
-  // billing them for coverage they don't use inflated a push-in to 36%.
+  // the ACTUAL pan, not the configured one: `zoom` never pans, and billing it
+  // for coverage it doesn't use inflated the move to 36%.
   const cover = (Math.max(Math.abs(dx), Math.abs(dy)) * 2) / 100;
   const zoom = (useScale ? amp.scale * depth : 0) + cover;
   return { zoom, dx, dy };
 }
 
-/** The from/to transform pair for one layer's ambient move. */
-export function ambientTransforms(
+/**
+ * WHERE THE MOVE BEGINS — the transform at t=0, as a CSS value.
+ *
+ * There is deliberately no companion `ambientEnd`. The end is the element's
+ * own untransformed state, which the keyframes get by not mentioning it, so no
+ * caller can be told a settled framing that differs from the resting one.
+ *
+ * This module used to export `ambientEndState` / `settledViewport` /
+ * `settledBounds` / `hasSettledShift`, and the editor drew a brass "here is
+ * what survives" frame from them, because a push-in really did ship a tighter
+ * crop than the one you framed. Motion now lands at rest, so the settled frame
+ * IS the frame — the guides described a difference that no longer exists, and
+ * went with them.
+ */
+export function ambientStart(
   move: Exclude<PhotoMove, 'auto'>,
   layer: AmbientLayer,
   spec: AmbientSpec,
-): { from: string; to: string } | null {
+): string | null {
   const m = ambientMotion(move, layer, spec);
   if (!m) return null;
-  const at = (s: number, x: number, y: number) =>
-    `scale(${(1 + s).toFixed(4)}) translate(${x.toFixed(3)}%, ${y.toFixed(3)}%)`;
-  // `out` starts zoomed and relaxes; everything else closes in.
-  return move === 'out'
-    ? { from: at(m.zoom, m.dx, m.dy), to: at(0, 0, 0) }
-    : { from: at(0, 0, 0), to: at(m.zoom, m.dx, m.dy) };
-}
-
-/** A rectangle in a layer's own box, as fractions [0..1] of its width/height. */
-export interface MotionRect {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
-
-/**
- * Where a layer's transform LANDS — the state it holds once the move is over.
- *
- * `ambientPhotoCss` emits `animation: … both`, so the layer sticks at the
- * keyframes' `to` state, and the video exporter deliberately seeks every
- * `cb-amb-*` animation to its end for the hold frames. This is therefore the
- * framing that actually ships, and the one the editor should be showing.
- *
- * `dx`/`dy` are FRACTIONS of the layer's box (the emitted percentage ÷ 100).
- * A still layer — and every `out`, which relaxes back to rest — reports the
- * identity, so callers can treat "no motion" and "settles at rest" alike.
- */
-export function ambientEndState(
-  move: Exclude<PhotoMove, 'auto'>,
-  layer: AmbientLayer,
-  spec: AmbientSpec,
-): { scale: number; dx: number; dy: number } {
-  const m = ambientMotion(move, layer, spec);
-  if (!m || move === 'out') return { scale: 1, dx: 0, dy: 0 };
-  return { scale: 1 + m.zoom, dx: m.dx / 100, dy: m.dy / 100 };
-}
-
-const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
-
-/**
- * THE GEOMETRY, once. CSS composes `transform: scale(s) translate(d)` about
- * `transform-origin: o` right-to-left, so a point `p` of the element lands at
- *
- *     p' = o + s · (p − o + d)
- *
- * with `p`, `p'`, `o` and `d` all as fractions of the element's own box. Both
- * helpers below are that one line, read in opposite directions.
- */
-const forward = (p: number, o: number, s: number, d: number) => o + s * (p - o + d);
-
-/**
- * The part of the photo still on screen when the move has settled, in the
- * layer's own [0..1] coordinates.
- *
- * Inverting `p' = o + s·(p − o + d)` for the window `p' ∈ [0,1]`:
- *
- *     left = o · (1 − 1/s) − d      width = 1/s
- *
- * A push-in eats the edges, so what you frame at rest is NOT what ships — this
- * is what the editor draws so you can see the difference before you export.
- * Clamped to the box: with the origin hard against an edge the zoom can drag
- * the layer off its own frame, and there is no photo out there to show.
- */
-export function settledViewport(
-  move: Exclude<PhotoMove, 'auto'>,
-  layer: AmbientLayer,
-  spec: AmbientSpec,
-  focal?: { x: number; y: number },
-): MotionRect {
-  const { scale: s, dx, dy } = ambientEndState(move, layer, spec);
-  if (s === 1 && dx === 0 && dy === 0) return { x: 0, y: 0, w: 1, h: 1 };
-  const axis = (o: number, d: number) => {
-    const lo = clamp01(o * (1 - 1 / s) - d);
-    const hi = clamp01(o * (1 - 1 / s) - d + 1 / s);
-    return { lo, len: Math.max(0, hi - lo) };
-  };
-  const h = axis(focal?.x ?? 0.5, dx);
-  const v = axis(focal?.y ?? 0.5, dy);
-  return { x: h.lo, y: v.lo, w: h.len, h: v.len };
-}
-
-/**
- * Where the layer's own BOX ends up once the move has settled — the forward
- * reading of the same mapping, in the box's own [0..1] coordinates.
- *
- * Deliberately unclamped: the whole point for a floating photo is that it
- * grows past the frame you dragged, and a guide that stopped at the edge would
- * hide exactly the overhang the user needs to see.
- */
-export function settledBounds(
-  move: Exclude<PhotoMove, 'auto'>,
-  layer: AmbientLayer,
-  spec: AmbientSpec,
-  focal?: { x: number; y: number },
-): MotionRect {
-  const { scale: s, dx, dy } = ambientEndState(move, layer, spec);
-  const ox = focal?.x ?? 0.5;
-  const oy = focal?.y ?? 0.5;
-  return { x: forward(0, ox, s, dx), y: forward(0, oy, s, dy), w: s, h: s };
-}
-
-/** Whether the settled framing differs from what you see at rest at all. */
-export function hasSettledShift(
-  move: Exclude<PhotoMove, 'auto'>,
-  layer: AmbientLayer,
-  spec: AmbientSpec,
-): boolean {
-  const { scale, dx, dy } = ambientEndState(move, layer, spec);
-  return scale !== 1 || dx !== 0 || dy !== 0;
+  return `scale(${(1 + m.zoom).toFixed(4)}) translate(${m.dx.toFixed(3)}%, ${m.dy.toFixed(3)}%)`;
 }
 
 /**
@@ -285,19 +232,20 @@ export function ambientPhotoCss(
   layer: AmbientLayer,
   spec: AmbientSpec,
   focal?: { x: number; y: number },
-  /** Stretch the drift across a clip of this length (video export). */
-  seconds = AMBIENT_SECONDS,
 ): string {
-  const t = ambientTransforms(move, layer, spec);
-  if (!t) return '';
+  const from = ambientStart(move, layer, spec);
+  if (!from) return '';
   const ox = ((focal?.x ?? 0.5) * 100).toFixed(1);
   const oy = ((focal?.y ?? 0.5) * 100).toFixed(1);
   return [
-    `@keyframes ${keyframeName}{from{transform:${t.from}}to{transform:${t.to}}}`,
-    // `alternate` so a long hold never jumps: the move eases out and comes back
-    // rather than cutting from fully-zoomed to the start.
+    // NO `to`. CSS fills the missing endpoint from the element's own style, so
+    // the move can only ever finish on the untransformed photo — the framing
+    // the editor showed and the still export renders.
+    `@keyframes ${keyframeName}{from{transform:${from}}}`,
+    // `ease-out`: a move that resolves should decelerate into rest, not coast
+    // into it. `both` so the offset applies before the clip's first frame.
     `${selector}{transform-origin:${ox}% ${oy}%;` +
-      `animation:${keyframeName} ${seconds}s ease-in-out both;will-change:transform}`,
+      `animation:${keyframeName} ${AMBIENT_SECONDS}s ease-out both;will-change:transform}`,
   ].join('\n');
 }
 
@@ -309,15 +257,17 @@ export function ambientPhotoCss(
  * would drag the whole composition with it. Moving the background position
  * moves only the painted layers.
  */
-export function ambientArtCss(scope: string, spec: AmbientSpec, seconds = AMBIENT_SECONDS): string {
+export function ambientArtCss(scope: string, spec: AmbientSpec): string {
   if (spec.style === 'none') return '';
   const amp = AMBIENT_AMPLITUDE[spec.intensity];
   const d = (amp.shift * AMBIENT_DEPTH.art).toFixed(2);
   return [
-    `@keyframes cb-amb-art{from{background-position:calc(50% - ${d}%) calc(50% - ${d}%)}` +
-      `to{background-position:calc(50% + ${d}%) calc(50% + ${d}%)}}`,
+    // Again only a `from`: the art drifts in and lands on whatever position the
+    // recipe authored for it. Pinning both ends used to override the brand's
+    // own `background-position` outright, and left it parked off-centre.
+    `@keyframes cb-amb-art{from{background-position:calc(50% - ${d}%) calc(50% - ${d}%)}}`,
     // Doubled class to match a recipe's own `.cb-slide.photo` specificity; this
     // sheet is emitted after the recipe's, so source order decides.
-    `.${scope} .cb-slide.cb-slide{animation:cb-amb-art ${seconds}s ease-in-out both}`,
+    `.${scope} .cb-slide.cb-slide{animation:cb-amb-art ${AMBIENT_SECONDS}s ease-out both}`,
   ].join('\n');
 }

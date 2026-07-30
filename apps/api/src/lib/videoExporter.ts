@@ -140,10 +140,9 @@ export async function renderSlidesToVideo(
       report(i, 0);
       // `srcJob` points the renderer at this export's FROZEN snapshot, so every
       // slide comes from the same moment and editing mid-export cannot tear the
-      // file. `sec` stretches the ambient drift across the whole clip.
+      // file.
       const url =
         `${base}/render?projectId=${project._id}&slideId=${encodeURIComponent(slide.id)}&motion=1` +
-        `&sec=${seconds}` +
         (opts?.srcJob ? `&srcJob=${encodeURIComponent(opts.srcJob)}` : '');
       await gotoAndSettle(page, url, slide.id);
       report(i, 0.08);
@@ -194,30 +193,19 @@ export async function renderSlidesToVideo(
       }
 
       /**
-       * Settled: drop the REVEAL so the slide renders in its plain static state
-       * — identical to the still PNG export, and immune to the stale-paint
-       * quirk above.
+       * Settled: drop EVERY animation so the slide renders in its plain static
+       * state — identical to the still PNG export, and immune to the
+       * stale-paint quirk above.
        *
-       * The ambient drift must NOT be dropped with it. Cancelling every
-       * animation would snap a push-in back to its starting scale for the whole
-       * 1400ms hold — the same trap that made a counted stat fall back to zero.
-       * So ambient animations are seeked to their END and left in place, and the
-       * hold genuinely holds where the motion finished.
+       * Ambient used to need protecting here: it ran the length of the clip and
+       * held at its far end, so cancelling it snapped a push-in back to its
+       * starting scale for the whole hold. Ambient now *lands* on the static
+       * state within AMBIENT_SECONDS, so cancelling it and letting it finish
+       * are the same picture, and the special case is gone.
        */
       await page.evaluate(() => {
         const doc = (globalThis as any).document;
         doc.getAnimations().forEach((a: any) => {
-          const name = String(a.animationName ?? '');
-          if (name.startsWith('cb-amb-')) {
-            try {
-              const t = a.effect?.getComputedTiming?.();
-              const end = Number(t?.endTime ?? 0);
-              if (Number.isFinite(end)) a.currentTime = end;
-            } catch {
-              /* leave it wherever it is rather than losing it */
-            }
-            return;
-          }
           try {
             a.cancel();
           } catch {
@@ -228,8 +216,9 @@ export async function renderSlidesToVideo(
       });
       await new Promise((r) => setTimeout(r, 120));
       const settled = Buffer.from(await el.screenshot({ type: 'png' }));
-      // Whatever is left of the requested duration holds on the settled frame —
-      // usually nothing, since the drift now spans the clip.
+      // Whatever is left of the requested duration holds on the settled frame.
+      // With a 3s ambient move inside a 10s clip that is most of the slide —
+      // which is the point: you get a camera move, then time to read.
       for (let h = frames.length; h < targetFrames; h++) frames.push(settled);
 
       const name = `${String(i + 1).padStart(2, '0')}.mp4`;

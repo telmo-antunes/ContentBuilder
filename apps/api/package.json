@@ -11,7 +11,8 @@
     "eval:compose": "tsx src/eval/run.ts",
     "migrate:photos": "tsx src/scripts/migrateSlidePhotos.ts",
     "typecheck": "tsc --noEmit",
-    "migrate:recipes": "tsx src/scripts/migrateRecipeGates.ts"
+    "migrate:recipes": "tsx src/scripts/migrateRecipeGates.ts",
+    "prompt:hashes": "tsx src/scripts/promptHashes.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.106.0",

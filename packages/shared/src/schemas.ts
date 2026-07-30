@@ -105,6 +105,12 @@ export const slideSchema = z.object({
       /** The composer's slide ROLE (cover/statement/quote/stat/cta/…). Drives the
        *  recipe's per-role motion in animated exports. */
       role: z.string().max(24).optional(),
+      /**
+       * WHICH PROMPT VERSIONS wrote and arranged this slide. Stamped at compose
+       * so a post can be told what a newer copywriter or composer would improve.
+       * Absent means it predates versioning — behind everything.
+       */
+      pv: z.record(z.string(), z.number()).optional(),
     })
     .optional(),
 });

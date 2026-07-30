@@ -38,6 +38,18 @@ const NAV: { href: string; label: string; icon: ReactNode; match: (p: string) =>
     ),
   },
   {
+    href: '/whats-new',
+    label: 'What the AI learned',
+    match: (p) => p.startsWith('/whats-new'),
+    icon: (
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6">
+        <path d="M5 4.5h9l5 5V19a.5.5 0 01-.5.5h-13A.5.5 0 015 19V5a.5.5 0 010-.5z" />
+        <path d="M13.5 4.5V10h5.5" strokeOpacity=".6" />
+        <path d="M8.5 13.5h7M8.5 16.5h4.5" />
+      </svg>
+    ),
+  },
+  {
     href: '/settings',
     label: 'Settings',
     match: (p) => p.startsWith('/settings'),

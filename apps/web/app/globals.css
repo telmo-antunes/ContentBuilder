@@ -1716,3 +1716,86 @@ input[type='color'] {
 .dcard-sep { color: var(--border-strong); }
 /* In flow, not absolute — an overlaid button would sit on top of the title. */
 .dcard-menu { grid-area: menu; align-self: start; margin: -2px -2px 0 0; }
+
+/* ── Prompt versions ────────────────────────────────────────────────────────
+   "The AI got better since this was made." Styled as a QUIET NOTICE, not an
+   alert: it is never urgent, it never blocks, and it appears only when the app
+   can name the specific thing in your artifact a newer prompt would fix. Its
+   border reads as information (accent), not as a problem (warning). */
+.pu {
+  margin-top: 12px; padding: 11px 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--border));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 5%, var(--panel));
+  animation: bk-suggest-in 0.32s var(--ease) both;
+}
+.pu-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pu-head > svg { color: var(--accent); flex: 0 0 auto; }
+.pu-msg { flex: 1 1 220px; margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text); font-weight: 600; }
+.pu-findings { margin: 8px 0 0; padding-left: 26px; display: grid; gap: 3px; }
+.pu-findings li { font-size: 12px; line-height: 1.55; color: var(--faint); }
+.pu-findings li::marker { color: color-mix(in srgb, var(--accent) 70%, transparent); }
+.pu-releases { margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--border); display: grid; gap: 14px; }
+.pu-releases h4 { margin: 0 0 7px; display: flex; align-items: baseline; gap: 8px; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); font-weight: 700; }
+.pu-vers {
+  font-size: 10.5px; letter-spacing: 0.06em; font-weight: 700; text-transform: none;
+  padding: 1px 7px; border-radius: 999px;
+  color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent);
+  font-variant-numeric: tabular-nums;
+}
+.pu-more { margin: 2px 0 0; font-size: 12px; }
+.pu-more a { color: var(--accent); text-decoration: none; }
+.pu-more a:hover { text-decoration: underline; }
+
+/* One release: a version, what changed in a line, then the detail. */
+.pu-rel { list-style: none; margin: 0; padding: 0; display: grid; gap: 11px; }
+.pu-rel > li { padding-left: 13px; border-left: 2px solid color-mix(in srgb, var(--accent) 34%, transparent); }
+/* Releases the artifact already HAS, when a list shows both — present, but not
+   competing with the ones that are new to it. */
+.pu-rel > li.has { border-left-color: var(--border); opacity: 0.55; }
+.pu-rel-head { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
+.pu-rel-head strong { font-size: 12.5px; font-weight: 650; color: var(--text); line-height: 1.45; }
+.pu-rel-v {
+  font-size: 10.5px; font-weight: 700; color: var(--accent);
+  font-variant-numeric: tabular-nums; flex: 0 0 auto;
+}
+.pu-rel-head time { margin-left: auto; font-size: 10.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.pu-rel > li > ul { margin: 5px 0 0; padding-left: 17px; display: grid; gap: 3px; }
+.pu-rel > li > ul li { font-size: 12px; line-height: 1.55; color: var(--faint); }
+
+/* The changelog page. Reading width, no cards — this is a document. */
+.wn { display: grid; gap: 26px; padding-bottom: 40px; }
+.wn-head h1 { margin: 0 0 10px; }
+.wn-head p { margin: 0; max-width: 68ch; font-size: 13.5px; line-height: 1.7; color: var(--faint); }
+.wn-filter { display: flex; gap: 6px; margin-top: 14px; }
+.wn-tp { padding-top: 20px; border-top: 1px solid var(--border); }
+.wn-tp-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.wn-tp-head h2 { margin: 0; font-size: 17px; }
+.wn-affects { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); font-weight: 600; }
+.wn-role { margin: 6px 0 14px; max-width: 68ch; font-size: 12.5px; line-height: 1.6; color: var(--faint); }
+
+/* A slide the newer prompts would change, marked on its own card. */
+.pu-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 8px; border-radius: 999px;
+  font-size: 10.5px; font-weight: 600; letter-spacing: 0.02em;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+/* On the review screen the strip is one voice among several (overflow, needs
+   photo) — give it the deck's rhythm rather than the brand page's inset. */
+.studio-pu { margin: 10px 0 2px; }
+/* "Improvable": the same shape and corner language as Needs photo / Overflows,
+   in the accent that means information rather than the amber that means
+   something is wrong. Bottom-left, so it never collides with either. */
+.studio-pcard .stale {
+  position: absolute; bottom: 8px; left: 8px; z-index: 4;
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
+  color: var(--accent); background: var(--panel);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border-strong));
+  border-radius: 6px; padding: 3px 7px; box-shadow: var(--shadow-sm);
+}

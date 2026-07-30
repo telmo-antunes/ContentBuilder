@@ -13,6 +13,7 @@ import type {
   AssetType,
   Format,
   TweakSuggestion,
+  UpdateStatus,
 } from '@contentbuilder/shared';
 import { api } from './config';
 
@@ -32,9 +33,20 @@ export interface BusinessDetail extends BusinessSummary {
 }
 
 /** Project fetched for the editor — bundled with its approved kit + business media. */
+/**
+ * A post, plus the two things the review screen can't derive on its own: the
+ * brand it composes against, and which of its slides a newer prompt would
+ * improve.
+ */
 export interface ProjectDetail extends Project {
   brandKit: BrandKit | null;
   media: MediaAsset[];
+  promptUpdates?: PostUpdateStatus | null;
+}
+
+/** `UpdateStatus`, plus WHICH slides earned the flag. Mirrors the API's shape. */
+export interface PostUpdateStatus extends UpdateStatus {
+  slides: Array<{ id: string; order: number; reasons: string[] }>;
 }
 
 export class ApiClientError extends Error {
@@ -319,6 +331,12 @@ export interface BrandKitState {
    * through the ordinary recipe-knobs PATCH; dismissing snoozes it 14 days.
    */
   suggestion?: TweakSuggestion | null;
+  /**
+   * What a newer design prompt would fix about the APPROVED kit's recipe, with
+   * the evidence that says so. Null when the brand has no recipe yet, and
+   * `flagged: false` whenever being behind changed nothing measurable here.
+   */
+  promptUpdates?: UpdateStatus | null;
 }
 
 export interface BrandKitEdit {

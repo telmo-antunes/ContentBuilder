@@ -110,10 +110,8 @@ export default function SlidePhotoPanel({
   busy: boolean;
   selectedFreeId: string | null;
   /**
-   * The brand's ambient motion, so the focal picker can show where each move
-   * LEAVES the photo — the framing that ships is the one the motion settles
-   * into, not the one at rest. Absent, it assumes the same default the recipe
-   * falls back to.
+   * The brand's ambient motion, so the focal picker can describe what each
+   * move does — and say nothing at all when the brand has motion switched off.
    */
   ambient?: AmbientSpec;
   onSelectFree: (id: string | null) => void;
@@ -361,16 +359,23 @@ export default function SlidePhotoPanel({
 
   const disabled = busy || uploading !== null;
 
-  /** Plain-language names for every movement a photo can have in a video. */
+  /**
+   * Plain-language names for every movement a photo can have in a video.
+   *
+   * Each one names where the move COMES FROM, because they all arrive in the
+   * same place: the framing set below. A photo cropped to its box shows less of
+   * itself the moment it zooms, and whatever the move ends on is what the rest
+   * of the clip holds — so the move ends at rest, and only the opening seconds
+   * travel.
+   */
   const MOVES: Array<{ v: string; t: string }> = [
     { v: 'auto', t: 'Automatic' },
     { v: 'none', t: 'Hold still' },
-    { v: 'in', t: 'Slowly zoom in' },
-    { v: 'out', t: 'Slowly zoom out' },
-    { v: 'left', t: 'Drift left' },
-    { v: 'right', t: 'Drift right' },
-    { v: 'up', t: 'Drift up' },
-    { v: 'down', t: 'Drift down' },
+    { v: 'zoom', t: 'Open out from the subject' },
+    { v: 'left', t: 'Slide in from the left' },
+    { v: 'right', t: 'Slide in from the right' },
+    { v: 'up', t: 'Slide in from above' },
+    { v: 'down', t: 'Slide in from below' },
   ];
 
   /** A labelled row of choices. Words, not glyphs — the old controls were a
@@ -486,7 +491,6 @@ export default function SlidePhotoPanel({
                 url={asset.url}
                 value={p.focal}
                 move={resolveMove(p.motion, p.focal, opts.index ?? 0)}
-                layer={kind}
                 ambient={amb}
                 onChange={(focal) => patch(p.id, { focal })}
               />
@@ -618,7 +622,7 @@ export default function SlidePhotoPanel({
   };
 
   const moveName = (p?: SlidePhoto) =>
-    MOVES.find((m) => m.v === (p?.motion ?? 'auto'))!.t.toLowerCase();
+    (MOVES.find((m) => m.v === (p?.motion ?? 'auto')) ?? MOVES[0]!).t.toLowerCase();
 
   return (
     <div className="sp">

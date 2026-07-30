@@ -32,6 +32,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 import {
   clampText,
   composeRecipeLayers,
+  currentVersions,
   migrateRecipe,
   ensureListSkeleton,
   ensureRecipeContrast,
@@ -103,7 +104,7 @@ WHY: without them every future slide is re-invented by a cheap model reading you
 ${FRAGMENT_CONVENTION}
 Cover every role you can lay out well. A role you leave out (or that names a class you never defined) simply falls back to the model, so a fragment you are unsure of costs nothing to omit — but a brand with all seven is a brand whose every post is composed exactly as you designed it.`;
 
-const SYSTEM = `You are an elite brand & art director. From a business's brand evidence you author its complete DESIGN SYSTEM — a "recipe" that EVERY future Instagram post is composed against, authored ONCE. Deliver it by CALLING THE "author_recipe" TOOL with the whole design system as its argument, matching the shape of the worked examples EXACTLY. (If you cannot call the tool, output the same object as STRICT JSON only — no prose, no fences.)
+export const RECIPE_AUTHOR_SYSTEM = `You are an elite brand & art director. From a business's brand evidence you author its complete DESIGN SYSTEM — a "recipe" that EVERY future Instagram post is composed against, authored ONCE. Deliver it by CALLING THE "author_recipe" TOOL with the whole design system as its argument, matching the shape of the worked examples EXACTLY. (If you cannot call the tool, output the same object as STRICT JSON only — no prose, no fences.)
 
 THE BAR IS REFERENCE-GRADE: a stranger should see a rendered slide and assume a senior designer made it by hand for THIS brand. You are judged almost entirely on the CSS you author — real CSS scoped to .cb-slide, written against the --cb-* tokens, sized for the FULL 1080×1350 canvas. Both worked examples clear this bar; match it, do not copy them.
 
@@ -133,7 +134,7 @@ WHAT REFERENCE-GRADE MEANS (both examples do ALL of this):
 6. PER-FORMAT tuning in "formats" — keys "1080x1920" (story) and "1080x1080" (square). Every IG format is 1080 WIDE, so only VERTICAL metrics change: append a small override stylesheet (safe-area padding for stories ~210px top / ~240px bottom + a size bump; tighter padding + smaller sizes for square). Copy the examples' "formats" approach.
 7. A PHOTO TREATMENT — this brand's posts carry the user's own photographs, dropped into ".cb-shot" boxes the composer leaves in the layout. The app already sizes and crops those boxes; YOU decide what a photograph LOOKS LIKE on this brand. Add rules for ".cb-slide .cb-shot" (and "::after" for an overlay — never "::before", which carries the photograph itself) that make a plain snapshot read as this brand's imagery — e.g. the same film grain as the background, a duotone or warm/cool cast via a blend mode, a bottom scrim so type stays legible over it, a hairline edge or an inset shadow, a corner treatment consistent with --cb-radius. Keep it to 2–4 rules, and make it recognisably yours: two brands must not treat a photo the same way. Describe the intent in "imagery.treatment", and set "imagery.photoRole" honestly — "hero" if photography carries this brand, "accent" if it supports the type, "none" if this brand is purely typographic.
 8. A MOTION signature in "motion" — how the brand MOVES when a post is exported as video. Pick the brand-default style + pace that match its character (e.g. a disciplined, forceful brand punches in punchy; a premium, unhurried one rises calm; an editorial one fades balanced), and describe it in one evocative line — as deliberate as its visual signature.
-   Also set "motion.ambient" — the CONTINUOUS drift that runs under everything for the whole clip, which is what makes a still photograph read as footage instead of a slideshow. style ∈ {parallax|push|drift|none} (parallax = layers move at different depths; push = zoom only; drift = pan only), intensity ∈ {subtle|medium|strong}. Choose for the brand's character: a calm, premium brand wants "parallax"/"subtle"; an energetic one can take "medium". Ambient motion you consciously NOTICE is too strong — pick "strong" only for a deliberately restless brand, and "none" only if stillness is the point.
+   Also set "motion.ambient" — the OPENING CAMERA MOVE, which is what makes a still photograph read as footage instead of a slideshow. It runs for the first three seconds of a slide and then lands: every layer starts offset and arrives at the framing the user chose, so the picture is never left cropped by the motion. style ∈ {parallax|push|drift|none} (parallax = layers arrive at different depths; push = zoom only; drift = pan only), intensity ∈ {subtle|medium|strong} — how far from rest it starts. Choose for the brand's character: a calm, premium brand wants "parallax"/"subtle"; an energetic one can take "medium". Pick "strong" only for a deliberately restless brand, and "none" only if stillness is the point.
    Then make motion EDITORIAL with per-role overrides in "motion.roles" (keys: cover, statement, quote, feature, stat, list, cta — include only the ones worth differing). Each slide role has a different job, so it should move differently: a "stat" is the one moment to show off (use "pop"); a "quote" wants a calm "fade" so the words breathe; a "cta" should arrive decisively; a photo "cover" often reads best as a simple "fade" that lets the image work. Keep it coherent with the brand default — vary the accent, not the identity.
 
 THE GROUND — BAD vs GOOD. A flat gradient is the single most common failure, so anchor on this pair rather than on adjectives:
@@ -159,7 +160,7 @@ HARD RULES:
 - The three layers together under ~4500 characters (the per-format overrides in "formats" are separate). ${ENUMS}
 - INVENT this brand's own colours/fonts/voice/signature/graphic — never reuse the examples'.`;
 
-const CRITIQUE_SYSTEM = `You are a ruthless design director reviewing a junior's brand recipe against a reference bar. Deliver your review by CALLING THE "review_recipe" TOOL. (If you cannot call the tool, output the same object as STRICT JSON only, no prose, no fences.)
+export const RECIPE_CRITIQUE_SYSTEM = `You are a ruthless design director reviewing a junior's brand recipe against a reference bar. Deliver your review by CALLING THE "review_recipe" TOOL. (If you cannot call the tool, output the same object as STRICT JSON only, no prose, no fences.)
 
 Judge the recipe you are given on: (1) is the background CINEMATIC and layered, or a flat/timid gradient? (2) is there a real, named SIGNATURE move applied consistently? (3) is the display type feed-huge (${HEADLINE_RANGE_PX}) or timid? (4) is the component vocabulary rich (8–12 classes) or thin? (5) are per-format "formats" overrides present for story + square? (6) is ONE accent rationed with real negative space? (7) does "motion" carry a style+pace that genuinely matches the brand's character, with an evocative one-line description AND per-role overrides in "motion.roles" that give a stat, a quote and a cta their own distinct entrance?
 
@@ -388,11 +389,11 @@ function exemplarsFor([a, b]: [Exemplar, Exemplar]): string {
  * evidence, and above all not the homepage screenshot. See lib/ai.ts.
  */
 const AUTHOR_SYSTEMS: Record<Pairing, Anthropic.TextBlockParam[]> = {
-  dark: cachedSystem(`${SYSTEM}\n\n${exemplarsFor(PAIRINGS.dark)}`),
-  mixed: cachedSystem(`${SYSTEM}\n\n${exemplarsFor(PAIRINGS.mixed)}`),
-  light: cachedSystem(`${SYSTEM}\n\n${exemplarsFor(PAIRINGS.light)}`),
+  dark: cachedSystem(`${RECIPE_AUTHOR_SYSTEM}\n\n${exemplarsFor(PAIRINGS.dark)}`),
+  mixed: cachedSystem(`${RECIPE_AUTHOR_SYSTEM}\n\n${exemplarsFor(PAIRINGS.mixed)}`),
+  light: cachedSystem(`${RECIPE_AUTHOR_SYSTEM}\n\n${exemplarsFor(PAIRINGS.light)}`),
 };
-const CRITIQUE_SYSTEM_CACHED = cachedSystem(CRITIQUE_SYSTEM);
+const CRITIQUE_SYSTEM_CACHED = cachedSystem(RECIPE_CRITIQUE_SYSTEM);
 
 function evidenceBlock(e: RecipeEvidence): string {
   return [
@@ -604,7 +605,14 @@ function gate(recipe: BrandRecipe, label: string): BrandRecipe {
   // placeholder convention is DROPPED, and that role composes the old way. Runs
   // after the consistency pass, so a fragment is judged against the component
   // vocabulary that actually survived.
-  const fragments = validateRecipeFragments(consistency.recipe);
+  // Stamp WHAT MADE THIS. Every recipe leaving this function was designed by
+  // today's prompts, so it carries today's versions; anything without a stamp
+  // predates versioning and is treated as behind.
+  const stamped = {
+    ...consistency.recipe,
+    promptVersions: currentVersions('brand') as Record<string, number>,
+  };
+  const fragments = validateRecipeFragments(stamped);
   for (const d of fragments.dropped) {
     console.warn(`[recipe:${label}] dropped the "${d.role}" reference fragment — ${d.reason}`);
   }

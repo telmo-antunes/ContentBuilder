@@ -44,7 +44,6 @@ export function AuthoredSlide({
   photos,
   editing = false,
   motion = false,
-  ambientSeconds,
   onOverflow,
 }: {
   recipe: BrandRecipe;
@@ -60,7 +59,6 @@ export function AuthoredSlide({
   /** Play the reveal choreography (for animated/video export). Off = still PNG. */
   motion?: boolean;
   /** Stretch the ambient drift across a clip of this length (video export). */
-  ambientSeconds?: number;
   /** Reports whether the composition exceeds the canvas (see the effect below). */
   onOverflow?: (overflow: boolean) => void;
 }) {
@@ -176,11 +174,16 @@ export function AuthoredSlide({
    * The recipe's art is drifted with `background-position` and everything else
    * with a transform, because the art is painted on `.cb-slide` — which also
    * holds every word on the slide, and must not move.
+   *
+   * It is an OPENING move, not a permanent one: every layer starts offset and
+   * lands, within AMBIENT_SECONDS, on exactly the framing this component
+   * renders when `motion` is off. So a longer clip holds still for longer, and
+   * the video and the PNG agree about what the slide looks like.
    */
   const ambient = recipeAmbient(recipe);
   const ambientCss = motion
     ? [
-        ambientArtCss(scope, ambient, ambientSeconds),
+        ambientArtCss(scope, ambient),
         bg
           ? ambientPhotoCss(
               `.${scope} .cb-bg-photo`,
@@ -189,7 +192,6 @@ export function AuthoredSlide({
               'background',
               ambient,
               bg.focal,
-              ambientSeconds,
             )
           : '',
         ...authoredSlots(html)
@@ -204,7 +206,6 @@ export function AuthoredSlide({
                   'slot',
                   ambient,
                   p.focal,
-                  ambientSeconds,
                 )
               : '';
           }),
@@ -216,7 +217,6 @@ export function AuthoredSlide({
             'free',
             ambient,
             p.focal,
-            ambientSeconds,
           ),
         ),
       ]

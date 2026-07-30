@@ -1,25 +1,18 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  hasSettledShift,
-  settledViewport,
-  type AmbientLayer,
-  type AmbientSpec,
-  type PhotoMove,
-} from '@contentbuilder/shared';
+import { AMBIENT_SECONDS, type AmbientSpec, type PhotoMove } from '@contentbuilder/shared';
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
-/** What each move does, said the way a person would say it. */
+/** How each move ARRIVES at this framing, said the way a person would say it. */
 const MOVE_PHRASE: Record<Exclude<PhotoMove, 'auto'>, string> = {
-  none: 'holds still',
-  in: 'slowly closes in on the dot',
-  out: 'slowly pulls back',
-  left: 'drifts left',
-  right: 'drifts right',
-  up: 'drifts up',
-  down: 'drifts down',
+  none: 'it holds still',
+  zoom: 'it starts close on the dot and opens out to this',
+  left: 'it slides in from the left and settles here',
+  right: 'it slides in from the right and settles here',
+  up: 'it slides in from above and settles here',
+  down: 'it slides in from below and settles here',
 };
 
 /**
@@ -32,19 +25,18 @@ const MOVE_PHRASE: Record<Exclude<PhotoMove, 'auto'>, string> = {
  * shows the whole picture and lets you put the crosshair on the part that
  * matters; the renderer feeds it to `background-position` / `object-position`.
  *
- * THE SECOND CROP. Video adds one the still preview never showed: ambient
- * motion holds at the END of its move, so a push-in ships the framing it
- * settles into, not the one you see at rest. Framing against the resting box
- * therefore quietly lost the edges. `settledViewport` says exactly how much,
- * and the brass frame below draws it — everything scrimmed is gone by the time
- * the clip lands.
+ * THERE IS ONLY ONE CROP. Video used to add a second one this picker had to
+ * draw a brass frame for: ambient motion held at the END of its move, so a
+ * push-in shipped a tighter framing than the one you set here. Motion now
+ * lands at rest instead, in the clip's first few seconds, so what you choose
+ * here is what the video holds and what the PNG exports. The move is described
+ * in words below; there is nothing left to outline.
  */
 export default function FocalPicker({
   url,
   value,
   onChange,
   move,
-  layer,
   ambient,
 }: {
   url: string;
@@ -52,9 +44,7 @@ export default function FocalPicker({
   onChange: (focal: { x: number; y: number }) => void;
   /** The move this photo really makes — already resolved out of 'auto'. */
   move?: Exclude<PhotoMove, 'auto'>;
-  /** Which depth it moves at: background, slot, or a floating overlay. */
-  layer?: AmbientLayer;
-  /** The brand's ambient setting. Without all three, no guide is drawn. */
+  /** The brand's ambient setting; 'none' means the photo never moves at all. */
   ambient?: AmbientSpec;
 }) {
   const boxRef = useRef<HTMLDivElement | null>(null);
@@ -89,24 +79,16 @@ export default function FocalPicker({
     };
   }, [dragging, at, onChange]);
 
-  // The motion is anchored on the focal point, so the guide has to follow the
-  // LIVE dot — including mid-drag — or it would describe the previous framing.
-  const shifts = Boolean(move && layer && ambient && hasSettledShift(move, layer, ambient));
-  const settled =
-    move && layer && ambient && shifts ? settledViewport(move, layer, ambient, focal) : null;
-
   /**
-   * What the motion does to the framing, in words. A full-box result gets a
-   * sentence instead of a rectangle: an outline around the entire picture says
-   * nothing, and drawing one would imply something is being trimmed.
+   * What the motion does, in words. Every move ends on this framing, so the
+   * sentence is about the FIRST few seconds and always closes the same way.
    */
+  const still = !move || move === 'none' || ambient?.style === 'none';
   const motionHint = !move
     ? null
-    : !shifts
-      ? move === 'out'
-        ? 'In the video it starts close and pulls back to the whole box, so nothing further is lost by the end.'
-        : 'It holds still in the video, so this framing is exactly what gets exported.'
-      : `In the video it ${MOVE_PHRASE[move]}, and stops there — only what is inside the brass frame is still showing at the end. Everything shaded has gone.`;
+    : still
+      ? 'It holds still in the video, so this framing is exactly what gets exported.'
+      : `In the video ${MOVE_PHRASE[move]} over the first ${AMBIENT_SECONDS} seconds, then holds. Nothing beyond this framing is ever cropped away.`;
 
   return (
     <div className="fp">
@@ -121,18 +103,6 @@ export default function FocalPicker({
         }}
       >
         <img src={url} alt="" />
-        {settled && (
-          <span
-            className="fp-settled"
-            aria-hidden
-            style={{
-              left: `${settled.x * 100}%`,
-              top: `${settled.y * 100}%`,
-              width: `${settled.w * 100}%`,
-              height: `${settled.h * 100}%`,
-            }}
-          />
-        )}
         <span className="fp-dot" style={{ left: `${focal.x * 100}%`, top: `${focal.y * 100}%` }} />
       </div>
       <p className="fp-hint">

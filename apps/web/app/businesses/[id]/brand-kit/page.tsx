@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import type { BrandKit, BrandRecipe, TweakSuggestion } from '@contentbuilder/shared';
+import type { BrandKit, BrandRecipe, TweakSuggestion, UpdateStatus } from '@contentbuilder/shared';
 import { BUNDLED_FONT_FAMILIES, applyKitToRecipe, contrastRatio } from '@contentbuilder/shared';
 import {
   getBrandKit,
@@ -28,6 +28,7 @@ import type { RenderBrandKit } from '../../../../lib/render/types';
 import { confirm } from '../../../components/ConfirmDialog';
 import { ErrorState } from '../../../components/ErrorState';
 import { Icon } from '../../../components/Icon';
+import PromptUpdates from '../../../components/PromptUpdates';
 import { Skeleton } from '../../../components/Skeleton';
 import { toast } from '../../../components/Toast';
 import {
@@ -76,6 +77,7 @@ export default function BrandKitPage() {
   const [kit, setKit] = useState<BrandKit | null>(null);
   const [hasApproved, setHasApproved] = useState(false);
   const [suggestion, setSuggestion] = useState<TweakSuggestion | null>(null);
+  const [promptUpdates, setPromptUpdates] = useState<UpdateStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -90,6 +92,9 @@ export default function BrandKitPage() {
       // The suggestion is about the APPROVED kit — while a pending draft is
       // open in the editor, applying it there would tune the wrong kit.
       setSuggestion(state.draft ? null : (state.suggestion ?? null));
+      // Like the suggestion, this is about the APPROVED kit — the one posts are
+      // actually composed against. A pending draft is about to replace it.
+      setPromptUpdates(state.draft ? null : (state.promptUpdates ?? null));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -226,6 +231,7 @@ export default function BrandKitPage() {
           kit={kit}
           hasApproved={hasApproved}
           suggestion={suggestion}
+          promptUpdates={promptUpdates}
           onSuggestionResolved={() => setSuggestion(null)}
           onReanalyze={business?.websiteUrl ? analyze : undefined}
           onManual={startManual}
@@ -334,6 +340,7 @@ function KitEditor({
   kit,
   hasApproved,
   suggestion,
+  promptUpdates,
   onSuggestionResolved,
   onReanalyze,
   onManual,
@@ -346,6 +353,7 @@ function KitEditor({
   kit: BrandKit;
   hasApproved: boolean;
   suggestion: TweakSuggestion | null;
+  promptUpdates: UpdateStatus | null;
   onSuggestionResolved: () => void;
   onReanalyze?: () => void;
   onManual: () => void;
@@ -1052,6 +1060,16 @@ function KitEditor({
               </button>
             </div>
           </aside>
+        )}
+
+        {/* What a NEWER design prompt would fix about this recipe. Sits beside
+            the learned nudge because it is the same kind of thing — a quiet,
+            evidenced offer — but its source is the app improving, not you. */}
+        {!candidates && busy !== 'recipe' && busy !== 'candidates' && (
+          <PromptUpdates
+            status={promptUpdates}
+            action={{ label: 'Redesign', onClick: () => void authorRec(), disabled: busy !== null }}
+          />
         )}
       </section>
 

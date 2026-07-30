@@ -24,6 +24,7 @@ import { googleFontAvailable, resolveRenderFonts } from '../lib/fonts';
 import { authorRecipe, type RecipeEvidence } from '../lib/htmlDirector/authorRecipe';
 import { RECIPE_LAYERS, REFINE_INSTRUCTION_MAX, refineRecipeLayer } from '../lib/htmlDirector/refineLayer';
 import { harvestSiteImages } from '../lib/harvest';
+import { brandUpdateStatus } from '../lib/promptStatus';
 
 const hex = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Expected a #rrggbb color');
 // Any family name is accepted at the schema level; non-bundled ones are verified
@@ -302,7 +303,14 @@ businessBrandKitRouter.get(
     const norm = (k: Record<string, any> | null) => (k ? { ...k, _id: String(k._id) } : null);
     // The learned-preference nudge rides along with the kit: derived, never
     // stored, and always about the APPROVED kit (the one projects compose against).
-    res.json({ draft: norm(draft), approved: norm(approved), suggestion: deriveTweakSuggestion(approved) });
+    // `promptUpdates` is the same idea for the AI itself — what a newer design
+    // prompt would fix about THIS recipe, evidence included, never applied.
+    res.json({
+      draft: norm(draft),
+      approved: norm(approved),
+      suggestion: deriveTweakSuggestion(approved),
+      promptUpdates: brandUpdateStatus((approved as any)?.recipe),
+    });
   }),
 );
 

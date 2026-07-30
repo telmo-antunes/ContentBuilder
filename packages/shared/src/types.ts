@@ -203,7 +203,7 @@ export interface Slide {
    * This is what the renderer mounts — slides are authored-first; a slide
    * without markup renders as a neutral branded field.
    */
-  authored?: { html: string; bg?: string; role?: string };
+  authored?: { html: string; bg?: string; role?: string; pv?: Record<string, number> };
 }
 
 export type ProjectStatus = 'draft' | 'rendered';

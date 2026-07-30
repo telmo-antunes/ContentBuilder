@@ -132,6 +132,16 @@ export const brandRecipeSchema = z.object({
   version: z.number().int().min(1).max(99).catch(1).default(RECIPE_VERSION),
 
   /**
+   * WHICH PROMPT VERSIONS made this design system.
+   *
+   * Stamped at author time, so the app can say what the AI knew when it designed
+   * this brand and detect what a newer prompt would actually improve. Absent
+   * means the recipe predates prompt versioning entirely, which is treated as
+   * version 0 — behind everything.
+   */
+  promptVersions: z.record(z.string(), z.number()).optional(),
+
+  /**
    * WHICH PROMPTS wrote this recipe — the author touchpoint's `PROMPT_VERSION`,
    * plus the critique's when that pass ran. Purely additive telemetry: when a
    * batch of brands suddenly authors worse, this is what says "everything bad

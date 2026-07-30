@@ -49,6 +49,7 @@ import { ErrorState } from '../../../components/ErrorState';
 import { Icon } from '../../../components/Icon';
 import { Skeleton } from '../../../components/Skeleton';
 import DeckScroller from '../../../components/DeckScroller';
+import PromptUpdates from '../../../components/PromptUpdates';
 import SlidePhotoPanel from '../../../components/SlidePhotoPanel';
 import FreeImageOverlay from '../../../components/FreeImageOverlay';
 import CanvasCopyEditor from '../../../components/CanvasCopyEditor';
@@ -140,6 +141,18 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
    * editor, but nothing stood between a known-broken slide and the finished
    * file — so the one moment it matters said nothing at all.
    */
+  /**
+   * Which slides a newer copywriter or composer would change, and why — the
+   * server's per-slide verdict, keyed for the deck cards. The rule that keeps
+   * it quiet lives in the API: a slide appears here only when the post is
+   * behind AND a detector found the specific thing in THIS slide.
+   */
+  const staleSlides = useMemo(() => {
+    const m: Record<string, string[]> = {};
+    for (const s of project?.promptUpdates?.slides ?? []) m[s.id] = s.reasons;
+    return m;
+  }, [project]);
+
   const overflowCount = useMemo(
     () => (project?.slides ?? []).filter((s) => overflow[s.id]).length,
     [project, overflow],
@@ -950,6 +963,11 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
               Click a slide to select it, then edit it on the right — copy, order, and the brand&apos;s accent, all kept in the recipe&apos;s own design.
             </p>
 
+            {/* Written by an older copywriter or composer. No apply button: a
+                recompose rewrites copy that may have been hand-edited since,
+                so the offer is to go and recompose deliberately. */}
+            <PromptUpdates status={project.promptUpdates} className="studio-pu" />
+
             <DeckScroller className="studio-deck">
               {workingSlides.map((slide, i) => (
                 <div
@@ -995,6 +1013,14 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                   {overflow[slide.id] && (
                     <span className="ovf" title="This slide's content is taller than the canvas — shorten the copy.">
                       <Icon name="warning" size={11} /> Overflows
+                    </span>
+                  )}
+                  {/* Made by an older copywriter or composer, and the app can
+                      say what a newer one would do differently HERE. Advisory
+                      only — recomposing rewrites copy you may have edited. */}
+                  {staleSlides[slide.id] && (
+                    <span className="stale" title={`A newer prompt would fix: ${staleSlides[slide.id]!.join('; ')}.`}>
+                      <Icon name="sparkle" size={11} /> Improvable
                     </span>
                   )}
                   <ScaledSlide format={project.format} displayWidth={cardW}>
@@ -1105,9 +1131,6 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                           canvasH={dimensionsFor(project.format).height}
                           scale={inspectorScale}
                           selectedId={freeSel}
-                          // So the overlay can draw where the motion leaves each
-                          // photo, not just where it sits at rest.
-                          ambient={recipeAmbient(recipe)}
                           onSelect={setFreeSel}
                           onCommit={(id, frame: BlockFrame) =>
                             void savePhotos(
