@@ -152,6 +152,21 @@ export function slideMediaCss(canvasHeight = 1350, align?: string): string {
     `.cb-free-layer.over{z-index:6}`,
     `.cb-free-layer.under{z-index:0}`,
     `.cb-free-img{position:absolute;display:block;border-radius:var(--cb-radius,0px)}`,
+    // ── enumeration rows ─────────────────────────────────────────────────
+    // Brands author a list row as a single line — marker, item, then the detail
+    // pushed right with `margin-left:auto`. That only works while both fit on
+    // one line, and at the sizes the legibility floor guarantees they never do:
+    // the detail wrapped and drifted right with nothing to align to, which is
+    // what made lists look broken.
+    //
+    // So the detail is given its own line, indented under the item, and the
+    // marker element — which composers emit EMPTY, leaving a phantom gap where
+    // a bullet should be — is filled. Doubled class to out-specify the brand's
+    // own `.panel .row`; this sheet is emitted after it, so order decides.
+    `.cb-slide .row.row{display:flex;flex-wrap:wrap;align-items:baseline;column-gap:0.5em;row-gap:0.14em}`,
+    `.cb-slide .row.row > em,.cb-slide .row.row > i,.cb-slide .row.row > small{` +
+      `flex:1 0 100%;margin-left:0;font-style:normal;padding-left:1.15em}`,
+    `.cb-slide .row.row > span:empty::before{content:"—";color:var(--cb-accent)}`,
   ]
     .filter(Boolean)
     .join('\n');

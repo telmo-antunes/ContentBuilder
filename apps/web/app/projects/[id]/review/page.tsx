@@ -38,7 +38,7 @@ import {
   toRenderKit,
   resolveSlidePhotos,
 } from '../../../../lib/render/projectRender';
-import { parseAuthored, buildAuthored, type AuthoredEl } from '../../../../lib/authoredEdit';
+import { parseAuthored, buildAuthored, type AuthoredEl, type AuthoredRow } from '../../../../lib/authoredEdit';
 import { toast } from '../../../components/Toast';
 import { confirm } from '../../../components/ConfirmDialog';
 import { ErrorState } from '../../../components/ErrorState';
@@ -200,6 +200,31 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
   }, []);
   const removeEl = useCallback((key: string) => {
     setEditEls((els) => els.filter((e) => e.key !== key));
+  }, []);
+
+  // ── enumeration rows ──────────────────────────────────────────────────
+  const patchRow = useCallback((elKey: string, rowKey: string, patch: Partial<AuthoredRow>) => {
+    setEditEls((els) =>
+      els.map((e) =>
+        e.key === elKey
+          ? { ...e, rows: (e.rows ?? []).map((r) => (r.key === rowKey ? { ...r, ...patch } : r)) }
+          : e,
+      ),
+    );
+  }, []);
+  const removeRow = useCallback((elKey: string, rowKey: string) => {
+    setEditEls((els) =>
+      els.map((e) => (e.key === elKey ? { ...e, rows: (e.rows ?? []).filter((r) => r.key !== rowKey) } : e)),
+    );
+  }, []);
+  const addRow = useCallback((elKey: string) => {
+    setEditEls((els) =>
+      els.map((e) =>
+        e.key === elKey
+          ? { ...e, rows: [...(e.rows ?? []), { key: `nr${Date.now()}${(e.rows ?? []).length}`, text: '' }] }
+          : e,
+      ),
+    );
   }, []);
 
   const saveEdit = useCallback(
@@ -1033,6 +1058,43 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                             />
                           )}
                         </>
+                      ) : el.kind === 'list' ? (
+                        /* An enumeration: one editable line per item, plus its
+                           optional half-line of detail. This used to read
+                           "kept exactly as designed" and could not be touched. */
+                        <div className="aed-rows">
+                          {(el.rows ?? []).map((r, ri) => (
+                            <div className="aed-item" key={r.key}>
+                              <span className="aed-itemnum">{ri + 1}</span>
+                              <div className="aed-itemfields">
+                                <textarea
+                                  className="aed-text"
+                                  rows={1}
+                                  placeholder="the item"
+                                  value={r.text}
+                                  onChange={(e) => patchRow(el.key, r.key, { text: e.target.value })}
+                                />
+                                <input
+                                  className="aed-emph"
+                                  placeholder="supporting detail — optional"
+                                  value={r.note ?? ''}
+                                  onChange={(e) => patchRow(el.key, r.key, { note: e.target.value || undefined })}
+                                />
+                              </div>
+                              <button
+                                className="aed-itemdel"
+                                title="Remove this item"
+                                aria-label="Remove this item"
+                                onClick={() => removeRow(el.key, r.key)}
+                              >
+                                <Icon name="close" size={11} />
+                              </button>
+                            </div>
+                          ))}
+                          <button className="btn sm" onClick={() => addRow(el.key)}>
+                            Add an item
+                          </button>
+                        </div>
                       ) : (
                         <div className="aed-struct">{el.label} — kept exactly as designed</div>
                       )}

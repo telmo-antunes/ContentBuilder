@@ -1018,6 +1018,25 @@ input[type='color'] {
 }
 .aed-text:focus, .aed-emph:focus { outline: none; border-color: var(--accent-2); }
 .aed-struct { font-size: 12px; color: var(--faint); font-style: italic; padding: 2px 0; }
+
+/* Editable enumeration rows — the item, its optional detail, numbered so the
+   order on the slide is obvious while editing. */
+/* NB: `.aed-row` is already the wrapper for every editable element above —
+   these use `aed-item*` so they cannot restyle it. */
+.aed-rows { display: flex; flex-direction: column; gap: 7px; }
+.aed-item { display: flex; align-items: flex-start; gap: 7px; }
+.aed-itemnum {
+  flex: 0 0 auto; width: 17px; height: 17px; margin-top: 5px; border-radius: 50%;
+  display: grid; place-items: center; font-size: 9.5px; font-weight: 700;
+  background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.aed-itemfields { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.aed-itemdel {
+  flex: 0 0 auto; margin-top: 3px; width: 20px; height: 20px; padding: 0; display: grid; place-items: center;
+  border: 1px solid var(--border); border-radius: 6px; background: none; color: var(--faint); cursor: pointer;
+}
+.aed-itemdel:hover { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); }
 .aed-actions { display: flex; gap: 8px; margin-top: 14px; }
 
 /* ── The brand rail — the directory folded into the Desk home ───────────── */
