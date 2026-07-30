@@ -1,6 +1,6 @@
 import { api } from '../lib/config';
 import type { ProjectDetail } from '../lib/api';
-import { toRenderKit, resolveSlideImage, resolveSlidePhotos } from '../../lib/render/projectRender';
+import { toRenderKit, resolveSlidePhotos } from '../../lib/render/projectRender';
 import RenderStage from './RenderStage';
 
 // Always fetch fresh — this route is hit per-slide by the export pipeline.
@@ -31,14 +31,12 @@ export default async function RenderPage({
   if (!slide) return <div data-render-error>no slide</div>;
 
   const kit = toRenderKit(project.brandKit);
-  const image = resolveSlideImage(slide, project.media);
   // The user's own photos ride the same path, so PNG + MP4 exports carry them.
   const photos = resolveSlidePhotos(slide, project.media);
 
   return (
     <RenderStage
       authored={slide.authored}
-      image={image}
       photos={photos}
       format={project.format}
       kit={kit}

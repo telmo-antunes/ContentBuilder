@@ -18,6 +18,7 @@ const settingSchema = new Schema(
     captionModel: { type: String, default: '' },
     /** HTML-authoring path: brand recipe author (design tier) + idea→slide compose (cheap tier). */
     recipeModel: { type: String, default: '' },
+    parseModel: { type: String, default: '' },
     composeModel: { type: String, default: '' },
     updatedAt: { type: Date, default: () => new Date() },
   },

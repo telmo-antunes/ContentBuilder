@@ -14,6 +14,7 @@ const settingsSchema = z.object({
   visionModel: z.string().max(120).optional(),
   captionModel: z.string().max(120).optional(),
   recipeModel: z.string().max(120).optional(),
+  parseModel: z.string().max(120).optional(),
   composeModel: z.string().max(120).optional(),
 });
 

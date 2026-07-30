@@ -60,6 +60,39 @@ export interface RecipeCandidate {
   createdAt: string;
 }
 
+/**
+ * Counters of the deterministic slide tweaks ("Bigger headline", "Smaller
+ * headline", "Invert") made against this brand's posts. Each press is a
+ * labelled correction of the recipe; enough of them, netted, become a
+ * suggestion on the brand-kit page instead of evaporating. "Un-invert"
+ * withdraws an invert (decrements), so the counter is a net preference.
+ */
+export interface TweakSignals {
+  biggerHeadline?: number;
+  smallerHeadline?: number;
+  invert?: number;
+  updatedAt?: string;
+  /** "Not now" — suppresses suggestions for 14 days without forgetting the counts. */
+  dismissedAt?: string;
+}
+
+/**
+ * A recipe adjustment derived from TweakSignals, served with GET
+ * /businesses/:id/brandkit. Applying goes through the existing recipe-knobs
+ * PATCH — the suggestion is only the nudge, never a new mechanism.
+ */
+export type TweakSuggestion =
+  | {
+      kind: 'density';
+      from: 'roomy' | 'balanced' | 'dense';
+      /** The one step to apply via the density knob. */
+      to: 'roomy' | 'balanced' | 'dense';
+      reason: 'smaller-headline' | 'bigger-headline';
+      /** The net number of presses that earned the suggestion. */
+      count: number;
+    }
+  | { kind: 'invert'; count: number };
+
 export interface BrandKit {
   _id: string;
   businessId: string;
@@ -82,6 +115,8 @@ export interface BrandKit {
   recipe?: BrandRecipe;
   /** Pending recipe candidates from a directions run (cleared on select). */
   recipeCandidates?: RecipeCandidate[];
+  /** Net counts of manual slide tweaks — the raw material for TweakSuggestion. */
+  tweakSignals?: TweakSignals;
   createdAt: string;
 }
 
@@ -158,7 +193,6 @@ export interface Slide {
   id: string;
   order: number;
   imageNeed: ImageNeed;
-  mediaAssetId?: string;
   /** The user's own photos on this slide (slot fills, background, overlays). */
   photos?: SlidePhoto[];
   /** Stock-search phrase chosen by the AI art director (drives the stock picker). */

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { BrandKit, MediaAsset, Slide } from '@contentbuilder/shared';
-import { toRenderKit, resolveSlideImage } from './projectRender';
+import { toRenderKit, resolveSlidePhotos } from './projectRender';
 
 const kit = {
   _id: 'k1',
@@ -38,20 +38,18 @@ describe('toRenderKit', () => {
   });
 });
 
-describe('resolveSlideImage', () => {
-  it('returns null without a mediaAssetId', () => {
-    expect(resolveSlideImage({ mediaAssetId: undefined } as Slide, media)).toBeNull();
-  });
-  it('resolves the asset url and threads focal/treatment overrides', () => {
+// `photos[]` is the only source of a slide's pictures — the slide-level
+// `mediaAssetId` was migrated into it and retired.
+describe('resolveSlidePhotos', () => {
+  it('resolves a background photo onto the background layer', () => {
     const slide = {
-      mediaAssetId: 'm1',
-      overrides: { focalPoint: { x: 0.3, y: 0.7 }, imageTreatment: 'tint' },
+      photos: [{ id: 'p1', mediaAssetId: 'm1', placement: 'background', fit: 'cover' }],
     } as unknown as Slide;
-    const img = resolveSlideImage(slide, media);
-    expect(img).toMatchObject({ url: 'http://x/a.png', treatment: 'tint' });
-    expect(img!.focalPoint).toEqual({ x: 0.3, y: 0.7 });
+    expect(resolveSlidePhotos(slide, media).background).toMatchObject({ url: 'http://x/a.png', fit: 'cover' });
   });
-  it('returns null when the asset is missing', () => {
-    expect(resolveSlideImage({ mediaAssetId: 'gone' } as unknown as Slide, media)).toBeNull();
+  it('skips a photo whose asset is gone, and has no layers without photos', () => {
+    const gone = { photos: [{ id: 'p1', mediaAssetId: 'nope', placement: 'background' }] } as unknown as Slide;
+    expect(resolveSlidePhotos(gone, media).background).toBeUndefined();
+    expect(resolveSlidePhotos({ photos: [] } as unknown as Slide, media).background).toBeUndefined();
   });
 });

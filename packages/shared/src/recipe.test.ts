@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   brandRecipeSchema,
+  composeRecipeLayers,
   recipeCssVars,
+  recipeEmphasisWrap,
   recipeFontFamilies,
   recipeStylesheetFor,
   recipePatternsFor,
@@ -21,6 +23,7 @@ import {
   RECIPE_VAR_PREFIX,
 } from './recipe';
 import { contrastRatio } from './colorContrast';
+import { APP_IMAGE_CLASSES } from './slidePhotos';
 
 const minimal = {
   tokens: {
@@ -51,6 +54,94 @@ describe('brandRecipeSchema', () => {
 
   it('rejects an oversized stylesheet', () => {
     expect(() => brandRecipeSchema.parse({ ...minimal, stylesheet: 'x'.repeat(24001) })).toThrow();
+  });
+});
+
+describe('reference fragments (additive, compose by example)', () => {
+  const fragments = {
+    statement: '<div class="headline">{{headline}}</div>',
+    list: '<div class="panel">{{#rows}}<div class="row">{{row.text}}</div>{{/rows}}</div>',
+  };
+
+  it('round-trips a recipe WITH fragments', () => {
+    const r = brandRecipeSchema.parse({ ...minimal, fragments });
+    expect(r.fragments).toEqual(fragments);
+    // …and again, through a full serialize/parse cycle (how a recipe is stored)
+    expect(brandRecipeSchema.parse(JSON.parse(JSON.stringify(r))).fragments).toEqual(fragments);
+  });
+
+  it('round-trips a recipe WITHOUT fragments — the key stays absent', () => {
+    const r = brandRecipeSchema.parse(minimal);
+    expect(r.fragments).toBeUndefined();
+    expect('fragments' in r).toBe(false);
+    expect(migrateRecipe(r).fragments).toBeUndefined();
+  });
+
+  it('survives shape drift rather than failing a stored recipe', () => {
+    // `.catch(undefined)`: a payload whose fragments are not a string map loses
+    // them and keeps its design system, exactly like `promptVersion`.
+    expect(brandRecipeSchema.parse({ ...minimal, fragments: ['nope'] }).fragments).toBeUndefined();
+    expect(brandRecipeSchema.parse({ ...minimal, fragments: { list: 42 } }).fragments).toBeUndefined();
+    expect(
+      brandRecipeSchema.parse({ ...minimal, fragments: { list: 'x'.repeat(4001) } }).fragments,
+    ).toBeUndefined();
+  });
+});
+
+describe('signature.emphasisWrap (additive, mechanical emphasis)', () => {
+  it('round-trips a recipe WITHOUT the field (every stored recipe stays valid)', () => {
+    const r = brandRecipeSchema.parse(minimal);
+    expect(r.signature.emphasisWrap).toBeUndefined();
+    // …and re-parsing the parsed output changes nothing
+    expect(brandRecipeSchema.parse(r).signature.emphasisWrap).toBeUndefined();
+  });
+
+  it('round-trips a recipe WITH the field', () => {
+    const r = brandRecipeSchema.parse({
+      ...minimal,
+      signature: { ...minimal.signature, emphasisWrap: { tag: 'span', className: 'em' } },
+    });
+    expect(r.signature.emphasisWrap).toEqual({ tag: 'span', className: 'em' });
+    expect(brandRecipeSchema.parse(r).signature.emphasisWrap).toEqual({ tag: 'span', className: 'em' });
+  });
+
+  it('drops a malformed emphasisWrap instead of failing the whole recipe', () => {
+    const r = brandRecipeSchema.parse({
+      ...minimal,
+      signature: { ...minimal.signature, emphasisWrap: 'gold italic span' },
+    });
+    expect(r.signature.emphasisWrap).toBeUndefined();
+  });
+
+  it('prefers the authored wrap over any derivation', () => {
+    const r = brandRecipeSchema.parse({
+      ...minimal,
+      stylesheet: '.cb-slide .headline .it{ font-style:italic }',
+      signature: { ...minimal.signature, emphasisWrap: { tag: 'em', className: 'accent' } },
+    });
+    expect(recipeEmphasisWrap(r)).toEqual({ tag: 'em', className: 'accent' });
+  });
+
+  it('derives span.it from a headline-scoped .it rule (how reparse reads it back)', () => {
+    const r = brandRecipeSchema.parse({
+      ...minimal,
+      stylesheet: '.cb-slide .headline{ font-size:100px } .cb-slide .headline .it{ font-style:italic }',
+    });
+    expect(recipeEmphasisWrap(r)).toEqual({ tag: 'span', className: 'it' });
+  });
+
+  it('derives span.em from a component that asks for <span class="em">', () => {
+    const r = brandRecipeSchema.parse({
+      ...minimal,
+      stylesheet: '.cb-slide .quote{ font-size:72px } .cb-slide .quote .em{ color:gold }',
+      components: [{ className: 'quote', use: 'A pull-quote; wrap the punchy phrase in <span class="em">.' }],
+    });
+    expect(recipeEmphasisWrap(r)).toEqual({ tag: 'span', className: 'em' });
+  });
+
+  it('falls back to span.em when the recipe defines no emphasis vocabulary', () => {
+    const r = brandRecipeSchema.parse({ ...minimal, stylesheet: '.cb-slide .headline{ font-size:100px }' });
+    expect(recipeEmphasisWrap(r)).toEqual({ tag: 'span', className: 'em' });
   });
 });
 
@@ -362,6 +453,27 @@ describe('self-consistency (R9)', () => {
     expect(out.unlisted).not.toContain('org'); // url() payloads are stripped
     expect(out.unlisted).not.toContain('w3');
   });
+
+  it('never reports the app-owned image classes — `.cb-shot` above all', () => {
+    // Rule 7 of the author prompt REQUIRES every brand to style `.cb-shot`, but
+    // the class is app-owned (`SLOT_CLASS`) and the composer never names it, so
+    // it can never appear in `components`. Reporting it made every
+    // prompt-compliant brand log a warning nobody could act on.
+    const r = brandRecipeSchema.parse({
+      ...minimal,
+      stylesheet: [
+        '.cb-slide .cb-shot{ filter:saturate(.9) }',
+        '.cb-slide .cb-shot.tall::after{ content:"" }',
+        '.cb-free-layer.over{ opacity:.9 }',
+        '.cb-bg-photo{ opacity:.8 }',
+        '.cb-slide .ghost{ opacity:.2 }',
+      ].join('\n'),
+      components: [],
+    });
+    const out = validateRecipeConsistency(r);
+    expect(out.unlisted).toEqual(['ghost']);
+    for (const app of APP_IMAGE_CLASSES) expect(out.unlisted).not.toContain(app);
+  });
 });
 
 describe('typography drives the CSS (R3)', () => {
@@ -466,6 +578,46 @@ describe('layered stylesheet (R6)', () => {
   it('uses the single stylesheet when no layers are authored', () => {
     const r = brandRecipeSchema.parse({ ...minimal, stylesheet: '.cb-slide{ solo:1 }' });
     expect(recipeStylesheetFor(r, '1080x1350')).toContain('solo:1');
+  });
+
+  it('composeRecipeLayers IS what the renderer composes (one definition, three callers)', () => {
+    const layers = { background: '.cb-slide{ bg:1 }', type: '.cb-slide .headline{ t:1 }', components: '.cb-slide .cta{ c:1 }' };
+    const composed = composeRecipeLayers(layers);
+    expect(composed).toBe('.cb-slide{ bg:1 }\n.cb-slide .headline{ t:1 }\n.cb-slide .cta{ c:1 }');
+    // the renderer's own output contains it verbatim, so an authored recipe whose
+    // `stylesheet` equals this can never disagree with what is painted
+    const r = brandRecipeSchema.parse({ ...minimal, stylesheet: composed, layers });
+    expect(recipeStylesheetFor(r, '1080x1350')).toContain(composed);
+  });
+
+  it('drops empty layers and tolerates no layers at all', () => {
+    expect(composeRecipeLayers({ background: '.a{}', type: '', components: '.c{}' })).toBe('.a{}\n.c{}');
+    expect(composeRecipeLayers(undefined)).toBe('');
+    expect(composeRecipeLayers({ background: '', type: '', components: '' })).toBe('');
+  });
+});
+
+describe('promptVersion (additive attribution)', () => {
+  it('round-trips a recipe WITHOUT the field (every stored recipe stays valid)', () => {
+    const r = brandRecipeSchema.parse(minimal);
+    expect(r.promptVersion).toBeUndefined();
+    expect(brandRecipeSchema.parse(r).promptVersion).toBeUndefined();
+  });
+
+  it('round-trips a recipe WITH the field', () => {
+    const r = brandRecipeSchema.parse({ ...minimal, promptVersion: { author: 3, critique: 2 } });
+    expect(r.promptVersion).toEqual({ author: 3, critique: 2 });
+    expect(brandRecipeSchema.parse(r).promptVersion).toEqual({ author: 3, critique: 2 });
+    // and through the migrator, which is how every stored recipe is read
+    expect(migrateRecipe(r).promptVersion).toEqual({ author: 3, critique: 2 });
+  });
+
+  it('accepts a partial stamp, and swallows a malformed one rather than failing the recipe', () => {
+    expect(brandRecipeSchema.parse({ ...minimal, promptVersion: { author: 1 } }).promptVersion).toEqual({
+      author: 1,
+    });
+    expect(brandRecipeSchema.parse({ ...minimal, promptVersion: 'v3' }).promptVersion).toBeUndefined();
+    expect(() => brandRecipeSchema.parse({ ...minimal, promptVersion: { author: -1 } })).not.toThrow();
   });
 });
 

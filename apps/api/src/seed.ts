@@ -30,7 +30,7 @@ async function saveBrandAsset(storage: StorageProvider, businessId: string, kind
   });
 }
 
-/** Save a photo from seed-assets, create a MediaAsset, and return its id (for slide.mediaAssetId). */
+/** Save a photo from seed-assets, create a MediaAsset, and return its id (for a slide photo). */
 async function seedPhoto(storage: StorageProvider, businessId: string, file: string): Promise<string> {
   const buf = await loadAsset(file);
   const meta = await sharp(buf)

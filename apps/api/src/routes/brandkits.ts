@@ -7,9 +7,13 @@ import {
   DEFAULT_RENDER_BODY,
   applyKitToRecipe,
   applyRecipeKnobs,
+  ensureRecipeContrast,
   migrateRecipe,
   VOICE_MAX,
+  type BrandRecipe,
   type RecipeCandidate,
+  type TweakSignals,
+  type TweakSuggestion,
 } from '@contentbuilder/shared';
 import { BusinessModel, BrandKitModel } from '../models';
 import { ApiError, asyncHandler, parseBody, publicErrMessage, requireObjectId } from '../lib/http';
@@ -18,6 +22,7 @@ import { assignRolesAndVibe, brandColorQuality } from '../lib/vision';
 import { assertPublicHttpUrl } from '../lib/urlGuard';
 import { googleFontAvailable, resolveRenderFonts } from '../lib/fonts';
 import { authorRecipe, type RecipeEvidence } from '../lib/htmlDirector/authorRecipe';
+import { RECIPE_LAYERS, REFINE_INSTRUCTION_MAX, refineRecipeLayer } from '../lib/htmlDirector/refineLayer';
 import { harvestSiteImages } from '../lib/harvest';
 
 const hex = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Expected a #rrggbb color');
@@ -53,9 +58,103 @@ const patchKitSchema = z.object({
       density: z.enum(['roomy', 'balanced', 'dense']).optional(),
       motionStyle: z.enum(['rise', 'fade', 'slide', 'punch', 'pop']).optional(),
       motionPace: z.enum(['calm', 'balanced', 'punchy']).optional(),
+      /**
+       * Swap the recipe's default surface with its `surfaces.inverse` (the
+       * apply path for the learned "you keep inverting posts" suggestion).
+       * Round-trippable: flipping twice restores the original. No-op when the
+       * recipe defines no inverse surface.
+       */
+      flipSurfaces: z.literal(true).optional(),
     })
     .optional(),
 });
+
+// ── Learned tweak signals → one quiet suggestion ─────────────────────────────
+// The slide-tweak endpoint counts every bigger/smaller/invert press on the
+// approved kit; here those counters are distilled into at most ONE suggestion,
+// served alongside the kit. Deriving lives server-side so the thresholds and
+// the density direction have a single owner (and a single test surface).
+
+/** Net presses (one direction minus its opposite) before we dare suggest. */
+const TWEAK_SUGGEST_NET = 3;
+/** "Not now" snoozes suggestions for 14 days without forgetting the counts. */
+const TWEAK_DISMISS_COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000;
+/**
+ * One step along the density scale. Density drives `--cb-step`, a rhythm
+ * multiplier (roomy 1.15 → balanced 1 → dense 0.86) the recipe's type scales
+ * by — so repeated "Smaller headline" means the display type keeps running too
+ * BIG for this brand's copy, and the fix is one step TOWARD dense (multiplier
+ * down). "Bigger headline" is the mirror image. At the end of the scale there
+ * is no honest step left, so no suggestion is made.
+ */
+const DENSER: Record<string, 'balanced' | 'dense' | undefined> = { roomy: 'balanced', balanced: 'dense' };
+const ROOMIER: Record<string, 'roomy' | 'balanced' | undefined> = { dense: 'balanced', balanced: 'roomy' };
+
+function deriveTweakSuggestion(kit: Record<string, any> | null): TweakSuggestion | null {
+  const signals = kit?.tweakSignals as TweakSignals | undefined;
+  if (!kit || !signals) return null;
+  if (
+    signals.dismissedAt &&
+    Date.now() - new Date(signals.dismissedAt).getTime() < TWEAK_DISMISS_COOLDOWN_MS
+  ) {
+    return null;
+  }
+  // Suggestions are recipe adjustments — without a (valid) recipe there is
+  // nothing to adjust, and a broken stored recipe must not break the kit GET.
+  if (!kit.recipe) return null;
+  let recipe: BrandRecipe;
+  try {
+    recipe = migrateRecipe(kit.recipe);
+  } catch {
+    return null;
+  }
+
+  const net = (signals.smallerHeadline ?? 0) - (signals.biggerHeadline ?? 0);
+  const density = recipe.typography.density;
+  if (net >= TWEAK_SUGGEST_NET && DENSER[density]) {
+    return { kind: 'density', from: density, to: DENSER[density]!, reason: 'smaller-headline', count: net };
+  }
+  if (-net >= TWEAK_SUGGEST_NET && ROOMIER[density]) {
+    return { kind: 'density', from: density, to: ROOMIER[density]!, reason: 'bigger-headline', count: -net };
+  }
+  // Only offer the surface flip when the recipe actually HAS an inverse
+  // surface to make default — otherwise there is nothing to apply.
+  if ((signals.invert ?? 0) >= TWEAK_SUGGEST_NET && recipe.surfaces?.inverse) {
+    return { kind: 'invert', count: signals.invert ?? 0 };
+  }
+  return null;
+}
+
+/**
+ * Swap the recipe's default surface with `surfaces.inverse`. The old ground
+ * becomes the new inverse, so per-slide "Invert" keeps working and a second
+ * flip restores the original. Contrast is re-gated, as with any colour change.
+ */
+function flipRecipeSurfaces(recipe: BrandRecipe): BrandRecipe {
+  const inv = recipe.surfaces?.inverse;
+  if (!inv) return recipe;
+  const t = recipe.tokens;
+  const flipped: BrandRecipe = {
+    ...recipe,
+    tokens: {
+      ...t,
+      ground: inv.ground,
+      ink: inv.ink,
+      ...(inv.accent ? { accent: inv.accent } : {}),
+      ...(inv.inkMuted ? { inkMuted: inv.inkMuted } : {}),
+    },
+    surfaces: {
+      ...recipe.surfaces,
+      inverse: {
+        ground: t.ground,
+        ink: t.ink,
+        ...(inv.accent && t.accent ? { accent: t.accent } : {}),
+        ...(inv.inkMuted && t.inkMuted ? { inkMuted: t.inkMuted } : {}),
+      },
+    },
+  };
+  return ensureRecipeContrast(flipped).recipe;
+}
 
 /** Business-scoped: mounted at /businesses/:id */
 export const businessBrandKitRouter = Router({ mergeParams: true });
@@ -201,7 +300,9 @@ businessBrandKitRouter.get(
       BrandKitModel.findOne({ businessId: id, status: 'approved' }).sort({ createdAt: -1 }).lean(),
     ]);
     const norm = (k: Record<string, any> | null) => (k ? { ...k, _id: String(k._id) } : null);
-    res.json({ draft: norm(draft), approved: norm(approved) });
+    // The learned-preference nudge rides along with the kit: derived, never
+    // stored, and always about the APPROVED kit (the one projects compose against).
+    res.json({ draft: norm(draft), approved: norm(approved), suggestion: deriveTweakSuggestion(approved) });
   }),
 );
 
@@ -231,6 +332,9 @@ async function kitEvidence(kit: KitDoc): Promise<RecipeEvidence> {
     logoTreatment: kit.get('logoTreatment'),
     styleDescriptor: kit.get('styleDescriptor'),
     voice: kit.get('voice') || (Array.isArray(profile.tone) ? profile.tone.join(', ') : undefined),
+    // The homepage capture, so the author can SEE the site it is designing for.
+    // Optional everywhere downstream — an absent one changes nothing.
+    screenshot: kit.get('homepageScreenshot'),
   };
 }
 
@@ -399,6 +503,56 @@ brandKitRouter.post(
   }),
 );
 
+const refineSchema = z.object({
+  layer: z.enum(RECIPE_LAYERS),
+  instruction: z.string().trim().min(1).max(REFINE_INSTRUCTION_MAX),
+});
+
+/**
+ * Refine ONE LAYER of the kit's recipe from a one-line instruction — the
+ * surgical alternative to re-authoring. "The background is too busy" used to
+ * cost a full ~60s re-author that also rewrote the type, the components and the
+ * signature, so nobody dared touch a recipe they liked. Here the other layers
+ * come back byte-identical (see refineLayer.ts for the layered vs flat paths).
+ * Design tier, so it is metered like the other expensive recipe routes.
+ */
+brandKitRouter.post(
+  '/:kitId/recipe/refine',
+  asyncHandler(async (req, res) => {
+    const kitId = requireObjectId(req.params.kitId, 'Brand kit');
+    const { layer, instruction } = parseBody(refineSchema, req.body);
+    const kit = await BrandKitModel.findById(kitId);
+    if (!kit) throw new ApiError(404, 'Brand kit not found');
+    const stored = kit.get('recipe');
+    if (!stored) {
+      throw new ApiError(400, 'This kit has no recipe yet — design one before refining it.');
+    }
+    let current: BrandRecipe;
+    try {
+      current = migrateRecipe(stored);
+    } catch (err) {
+      throw new ApiError(
+        400,
+        `This kit's stored recipe can't be read (${publicErrMessage(err, 'invalid recipe')}) — redesign it.`,
+      );
+    }
+    let refined: Awaited<ReturnType<typeof refineRecipeLayer>>;
+    try {
+      refined = await refineRecipeLayer(current, layer, instruction);
+    } catch (err) {
+      throw new ApiError(502, `Recipe refine failed: ${publicErrMessage(err, 'AI error')}.`);
+    }
+    console.warn(
+      `[recipe] refined ${refined.diff.layer} (${refined.diff.mode}) — ${refined.diff.charsBefore} → ${refined.diff.charsAfter} chars`,
+    );
+    kit.set('recipe', refined.recipe);
+    await kit.save();
+    // The diff rides alongside the kit so the UI can say what actually changed
+    // — and, on a flat recipe, be honest that the whole sheet was rewritten.
+    res.json({ ...kit.toJSON(), refine: refined.diff });
+  }),
+);
+
 // Edit fields and/or approve (status: 'approved' flips it live for projects).
 brandKitRouter.patch(
   '/:kitId',
@@ -458,7 +612,26 @@ brandKitRouter.patch(
             console.warn(`[recipe] re-pointed from kit edit: ${synced.changed.join(', ')}`);
           }
         }
-        if (body.recipe) recipe = applyRecipeKnobs(recipe, body.recipe);
+        if (body.recipe) {
+          const { flipSurfaces, ...knobs } = body.recipe;
+          if (Object.keys(knobs).length) recipe = applyRecipeKnobs(recipe, knobs);
+          if (flipSurfaces) recipe = flipRecipeSurfaces(recipe);
+          // A density edit (tuned by hand or applied from the suggestion)
+          // answers the headline-size signals; a surface flip answers the
+          // invert signal. Either way those presses are spent — reset them so
+          // the next suggestion is earned by NEW corrections.
+          const signals = kit.get('tweakSignals');
+          if (signals && (knobs.density || flipSurfaces)) {
+            const next = { ...(typeof signals.toObject === 'function' ? signals.toObject() : signals) };
+            if (knobs.density) {
+              next.smallerHeadline = 0;
+              next.biggerHeadline = 0;
+            }
+            if (flipSurfaces) next.invert = 0;
+            next.updatedAt = new Date();
+            kit.set('tweakSignals', next);
+          }
+        }
         kit.set('recipe', recipe);
       } catch (err) {
         console.warn('[recipe] could not sync from kit edit:', err instanceof Error ? err.message : err);
@@ -479,6 +652,26 @@ brandKitRouter.patch(
       }
     }
 
+    res.json(kit.toJSON());
+  }),
+);
+
+// "Not now" on the learned-preference suggestion. A snooze, not amnesia: the
+// counters stay, and the suggestion may return after 14 days if the same
+// corrections keep coming. Dismissal is real state (it must survive a reload),
+// which no existing endpoint could record — hence this one small POST.
+brandKitRouter.post(
+  '/:kitId/suggestion/dismiss',
+  asyncHandler(async (req, res) => {
+    const kitId = requireObjectId(req.params.kitId, 'Brand kit');
+    const kit = await BrandKitModel.findById(kitId);
+    if (!kit) throw new ApiError(404, 'Brand kit not found');
+    const signals = kit.get('tweakSignals');
+    kit.set('tweakSignals', {
+      ...(signals && typeof signals.toObject === 'function' ? signals.toObject() : (signals ?? {})),
+      dismissedAt: new Date(),
+    });
+    await kit.save();
     res.json(kit.toJSON());
   }),
 );

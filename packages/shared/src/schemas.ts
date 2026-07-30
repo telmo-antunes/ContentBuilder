@@ -74,14 +74,14 @@ export const slideSchema = z.object({
   id: z.string().optional(),
   order: z.number().optional(),
   imageNeed: z.enum(['none', 'upload']).default('none'),
-  mediaAssetId: z.string().nullable().optional(),
   /** Stock-photo search phrase (AI-chosen or user-edited); prefills the
    *  editor's stock picker. */
   imageQuery: z.string().max(80).optional(),
   /**
    * The user's own photos on this slide — slot fills, a background, and free
-   * overlays. Replaces the single `mediaAssetId` (kept above for back-compat;
-   * a legacy slide's asset is migrated into here as a background on save).
+   * overlays. This replaced the single slide-level `mediaAssetId`, which was
+   * folded in here once (`npm run migrate:photos`) and then retired; zod drops
+   * it from any stored document that still carries it.
    */
   photos: z.array(slidePhotoSchema).max(24).default([]),
   overrides: z

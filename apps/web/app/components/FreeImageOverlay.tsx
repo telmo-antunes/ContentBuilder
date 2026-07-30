@@ -1,7 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import type { BlockFrame, SlidePhoto } from '@contentbuilder/shared';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  hasSettledShift,
+  resolveMove,
+  settledBounds,
+  type AmbientSpec,
+  type BlockFrame,
+  type SlidePhoto,
+} from '@contentbuilder/shared';
 
 /** Nothing smaller than this fraction of the canvas — a 0-size image is unclickable. */
 const MIN = 0.05;
@@ -63,6 +70,7 @@ export default function FreeImageOverlay({
   canvasH,
   scale,
   selectedId,
+  ambient,
   onSelect,
   onCommit,
 }: {
@@ -72,6 +80,12 @@ export default function FreeImageOverlay({
   /** displayWidth / canvasW — the factor the parent is scaling everything by. */
   scale: number;
   selectedId: string | null;
+  /**
+   * The brand's ambient motion. A floating photo moves at the deepest parallax
+   * multiplier there is, so where it ENDS is furthest from where you drop it —
+   * without this the overlay can't say, and the settled outline stays hidden.
+   */
+  ambient?: AmbientSpec;
   onSelect: (id: string | null) => void;
   /** Fires once per gesture, on release — not on every pointer move. */
   onCommit: (id: string, frame: BlockFrame) => void;
@@ -257,6 +271,16 @@ export default function FreeImageOverlay({
   const px = (n: number) => n / scale;
   const active = draft?.id ?? null;
 
+  /**
+   * `auto` alternates in/out by position for photos with no focal point, and
+   * the renderer walks the overlays in PAINT order (z ascending) — so the guide
+   * has to index them the same way or it would predict the opposite move.
+   */
+  const order = useMemo(
+    () => [...photos].sort((a, b) => (a.z ?? 1) - (b.z ?? 1)).map((p) => p.id),
+    [photos],
+  );
+
   return (
     <div
       style={{ position: 'absolute', inset: 0 }}
@@ -298,6 +322,19 @@ export default function FreeImageOverlay({
         if (!frame) return null;
         const selected = selectedId === p.id;
         const showing = selected || hover === p.id;
+        /**
+         * WHERE IT ENDS UP. The ambient move holds at its far end, so the box
+         * you drag is only the START of the framing — a floating photo moves at
+         * the deepest depth of all, and a push-in walks its edges well outside
+         * the frame by the time the clip settles. Percentages resolve against
+         * this element, which is the photo's own box, so the settled rectangle
+         * drops in untranslated.
+         */
+        const move = ambient ? resolveMove(p.motion, p.focal, order.indexOf(p.id)) : null;
+        const settled =
+          move && ambient && hasSettledShift(move, 'free', ambient)
+            ? settledBounds(move, 'free', ambient, p.focal)
+            : null;
         return (
           <div
             key={p.id}
@@ -321,6 +358,42 @@ export default function FreeImageOverlay({
               outlineOffset: px(2),
             }}
           >
+            {/* The settled outline is a GUIDE, never a target: the handles stay
+                on the live frame, because that is the thing dragging edits. */}
+            {showing && settled && (
+              <div
+                aria-hidden
+                style={{
+                  position: 'absolute',
+                  left: `${settled.x * 100}%`,
+                  top: `${settled.y * 100}%`,
+                  width: `${settled.w * 100}%`,
+                  height: `${settled.h * 100}%`,
+                  border: `${px(1.5)}px dashed var(--accent-2)`,
+                  borderRadius: px(2),
+                  opacity: 0.7,
+                  pointerEvents: 'none',
+                }}
+              >
+                <span
+                  style={{
+                    position: 'absolute',
+                    left: px(6),
+                    top: px(6),
+                    padding: `${px(2)}px ${px(6)}px`,
+                    borderRadius: px(4),
+                    background: 'rgba(0,0,0,.62)',
+                    color: 'var(--accent-2)',
+                    fontSize: px(13),
+                    letterSpacing: px(0.4),
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  Where it settles
+                </span>
+              </div>
+            )}
+
             {selected &&
               HANDLES.map((h) => (
                 <div

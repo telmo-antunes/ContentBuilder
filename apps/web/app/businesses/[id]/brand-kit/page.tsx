@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import type { BrandKit, BrandRecipe } from '@contentbuilder/shared';
+import type { BrandKit, BrandRecipe, TweakSuggestion } from '@contentbuilder/shared';
 import { BUNDLED_FONT_FAMILIES, applyKitToRecipe, contrastRatio } from '@contentbuilder/shared';
 import {
   getBrandKit,
@@ -11,13 +11,16 @@ import {
   analyzeBusiness,
   createManualKit,
   patchBrandKit,
+  dismissKitSuggestion,
   uploadMedia,
   authorBrandRecipe,
   authorRecipeCandidates,
   selectRecipeCandidate,
+  refineRecipeLayer,
   ApiClientError,
   type BusinessDetail,
   type RecipeCandidate,
+  type RecipeLayer,
 } from '../../../lib/api';
 import { SlideRenderer } from '../../../../lib/render/SlideRenderer';
 import { ScaledSlide } from '../../../../lib/render/SlideFrame';
@@ -27,7 +30,12 @@ import { ErrorState } from '../../../components/ErrorState';
 import { Icon } from '../../../components/Icon';
 import { Skeleton } from '../../../components/Skeleton';
 import { toast } from '../../../components/Toast';
-import { ANALYZE_STAGES, REANALYZE_STAGES, RECIPE_STAGES } from '../../../components/useStagedProgress';
+import {
+  ANALYZE_STAGES,
+  REANALYZE_STAGES,
+  RECIPE_STAGES,
+  type ProgressStage,
+} from '../../../components/useStagedProgress';
 import { WorkingPanel } from '../../../components/WorkingPanel';
 
 type ColorRoleKey = 'primary' | 'secondary' | 'accent' | 'background' | 'text';
@@ -39,12 +47,35 @@ const ROLES: Array<[ColorRoleKey, string]> = [
   ['text', 'Text'],
 ];
 
+/** Mirrors the server's CANDIDATE_DIRECTIONS order, for labelling the ghosts. */
+const CANDIDATE_NOTES = ['Faithful', 'Bolder', 'Quieter'];
+
+/**
+ * The recipe's three layers, in plain words. The stored keys are
+ * background/type/components; nobody outside the code thinks in those terms,
+ * so the chooser names the CONCERN each one owns.
+ */
+const REFINE_LAYERS: Array<[RecipeLayer, string]> = [
+  ['background', 'Background & texture'],
+  ['type', 'Type & scale'],
+  ['components', 'Components'],
+];
+
+/** One layer, not a whole re-author — a much shorter wait, narrated honestly. */
+const REFINE_STAGES: ProgressStage[] = [
+  { label: 'Reading the current design…', atMs: 0 },
+  { label: 'Rewriting that layer…', atMs: 6000 },
+  { label: 'Checking legibility and classes…', atMs: 18000 },
+  { label: 'Almost there…', atMs: 30000 },
+];
+
 export default function BrandKitPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [business, setBusiness] = useState<BusinessDetail | null>(null);
   const [kit, setKit] = useState<BrandKit | null>(null);
   const [hasApproved, setHasApproved] = useState(false);
+  const [suggestion, setSuggestion] = useState<TweakSuggestion | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -56,6 +87,9 @@ export default function BrandKitPage() {
       setBusiness(biz);
       setKit(state.draft ?? state.approved);
       setHasApproved(Boolean(state.approved));
+      // The suggestion is about the APPROVED kit — while a pending draft is
+      // open in the editor, applying it there would tune the wrong kit.
+      setSuggestion(state.draft ? null : (state.suggestion ?? null));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -191,6 +225,8 @@ export default function BrandKitPage() {
           businessName={business?.name ?? 'Your brand'}
           kit={kit}
           hasApproved={hasApproved}
+          suggestion={suggestion}
+          onSuggestionResolved={() => setSuggestion(null)}
           onReanalyze={business?.websiteUrl ? analyze : undefined}
           onManual={startManual}
           busy={busy}
@@ -218,6 +254,17 @@ function provenanceChips(p: BrandKit['provenance'] | undefined): string[] {
   if (p.logo === 'dom') chips.push('Logo found on the site');
   else if (p.logo === 'none') chips.push('No logo found \u2014 upload one');
   return chips;
+}
+
+/** Plain-voice copy for the learned suggestion \u2014 what happened, what one click does. */
+function suggestionCopy(s: TweakSuggestion): string {
+  if (s.kind === 'invert') {
+    return `You\u2019ve flipped ${s.count} posts to the inverse surface \u2014 make it the default so new posts start there?`;
+  }
+  const posts = `${s.count} post${s.count === 1 ? '' : 's'}`;
+  return s.reason === 'smaller-headline'
+    ? `You\u2019ve shrunk headlines on ${posts} \u2014 set the type a step denser so they start out right?`
+    : `You\u2019ve bumped headlines up on ${posts} \u2014 give the type a step more room so they start out right?`;
 }
 
 /** Strip Next.js's internal font tokens ("__Playfair_Display_eea437" \u2192 "Playfair Display"). */
@@ -286,6 +333,8 @@ function KitEditor({
   businessName,
   kit,
   hasApproved,
+  suggestion,
+  onSuggestionResolved,
   onReanalyze,
   onManual,
   busy,
@@ -296,6 +345,8 @@ function KitEditor({
   businessName: string;
   kit: BrandKit;
   hasApproved: boolean;
+  suggestion: TweakSuggestion | null;
+  onSuggestionResolved: () => void;
   onReanalyze?: () => void;
   onManual: () => void;
   busy: string | null;
@@ -319,6 +370,9 @@ function KitEditor({
     return list && list.length ? list : null;
   });
   const [candCount, setCandCount] = useState<2 | 3>(2);
+  // Refine: which layer to rewrite, and the one-line ask.
+  const [refineLayer, setRefineLayer] = useState<RecipeLayer>('background');
+  const [refineNote, setRefineNote] = useState('');
   // What the server currently holds — the baseline unsaved edits are measured
   // against for the "Now → After save" diff.
   const [savedBase, setSavedBase] = useState(() => ({
@@ -439,7 +493,7 @@ function KitEditor({
    * Tune the recipe directly. Instant and scoped — a colour or tempo change used
    * to require a full re-author, which also rewrote everything else.
    */
-  const saveRecipeKnobs = async (knobs: Record<string, string>) => {
+  const saveRecipeKnobs = async (knobs: Record<string, string | boolean>) => {
     setBusy('knobs');
     try {
       const updated = (await patchBrandKit(kit._id, { recipe: knobs } as never)) as {
@@ -451,6 +505,26 @@ function KitEditor({
       toast(e instanceof Error ? e.message : String(e), 'error');
     } finally {
       setBusy(null);
+    }
+  };
+
+  /**
+   * "Make it so" on the learned suggestion — the exact knobs PATCH the Tune
+   * row uses (density step), or the surface flip. The server clears the spent
+   * counters as part of the same PATCH.
+   */
+  const applySuggestion = async (s: TweakSuggestion) => {
+    await saveRecipeKnobs(s.kind === 'density' ? { density: s.to } : { flipSurfaces: true });
+    onSuggestionResolved();
+  };
+
+  /** "Not now" — a 14-day snooze on the server, so it survives reloads. */
+  const snoozeSuggestion = async () => {
+    try {
+      await dismissKitSuggestion(kit._id);
+      onSuggestionResolved();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : String(e), 'error');
     }
   };
 
@@ -495,6 +569,34 @@ function KitEditor({
     }
   };
 
+  const refineLayerLabel = REFINE_LAYERS.find(([key]) => key === refineLayer)?.[1] ?? refineLayer;
+
+  /**
+   * Rewrite ONE layer of the recipe from a sentence. The whole point is that
+   * everything else survives, so the toast says which layer changed — and, when
+   * the stored recipe has no layer split, admits the sheet was rewritten whole.
+   */
+  const refine = async () => {
+    const instruction = refineNote.trim();
+    if (!instruction) return;
+    setBusy('refine');
+    try {
+      const updated = await refineRecipeLayer(kit._id, refineLayer, instruction);
+      if (updated.recipe) setRecipe(updated.recipe);
+      setRefineNote('');
+      const label = refineLayerLabel.toLowerCase();
+      toast(
+        updated.refine?.mode === 'sheet'
+          ? `Recipe refined — this design had no layer split, so the whole stylesheet was rewritten for the ${label}.`
+          : `Refined the ${label} — the rest of the design is untouched.`,
+      );
+    } catch (e) {
+      toast(e instanceof Error ? e.message : String(e), 'error');
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const chooseCandidate = async (candidateId: string) => {
     setBusy(`select:${candidateId}`);
     try {
@@ -523,6 +625,9 @@ function KitEditor({
   };
   const textOnBrand = readable(colors.background);
   const tint = (a: string) => (HEX.test(colors.text) ? colors.text + a : `rgba(20,18,14,${parseInt(a, 16) / 255})`);
+  // The kit's colours are already known while the recipe is being authored, so
+  // the working panel ghosts THIS brand rather than five grey placeholders.
+  const paletteSwatches = ROLES.map(([role]) => colors[role]).filter((c) => HEX.test(c));
 
   // ── Kit-edit diff: what saving will do to every post, shown BEFORE saving ──
   // applyKitToRecipe is the exact pure function the server runs on save, so the
@@ -673,6 +778,11 @@ function KitEditor({
               bare
               stages={RECIPE_STAGES}
               title={busy === 'candidates' ? `Designing ${candCount} directions` : 'Designing the recipe'}
+              // One ghost per direction, labelled and in the brand's own colours,
+              // so the wait shows what is actually being made.
+              count={busy === 'candidates' ? candCount : 1}
+              notes={busy === 'candidates' ? CANDIDATE_NOTES.slice(0, candCount) : undefined}
+              palette={paletteSwatches}
               sub={
                 busy === 'candidates'
                   ? `Authoring ${candCount} complete design systems in parallel — one faithful, one bolder${candCount === 3 ? ', one quieter' : ''} — so you choose visually. This takes ~40–70s.`
@@ -853,6 +963,66 @@ function KitEditor({
                   </select>
                 </label>
               </div>
+
+              {/* Refine — a scalpel beside Tune's dials. "The background is too
+                  busy" used to mean a full re-author that changed everything;
+                  this rewrites ONE layer and leaves the rest byte-identical. */}
+              <div className="bk-refine">
+                {busy === 'refine' ? (
+                  <WorkingPanel
+                    active
+                    bare
+                    stages={REFINE_STAGES}
+                    palette={paletteSwatches}
+                    title={`Refining the ${refineLayerLabel.toLowerCase()}`}
+                    sub="Rewriting this one layer against your note — the rest of the design stays exactly as it is. This takes ~15–40s."
+                  />
+                ) : (
+                  <>
+                    <div className="bk-refine-row">
+                      <span className="bk-knobs-lbl">Refine</span>
+                      <label>
+                        Layer
+                        <select
+                          value={refineLayer}
+                          onChange={(e) => setRefineLayer(e.target.value as RecipeLayer)}
+                          disabled={busy !== null}
+                        >
+                          {REFINE_LAYERS.map(([key, label]) => (
+                            <option key={key} value={key}>
+                              {label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="bk-refine-ask">
+                        In your words
+                        <input
+                          value={refineNote}
+                          maxLength={200}
+                          placeholder="e.g. the background is too busy — calm it right down"
+                          onChange={(e) => setRefineNote(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') void refine();
+                          }}
+                          disabled={busy !== null}
+                        />
+                      </label>
+                      <button
+                        className="btn sm"
+                        onClick={() => void refine()}
+                        disabled={busy !== null || !refineNote.trim()}
+                      >
+                        Refine
+                      </button>
+                    </div>
+                    <p className="bk-refine-hint">
+                      Changes one layer of the design and leaves the rest alone — far quicker, and
+                      much safer, than redesigning a recipe you already like.
+                    </p>
+                  </>
+                )}
+              </div>
             </>
           ) : (
             <p className="v" style={{ marginTop: 14, maxWidth: '62ch', color: 'var(--muted)', lineHeight: 1.6 }}>
@@ -862,6 +1032,27 @@ function KitEditor({
             </p>
           )}
         </div>
+
+        {/* Learned preference: repeated slide tweaks, distilled into one quiet,
+            dismissible nudge. Applying rides the same knobs PATCH as Tune. */}
+        {recipe && suggestion && !candidates && busy !== 'recipe' && busy !== 'candidates' && (
+          <aside className="bk-suggest" role="status">
+            <Icon name="sparkle" size={14} />
+            <p className="bk-suggest-msg">{suggestionCopy(suggestion)}</p>
+            <div className="row" style={{ gap: 6 }}>
+              <button
+                className="btn sm primary"
+                onClick={() => void applySuggestion(suggestion)}
+                disabled={busy !== null}
+              >
+                Make it so
+              </button>
+              <button className="btn ghost sm" onClick={() => void snoozeSuggestion()} disabled={busy !== null}>
+                Not now
+              </button>
+            </div>
+          </aside>
+        )}
       </section>
 
       {/* ── The atelier: living controls ── */}
@@ -1079,6 +1270,7 @@ function KitEditor({
             active
             bare
             stages={REANALYZE_STAGES}
+            palette={paletteSwatches}
             title="Re-reading your brand"
             sub="Your approved kit stays exactly as it is — this arrives as a draft you can compare and approve. ~20–40s."
           />

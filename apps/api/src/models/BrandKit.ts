@@ -65,6 +65,25 @@ const brandKitSchema = new Schema(
      * the same reason as `recipe`: zod validates the recipes at author time.
      */
     recipeCandidates: { type: [Schema.Types.Mixed], default: undefined },
+    /**
+     * Net counts of the deterministic slide tweaks made against this brand's
+     * posts (bigger/smaller headline, invert). Written by the tweak endpoint,
+     * read by GET /businesses/:id/brandkit to derive a recipe suggestion.
+     * Absent until the first tweak — old kits need no migration.
+     */
+    tweakSignals: {
+      type: new Schema(
+        {
+          biggerHeadline: { type: Number, default: 0 },
+          smallerHeadline: { type: Number, default: 0 },
+          invert: { type: Number, default: 0 },
+          updatedAt: { type: Date },
+          dismissedAt: { type: Date },
+        },
+        { _id: false },
+      ),
+      default: undefined,
+    },
     createdAt: { type: Date, default: () => new Date() },
   },
   baseSchemaOptions,

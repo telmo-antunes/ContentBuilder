@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import type { Format, ThemePreset } from '@contentbuilder/shared';
-import type { LayoutImage, RenderBrandKit } from './types';
+import type { RenderBrandKit } from './types';
 import type { SlidePhotoSet } from './projectRender';
 import { ensureGoogleFonts } from './fontLoader';
 import { SlideFrame } from './SlideFrame';
@@ -21,7 +21,6 @@ export function SlideRenderer({
   slide,
   brandKit,
   format,
-  image,
   photos,
   editing,
   onOverflow,
@@ -35,8 +34,6 @@ export function SlideRenderer({
   slide: RenderableSlide;
   brandKit: RenderBrandKit;
   format: Format;
-  /** Accepted for call-site compatibility; authored slides carry their own art. */
-  image?: LayoutImage | null;
   /** The user's own photos: slot fills, a background, and free overlays. */
   photos?: SlidePhotoSet;
   /**
@@ -100,7 +97,6 @@ export function SlideRenderer({
             authored={slide.authored}
             format={format}
             logoUrl={brandKit.logo?.url}
-            photoUrl={slide.authored.bg === 'photo' ? image?.url : undefined}
             photos={photos}
             // Empty-slot affordances belong to editing surfaces only.
             editing={editing ?? !forExport}

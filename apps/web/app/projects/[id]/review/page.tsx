@@ -7,6 +7,7 @@ import {
   authoredSlots,
   contrastRatio,
   dimensionsFor,
+  recipeAmbient,
   type BlockFrame,
   type BrandRecipe,
   type Format,
@@ -35,7 +36,6 @@ import { SlideRenderer } from '../../../../lib/render/SlideRenderer';
 import { ScaledSlide } from '../../../../lib/render/SlideFrame';
 import {
   toRenderKit,
-  resolveSlideImage,
   resolveSlidePhotos,
 } from '../../../../lib/render/projectRender';
 import { parseAuthored, buildAuthored, type AuthoredEl } from '../../../../lib/authoredEdit';
@@ -841,7 +841,6 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                       slide={slide}
                       brandKit={kit}
                       format={project.format}
-                      image={resolveSlideImage(slide, project.media)}
                       photos={resolveSlidePhotos(slide, project.media)}
                       editing
                       theme={slide.overrides?.theme ?? project.settings?.theme ?? 'editorial'}
@@ -942,6 +941,9 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                           canvasH={dimensionsFor(project.format).height}
                           scale={inspectorScale}
                           selectedId={freeSel}
+                          // So the overlay can draw where the motion leaves each
+                          // photo, not just where it sits at rest.
+                          ambient={recipeAmbient(recipe)}
                           onSelect={setFreeSel}
                           onCommit={(id, frame: BlockFrame) =>
                             void savePhotos(
@@ -960,7 +962,6 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                       slide={selectedWorking}
                       brandKit={kit}
                       format={project.format}
-                      image={resolveSlideImage(selectedWorking, project.media)}
                       photos={resolveSlidePhotos(selectedWorking, project.media)}
                       editing
                       theme={selectedWorking.overrides?.theme ?? project.settings?.theme ?? 'editorial'}
@@ -1092,6 +1093,7 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                       format={project.format}
                       busy={working !== null || saving}
                       selectedFreeId={freeSel}
+                      ambient={recipeAmbient(recipe)}
                       onSelectFree={setFreeSel}
                       onChange={(photos, uploaded) => void savePhotos(selected.id, photos, uploaded)}
                     />
@@ -1157,7 +1159,6 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                               slide={{ authored: v }}
                               brandKit={kit}
                               format={project.format}
-                              image={selected ? resolveSlideImage(selected, project.media) : null}
                               photos={selected ? resolveSlidePhotos(selected, project.media) : undefined}
                               forExport
                             />

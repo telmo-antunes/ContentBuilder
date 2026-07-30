@@ -2,9 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  DEFAULT_AMBIENT,
   SLOT_SHAPES,
   authoredSlots,
   dimensionsFor,
+  resolveMove,
+  type AmbientSpec,
   type Format,
   type MediaAsset,
   type Slide,
@@ -96,6 +99,7 @@ export default function SlidePhotoPanel({
   format,
   busy,
   selectedFreeId,
+  ambient,
   onSelectFree,
   onChange,
 }: {
@@ -105,6 +109,13 @@ export default function SlidePhotoPanel({
   format: Format;
   busy: boolean;
   selectedFreeId: string | null;
+  /**
+   * The brand's ambient motion, so the focal picker can show where each move
+   * LEAVES the photo — the framing that ships is the one the motion settles
+   * into, not the one at rest. Absent, it assumes the same default the recipe
+   * falls back to.
+   */
+  ambient?: AmbientSpec;
   onSelectFree: (id: string | null) => void;
   /**
    * The new photo list, plus the asset that was just created when this change
@@ -159,6 +170,9 @@ export default function SlidePhotoPanel({
   }, [photos]);
   const background = photos.find((p) => p.placement === 'background') ?? null;
   const free = photos.filter((p) => p.placement === 'free');
+  /** Paint order, which is how the renderer indexes overlays for `auto`. */
+  const freeOrder = [...free].sort((a, b) => (a.z ?? 1) - (b.z ?? 1)).map((p) => p.id);
+  const amb = ambient ?? DEFAULT_AMBIENT;
 
   const pick = (target: typeof targetRef.current) => {
     targetRef.current = target;
@@ -358,6 +372,13 @@ export default function SlidePhotoPanel({
     onStock?: () => void;
     slotShape?: string;
     kind: 'slot' | 'background' | 'free';
+    /**
+     * This photo's position within its own layer — the renderer walks slots in
+     * authored order and overlays in paint order, and `auto` alternates by that
+     * index for photos with no focal point. Guess it and the guide would show
+     * the opposite move.
+     */
+    index?: number;
   }) => {
     const { photo: p, kind } = opts;
     const asset = p ? assetOf(p.mediaAssetId) : undefined;
@@ -409,7 +430,14 @@ export default function SlidePhotoPanel({
           <div className="spc-body">
             <div className="spc-field">
               <span className="spc-label">What stays in frame</span>
-              <FocalPicker url={asset.url} value={p.focal} onChange={(focal) => patch(p.id, { focal })} />
+              <FocalPicker
+                url={asset.url}
+                value={p.focal}
+                move={resolveMove(p.motion, p.focal, opts.index ?? 0)}
+                layer={kind}
+                ambient={amb}
+                onChange={(focal) => patch(p.id, { focal })}
+              />
             </div>
 
             <Choice
@@ -553,11 +581,12 @@ export default function SlidePhotoPanel({
       {slots.length > 0 && (
         <>
           <div className="spc-group">Spaces the AI left for photos</div>
-          {slots.map((slotName) => {
+          {slots.map((slotName, i) => {
             const p = bySlot[slotName];
             const shape = shapeOf(slotName);
             return card({
               key: slotName,
+              index: i,
               photo: p,
               title: slotLabel(slotName),
               status: p ? `In place · ${moveName(p)}` : 'Empty — add your photo here',
@@ -589,6 +618,7 @@ export default function SlidePhotoPanel({
       {free.map((p) =>
         card({
           key: p.id,
+          index: freeOrder.indexOf(p.id),
           photo: p,
           title: 'Placed photo',
           status: `${(p.z ?? 1) < 0 ? 'Behind the text' : 'In front of the text'} · ${moveName(p)}`,

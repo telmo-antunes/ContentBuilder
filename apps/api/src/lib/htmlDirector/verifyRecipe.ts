@@ -16,15 +16,13 @@
  * Best-effort throughout: any failure returns the recipe untouched. Nothing here
  * may block a brand from getting a kit.
  */
-import { randomUUID } from 'node:crypto';
 import sharp from 'sharp';
 import { dimensionsFor, migrateRecipe, type BrandRecipe, type Format } from '@contentbuilder/shared';
-import { config } from '../../config';
 import { getBrowser } from '../browser';
 import { aiMessage, modelFor, textOf } from '../ai';
 import { recordUsage } from '../usage';
 import { sanitizeRecipeCss } from '../cssSanitize';
-import { BusinessModel, BrandKitModel, ProjectModel } from '../../models';
+import { createRenderScaffold } from './renderCheck';
 
 /** Sample copy per component class — plausible, and long enough to stress fit. */
 const SAMPLE: Record<string, string> = {
@@ -107,45 +105,22 @@ async function shootSamples(recipe: BrandRecipe, format: Format): Promise<Shot[]
   // PRODUCTION render route: it resolves the kit exactly as a real export does,
   // so fonts, tokens, per-format tuning and the overflow guard all behave the
   // same. Fully isolated (nothing live is touched) and torn down in `finally`.
-  const t = recipe.tokens;
-  const business = await BusinessModel.create({ name: `__verify-${randomUUID().slice(0, 8)}` });
-  const kit = await BrandKitModel.create({
-    businessId: business._id,
-    colors: {
-      primary: t.accent,
-      secondary: t.groundAlt ?? t.ground,
-      accent: t.accent,
-      background: t.ground,
-      text: t.ink,
-    },
-    fonts: { render: { heading: t.displayFamily, body: t.bodyFamily } },
-    status: 'approved',
+  // The rig itself lives in renderCheck.ts — the compose-time overflow check
+  // stands up exactly the same one, so there is one implementation, not two.
+  const scaffold = await createRenderScaffold(
     recipe,
-  });
-  const project = await ProjectModel.create({
-    businessId: business._id,
-    title: `__recipe-verify-${randomUUID().slice(0, 8)}`,
-    type: 'carousel',
     format,
-    status: 'draft',
-    settings: { theme: 'editorial', slideCounter: false },
-    slides: slides.map((html, i) => ({
-      id: randomUUID(),
-      order: i,
-      imageNeed: 'none',
-      authored: { html, role: i === 0 ? 'statement' : 'stat' },
-    })),
-  });
+    slides.map((html, i) => ({ html, role: i === 0 ? 'statement' : 'stat' })),
+    'recipe-verify',
+  );
 
   const browser = await getBrowser();
   const page = await browser.newPage();
   const shots: Shot[] = [];
   try {
     await page.setViewport({ width, height, deviceScaleFactor: 1 });
-    const base = config.webUrl.replace(/\/+$/, '');
-    for (const slide of project.get('slides') as Array<{ id: string }>) {
-      const url = `${base}/render?projectId=${String(project._id)}&slideId=${slide.id}`;
-      await page.goto(url, { waitUntil: 'load', timeout: 45000 });
+    for (let i = 0; i < scaffold.slideIds.length; i += 1) {
+      await page.goto(scaffold.urlFor(i), { waitUntil: 'load', timeout: 45000 });
       await page.waitForSelector('[data-slide-root]', { timeout: 25000 });
       await page.evaluate(async () => {
         const doc = (globalThis as { document?: any }).document;
@@ -164,11 +139,7 @@ async function shootSamples(recipe: BrandRecipe, format: Format): Promise<Shot[]
     }
   } finally {
     await page.close().catch(() => {});
-    await Promise.all([
-      ProjectModel.deleteOne({ _id: project._id }).catch(() => {}),
-      BrandKitModel.deleteOne({ _id: kit._id }).catch(() => {}),
-      BusinessModel.deleteOne({ _id: business._id }).catch(() => {}),
-    ]);
+    await scaffold.dispose();
   }
   return shots;
 }
@@ -246,7 +217,17 @@ export async function verifyRecipeByRender(
     }
     // Re-validate the revision exactly like an authored recipe: sanitise the CSS
     // and run it back through the schema/migrator.
-    const revised = migrateRecipe({ ...recipe, stylesheet: sanitizeRecipeCss(parsed.stylesheet) });
+    //
+    // `layers` is dropped deliberately. This step returns ONE corrected sheet, so
+    // the recipe's three-layer split no longer describes its CSS — and the
+    // renderer prefers layers over `stylesheet`, so keeping a stale split would
+    // make the fix invisible on the very slides it was measured from. Guessing a
+    // new split would be worse: it silently moves rules on the next refine.
+    const revised = migrateRecipe({
+      ...recipe,
+      layers: undefined,
+      stylesheet: sanitizeRecipeCss(parsed.stylesheet),
+    });
     return { recipe: revised, verdict: 'revised', notes: notes || 'stylesheet revised from the render' };
   } catch (err) {
     return {

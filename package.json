@@ -18,6 +18,8 @@
     "test:watch": "vitest",
     "fonts": "node scripts/copy-fonts.mjs",
     "seed": "npm --prefix apps/api run seed",
+    "eval:compose": "npm --prefix apps/api run eval:compose --",
+    "migrate:photos": "npm --prefix apps/api run migrate:photos --",
     "lint": "eslint ."
   },
   "devDependencies": {

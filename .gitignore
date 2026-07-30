@@ -24,6 +24,9 @@ out/
 # bundled dev MongoDB data dir
 .mongo-data/
 
+# compose eval reports (npm run eval:compose) — timestamped, machine-local
+eval-reports/
+
 # logs
 *.log
 npm-debug.log*
@@ -42,3 +45,6 @@ coverage/
 
 # scratch verification scripts
 *.tmp.mts
+
+# local .env backups
+.env.bak.*

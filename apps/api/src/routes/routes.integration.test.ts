@@ -12,7 +12,7 @@ import { MongoMemoryServer } from 'mongodb-memory-server';
 // The AI-gated routes check aiDraftConfigured() BEFORE reaching our mocks, and
 // config reads the env at import time — so stub the env before any import runs
 // (CI has no real key; the boundaries themselves are mocked below).
-const { renderVideoMock, authorRecipeMock } = vi.hoisted(() => {
+const { renderVideoMock, authorRecipeMock, aiReplyMock } = vi.hoisted(() => {
   process.env.ANTHROPIC_API_KEY = 'test-key';
   process.env.ANTHROPIC_MODEL = 'claude-test';
   process.env.ANTHROPIC_MODEL_SMALL = 'claude-test';
@@ -21,7 +21,11 @@ const { renderVideoMock, authorRecipeMock } = vi.hoisted(() => {
   // Video-export tests persist artifacts through the StorageProvider — keep
   // those writes out of the repo's real ./storage dir.
   process.env.STORAGE_DIR = `${process.env.TMPDIR ?? '/tmp'}/contentbuilder-test-storage`;
-  return { renderVideoMock: vi.fn(), authorRecipeMock: vi.fn() };
+  return {
+    renderVideoMock: vi.fn(),
+    authorRecipeMock: vi.fn(),
+    aiReplyMock: vi.fn((_params: unknown): string => ''),
+  };
 });
 
 // ── Mock the AI boundaries the surviving routes touch ─────────────────────────
@@ -38,12 +42,26 @@ vi.mock('../lib/videoExporter', async (importOriginal) => {
 vi.mock('../lib/htmlDirector/authorRecipe', () => ({
   authorRecipe: authorRecipeMock,
 }));
+// Recipe REFINE is mocked one level lower — at the SDK seam rather than at its
+// own module — so the route, the layered/flat branch, the reply parsing and the
+// deterministic gates all run for real against a scripted model reply. (Mocking
+// lib/ai instead would have taken `modelFor`, which this file tests, with it.)
+vi.mock('@anthropic-ai/sdk', () => ({
+  default: class MockAnthropic {
+    messages = {
+      create: async (params: unknown) => ({ content: [{ type: 'text', text: aiReplyMock(params) }] }),
+      stream: (params: unknown) => ({
+        finalMessage: async () => ({ content: [{ type: 'text', text: aiReplyMock(params) }] }),
+      }),
+    };
+  },
+}));
 
 import { createApp } from '../app';
 import { modelFor } from '../lib/ai';
 import { VideoExportCancelled, type IsCancelled } from '../lib/videoExporter';
 import { failInterruptedVideoJobs } from '../lib/videoJobs';
-import { BusinessModel, BrandKitModel, MediaAssetModel, ProjectVersionModel, SettingModel, VideoJobModel } from '../models';
+import { BusinessModel, BrandKitModel, MediaAssetModel, ProjectModel, ProjectVersionModel, SettingModel, VideoJobModel } from '../models';
 
 let mongod: MongoMemoryServer;
 const app = () => createApp();
@@ -238,19 +256,83 @@ describe('projects', () => {
         slides: [
           {
             imageNeed: 'upload',
-            mediaAssetId: String(foreign._id), // not ours — must be stripped
+            // not ours — must be dropped
+            photos: [{ id: 'p1', mediaAssetId: String(foreign._id), placement: 'background' }],
           },
           {
             imageNeed: 'upload',
-            mediaAssetId: String(mine._id), // ours — must survive
+            // ours — must survive
+            photos: [{ id: 'p2', mediaAssetId: String(mine._id), placement: 'background' }],
           },
         ],
       });
     expect(res.status).toBe(200);
-    expect(res.body.slides[0].mediaAssetId ?? null).toBeNull();
-    expect(String(res.body.slides[1].mediaAssetId)).toBe(String(mine._id));
+    expect(res.body.slides[0].photos).toHaveLength(0);
+    expect(String(res.body.slides[1].photos[0].mediaAssetId)).toBe(String(mine._id));
   });
 
+  /**
+   * Read-tolerance for the RETIRED slide-level `mediaAssetId`. A document
+   * written before `npm run migrate:photos` still carries the field; Mongoose
+   * strict mode ignores it on read and zod strips it at the wire boundary, so
+   * an unmigrated project must load and save normally — it simply shows no
+   * photo (which is exactly why the migration has to run).
+   */
+  it('loads an UNMIGRATED slide (legacy mediaAssetId) without crashing', async () => {
+    const biz = await seedBusiness();
+    await seedApprovedKit(String(biz._id));
+    const asset = await MediaAssetModel.create({
+      businessId: biz._id,
+      type: 'upload',
+      key: 'legacy.png',
+      url: 'http://x/legacy.png',
+      width: 10,
+      height: 10,
+    });
+    const created = await request(app())
+      .post('/projects')
+      .send({ businessId: String(biz._id), title: 'Legacy', type: 'carousel', format: '1080x1080' });
+    const pid = created.body._id;
+
+    // Write the legacy field straight through the driver — the schema no
+    // longer has a path for it, so a normal save could not produce this shape.
+    await ProjectModel.collection.updateOne(
+      { _id: new mongoose.Types.ObjectId(pid) },
+      {
+        $set: {
+          slides: [
+            {
+              id: 'legacy-1',
+              order: 0,
+              imageNeed: 'upload',
+              mediaAssetId: asset._id,
+              photos: [],
+              authored: { html: '<h1 class="headline">Still here</h1>' },
+            },
+          ],
+        },
+      },
+    );
+
+    const read = await request(app()).get(`/projects/${pid}`);
+    expect(read.status).toBe(200);
+    expect(read.body.slides).toHaveLength(1);
+    expect(read.body.slides[0].authored.html).toContain('Still here');
+    // Crucially NOT resurrected as a photo — the back-compat rule is gone, so
+    // the picture stays invisible until the migration folds it in.
+    expect(read.body.slides[0].photos).toEqual([]);
+
+    // …and it still saves. The retired field is dropped on the way in (zod) and
+    // on the way out (Mongoose has no path for it), so the round trip retires it.
+    const patched = await request(app())
+      .patch(`/projects/${pid}`)
+      .send({ slides: [{ ...read.body.slides[0], mediaAssetId: String(asset._id) }] });
+    expect(patched.status).toBe(200);
+    expect(patched.body.slides[0].mediaAssetId).toBeUndefined();
+    expect(patched.body.slides[0].photos).toEqual([]);
+    const stored = await ProjectModel.collection.findOne({ _id: new mongoose.Types.ObjectId(pid) });
+    expect((stored?.slides as any[])[0].mediaAssetId).toBeUndefined();
+  });
 });
 
 // ── A slide's photos ──────────────────────────────────────────────────────────
@@ -494,6 +576,349 @@ describe('recipe candidates', () => {
     const res = await request(app()).post(`/brandkits/${kit._id}/recipe/candidates`).send({});
     expect(res.status).toBe(502);
     expect(res.body.error).toMatch(/model exploded/);
+  });
+});
+
+// ── Recipe refine: one layer, not the whole design ────────────────────────────
+// The point of the endpoint is that everything NOT asked about survives, so
+// these assert byte-identity of the untouched layers — and that the flat
+// (no-layers) recipes every brand actually has stored still get an honest,
+// whole-sheet answer that clears the same gates.
+describe('recipe refine', () => {
+  const BG = '.cb-slide { background: radial-gradient(circle at 20% 0%, var(--cb-accent), var(--cb-ground)); }';
+  const TYPE = '.cb-slide .headline { font-size: 104px; font-family: var(--cb-display); }';
+  const COMPONENTS = '.cb-slide .cta { border-radius: var(--cb-radius); }';
+  const CALM_BG = '.cb-slide { background: var(--cb-ground); }';
+
+  function refinableRecipe(extra: Record<string, unknown> = {}) {
+    return {
+      version: 2,
+      tokens: {
+        ground: '#0B0F1A',
+        ink: '#F8FAFC',
+        accent: '#F5C044',
+        displayFamily: 'Inter',
+        bodyFamily: 'Inter',
+        radius: 16,
+      },
+      signature: { name: 'Gold rule', description: 'A hairline rule under every headline' },
+      stylesheet: [BG, TYPE, COMPONENTS].join('\n'),
+      components: [
+        { className: 'headline', use: 'The hook' },
+        { className: 'cta', use: 'The button' },
+      ],
+      ...extra,
+    };
+  }
+
+  async function seedKitWithRecipe(recipe: Record<string, unknown> | null) {
+    const biz = await seedBusiness();
+    const kit = await seedApprovedKit(String(biz._id));
+    if (recipe) {
+      kit.set('recipe', recipe);
+      await kit.save();
+    }
+    return kit;
+  }
+
+  const refine = (kitId: string, body: Record<string, unknown>) =>
+    request(app()).post(`/brandkits/${kitId}/recipe/refine`).send(body);
+
+  beforeEach(() => {
+    aiReplyMock.mockReset();
+    aiReplyMock.mockReturnValue('');
+  });
+
+  it('replaces only the targeted layer and leaves the others byte-identical', async () => {
+    const kit = await seedKitWithRecipe(
+      refinableRecipe({ layers: { background: BG, type: TYPE, components: COMPONENTS } }),
+    );
+    aiReplyMock.mockReturnValue(CALM_BG);
+
+    const res = await refine(String(kit._id), { layer: 'background', instruction: 'too busy — calm it' });
+    expect(res.status).toBe(200);
+    expect(res.body.refine).toMatchObject({ layer: 'background', mode: 'layer' });
+
+    const fresh = await BrandKitModel.findById(kit._id).lean<Record<string, any> | null>();
+    expect(fresh?.recipe?.layers?.background).toBe(CALM_BG);
+    expect(fresh?.recipe?.layers?.type).toBe(TYPE); // untouched, byte for byte
+    expect(fresh?.recipe?.layers?.components).toBe(COMPONENTS);
+    // The stored blob is recomposed exactly as the renderer composes layers.
+    expect(fresh?.recipe?.stylesheet).toBe([CALM_BG, TYPE, COMPONENTS].join('\n'));
+    // …and the model was actually shown the brand and the ask.
+    const sent = JSON.stringify(aiReplyMock.mock.calls[0]?.[0] ?? {});
+    expect(sent).toContain('too busy');
+    expect(sent).toContain('LAYER TO CHANGE: background');
+  });
+
+  it('rewrites the whole sheet — and says so — when the recipe has no layer split', async () => {
+    const kit = await seedKitWithRecipe(refinableRecipe());
+    const WHOLE = [CALM_BG, TYPE, COMPONENTS].join('\n');
+    aiReplyMock.mockReturnValue(WHOLE);
+
+    const res = await refine(String(kit._id), { layer: 'background', instruction: 'flatten the ground' });
+    expect(res.status).toBe(200);
+    expect(res.body.refine).toMatchObject({ layer: 'background', mode: 'sheet' });
+    expect(JSON.stringify(aiReplyMock.mock.calls[0]?.[0] ?? {})).toContain('NO LAYER SPLIT');
+
+    const fresh = await BrandKitModel.findById(kit._id).lean<Record<string, any> | null>();
+    expect(fresh?.recipe?.stylesheet).toBe(WHOLE);
+    expect(fresh?.recipe?.layers).toBeFalsy(); // no fake split is invented
+    // The gates still ran: both advertised classes are still defined, so both survive.
+    expect(fresh?.recipe?.components?.map((c: any) => c.className)).toEqual(['headline', 'cta']);
+  });
+
+  it('repairs a contrast failure through the same gate the author uses', async () => {
+    const kit = await seedKitWithRecipe(
+      refinableRecipe({
+        tokens: {
+          ground: '#0B0F1A',
+          ink: '#1A2030', // ~1.2:1 on that ground — unreadable
+          accent: '#F5C044',
+          displayFamily: 'Inter',
+          bodyFamily: 'Inter',
+          radius: 16,
+        },
+      }),
+    );
+    aiReplyMock.mockReturnValue([CALM_BG, TYPE, COMPONENTS].join('\n'));
+
+    const res = await refine(String(kit._id), { layer: 'background', instruction: 'calmer' });
+    expect(res.status).toBe(200);
+    expect(res.body.refine.repairs.join(' ')).toMatch(/ink/);
+    const fresh = await BrandKitModel.findById(kit._id).lean<Record<string, any> | null>();
+    expect(fresh?.recipe?.tokens?.ink).not.toBe('#1A2030');
+  });
+
+  it('parses a reply wrapped in fences and prose', async () => {
+    const kit = await seedKitWithRecipe(
+      refinableRecipe({ layers: { background: BG, type: TYPE, components: COMPONENTS } }),
+    );
+    aiReplyMock.mockReturnValue(
+      ['Happy to — here is the calmer background:', '', '```css', CALM_BG, '```', '', 'Hope that reads better!'].join('\n'),
+    );
+    const res = await refine(String(kit._id), { layer: 'background', instruction: 'calmer' });
+    expect(res.status).toBe(200);
+    const fresh = await BrandKitModel.findById(kit._id).lean<Record<string, any> | null>();
+    expect(fresh?.recipe?.layers?.background).toBe(CALM_BG);
+  });
+
+  it('rejects a bad layer, an unknown kit, an empty instruction and a recipe-less kit', async () => {
+    const kit = await seedKitWithRecipe(refinableRecipe());
+    aiReplyMock.mockReturnValue(CALM_BG);
+
+    const badLayer = await refine(String(kit._id), { layer: 'colours', instruction: 'x' });
+    expect(badLayer.status).toBe(400);
+    const noInstruction = await refine(String(kit._id), { layer: 'type', instruction: '  ' });
+    expect(noInstruction.status).toBe(400);
+
+    const unknown = await refine(String(new mongoose.Types.ObjectId()), {
+      layer: 'type',
+      instruction: 'bigger headlines',
+    });
+    expect(unknown.status).toBe(404);
+
+    const bare = await seedKitWithRecipe(null);
+    const noRecipe = await refine(String(bare._id), { layer: 'type', instruction: 'bigger headlines' });
+    expect(noRecipe.status).toBe(400);
+    expect(noRecipe.body.error).toMatch(/no recipe/i);
+
+    // None of the rejections reached the model.
+    expect(aiReplyMock).not.toHaveBeenCalled();
+  });
+
+  it('502s with the upstream reason when the model returns no CSS', async () => {
+    const kit = await seedKitWithRecipe(refinableRecipe());
+    aiReplyMock.mockReturnValue('I would rather not.');
+    const res = await refine(String(kit._id), { layer: 'type', instruction: 'bigger headlines' });
+    expect(res.status).toBe(502);
+    expect(res.body.error).toMatch(/no CSS/i);
+    const fresh = await BrandKitModel.findById(kit._id).lean<Record<string, any> | null>();
+    expect(fresh?.recipe?.stylesheet).toContain('radial-gradient'); // nothing was saved
+  });
+});
+
+// ── Tweak signals → kit suggestion ────────────────────────────────────────────
+// Every deterministic slide tweak is a labelled preference about the brand's
+// recipe; these cover the whole learning loop: press → counter on the approved
+// kit → derived suggestion (correct direction) → apply-clears / dismiss-snoozes.
+describe('tweak signals → kit suggestion', () => {
+  const DAY_MS = 24 * 60 * 60 * 1000;
+
+  /** A minimal valid recipe with the tunable typography block. */
+  function recipeWith(extra: Record<string, unknown> = {}) {
+    return {
+      version: 2,
+      tokens: {
+        ground: '#0B0F1A',
+        ink: '#F8FAFC',
+        accent: '#F5C044',
+        displayFamily: 'Inter',
+        bodyFamily: 'Inter',
+        radius: 16,
+      },
+      typography: { displayCase: 'sentence', displayWeight: 700, displayTracking: '-0.02em', density: 'balanced' },
+      signature: { name: 'Gold rule', description: 'A recurring move' },
+      stylesheet: '.cb-slide .headline { font-size: 100px; }',
+      components: [],
+      ...extra,
+    };
+  }
+
+  /** Approved kit WITH a recipe + one authored-slide project to press tweaks on. */
+  async function seedTweakable(recipeExtra: Record<string, unknown> = {}) {
+    const biz = await seedBusiness();
+    const kit = await seedApprovedKit(String(biz._id));
+    kit.set('recipe', recipeWith(recipeExtra));
+    await kit.save();
+    const created = await request(app())
+      .post('/projects')
+      .send({
+        businessId: String(biz._id),
+        title: 'T',
+        type: 'carousel',
+        format: '1080x1080',
+        slides: [{ authored: { html: '<h1 class="headline">Hi</h1>' } }],
+      });
+    expect(created.status).toBe(201);
+    return { biz, kit, project: created.body, slideId: created.body.slides[0].id as string };
+  }
+
+  const press = (projectId: string, slideId: string, tweak: string) =>
+    request(app()).post(`/projects/${projectId}/slides/${slideId}/tweak`).send({ tweak });
+
+  // The size buttons used to pattern-match `class="headline…"`, so they only
+  // worked when `headline` was the FIRST class in a double-quoted attribute —
+  // on a recipe writing `class="lead headline"` the button silently did nothing.
+  it('resizes a headline whose class attribute does not start with `headline`', async () => {
+    const { biz } = await seedTweakable();
+    const created = await request(app())
+      .post('/projects')
+      .send({
+        businessId: String(biz._id),
+        title: 'Awkward classes',
+        type: 'carousel',
+        format: '1080x1080',
+        // Single-quoted, and `headline` is neither first nor last.
+        slides: [{ authored: { html: `<h1 class='lead headline wide'>Hi</h1>` } }],
+      });
+    expect(created.status).toBe(201);
+    const id = created.body._id as string;
+    const sid = created.body.slides[0].id as string;
+
+    const smaller = await press(id, sid, 'smaller-headline');
+    expect(smaller.status).toBe(200);
+    expect(smaller.body.slides[0].authored.html).toContain('sm');
+
+    const bigger = await press(id, sid, 'bigger-headline');
+    expect(bigger.status).toBe(200);
+    expect(bigger.body.slides[0].authored.html).not.toMatch(/\bsm\b/);
+  });
+
+  it('three smaller-headline presses → counters on the approved kit and a denser-step suggestion', async () => {
+    const { biz, kit, project, slideId } = await seedTweakable();
+    for (let i = 0; i < 3; i++) expect((await press(project._id, slideId, 'smaller-headline')).status).toBe(200);
+
+    const fresh = await BrandKitModel.findById(kit._id).lean<Record<string, any> | null>();
+    expect(fresh?.tweakSignals?.smallerHeadline).toBe(3);
+
+    const state = await request(app()).get(`/businesses/${biz._id}/brandkit`);
+    expect(state.status).toBe(200);
+    expect(state.body.approved.tweakSignals.smallerHeadline).toBe(3);
+    // Density drives a rhythm multiplier (roomy 1.15 → balanced 1 → dense
+    // 0.86): repeated "smaller headline" means the type keeps running too BIG,
+    // so the correct direction is one step TOWARD dense.
+    expect(state.body.suggestion).toMatchObject({
+      kind: 'density',
+      from: 'balanced',
+      to: 'dense',
+      reason: 'smaller-headline',
+      count: 3,
+    });
+  });
+
+  it('net bigger-headline presses suggest the opposite step (toward roomy)', async () => {
+    const { biz, project, slideId } = await seedTweakable();
+    for (let i = 0; i < 4; i++) await press(project._id, slideId, 'bigger-headline');
+    await press(project._id, slideId, 'smaller-headline'); // netting: 4 − 1 = 3
+    const state = await request(app()).get(`/businesses/${biz._id}/brandkit`);
+    expect(state.body.suggestion).toMatchObject({ kind: 'density', to: 'roomy', reason: 'bigger-headline', count: 3 });
+  });
+
+  it('applying the density step via the ordinary knobs PATCH clears the spent counters', async () => {
+    const { biz, kit, project, slideId } = await seedTweakable();
+    for (let i = 0; i < 3; i++) await press(project._id, slideId, 'smaller-headline');
+
+    const patched = await request(app()).patch(`/brandkits/${kit._id}`).send({ recipe: { density: 'dense' } });
+    expect(patched.status).toBe(200);
+    expect(patched.body.recipe.typography.density).toBe('dense');
+
+    const fresh = await BrandKitModel.findById(kit._id).lean<Record<string, any> | null>();
+    expect(fresh?.tweakSignals?.smallerHeadline).toBe(0);
+    expect(fresh?.tweakSignals?.biggerHeadline).toBe(0);
+
+    const state = await request(app()).get(`/businesses/${biz._id}/brandkit`);
+    expect(state.body.suggestion).toBeNull();
+  });
+
+  it('dismiss suppresses the suggestion for 14 days without clearing the counters', async () => {
+    const { biz, kit, project, slideId } = await seedTweakable();
+    for (let i = 0; i < 3; i++) await press(project._id, slideId, 'smaller-headline');
+
+    const dismissed = await request(app()).post(`/brandkits/${kit._id}/suggestion/dismiss`);
+    expect(dismissed.status).toBe(200);
+
+    const state = await request(app()).get(`/businesses/${biz._id}/brandkit`);
+    expect(state.body.suggestion).toBeNull();
+    // A snooze, not amnesia: the presses are still on the kit.
+    expect(state.body.approved.tweakSignals.smallerHeadline).toBe(3);
+
+    // 15 days later, the same standing corrections resurface on their own.
+    await BrandKitModel.updateOne(
+      { _id: kit._id },
+      { $set: { 'tweakSignals.dismissedAt': new Date(Date.now() - 15 * DAY_MS) } },
+    );
+    const later = await request(app()).get(`/businesses/${biz._id}/brandkit`);
+    expect(later.body.suggestion).toMatchObject({ kind: 'density', to: 'dense' });
+  });
+
+  it('invert is only suggested when the recipe HAS an inverse surface; the flip applies and clears', async () => {
+    // No surfaces.inverse → three inverts earn nothing (there is nothing to flip to).
+    const bare = await seedTweakable();
+    for (let i = 0; i < 3; i++) await press(bare.project._id, bare.slideId, 'invert');
+    const bareState = await request(app()).get(`/businesses/${bare.biz._id}/brandkit`);
+    expect(bareState.body.approved.tweakSignals.invert).toBe(3);
+    expect(bareState.body.suggestion).toBeNull();
+
+    // With an inverse surface, the flip is offered…
+    const inv = await seedTweakable({ surfaces: { inverse: { ground: '#F8FAFC', ink: '#0B0F1A' } } });
+    for (let i = 0; i < 3; i++) await press(inv.project._id, inv.slideId, 'invert');
+    const state = await request(app()).get(`/businesses/${inv.biz._id}/brandkit`);
+    expect(state.body.suggestion).toMatchObject({ kind: 'invert', count: 3 });
+
+    // …and applying swaps default ↔ inverse (round-trippable) and spends the counter.
+    const patched = await request(app()).patch(`/brandkits/${inv.kit._id}`).send({ recipe: { flipSurfaces: true } });
+    expect(patched.status).toBe(200);
+    expect(patched.body.recipe.tokens.ground).toBe('#F8FAFC');
+    expect(patched.body.recipe.tokens.ink).toBe('#0B0F1A');
+    expect(patched.body.recipe.surfaces.inverse).toMatchObject({ ground: '#0B0F1A', ink: '#F8FAFC' });
+
+    const fresh = await BrandKitModel.findById(inv.kit._id).lean<Record<string, any> | null>();
+    expect(fresh?.tweakSignals?.invert).toBe(0);
+    const after = await request(app()).get(`/businesses/${inv.biz._id}/brandkit`);
+    expect(after.body.suggestion).toBeNull();
+  });
+
+  it('un-invert withdraws an invert press — the counter is a net preference', async () => {
+    const { biz, kit, project, slideId } = await seedTweakable({
+      surfaces: { inverse: { ground: '#F8FAFC', ink: '#0B0F1A' } },
+    });
+    for (let i = 0; i < 3; i++) await press(project._id, slideId, 'invert');
+    await press(project._id, slideId, 'un-invert');
+    const fresh = await BrandKitModel.findById(kit._id).lean<Record<string, any> | null>();
+    expect(fresh?.tweakSignals?.invert).toBe(2);
+    const state = await request(app()).get(`/businesses/${biz._id}/brandkit`);
+    expect(state.body.suggestion).toBeNull(); // back under the threshold
   });
 });
 

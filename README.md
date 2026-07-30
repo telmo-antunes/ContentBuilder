@@ -45,9 +45,17 @@ Every touchpoint resolves its model as: per-feature override saved in Settings (
 | --- | --- | --- | --- |
 | Brand vision (color roles, style, voice) | `ANTHROPIC_MODEL_FREE` → `ANTHROPIC_MODEL` | Once per analyze | Heuristic color roles |
 | Recipe author (the design system) | `ANTHROPIC_MODEL_DESIGN` → `_FREE` → `_SMALL` → `ANTHROPIC_MODEL` | Once per brand (approval or on demand; ×2–3 for candidates) | Disabled |
-| Compose (idea → slides; slide variants) | `ANTHROPIC_MODEL_SMALL` → `ANTHROPIC_MODEL` | Per post / per variant request | Disabled |
+| Parse (idea → the deck's copy) | `ANTHROPIC_MODEL_FREE` → `_SMALL` → `ANTHROPIC_MODEL` | Once per post | Disabled |
+| Compose (copy → authored slides; slide variants) | `ANTHROPIC_MODEL_SMALL` → `ANTHROPIC_MODEL` | Once per slide (skipped entirely when the recipe has fragments) | Disabled |
 | Caption | `ANTHROPIC_MODEL_FREE` → `_SMALL` → `ANTHROPIC_MODEL` | On demand per post | Disabled |
-| Photo fit (judge stock photos against copy) | `ANTHROPIC_MODEL_FREE` → `ANTHROPIC_MODEL` | Best-effort during stock photo selection | Skipped |
+
+The two halves of a compose sit on **different tiers on purpose**. The parse writes
+every headline and row from one sentence of idea — it runs once per deck and is the
+most quality-determining output in the product, so it gets the better model. The
+compose only arranges copy it may not alter, into classes the recipe already fixed,
+under a guard chain that repairs it mechanically — it runs once per slide, so it
+gets the cheap tier. Each is independently overridable from Settings
+(`parseModel`, `composeModel`).
 
 (`ANTHROPIC_MODEL_FREE` is historical naming — it is the vision/judgment tier, not a free tier.)
 
@@ -65,7 +73,7 @@ All read from a single `.env` at the repo root (see `.env.example`).
 | `STORAGE_PROVIDER` / `STORAGE_DIR` | Storage backend (`disk` only for now) + its directory (default `./storage`) |
 | `ANTHROPIC_API_KEY` | Optional — unset disables the AI touchpoints as described above |
 | `ANTHROPIC_MODEL` | Base model tier (also the "vision configured" requirement) |
-| `ANTHROPIC_MODEL_SMALL` | Cheap tier: compose + the "AI draft configured" gate (compose/caption routes) |
+| `ANTHROPIC_MODEL_SMALL` | Cheap tier: the per-slide compose + the "AI draft configured" gate (compose/caption routes) |
 | `ANTHROPIC_MODEL_FREE` | Vision/judgment tier (vision, captions, photo fit) |
 | `ANTHROPIC_MODEL_DESIGN` | Design-critical tier: recipe authoring; falls back down the stack when unset |
 | `PEXELS_API_KEY` | Optional — enables the stock-photo search/picker (free at pexels.com/api) |
@@ -95,6 +103,17 @@ npm run seed
 - Web: http://localhost:3000
 - API health: http://localhost:4000/health (reports DB state + which AI paths are configured)
 
+### Migrations
+
+Schema changes are normally tolerated on read (Mongoose strict mode ignores unknown stored fields; zod strips them at the wire boundary), so most old documents need nothing. A migration exists only where ignoring a field would lose data.
+
+```bash
+npm run migrate:photos -- --dry-run   # report what would change; writes nothing
+npm run migrate:photos                # migrate (honours MONGODB_URI)
+```
+
+**`migrate:photos`** retires the pre-photos-layer `slide.mediaAssetId`. A slide's pictures now live in `slide.photos[]` (slot fills / background / free overlays); the single legacy id is folded in as a `background` photo (`fit: 'cover'`), or simply dropped when `photos[]` already declares a background — the array is authoritative. It covers version snapshots too, so restoring an old version keeps its photo. Idempotent: a second run reports zero changes.
+
 ## Testing
 
 ```bash
@@ -103,7 +122,7 @@ npm run typecheck
 npm run lint
 ```
 
-- **Unit tests** live next to their sources in `packages/shared/src` (contrast math, formats, recipe schema/gates, type floor, slide motion/photos, schemas) and `apps/api/src/lib` (AI helper, caption, fonts, sanitizers, stock).
+- **Unit tests** live next to their sources in `packages/shared/src` (contrast math, formats, recipe schema/gates, type floor, slide motion/photos, schemas) and `apps/api/src/lib` (AI helper, caption, fonts, sanitizers, stock, the legacy-photo migration).
 - **Integration suite** — `apps/api/src/routes/routes.integration.test.ts` runs the real Express app against an in-memory Mongo with every AI/Puppeteer boundary mocked. It covers validation → normalization → persistence → response, the foreign-media scrub, the SSRF guard, the rate limiter, recipe candidates/select, and the video-job lifecycle (including cancel).
 
 ## Export

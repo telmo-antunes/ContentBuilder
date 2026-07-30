@@ -71,6 +71,32 @@ export const SLOT_SHAPES = {
 } as const;
 
 /**
+ * Every class the APP's own image layer injects — the counterpart of the
+ * brand-authored component vocabulary.
+ *
+ * These are app-owned but brand-STYLED: rule 7 of the recipe-author prompt
+ * requires every brand to give `.cb-shot` a photo treatment, and the free /
+ * background layers are painted by the renderer around the authored markup. The
+ * composer never *names* any of them, so they are deliberately absent from a
+ * recipe's `components` vocabulary — which is why `validateRecipeConsistency`
+ * must not report them as "styled but unadvertised". Derived from `SLOT_CLASS` /
+ * `SLOT_SHAPES` where possible so the two can never drift apart.
+ */
+export const APP_IMAGE_CLASSES: readonly string[] = [
+  SLOT_CLASS,
+  // shape modifiers on a slot: wide | tall | square (the '' default has no class)
+  ...Object.keys(SLOT_SHAPES).filter(Boolean),
+  // free overlays (siblings of the slide) and their two z-order layers
+  'cb-free-layer',
+  'cb-free-img',
+  'over',
+  'under',
+  // the full-bleed background photo layer
+  'cb-bg-layer',
+  'cb-bg-photo',
+];
+
+/**
  * The app's image-layer CSS for one canvas, injected with every recipe
  * stylesheet.
  *

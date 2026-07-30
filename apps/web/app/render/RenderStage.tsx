@@ -2,7 +2,7 @@
 
 import type { Format, ThemePreset } from '@contentbuilder/shared';
 import { SlideRenderer } from '../../lib/render/SlideRenderer';
-import type { LayoutImage, RenderBrandKit } from '../../lib/render/types';
+import type { RenderBrandKit } from '../../lib/render/types';
 import type { SlidePhotoSet } from '../../lib/render/projectRender';
 
 /**
@@ -12,7 +12,6 @@ import type { SlidePhotoSet } from '../../lib/render/projectRender';
  */
 export default function RenderStage({
   authored,
-  image,
   photos,
   format,
   kit,
@@ -23,7 +22,6 @@ export default function RenderStage({
   motion = false,
 }: {
   authored?: { html: string; bg?: string; role?: string };
-  image?: LayoutImage | null;
   /** The user's own photos: slot fills, a background, and free overlays. */
   photos?: SlidePhotoSet;
   format: Format;
@@ -41,7 +39,6 @@ export default function RenderStage({
         slide={{ authored }}
         brandKit={kit}
         format={format}
-        image={image}
         photos={photos}
         forExport
         theme={theme}

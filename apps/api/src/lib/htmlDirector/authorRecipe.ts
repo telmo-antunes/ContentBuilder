@@ -4,21 +4,49 @@
  * (design tier); every per-project compose then runs cheap against the result.
  *
  * Quality is everything here: the auto-authored recipe must be indistinguishable
- * from a hand-crafted one. Two mechanisms get it there — TWO diverse worked
- * examples (so the model learns the quality bar, not one brand's specifics) and
- * a self-critique/revise pass that holds the first draft to that bar. Output is
- * validated by brandRecipeSchema and its stylesheet is CSS-sanitised.
+ * from a hand-crafted one. Three mechanisms get it there:
+ *
+ *   1. THE BRAND'S ACTUAL HOMEPAGE. Five hexes, two font names and a one-line
+ *      style descriptor are a thin brief for the highest-taste call in the
+ *      product. When the kit has a homepage screenshot it is downscaled and
+ *      attached to the USER message, so the author can read the site's real
+ *      density, spacing and photography mood. Entirely best-effort.
+ *   2. TWO diverse worked examples — chosen per brand from THREE reference
+ *      recipes so the pair brackets the brand's own ground (see
+ *      `pairingFor`). A light brand must see the light exemplar, or it gets
+ *      pulled toward the dark-moody-premium of the seeded two.
+ *   3. A self-critique pass that returns a PATCH rather than a whole recipe.
+ *
+ * Output is validated by brandRecipeSchema and its stylesheet is CSS-sanitised.
+ *
+ * COST / CACHING: the system prompt and the exemplar pair are static, so they
+ * live in a prompt-cached SYSTEM prefix (one breakpoint after the exemplars).
+ * Only the per-brand evidence/draft/screenshot rides in the user message. Since
+ * the exemplars now vary by pairing, there are THREE possible prefixes rather
+ * than one — cache hits happen per pairing, and the pairings are deliberately a
+ * fixed set of three (not a continuum) so each stays warm. The screenshot is
+ * per-brand and therefore NEVER touches the prefix. See lib/ai.ts.
  */
+import sharp from 'sharp';
+import type Anthropic from '@anthropic-ai/sdk';
 import {
   clampText,
+  composeRecipeLayers,
   migrateRecipe,
   ensureRecipeContrast,
   validateRecipeConsistency,
+  relativeLuminance,
+  PHONE_SCALE,
+  SLIDE_ROLES,
   type BrandRecipe,
 } from '@contentbuilder/shared';
-import { aiMessageLarge, textOf, modelFor, withOpusReasoning } from '../ai';
+import { aiJson, cachedSystem, modelFor, withOpusReasoning, type AiJsonResult, type AiJsonTool } from '../ai';
 import { sanitizeRecipeCss } from '../cssSanitize';
-import { dynatosRecipe, detailMastersRecipe } from './recipes';
+import { PROMPT_VERSION } from '../promptVersion';
+import { getStorage } from '../../storage';
+import { FRAGMENT_CONVENTION, validateRecipeFragments } from './fragments';
+import { dynatosRecipe, detailMastersRecipe, halftonePressRecipe } from './recipes';
+import { LAYER_REMIT, RECIPE_LAYERS } from './refineLayer';
 import { verifyRecipeByRender } from './verifyRecipe';
 
 export interface RecipeEvidence {
@@ -29,6 +57,12 @@ export interface RecipeEvidence {
   logoTreatment?: string;
   styleDescriptor?: string;
   voice?: string;
+  /**
+   * The kit's stored homepage screenshot (`kit.homepageScreenshot`). OPTIONAL
+   * on purpose: every caller that predates it keeps working unchanged, and a
+   * brand whose capture failed simply authors from the text evidence.
+   */
+  screenshot?: { key?: string } | null;
 }
 
 /** Render fonts the export can actually load (bundled). The recipe must use these. */
@@ -38,16 +72,50 @@ const ALLOWED_FONTS = [
   'Merriweather', 'Lora', 'Source Serif 4',
 ];
 
+/**
+ * THE DISPLAY-TYPE RANGE, in ONE place.
+ *
+ * The author's type table said "headline 88–130px" while the critic asked "is
+ * display type feed-huge (80–120px)" — two prompts, two numbers, so the critic
+ * could mark a compliant 128px headline as oversized and a 82px one as fine.
+ * Both prompts now quote these, exactly like they already share `ENUMS`. The
+ * on-phone equivalent is derived from the app's real feed scale rather than
+ * restated, so the prompt can never drift from `enforceTypeFloor`.
+ */
+const HEADLINE_PX = { min: 88, max: 130 } as const;
+const HEADLINE_RANGE_PX = `${HEADLINE_PX.min}–${HEADLINE_PX.max}px`;
+const HEADLINE_RANGE_PT = `${Math.round(HEADLINE_PX.min / PHONE_SCALE)}–${Math.round(HEADLINE_PX.max / PHONE_SCALE)}pt`;
+
 const ENUMS = `Use EXACTLY these enum values: typography.displayCase ∈ {upper|title|sentence}; typography.density ∈ {roomy|balanced|dense}; composition.align ∈ {flush-left|center|flush-right}; imagery.photoRole ∈ {hero|accent|none}; motion.style ∈ {rise|fade|slide|punch|pop}; motion.pace ∈ {calm|balanced|punchy}; motion.ambient.style ∈ {parallax|push|drift|none}; motion.ambient.intensity ∈ {subtle|medium|strong}; motion.roles is an optional map of slide role → {style, pace} using those same values. typography.displayWeight is a number 300–900.`;
 
-const SYSTEM = `You are an elite brand & art director. From a business's brand evidence you author its complete DESIGN SYSTEM — a "recipe" that EVERY future Instagram post is composed against, authored ONCE. Output STRICT JSON only (no prose, no fences), matching the shape of the worked examples EXACTLY.
+const LAYERS_CONTRACT = `THE STYLESHEET IS AUTHORED IN THREE LAYERS, NOT ONE BLOB. Emit "layers" with exactly these three keys, each a complete, self-contained block of .cb-slide-scoped CSS:
+- background — ${LAYER_REMIT.background}
+- type — ${LAYER_REMIT.type}
+- components — ${LAYER_REMIT.components}
+They are concatenated in that order (background → type → components) to form the brand's stylesheet, so between them they must be exactly the sheet you would otherwise have written as one blob: no rule stated twice, nothing left out, and every class you list in "components" defined in one of them. Do NOT also emit a "stylesheet" field — it is derived from your layers.
+WHY THE SPLIT: it is what lets this brand's owner later say "make the backgrounds quieter" and have that ONE layer regenerated while the type, the components and the signature stay byte-identical. A rule filed under the wrong layer is silently moved or lost the first time they do.`;
 
-THE BAR IS REFERENCE-GRADE: a stranger should see a rendered slide and assume a senior designer made it by hand for THIS brand. You are judged almost entirely on the "stylesheet" — real CSS scoped to .cb-slide, written against the --cb-* tokens, sized for the FULL 1080×1350 canvas. Both worked examples clear this bar; match it, do not copy them.
+const SLIDE_ROLE_LIST = SLIDE_ROLES.join(', ');
+
+const FRAGMENTS_CONTRACT = `YOU ALSO COMPOSE THE SLIDES, ONCE. Emit "fragments" — a map of slide role (${SLIDE_ROLE_LIST}) to ONE worked slide of that role, written in this brand's markup with the WORDS left as placeholders.
+WHY: without them every future slide is re-invented by a cheap model reading your prose rules, which is where invented classes, drifting arrangements and duplicated copy come from. With them, a post is composed by SUBSTITUTION — your markup, this week's words, no model, no drift. Treat each fragment as the definitive layout of that role, not a hint: it is what the brand will actually look like.
+${FRAGMENT_CONVENTION}
+Cover every role you can lay out well. A role you leave out (or that names a class you never defined) simply falls back to the model, so a fragment you are unsure of costs nothing to omit — but a brand with all seven is a brand whose every post is composed exactly as you designed it.`;
+
+const SYSTEM = `You are an elite brand & art director. From a business's brand evidence you author its complete DESIGN SYSTEM — a "recipe" that EVERY future Instagram post is composed against, authored ONCE. Deliver it by CALLING THE "author_recipe" TOOL with the whole design system as its argument, matching the shape of the worked examples EXACTLY. (If you cannot call the tool, output the same object as STRICT JSON only — no prose, no fences.)
+
+THE BAR IS REFERENCE-GRADE: a stranger should see a rendered slide and assume a senior designer made it by hand for THIS brand. You are judged almost entirely on the CSS you author — real CSS scoped to .cb-slide, written against the --cb-* tokens, sized for the FULL 1080×1350 canvas. Both worked examples clear this bar; match it, do not copy them.
+
+${LAYERS_CONTRACT}
+
+${FRAGMENTS_CONTRACT}
+
+THE IMAGE, WHEN ONE IS ATTACHED: if the user message opens with a screenshot, that is the brand's REAL HOMEPAGE — evidence no hex list can carry. Read it for how this brand actually behaves: its density (crowded and utilitarian, or acres of space), its rhythm and alignment, how big type is relative to everything else, how it uses its accent, the mood and treatment of its photography, whether it is flat and graphic or lit and atmospheric. INTERPRET it into a design system for a 1080×1350 Instagram slide; never transcribe it. A website is a wide, scrolling, interactive surface and a post is a single tall image read at arm's length, so nav bars, hero sections, buttons, cards and column grids do not carry across — the CHARACTER does. If no image is attached, author from the text evidence exactly as you otherwise would.
 
 WHAT REFERENCE-GRADE MEANS (both examples do ALL of this):
 1. TYPE SIZED FOR A PHONE, NOT FOR THE CANVAS. The canvas is 1080px wide but it is READ on a handset, where Instagram shows it about 393pt wide — so everything you author is seen at roughly a THIRD of the size you write. Divide by 2.75 to get what the reader actually gets, and design against THAT number. For reference: iOS body text is 17pt, Instagram's own caption is ~14pt, and under about 11pt people stop reading and the text becomes texture.
    Minimums (canvas px → what the phone shows). Go bigger freely; never go under:
-     headline   88–130px  (32–47pt)   the hook — it must land at a glance
+     headline   ${HEADLINE_RANGE_PX} (${HEADLINE_RANGE_PT})   the hook — it must land at a glance
      stat       160–240px (58–87pt)   the one number worth showing off
      quote       72–96px  (26–35pt)
      body        44–56px  (16–20pt)   THE MESSAGE. Never smaller than 44.
@@ -67,19 +135,151 @@ WHAT REFERENCE-GRADE MEANS (both examples do ALL of this):
    Also set "motion.ambient" — the CONTINUOUS drift that runs under everything for the whole clip, which is what makes a still photograph read as footage instead of a slideshow. style ∈ {parallax|push|drift|none} (parallax = layers move at different depths; push = zoom only; drift = pan only), intensity ∈ {subtle|medium|strong}. Choose for the brand's character: a calm, premium brand wants "parallax"/"subtle"; an energetic one can take "medium". Ambient motion you consciously NOTICE is too strong — pick "strong" only for a deliberately restless brand, and "none" only if stillness is the point.
    Then make motion EDITORIAL with per-role overrides in "motion.roles" (keys: cover, statement, quote, feature, stat, list, cta — include only the ones worth differing). Each slide role has a different job, so it should move differently: a "stat" is the one moment to show off (use "pop"); a "quote" wants a calm "fade" so the words breathe; a "cta" should arrive decisively; a photo "cover" often reads best as a simple "fade" that lets the image work. Keep it coherent with the brand default — vary the accent, not the identity.
 
+THE GROUND — BAD vs GOOD. A flat gradient is the single most common failure, so anchor on this pair rather than on adjectives:
+BAD (one gradient; nothing to look at, nothing that says whose brand it is):
+  .cb-slide{ background: linear-gradient(180deg,#101010,#242424); }
+GOOD (a directional light, a vignette, grain, and ONE signature graphic):
+  .cb-slide{ background:
+    radial-gradient(80% 52% at 18% -6%, rgba(255,214,120,.22), transparent 60%),
+    radial-gradient(120% 90% at 50% 124%, rgba(0,0,0,.60), transparent 56%),
+    linear-gradient(172deg,#1d1a14,#0a0906); }
+  .cb-slide::before{ content:""; position:absolute; inset:0; z-index:0; pointer-events:none; opacity:.07; mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml,…feTurbulence…"); }
+  .cb-slide::after{ content:""; position:absolute; right:-80px; bottom:-90px; width:560px; height:560px; z-index:0; pointer-events:none;
+    background:var(--cb-logo) center/contain no-repeat; opacity:.05; }
+On a LIGHT ground the same three layers apply but the recipe changes: grain must blend with "multiply" (an overlay blend disappears on paper), the vignette is a warm grey rather than black (black reads as dirt), and the "light" is a near-white bloom.
+
 HARD RULES:
 - Colours: derive ground/ink/accent from the brand palette; high contrast, text legible on the ground.
 - Fonts: displayFamily / bodyFamily / accentFamily MUST come from the ALLOWED list, matched to the brand's character; reference as var(--cb-display) / var(--cb-body) / var(--cb-accent-family).
 - No <script>, no @import, no external URLs except inline data: URIs (grain). The logo is var(--cb-logo).
 - Do NOT set width/height/aspect-ratio/max-width/object-fit on .cb-shot — the app owns its geometry, and overriding it breaks the shape the composer asked for. Style its SURFACE only.
-- Base stylesheet under ~4500 characters. ${ENUMS}
+- The three layers together under ~4500 characters (the per-format overrides in "formats" are separate). ${ENUMS}
 - INVENT this brand's own colours/fonts/voice/signature/graphic — never reuse the examples'.`;
 
-const CRITIQUE_SYSTEM = `You are a ruthless design director reviewing a junior's brand recipe against a reference bar. Output STRICT JSON only — the SAME recipe shape, nothing else.
+const CRITIQUE_SYSTEM = `You are a ruthless design director reviewing a junior's brand recipe against a reference bar. Deliver your review by CALLING THE "review_recipe" TOOL. (If you cannot call the tool, output the same object as STRICT JSON only, no prose, no fences.)
 
-Judge the recipe you are given on: (1) is the background CINEMATIC and layered, or a flat/timid gradient? (2) is there a real, named SIGNATURE move applied consistently? (3) is the display type feed-huge (80–120px) or timid? (4) is the component vocabulary rich (8–12 classes) or thin? (5) are per-format "formats" overrides present for story + square? (6) is ONE accent rationed with real negative space? (7) does "motion" carry a style+pace that genuinely matches the brand's character, with an evocative one-line description AND per-role overrides in "motion.roles" that give a stat, a quote and a cta their own distinct entrance?
+Judge the recipe you are given on: (1) is the background CINEMATIC and layered, or a flat/timid gradient? (2) is there a real, named SIGNATURE move applied consistently? (3) is the display type feed-huge (${HEADLINE_RANGE_PX}) or timid? (4) is the component vocabulary rich (8–12 classes) or thin? (5) are per-format "formats" overrides present for story + square? (6) is ONE accent rationed with real negative space? (7) does "motion" carry a style+pace that genuinely matches the brand's character, with an evocative one-line description AND per-role overrides in "motion.roles" that give a stat, a quote and a cta their own distinct entrance?
 
-If ANY answer is below reference-grade, output an IMPROVED full recipe JSON that fixes it (keep the brand's colours/fonts/voice — improve the CRAFT). If it is already excellent, output it unchanged. Same JSON shape, ${ENUMS} STRICT JSON only, no prose.`;
+REPLY WITH A VERDICT, AND A PATCH — NOT THE WHOLE RECIPE. Exactly one of:
+  {"verdict":"pass"}
+  {"verdict":"revise","patch":{ …ONLY the fields you are changing… }}
+
+How the patch is applied: it is merged onto the recipe you were given. Nested objects merge KEY BY KEY, so {"patch":{"tokens":{"accent":"#c8992f"}}} changes the accent and nothing else, and {"patch":{"motion":{"roles":{"stat":{"style":"pop","pace":"punchy"}}}}} adds one role. Arrays and strings REPLACE wholesale, so a "components" or "stylesheet" patch must be the COMPLETE new value, and a "formats" patch must give each format you touch its complete stylesheet.
+
+CSS LIVES IN LAYERS. When the recipe you are given has a "layers" object, its CSS is authored as three concatenated layers — background (the ground and its art), type (the text classes' scale and families), components (the boxes, rules, buttons, panels, the .cb-shot photo treatment). Patch the LAYER you are changing, with that layer's complete new CSS: {"patch":{"layers":{"background":"…the whole background layer…"}}}. The layers you leave alone stay byte-identical, which is the entire point — never patch "stylesheet" on such a recipe, it is derived from the layers. Only a recipe with NO "layers" object is patched through "stylesheet".
+
+Never re-emit a field you did not change — copying back an unchanged stylesheet costs more than the review and risks corrupting CSS that was already right. If the recipe is already reference-grade, {"verdict":"pass"} is the correct answer and re-typing it is not.
+
+Keep the brand's colours, fonts and voice — improve the CRAFT. ${ENUMS} No prose.`;
+
+// ── The two structured-output tools ─────────────────────────────────────────
+
+/**
+ * THE AUTHOR'S OUTPUT SHAPE, as a tool the model is FORCED to call. The payload
+ * then arrives already parsed, instead of being cut out of prose with
+ * `indexOf('{')` … `lastIndexOf('}')`.
+ *
+ * Deliberately LOOSE — object-shaped fields carry a description rather than a
+ * full sub-schema. The worked exemplars teach the shape far better than a schema
+ * could, `brandRecipeSchema` (zod) remains the actual gate, and a tight schema
+ * here would reject a good recipe over a field zod would have `.catch()`-ed.
+ * What the schema IS for: naming the required fields — above all `layers`, which
+ * the prompt now demands and which nothing previously produced.
+ *
+ * Module-level and constant: the tool list renders before `system`, so these
+ * bytes are part of the cached prefix and must never vary per call.
+ */
+const AUTHOR_TOOL: AiJsonTool = {
+  name: 'author_recipe',
+  description:
+    "Deliver the brand's finished design system. Every field takes the same shape as the worked examples, except that the CSS is delivered as the three layers rather than one flat stylesheet.",
+  schema: {
+    type: 'object',
+    properties: {
+      tokens: {
+        type: 'object',
+        description:
+          'ground, groundAlt, ink, inkMuted, accent, accentAlt, line, displayFamily, bodyFamily, accentFamily, radius.',
+      },
+      typography: { type: 'object', description: 'displayCase, displayWeight, displayTracking, density.' },
+      signature: {
+        type: 'object',
+        description: 'name, description, and emphasisWrap {tag, className} — the recurring signature move.',
+      },
+      layers: {
+        type: 'object',
+        description:
+          'The brand stylesheet, split in three. Concatenated background → type → components to form the sheet, so together they are the complete CSS and no rule appears twice.',
+        properties: {
+          background: { type: 'string', description: LAYER_REMIT.background },
+          type: { type: 'string', description: LAYER_REMIT.type },
+          components: { type: 'string', description: LAYER_REMIT.components },
+        },
+        required: [...RECIPE_LAYERS],
+      },
+      components: {
+        type: 'array',
+        description:
+          'The 8–12 brand classes the slide composer may use — each one defined in one of the layers.',
+        items: {
+          type: 'object',
+          properties: {
+            className: { type: 'string' },
+            use: { type: 'string', description: 'One line on when a composer should reach for it.' },
+          },
+          required: ['className', 'use'],
+        },
+      },
+      fragments: {
+        type: 'object',
+        description:
+          'One worked slide per role, in this brand\'s markup with the copy left as {{placeholder}} holes — what every future post of that role is composed by substituting into. Keys are slide roles; each value is the inner markup of .cb-slide.',
+        properties: Object.fromEntries(
+          SLIDE_ROLES.map((role) => [
+            role,
+            { type: 'string', description: `The worked "${role}" slide, with {{…}} holes for its copy.` },
+          ]),
+        ),
+      },
+      composition: { type: 'object', description: 'align, and patterns[] (one arrangement per line).' },
+      imagery: { type: 'object', description: 'treatment, photoRole, texture, subjects[].' },
+      voice: { type: 'object', description: 'description, dos[], donts[].' },
+      formats: {
+        type: 'object',
+        description: 'Per-format overrides keyed "1080x1920" and "1080x1080", each {stylesheet}.',
+      },
+      motion: { type: 'object', description: 'style, pace, description, ambient, roles.' },
+      surfaces: { type: 'object', description: 'Optional inverse surface {ground, ink, accent, inkMuted}.' },
+      rationale: { type: 'object', description: 'One line each on palette, type, signature, motion.' },
+    },
+    required: ['tokens', 'signature', 'layers', 'components', 'fragments', 'composition', 'imagery', 'voice'],
+  },
+};
+
+/** The critique's `{verdict, patch}` envelope, as a forced tool. */
+const CRITIQUE_TOOL: AiJsonTool = {
+  name: 'review_recipe',
+  description:
+    'Deliver the review: a verdict, plus — only when revising — a patch carrying ONLY the fields that change.',
+  schema: {
+    type: 'object',
+    properties: {
+      verdict: {
+        type: 'string',
+        enum: ['pass', 'revise'],
+        description: '"pass" when the recipe is already reference-grade, otherwise "revise".',
+      },
+      patch: {
+        type: 'object',
+        description:
+          'Only the fields you are changing, merged onto the recipe key by key. Patch layers.<background|type|components> with that layer\'s complete new CSS; patch "stylesheet" only on a recipe that has no layers. Omit entirely when the verdict is "pass".',
+      },
+      notes: { type: 'string', description: 'Optional one line on what you changed and why.' },
+    },
+    required: ['verdict'],
+  },
+};
 
 /** Serialize a reference recipe as a worked example (the fields that teach shape + quality). */
 function exemplarJson(r: BrandRecipe): string {
@@ -97,6 +297,101 @@ function exemplarJson(r: BrandRecipe): string {
   });
 }
 
+/** One exemplar, with the one-line label that tells the model what it is. */
+interface Exemplar {
+  label: string;
+  recipe: BrandRecipe;
+}
+
+const DYNATOS: Exemplar = { label: 'dark ground, gold accent, condensed-caps coaching', recipe: dynatosRecipe };
+const DETAILMASTERS: Exemplar = { label: 'dark ground, bronze accent, elegant-serif detailing SaaS', recipe: detailMastersRecipe };
+const HALFTONE: Exemplar = { label: 'LIGHT paper ground, ink type, riso-blue accent, heavy-grotesque print studio', recipe: halftonePressRecipe };
+
+/**
+ * WHICH TWO EXAMPLES A BRAND SEES.
+ *
+ * The prompt promised "two diverse worked examples" and then showed everyone the
+ * same two dark, premium, gold-on-black recipes — so every authored brand drifted
+ * toward dark-moody-premium, and a brand whose own site is white paper had
+ * nothing at all to learn from. The pair is now chosen from the brand's own
+ * ground so it BRACKETS or MATCHES that ground.
+ *
+ * Deliberately THREE fixed pairings rather than a continuum. The exemplars sit
+ * in the prompt-cached SYSTEM prefix, so every distinct pair is a distinct cache
+ * entry: three keeps each one warm (many brands per entry), where a per-brand
+ * selection would mean a cache write on every call and cost more than it saved.
+ */
+export type Pairing = 'dark' | 'mixed' | 'light';
+
+/** WCAG relative-luminance cuts: below 0.18 is a night ground, 0.5 and up is paper. */
+const DARK_BELOW = 0.18;
+const LIGHT_FROM = 0.5;
+
+const PAIRINGS: Record<Pairing, [Exemplar, Exemplar]> = {
+  // A dark brand learns most from the two dark recipes — but they are chosen to
+  // differ in everything except tone (condensed caps vs elegant serif).
+  dark: [DYNATOS, DETAILMASTERS],
+  // A mid-tone ground is bracketed from both sides.
+  mixed: [DETAILMASTERS, HALFTONE],
+  // A light brand leads with the light recipe; the dark one keeps the range
+  // open so it does not simply copy the paper brand.
+  light: [HALFTONE, DYNATOS],
+};
+
+/** A usable `#rgb`/`#rrggbb` ground, or undefined (rgb()/named/absent colours). */
+function groundHex(e: RecipeEvidence): string | undefined {
+  const candidates = [e.colors.background, ...(e.colors.palette ?? [])];
+  return candidates.find((c) => typeof c === 'string' && /^#?[0-9a-f]{3}(?:[0-9a-f]{3})?$/i.test(c.trim()));
+}
+
+/**
+ * The pairing for a brand, from the WCAG relative luminance of its ground.
+ * Deterministic and model-free. An unreadable/absent ground falls back to
+ * 'dark', which is both the historical behaviour and the common case.
+ */
+export function pairingFor(evidence: RecipeEvidence): Pairing {
+  const hex = groundHex(evidence);
+  if (!hex) return 'dark';
+  const l = relativeLuminance(hex);
+  if (l >= LIGHT_FROM) return 'light';
+  if (l < DARK_BELOW) return 'dark';
+  return 'mixed';
+}
+
+/**
+ * The worked exemplars for one pairing, serialized ONCE at module load so each
+ * is byte-identical on every call. They used to open the per-call USER message;
+ * they now live in the SYSTEM prefix so a single prompt-cache breakpoint covers
+ * SYSTEM + exemplars (the expensive ~90% of every author call). The model reads
+ * the same content in the same order — system renders before messages — and
+ * only per-brand content stays in the user turn.
+ */
+function exemplarsFor([a, b]: [Exemplar, Exemplar]): string {
+  return [
+    `TWO WORKED EXAMPLES (different brands — match this JSON shape + quality bar; DO NOT copy their colours/fonts/voice/signature).`,
+    `NOTE ON SHAPE: both examples were hand-authored before the layer split and so show their CSS as a single flat "stylesheet". Read them for the CRAFT — the layering of the ground, the type scale, the component vocabulary — and then emit that same CSS as the THREE LAYERS described above. Everything else about their shape is exactly what your output should look like.`,
+    `EXAMPLE A (${a.label}):`,
+    exemplarJson(a.recipe),
+    ``,
+    `EXAMPLE B (${b.label}):`,
+    exemplarJson(b.recipe),
+  ].join('\n');
+}
+
+/**
+ * Cached system arrays, built once — one per pairing. Everything inside is
+ * brand-INDEPENDENT, so the candidates flow (2–3 concurrent author calls per
+ * brand) and every later brand of the same tonality read the same cache entry
+ * after the first write. Per-brand content NEVER goes in here — not the
+ * evidence, and above all not the homepage screenshot. See lib/ai.ts.
+ */
+const AUTHOR_SYSTEMS: Record<Pairing, Anthropic.TextBlockParam[]> = {
+  dark: cachedSystem(`${SYSTEM}\n\n${exemplarsFor(PAIRINGS.dark)}`),
+  mixed: cachedSystem(`${SYSTEM}\n\n${exemplarsFor(PAIRINGS.mixed)}`),
+  light: cachedSystem(`${SYSTEM}\n\n${exemplarsFor(PAIRINGS.light)}`),
+};
+const CRITIQUE_SYSTEM_CACHED = cachedSystem(CRITIQUE_SYSTEM);
+
 function evidenceBlock(e: RecipeEvidence): string {
   return [
     `NAME: ${e.name}`,
@@ -113,14 +408,52 @@ function evidenceBlock(e: RecipeEvidence): string {
     .join('\n');
 }
 
-/** Pull the first JSON object out of a model response and validate it into a recipe. */
-function parseRecipe(text: string): BrandRecipe {
+type Json = Record<string, unknown>;
+
+const isPlainObject = (v: unknown): v is Json =>
+  typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/**
+ * The first JSON object in a model reply, or a throw.
+ *
+ * THE FALLBACK PATH ONLY. Both calls force a tool, so the payload normally
+ * arrives already parsed; this string-scraping survives for the replies that
+ * carry no tool_use block — an older model, a refusal retry that landed
+ * elsewhere, a request the API declined to take tools on.
+ */
+function firstJsonObject(text: string, what: string): Json {
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');
-  if (start === -1 || end === -1) throw new Error('recipe author: no JSON in response');
-  const raw = JSON.parse(text.slice(start, end + 1));
+  if (start === -1 || end === -1) throw new Error(`recipe ${what}: no JSON in response`);
+  const raw: unknown = JSON.parse(text.slice(start, end + 1));
+  if (!isPlainObject(raw)) throw new Error(`recipe ${what}: JSON is not an object`);
+  return raw;
+}
+
+/** The reply's payload: the forced tool's input, else the scraped text. */
+function jsonOf(reply: AiJsonResult, what: string): Json {
+  if (reply.json) return reply.json;
+  console.warn(`[recipe] ${what}: no tool_use block — falling back to reading JSON out of the text`);
+  return firstJsonObject(reply.text, what);
+}
+
+/**
+ * Make raw model output safe to validate, IN PLACE. Runs on a whole authored
+ * recipe and on a critique patch alike, so a stylesheet that arrives in a patch
+ * is sanitised exactly like one that arrives in a full draft.
+ */
+function normalizeRaw(raw: Json): Json {
   if (typeof raw.stylesheet === 'string') raw.stylesheet = sanitizeRecipeCss(raw.stylesheet);
-  if (raw.formats && typeof raw.formats === 'object') {
+  // Each authored LAYER is CSS in its own right, so it is sanitised in its own
+  // right — a `@import` smuggled into the type layer must die there, not survive
+  // because only the composed sheet was ever checked.
+  if (isPlainObject(raw.layers)) {
+    for (const k of RECIPE_LAYERS) {
+      const css = (raw.layers as Json)[k];
+      if (typeof css === 'string') (raw.layers as Json)[k] = sanitizeRecipeCss(css);
+    }
+  }
+  if (isPlainObject(raw.formats)) {
     for (const v of Object.values(raw.formats) as Array<{ stylesheet?: unknown }>) {
       if (v && typeof v.stylesheet === 'string') v.stylesheet = sanitizeRecipeCss(v.stylesheet);
     }
@@ -129,7 +462,7 @@ function parseRecipe(text: string): BrandRecipe {
   // a model that writes one sentence too many would fail the entire recipe
   // parse over prose. Clamp it here so length can never cost a brand its
   // design system, and so what survives ends on a word.
-  if (raw.voice && typeof raw.voice === 'object') {
+  if (isPlainObject(raw.voice)) {
     const v = raw.voice as { description?: unknown; dos?: unknown; donts?: unknown };
     if (typeof v.description === 'string') v.description = clampText(v.description, 400);
     for (const k of ['dos', 'donts'] as const) {
@@ -138,9 +471,105 @@ function parseRecipe(text: string): BrandRecipe {
       }
     }
   }
+  return raw;
+}
+
+/**
+ * KEEP `stylesheet` EQUAL TO THE COMPOSITION OF `layers`, IN PLACE.
+ *
+ * The renderer paints the layers when they exist (`recipeStylesheetFor`), but
+ * `validateRecipeConsistency` discovers which classes the CSS defines by reading
+ * ONLY `stylesheet` — so a layered recipe whose `stylesheet` was stale, empty or
+ * flat would have every component class "dropped as undefined" and render a
+ * slide of unstyled divs. Derived with the shared composition the renderer
+ * itself uses, so the two can never disagree.
+ *
+ * A payload with no layers is untouched: every recipe authored before this, and
+ * every stored one, keeps working exactly as it does today.
+ */
+function deriveStylesheet(raw: Json): Json {
+  if (!isPlainObject(raw.layers)) return raw;
+  const l = raw.layers as Json;
+  const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
+  const composed = composeRecipeLayers({
+    background: str(l.background),
+    type: str(l.type),
+    components: str(l.components),
+  });
+  if (composed) raw.stylesheet = composed;
+  return raw;
+}
+
+/** Validate a model-authored payload into a recipe. */
+function parseRecipe(raw: Json): BrandRecipe {
   // Route model output through the migrator as well, so a recipe authored
   // against an older prompt/shape is normalised the same way a stored one is.
-  return migrateRecipe(raw);
+  return migrateRecipe(deriveStylesheet(normalizeRaw(raw)));
+}
+
+/**
+ * Merge a critique PATCH onto a draft.
+ *
+ * Objects merge key by key (so a patch may change one token, or add one motion
+ * role, without restating its siblings); arrays and scalars REPLACE wholesale,
+ * because there is no sane element-wise merge for a component vocabulary or a
+ * list of composition patterns — a half-merged array would be a design nobody
+ * authored. The critic's prompt states these semantics verbatim.
+ */
+function mergePatch(base: Json, patch: Json): Json {
+  const out: Json = { ...base };
+  for (const [k, v] of Object.entries(patch)) {
+    if (v === undefined) continue;
+    const cur = out[k];
+    out[k] = isPlainObject(v) && isPlainObject(cur) ? mergePatch(cur, v) : v;
+  }
+  return out;
+}
+
+/** Keys that belong to the verdict envelope rather than to the recipe itself. */
+const VERDICT_KEYS = new Set(['verdict', 'patch', 'notes', 'reason', 'rationale_for_change']);
+
+/**
+ * Apply a critique reply to the draft.
+ *
+ * `{"verdict":"pass"}` returns the draft untouched — no merge, no re-validation,
+ * no chance to corrupt CSS that was already right. `{"verdict":"revise","patch":…}`
+ * merges only the fields the critic changed.
+ *
+ * FALLBACK: a model that ignores the protocol and returns a full recipe (the old
+ * contract, or a future drift) still works — the whole object minus the envelope
+ * keys is treated as the patch, and merging a complete recipe onto the draft
+ * yields that complete recipe. Anything unparseable throws, and the caller keeps
+ * the draft.
+ */
+function applyCritique(raw: Json, draft: BrandRecipe): BrandRecipe {
+  const verdict = typeof raw.verdict === 'string' ? raw.verdict.trim().toLowerCase() : '';
+  if (verdict === 'pass') return draft;
+
+  const patch = isPlainObject(raw.patch)
+    ? raw.patch
+    : (Object.fromEntries(Object.entries(raw).filter(([k]) => !VERDICT_KEYS.has(k))) as Json);
+  if (!Object.keys(patch).length) return draft;
+
+  const merged = mergePatch(draft as unknown as Json, normalizeRaw(patch));
+  /**
+   * WHICH CSS WINS after a patch. A patch that touches `layers` is merged layer
+   * by layer and `stylesheet` is then re-derived from the result — so patching
+   * one layer leaves the other two byte-identical, which is the whole point.
+   *
+   * A patch that rewrites `stylesheet` WITHOUT layers is a whole-sheet rewrite:
+   * the layer split no longer describes that CSS, and guessing a new split would
+   * silently move rules between layers on the next refine. So the layers are
+   * dropped and the flat sheet becomes the truth — the same honest choice
+   * `refineLayer` makes for an unlayered recipe. Anything else would leave the
+   * critic's fix in a field the renderer never reads.
+   */
+  if (isPlainObject(patch.layers)) return migrateRecipe(deriveStylesheet(merged));
+  if (typeof patch.stylesheet === 'string' && isPlainObject(merged.layers)) {
+    console.warn('[recipe] critique rewrote the whole stylesheet — dropping the layer split it no longer describes');
+    delete merged.layers;
+  }
+  return migrateRecipe(merged);
 }
 
 /**
@@ -161,38 +590,117 @@ function gate(recipe: BrandRecipe, label: string): BrandRecipe {
   if (consistency.unlisted.length) {
     console.warn(`[recipe:${label}] styled but unadvertised: ${consistency.unlisted.join(', ')}`);
   }
-  return consistency.recipe;
+  // The same treatment for the reference fragments: a fragment that is not
+  // sanitiser-clean, names a class the recipe never defined, or breaks the
+  // placeholder convention is DROPPED, and that role composes the old way. Runs
+  // after the consistency pass, so a fragment is judged against the component
+  // vocabulary that actually survived.
+  const fragments = validateRecipeFragments(consistency.recipe);
+  for (const d of fragments.dropped) {
+    console.warn(`[recipe:${label}] dropped the "${d.role}" reference fragment — ${d.reason}`);
+  }
+  const usable = Object.keys(fragments.recipe.fragments ?? {}).length;
+  if (usable) console.warn(`[recipe:${label}] ${usable} usable reference fragment(s)`);
+  return fragments.recipe;
 }
 
-/** First draft: author a recipe from evidence, shown TWO diverse reference examples. */
+/**
+ * THE HOMEPAGE SCREENSHOT, sized for a prompt.
+ *
+ * The stored capture is a full 1366×900 PNG — several times more tokens than
+ * the design needs, since the author is reading density, rhythm and mood rather
+ * than pixels. It is downscaled to a ~1000px long edge and re-encoded as JPEG,
+ * which is where the cost actually lives, and refused outright above a ceiling
+ * so a pathological asset can never blow up an author call.
+ */
+const SHOT_LONG_EDGE = 1000;
+const SHOT_JPEG_QUALITY = 75;
+/** Hard ceiling on the ENCODED bytes we will attach. A real capture lands ~10× under it. */
+const SHOT_MAX_BYTES = 900_000;
+
+/**
+ * The brand's homepage as an image content block, or null.
+ *
+ * BEST-EFFORT BY CONSTRUCTION: no screenshot, a key storage cannot read, bytes
+ * sharp cannot decode, or an oversized encode all return null, and the author
+ * call then goes out exactly as it did before this existed. A brand must never
+ * lose its design system because a screenshot went missing.
+ */
+async function screenshotBlock(evidence: RecipeEvidence): Promise<Anthropic.ImageBlockParam | null> {
+  const key = evidence.screenshot?.key;
+  if (!key) return null;
+  try {
+    const raw = await getStorage().read(key);
+    const jpeg = await sharp(raw)
+      .resize(SHOT_LONG_EDGE, SHOT_LONG_EDGE, { fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: SHOT_JPEG_QUALITY })
+      .toBuffer();
+    if (jpeg.byteLength > SHOT_MAX_BYTES) {
+      console.warn(`[recipe] homepage screenshot too large after resize (${jpeg.byteLength}B) — authoring without it`);
+      return null;
+    }
+    return {
+      type: 'image',
+      source: { type: 'base64', media_type: 'image/jpeg', data: jpeg.toString('base64') },
+    };
+  } catch (err) {
+    console.warn(
+      '[recipe] homepage screenshot unavailable — authoring from text evidence:',
+      err instanceof Error ? err.message : err,
+    );
+    return null;
+  }
+}
+
+/**
+ * First draft: author a recipe from evidence, shown TWO diverse reference
+ * examples chosen for this brand's ground (see `pairingFor`). The examples ride
+ * in the cached SYSTEM prefix; the user message carries only what varies per
+ * brand — the evidence, the direction, and the homepage screenshot.
+ *
+ * The image goes in the USER message and NEVER in the system prefix: it is the
+ * most per-brand thing in the whole call, and a cached prefix that varied per
+ * brand would never be read twice.
+ */
 async function authorOnce(
   model: string,
   evidence: RecipeEvidence,
   reasoning?: boolean,
   direction?: string,
 ): Promise<BrandRecipe> {
+  const shot = await screenshotBlock(evidence);
   const user = [
-    `TWO WORKED EXAMPLES (different brands — match this JSON shape + quality bar; DO NOT copy their colours/fonts/voice/signature):`,
-    `EXAMPLE A (dark, gold, condensed-caps coaching):`,
-    exemplarJson(dynatosRecipe),
-    ``,
-    `EXAMPLE B (dark, bronze, elegant-serif detailing SaaS):`,
-    exemplarJson(detailMastersRecipe),
-    ``,
     `NOW AUTHOR THE RECIPE FOR THIS BRAND — output only the JSON object:`,
     evidenceBlock(evidence),
+    ...(shot ? [``, `The image above is this brand's actual homepage. Interpret its density, spacing, type scale, accent use and photography mood — do not transcribe its layout.`] : []),
     // A candidate run authors SEVERAL takes on the same evidence; the direction
     // is what makes each take a different design, not the same one re-rolled.
     ...(direction
       ? [``, `DIRECTION FOR THIS TAKE (one of several candidate systems — commit to it): ${direction}`]
       : []),
   ].join('\n');
-  const params = { model, max_tokens: 7000, system: SYSTEM, messages: [{ role: 'user' as const, content: user }] };
-  const resp = await aiMessageLarge(reasoning ? withOpusReasoning(params) : params);
-  return parseRecipe(textOf(resp));
+  // Without a screenshot the content stays a plain string — byte-for-byte the
+  // request this made before the image existed.
+  const content = shot ? [shot, { type: 'text' as const, text: user }] : user;
+  const params = {
+    model,
+    max_tokens: 7000,
+    system: AUTHOR_SYSTEMS[pairingFor(evidence)],
+    messages: [{ role: 'user' as const, content }],
+  };
+  const reply = await aiJson(reasoning ? withOpusReasoning(params) : params, AUTHOR_TOOL, { large: true });
+  return parseRecipe(jsonOf(reply, 'author'));
 }
 
-/** Second pass: hold the first draft to the reference bar and revise. */
+/**
+ * Second pass: hold the first draft to the reference bar and PATCH it.
+ *
+ * The critic used to have to re-emit the entire recipe — ~7k tokens of verbatim
+ * copying even to say "this is already excellent", which is both the most
+ * expensive possible way to pass and a fresh chance to mangle working CSS. It
+ * now returns a verdict plus only the fields it changed; `applyCritique` merges
+ * them onto the draft and the result is gated exactly as before.
+ */
 async function critiqueAndRevise(
   model: string,
   evidence: RecipeEvidence,
@@ -208,11 +716,11 @@ async function critiqueAndRevise(
     `RECIPE TO REVIEW:`,
     JSON.stringify(draft),
     ``,
-    `Review it against the reference bar and output the improved (or unchanged) recipe JSON.`,
+    `Review it against the reference bar. Reply {"verdict":"pass"} or {"verdict":"revise","patch":{…only what you changed…}}.`,
   ].join('\n');
-  const params = { model, max_tokens: 7000, system: CRITIQUE_SYSTEM, messages: [{ role: 'user' as const, content: user }] };
-  const resp = await aiMessageLarge(reasoning ? withOpusReasoning(params) : params);
-  return parseRecipe(textOf(resp));
+  const params = { model, max_tokens: 7000, system: CRITIQUE_SYSTEM_CACHED, messages: [{ role: 'user' as const, content: user }] };
+  const reply = await aiJson(reasoning ? withOpusReasoning(params) : params, CRITIQUE_TOOL, { large: true });
+  return applyCritique(jsonOf(reply, 'critique'), draft);
 }
 
 /**
@@ -239,13 +747,15 @@ export async function authorRecipe(
 ): Promise<BrandRecipe> {
   const model = opts?.model ?? (await modelFor('recipe'));
   let recipe = gate(await authorOnce(model, evidence, opts?.reasoning, opts?.direction), 'draft');
+  let critiqued = false;
 
   if (opts?.critique !== false) {
     try {
-      recipe = gate(
-        await critiqueAndRevise(model, evidence, recipe, opts?.reasoning, opts?.direction),
-        'revised',
-      );
+      const reviewed = await critiqueAndRevise(model, evidence, recipe, opts?.reasoning, opts?.direction);
+      critiqued = true;
+      // A "pass" returns the very object it was given, so there is nothing to
+      // re-gate — the draft already cleared these gates on the way in.
+      if (reviewed !== recipe) recipe = gate(reviewed, 'revised');
     } catch (err) {
       console.warn(
         '[recipe] critique pass failed — keeping the draft:',
@@ -263,5 +773,15 @@ export async function authorRecipe(
     if (seen.verdict === 'revised') recipe = gate(seen.recipe, 'verified');
   }
 
-  return recipe;
+  // STAMP WHICH PROMPTS WROTE THIS. Purely additive, and last so it survives
+  // every gate: when a cohort of brands regresses, this is what attributes it to
+  // a specific prompt edit instead of leaving it a mystery. The critique version
+  // is recorded when that pass actually ran — pass or revise, the prompt was used.
+  return {
+    ...recipe,
+    promptVersion: {
+      author: PROMPT_VERSION.author,
+      ...(critiqued ? { critique: PROMPT_VERSION.critique } : {}),
+    },
+  };
 }

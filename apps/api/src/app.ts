@@ -99,9 +99,10 @@ export function createApp() {
     const WINDOW_MS = 5 * 60 * 1000;
     const MAX = 30;
     const hits = new Map<string, number[]>();
-    // `/recipe/candidates` authors 2–3 recipes in one request, so it counts as
-    // expensive too; `/recipe/select` is a cheap DB write and stays unmetered.
-    const EXPENSIVE = /(\/analyze|\/recipe(\/candidates)?|\/compose|\/caption|\/export)$/;
+    // `/recipe/candidates` authors 2–3 recipes in one request and `/recipe/refine`
+    // is a design-tier call too, so both count as expensive; `/recipe/select` is
+    // a cheap DB write and stays unmetered.
+    const EXPENSIVE = /(\/analyze|\/recipe(\/(candidates|refine))?|\/compose|\/caption|\/export)$/;
     app.use((req: Request, res: Response, next) => {
       if (req.method !== 'POST' || !EXPENSIVE.test(req.path)) return next();
       const now = Date.now();

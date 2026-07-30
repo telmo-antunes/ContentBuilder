@@ -16,6 +16,7 @@ import {
 } from '@contentbuilder/shared';
 import { composeProject, composeSlide } from '../lib/htmlDirector/compose';
 import { partsFromAuthored } from '../lib/htmlDirector/reparse';
+import { addHeadlineVariant, removeHeadlineVariant } from '../lib/htmlDirector/renderCheck';
 import { sanitizeAuthoredHtml } from '../lib/htmlSanitize';
 import { ProjectModel, ProjectVersionModel, BusinessModel, BrandKitModel, MediaAssetModel, VideoJobModel, VIDEO_JOB_ACTIVE_STATES } from '../models';
 import { ApiError, asyncHandler, parseBody, publicErrMessage, requireObjectId } from '../lib/http';
@@ -36,9 +37,9 @@ export const projectsRouter = Router();
 /**
  * The user's photos for one slide, cleaned up: bad asset ids dropped, slot
  * fills without a slot name demoted to free, at most ONE background, and every
- * free overlay given a frame. A legacy slide's single `mediaAssetId` is
- * migrated in as the background, so posts made before this existed keep their
- * picture.
+ * free overlay given a frame. This array is the whole truth about a slide's
+ * photos — the pre-photos-layer `slide.mediaAssetId` was folded in here once by
+ * `npm run migrate:photos` and no longer exists.
  */
 function normalizePhotos(s: SlideInput): SlidePhoto[] {
   const raw = s.photos ?? [];
@@ -69,15 +70,6 @@ function normalizePhotos(s: SlideInput): SlidePhoto[] {
     });
     if (out.length >= 24) break;
   }
-  // Back-compat: the old single attached photo becomes the background.
-  if (!out.length && s.mediaAssetId && Types.ObjectId.isValid(s.mediaAssetId)) {
-    out.push({
-      id: randomUUID(),
-      mediaAssetId: s.mediaAssetId,
-      placement: 'background',
-      fit: 'cover',
-    });
-  }
   return out;
 }
 
@@ -87,8 +79,6 @@ export function normalizeSlides(slides: SlideInput[]) {
     id: s.id ?? randomUUID(),
     order: i,
     imageNeed: s.imageNeed ?? 'none',
-    mediaAssetId:
-      s.mediaAssetId && Types.ObjectId.isValid(s.mediaAssetId) ? s.mediaAssetId : undefined,
     imageQuery: s.imageQuery,
     photos: normalizePhotos(s),
     overrides: s.overrides,
@@ -122,7 +112,6 @@ async function scrubForeignMedia(
 ): Promise<void> {
   const ids = new Set<string>();
   for (const s of slides) {
-    if (s.mediaAssetId) ids.add(String(s.mediaAssetId));
     for (const p of s.photos ?? []) ids.add(String(p.mediaAssetId));
   }
   if (ids.size === 0) return;
@@ -132,7 +121,6 @@ async function scrubForeignMedia(
     ),
   );
   for (const s of slides) {
-    if (s.mediaAssetId && !owned.has(String(s.mediaAssetId))) s.mediaAssetId = undefined;
     // A photo pointing at another business's asset is dropped outright — there
     // is no meaningful "partial" version of a picture on the wrong brand.
     s.photos = (s.photos ?? []).filter((p) => owned.has(String(p.mediaAssetId)));
@@ -469,7 +457,9 @@ projectsRouter.post(
           // authored arrangement for this role.
           index: idx + v + 1,
         });
-        if (out.html) variants.push(out);
+        // Only the slide's own fields travel: `composeSlide` also reports WHICH
+        // path composed it, and that is telemetry, not part of the response.
+        if (out.html) variants.push({ html: out.html, ...(out.bg ? { bg: out.bg } : {}), ...(out.role ? { role: out.role } : {}) });
       } catch (err) {
         console.warn('[variants] one candidate failed:', err instanceof Error ? err.message : err);
       }
@@ -504,11 +494,14 @@ projectsRouter.post(
     let bg = slide.authored.bg;
     switch (tweak) {
       // The recipe's `.sm` headline variant IS the size control — toggle it.
+      // Tokenised rather than pattern-matched: the old regexes only fired when
+      // `headline` was the FIRST class in a double-quoted attribute, so on a
+      // recipe that writes `class="lead headline"` the button did nothing at all.
       case 'smaller-headline':
-        html = html.replace(/class="headline(?! sm)([^"]*)"/g, 'class="headline sm$1"');
+        html = addHeadlineVariant(html).html;
         break;
       case 'bigger-headline':
-        html = html.replace(/class="headline sm([^"]*)"/g, 'class="headline$1"');
+        html = removeHeadlineVariant(html).html;
         break;
       // The recipe's inverse surface, applied per slide.
       case 'invert':
@@ -522,6 +515,32 @@ projectsRouter.post(
     slides[idx] = { ...slide, authored: { ...slide.authored, html, ...(bg ? { bg } : { bg: undefined }) } };
     project.set('slides', normalizeSlides(slides));
     await project.save();
+
+    // Each tweak is a labelled correction of the brand's recipe (type runs too
+    // big, too small, wrong default surface). Record it on the APPROVED kit so
+    // repeated corrections can surface as ONE suggestion on the brand-kit page
+    // instead of evaporating. Un-invert withdraws an invert, so the counter is
+    // a net preference. Best-effort: a signal write must never fail the tweak.
+    const TWEAK_SIGNALS: Record<typeof tweak, { field: string; by: number }> = {
+      'bigger-headline': { field: 'biggerHeadline', by: 1 },
+      'smaller-headline': { field: 'smallerHeadline', by: 1 },
+      invert: { field: 'invert', by: 1 },
+      'un-invert': { field: 'invert', by: -1 },
+    };
+    const sig = TWEAK_SIGNALS[tweak];
+    try {
+      await BrandKitModel.findOneAndUpdate(
+        { businessId: project.get('businessId'), status: 'approved' },
+        {
+          $inc: { [`tweakSignals.${sig.field}`]: sig.by },
+          $set: { 'tweakSignals.updatedAt': new Date() },
+        },
+        { sort: { createdAt: -1 } },
+      );
+    } catch (err) {
+      console.warn('[tweak] could not record signal:', err instanceof Error ? err.message : err);
+    }
+
     res.json(project.toJSON());
   }),
 );

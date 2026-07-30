@@ -92,12 +92,20 @@ export function resolveMove(move: PhotoMove | undefined, focal?: { x: number; y:
   return index % 2 === 0 ? 'in' : 'out';
 }
 
-/** The from/to transform pair for one layer's ambient move. */
-export function ambientTransforms(
+/**
+ * The NUMBERS behind one layer's ambient move, before they become CSS.
+ *
+ * `zoom` is the extra scale at the far end of the move; `dx`/`dy` are the pan
+ * in CSS `translate` percentages of the layer's own box. Everything that needs
+ * to reason about ambient geometry — the stylesheet, the settled-frame guides
+ * in the editor — comes through here, so there is exactly one place where the
+ * amplitude and the cover allowance are decided.
+ */
+function ambientMotion(
   move: Exclude<PhotoMove, 'auto'>,
   layer: AmbientLayer,
   spec: AmbientSpec,
-): { from: string; to: string } | null {
+): { zoom: number; dx: number; dy: number } | null {
   if (move === 'none' || spec.style === 'none') return null;
   const depth = AMBIENT_DEPTH[layer];
   const amp = AMBIENT_AMPLITUDE[spec.intensity];
@@ -120,12 +128,127 @@ export function ambientTransforms(
   // billing them for coverage they don't use inflated a push-in to 36%.
   const cover = (Math.max(Math.abs(dx), Math.abs(dy)) * 2) / 100;
   const zoom = (useScale ? amp.scale * depth : 0) + cover;
+  return { zoom, dx, dy };
+}
+
+/** The from/to transform pair for one layer's ambient move. */
+export function ambientTransforms(
+  move: Exclude<PhotoMove, 'auto'>,
+  layer: AmbientLayer,
+  spec: AmbientSpec,
+): { from: string; to: string } | null {
+  const m = ambientMotion(move, layer, spec);
+  if (!m) return null;
   const at = (s: number, x: number, y: number) =>
     `scale(${(1 + s).toFixed(4)}) translate(${x.toFixed(3)}%, ${y.toFixed(3)}%)`;
   // `out` starts zoomed and relaxes; everything else closes in.
   return move === 'out'
-    ? { from: at(zoom, dx, dy), to: at(0, 0, 0) }
-    : { from: at(0, 0, 0), to: at(zoom, dx, dy) };
+    ? { from: at(m.zoom, m.dx, m.dy), to: at(0, 0, 0) }
+    : { from: at(0, 0, 0), to: at(m.zoom, m.dx, m.dy) };
+}
+
+/** A rectangle in a layer's own box, as fractions [0..1] of its width/height. */
+export interface MotionRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/**
+ * Where a layer's transform LANDS — the state it holds once the move is over.
+ *
+ * `ambientPhotoCss` emits `animation: … both`, so the layer sticks at the
+ * keyframes' `to` state, and the video exporter deliberately seeks every
+ * `cb-amb-*` animation to its end for the hold frames. This is therefore the
+ * framing that actually ships, and the one the editor should be showing.
+ *
+ * `dx`/`dy` are FRACTIONS of the layer's box (the emitted percentage ÷ 100).
+ * A still layer — and every `out`, which relaxes back to rest — reports the
+ * identity, so callers can treat "no motion" and "settles at rest" alike.
+ */
+export function ambientEndState(
+  move: Exclude<PhotoMove, 'auto'>,
+  layer: AmbientLayer,
+  spec: AmbientSpec,
+): { scale: number; dx: number; dy: number } {
+  const m = ambientMotion(move, layer, spec);
+  if (!m || move === 'out') return { scale: 1, dx: 0, dy: 0 };
+  return { scale: 1 + m.zoom, dx: m.dx / 100, dy: m.dy / 100 };
+}
+
+const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+
+/**
+ * THE GEOMETRY, once. CSS composes `transform: scale(s) translate(d)` about
+ * `transform-origin: o` right-to-left, so a point `p` of the element lands at
+ *
+ *     p' = o + s · (p − o + d)
+ *
+ * with `p`, `p'`, `o` and `d` all as fractions of the element's own box. Both
+ * helpers below are that one line, read in opposite directions.
+ */
+const forward = (p: number, o: number, s: number, d: number) => o + s * (p - o + d);
+
+/**
+ * The part of the photo still on screen when the move has settled, in the
+ * layer's own [0..1] coordinates.
+ *
+ * Inverting `p' = o + s·(p − o + d)` for the window `p' ∈ [0,1]`:
+ *
+ *     left = o · (1 − 1/s) − d      width = 1/s
+ *
+ * A push-in eats the edges, so what you frame at rest is NOT what ships — this
+ * is what the editor draws so you can see the difference before you export.
+ * Clamped to the box: with the origin hard against an edge the zoom can drag
+ * the layer off its own frame, and there is no photo out there to show.
+ */
+export function settledViewport(
+  move: Exclude<PhotoMove, 'auto'>,
+  layer: AmbientLayer,
+  spec: AmbientSpec,
+  focal?: { x: number; y: number },
+): MotionRect {
+  const { scale: s, dx, dy } = ambientEndState(move, layer, spec);
+  if (s === 1 && dx === 0 && dy === 0) return { x: 0, y: 0, w: 1, h: 1 };
+  const axis = (o: number, d: number) => {
+    const lo = clamp01(o * (1 - 1 / s) - d);
+    const hi = clamp01(o * (1 - 1 / s) - d + 1 / s);
+    return { lo, len: Math.max(0, hi - lo) };
+  };
+  const h = axis(focal?.x ?? 0.5, dx);
+  const v = axis(focal?.y ?? 0.5, dy);
+  return { x: h.lo, y: v.lo, w: h.len, h: v.len };
+}
+
+/**
+ * Where the layer's own BOX ends up once the move has settled — the forward
+ * reading of the same mapping, in the box's own [0..1] coordinates.
+ *
+ * Deliberately unclamped: the whole point for a floating photo is that it
+ * grows past the frame you dragged, and a guide that stopped at the edge would
+ * hide exactly the overhang the user needs to see.
+ */
+export function settledBounds(
+  move: Exclude<PhotoMove, 'auto'>,
+  layer: AmbientLayer,
+  spec: AmbientSpec,
+  focal?: { x: number; y: number },
+): MotionRect {
+  const { scale: s, dx, dy } = ambientEndState(move, layer, spec);
+  const ox = focal?.x ?? 0.5;
+  const oy = focal?.y ?? 0.5;
+  return { x: forward(0, ox, s, dx), y: forward(0, oy, s, dy), w: s, h: s };
+}
+
+/** Whether the settled framing differs from what you see at rest at all. */
+export function hasSettledShift(
+  move: Exclude<PhotoMove, 'auto'>,
+  layer: AmbientLayer,
+  spec: AmbientSpec,
+): boolean {
+  const { scale, dx, dy } = ambientEndState(move, layer, spec);
+  return scale !== 1 || dx !== 0 || dy !== 0;
 }
 
 /**

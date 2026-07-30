@@ -7,6 +7,9 @@ const usageSchema = new Schema(
     model: { type: String, required: true },
     inputTokens: { type: Number, required: true, default: 0 },
     outputTokens: { type: Number, required: true, default: 0 },
+    // Prompt-cache telemetry (additive — absent on docs written before caching).
+    cacheCreationInputTokens: { type: Number, required: false, default: 0 },
+    cacheReadInputTokens: { type: Number, required: false, default: 0 },
     costUsd: { type: Number, required: true, default: 0 },
   },
   { timestamps: { createdAt: true, updatedAt: false } },

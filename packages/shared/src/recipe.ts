@@ -17,7 +17,7 @@
  */
 import { z } from 'zod';
 import { AA_LARGE, AA_TEXT, contrastRatio, hexToRgb, relativeLuminance } from './colorContrast';
-import { slideMediaCss } from './slidePhotos';
+import { APP_IMAGE_CLASSES, slideMediaCss } from './slidePhotos';
 import { AMBIENT_INTENSITIES, AMBIENT_STYLES, DEFAULT_AMBIENT, type AmbientSpec } from './slideMotion';
 import { enforceTypeFloor, typeBaseCss } from './typeFloor';
 
@@ -132,6 +132,23 @@ export const brandRecipeSchema = z.object({
   version: z.number().int().min(1).max(99).catch(1).default(RECIPE_VERSION),
 
   /**
+   * WHICH PROMPTS wrote this recipe — the author touchpoint's `PROMPT_VERSION`,
+   * plus the critique's when that pass ran. Purely additive telemetry: when a
+   * batch of brands suddenly authors worse, this is what says "everything bad
+   * carries author v3" instead of leaving the regression unattributable.
+   *
+   * Optional and `.catch(undefined)` so every recipe stored before it existed —
+   * and any future shape drift — stays valid on read.
+   */
+  promptVersion: z
+    .object({
+      author: z.number().int().min(0).max(9999).optional(),
+      critique: z.number().int().min(0).max(9999).optional(),
+    })
+    .optional()
+    .catch(undefined),
+
+  /**
    * WHY the recipe made its choices. The old art-direction brief captured this
    * and was lost with the block director; without it neither a human nor a later
    * refinement pass can tell intent from accident.
@@ -164,6 +181,22 @@ export const brandRecipeSchema = z.object({
   signature: z.object({
     name: z.string().min(1).max(80),
     description: z.string().min(1).max(400),
+    /**
+     * MECHANICAL form of the emphasis half of the signature: the element the
+     * headline's emphasis phrase is wrapped in (e.g. { tag: 'span', className:
+     * 'it' }). The prose `description` still instructs the composer; this field
+     * lets deterministic code guarantee the wrap after the fact. Optional and
+     * `.catch(undefined)` so every stored recipe stays valid; when absent, a
+     * default is derived from the stylesheet/components (see
+     * `recipeEmphasisWrap`).
+     */
+    emphasisWrap: z
+      .object({
+        tag: z.string().min(1).max(24).catch('span'),
+        className: z.string().min(1).max(60).catch('em'),
+      })
+      .optional()
+      .catch(undefined),
   }),
 
   /** The brand's authored, sanitised stylesheet: base + signature + component
@@ -189,6 +222,24 @@ export const brandRecipeSchema = z.object({
   /** The class vocabulary the slide composer is allowed to use — its palette of
    *  brand components. Names must correspond to classes in `stylesheet`. */
   components: z.array(recipeComponentSchema).max(40).default([]),
+
+  /**
+   * REFERENCE FRAGMENTS — one worked slide per role, authored ONCE with the
+   * brand's own classes and PLACEHOLDER copy, so a slide can be composed by
+   * SUBSTITUTION instead of being generated from prose rules on every deck.
+   *
+   * Keyed by `SLIDE_ROLES` member; the value is the inner markup of `.cb-slide`
+   * with `{{headline}}`-style holes (see the API's `htmlDirector/fragments.ts`,
+   * which owns the convention, the author-time validation and the fill).
+   *
+   * Optional and `.catch(undefined)`: every recipe stored before this existed —
+   * and any future shape drift — stays valid on read and simply composes the way
+   * it always has. Deliberately a loose `Record<string, string>` rather than a
+   * role-keyed record: zod would type an enum-keyed record as TOTAL (every role
+   * present), and the whole point is that a brand may fill in as few roles as it
+   * can express well.
+   */
+  fragments: z.record(z.string(), z.string().max(4000)).optional().catch(undefined),
 
   /** Per-format vertical tuning, keyed by format string ('1080x1920' story,
    *  '1080x1080' square). The base stylesheet targets 1080×1350; each entry
@@ -319,6 +370,26 @@ export const RECIPE_FORMAT_DIMS: Record<string, { w: number; h: number; label: s
 };
 
 /**
+ * THE LAYER COMPOSITION — background → type → components, empties dropped,
+ * newline-joined. Defined ONCE, here, because three places must agree on it to
+ * the byte: the renderer composes what it paints from it (`recipeStylesheetFor`
+ * below), the layer refiner writes it back into `stylesheet` after swapping one
+ * layer, and the recipe author derives `stylesheet` from the layers it emits.
+ * `validateRecipeConsistency` reads ONLY `stylesheet` to discover which classes
+ * are defined, so a `stylesheet` that disagreed with the layers would silently
+ * drop every component the layers define.
+ *
+ * Takes a loose shape (not the parsed `layers`) so pre-validation model output
+ * can be composed with the same one line.
+ */
+export function composeRecipeLayers(
+  layers?: { background?: string; type?: string; components?: string } | null,
+): string {
+  if (!layers) return '';
+  return [layers.background, layers.type, layers.components].filter(Boolean).join('\n');
+}
+
+/**
  * The stylesheet to inject for a given format: the base (4:5) sheet, with the
  * format's override appended when one exists. Both are `.cb-slide`-scoped, so
  * the later rules win by cascade order. Unknown/absent formats use the base.
@@ -327,11 +398,7 @@ export function recipeStylesheetFor(recipe: BrandRecipe, format: string): string
   // Layers win when present (background → type → components); otherwise the
   // single authored blob. Either way the surface CSS is appended so an
   // `.inverse` slide re-points its tokens last.
-  const l = recipe.layers;
-  const base =
-    l && (l.background || l.type || l.components)
-      ? [l.background, l.type, l.components].filter(Boolean).join('\n')
-      : recipe.stylesheet;
+  const base = composeRecipeLayers(recipe.layers) || recipe.stylesheet;
   const extra = recipe.formats?.[format]?.stylesheet?.trim();
   const surface = recipeSurfaceCss(recipe);
   // The image layer is app capability, not brand taste, so it ships with every
@@ -444,6 +511,51 @@ export function recipePatternVariant(
   return mine[Math.abs(index) % mine.length];
 }
 
+/** The element a headline's emphasis phrase is wrapped in. */
+export interface RecipeEmphasisWrap {
+  tag: string;
+  className: string;
+}
+
+/**
+ * The brand's emphasis wrapper — authored (`signature.emphasisWrap`) when
+ * present, else DERIVED from what the recipe already defines. The derivation
+ * mirrors how `reparse.ts` reads an emphasis back out of authored markup (a
+ * span classed `em` or `it` inside the headline):
+ *   1. a headline-scoped `.it` / `.em` rule in the stylesheet (or its layers /
+ *      format overrides) — the class the brand's own CSS styles for this job;
+ *   2. a component `use` line that asks for `<span class="it">` / `<span
+ *      class="em">` — the vocabulary both reference recipes use;
+ *   3. any `.it` / `.em` rule at all;
+ *   4. the `span.em` default.
+ * `it` is checked before `em` at each step only to break ties; a brand that
+ * defines one and not the other always gets its own class.
+ */
+export function recipeEmphasisWrap(recipe: BrandRecipe): RecipeEmphasisWrap {
+  const authored = recipe.signature.emphasisWrap;
+  if (authored) return { tag: authored.tag, className: authored.className };
+  const css = [
+    recipe.stylesheet,
+    recipe.layers?.type ?? '',
+    recipe.layers?.components ?? '',
+    ...Object.values(recipe.formats ?? {}).map((f) => f.stylesheet),
+  ].join('\n');
+  const uses = recipe.components.map((c) => c.use).join('\n');
+  const candidates = ['it', 'em'] as const;
+  for (const cls of candidates) {
+    if (new RegExp(`\\.headline\\b[^{},]*\\.${cls}(?![\\w-])`).test(css)) {
+      return { tag: 'span', className: cls };
+    }
+  }
+  for (const cls of candidates) {
+    if (uses.includes(`<span class="${cls}">`)) return { tag: 'span', className: cls };
+  }
+  for (const cls of candidates) {
+    if (new RegExp(`\\.${cls}(?![\\w-])`).test(css)) return { tag: 'span', className: cls };
+  }
+  return { tag: 'span', className: 'em' };
+}
+
 // ── Motion ──────────────────────────────────────────────────────────────────
 
 /** Tempo per pace: entrance duration + the stagger step between elements (s). */
@@ -488,6 +600,14 @@ const ORDER: string[][] = [
 ];
 
 const LEAD_IN = 0.12;
+
+/**
+ * The reveal order, exported (read-only) as the canonical "what comes before
+ * what" of a slide: the compose repair path uses it to place a deterministically
+ * spliced element at its role-appropriate position when the slide's composition
+ * pattern doesn't already order that class.
+ */
+export const RECIPE_REVEAL_ORDER: ReadonlyArray<ReadonlyArray<string>> = ORDER;
 
 export const DEFAULT_MOTION: RecipeMotion = {
   style: 'rise',
@@ -682,6 +802,36 @@ function definedClasses(recipe: BrandRecipe): Set<string> {
 }
 
 /**
+ * Classes the composer never names directly, so they are never "advertised":
+ *
+ *   · structural/base classes and modifiers the renderer or the markup owns;
+ *   · APP_IMAGE_CLASSES — the app's own image layer. `.cb-shot` is the reason
+ *     this matters: rule 7 of the author prompt REQUIRES every brand to style
+ *     it, while the class itself is app-owned (`SLOT_CLASS`), so without this
+ *     every prompt-compliant recipe reported `cb-shot` as "styled but
+ *     unadvertised" — a warning no brand could ever act on.
+ *
+ * Exported because TWO consistency checks need exactly this set: the one below
+ * (which classes may be styled without being listed) and the API's reference-
+ * fragment validator (which classes a fragment may USE without being listed).
+ * One set, so a fragment can never be rejected for a modifier this file already
+ * treats as structural.
+ */
+export const RECIPE_STRUCTURAL_CLASSES: ReadonlySet<string> = new Set([
+  'cb-slide',
+  'cb-motion',
+  'cb-cnt',
+  'photo',
+  'inverse',
+  'sm',
+  'em',
+  'it',
+  'row',
+  'tick',
+  ...APP_IMAGE_CLASSES,
+]);
+
+/**
  * Hold the recipe to its own promises. The composer may use ONLY the classes in
  * `components`, so a class advertised there but never defined in the CSS yields
  * an unstyled element on a real slide — a silent, ugly failure. Drop those, and
@@ -703,10 +853,10 @@ export function validateRecipeConsistency(recipe: BrandRecipe): {
     return false;
   });
 
-  // Structural/base classes the composer never names directly.
-  const IGNORE = new Set(['cb-slide', 'cb-motion', 'cb-cnt', 'photo', 'inverse', 'sm', 'em', 'it', 'row', 'tick']);
   const listed = new Set(recipe.components.flatMap((c) => c.className.trim().split(/\s+/)));
-  const unlisted = [...defined].filter((c) => !listed.has(c) && !IGNORE.has(c)).sort();
+  const unlisted = [...defined]
+    .filter((c) => !listed.has(c) && !RECIPE_STRUCTURAL_CLASSES.has(c))
+    .sort();
 
   return {
     recipe: dropped.length ? { ...recipe, components: kept } : recipe,

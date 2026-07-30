@@ -1,11 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
+  AMBIENT_AMPLITUDE,
+  AMBIENT_DEPTH,
   AMBIENT_SECONDS,
   DEFAULT_AMBIENT,
   ambientArtCss,
+  ambientEndState,
   ambientPhotoCss,
   ambientTransforms,
+  hasSettledShift,
   resolveMove,
+  settledBounds,
+  settledViewport,
 } from './slideMotion';
 
 /** Pull the scale factor out of a `scale(N) translate(...)` transform. */
@@ -74,6 +80,132 @@ describe('ambientTransforms', () => {
     const t = ambientTransforms('out', 'slot', DEFAULT_AMBIENT)!;
     expect(scaleOf(t.from)).toBeGreaterThan(scaleOf(t.to));
     expect(scaleOf(t.to)).toBe(1);
+  });
+});
+
+describe('ambientEndState', () => {
+  it('reports the state the layer HOLDS at, which is what the export ships', () => {
+    // `animation: … both` sticks at the keyframes' `to`, and the exporter seeks
+    // every cb-amb-* animation to its end for the hold frames.
+    const e = ambientEndState('in', 'slot', DEFAULT_AMBIENT);
+    expect(e.scale).toBeCloseTo(1 + AMBIENT_AMPLITUDE.medium.scale * AMBIENT_DEPTH.slot, 10);
+    expect(e).toMatchObject({ dx: 0, dy: 0 });
+  });
+
+  it('is the identity for a still layer and for `out`, which relaxes back to rest', () => {
+    expect(ambientEndState('none', 'slot', DEFAULT_AMBIENT)).toEqual({ scale: 1, dx: 0, dy: 0 });
+    expect(ambientEndState('in', 'slot', { style: 'none', intensity: 'strong' })).toEqual({ scale: 1, dx: 0, dy: 0 });
+    expect(ambientEndState('out', 'free', DEFAULT_AMBIENT)).toEqual({ scale: 1, dx: 0, dy: 0 });
+  });
+
+  it('agrees with the transform the renderer actually emits', () => {
+    const e = ambientEndState('left', 'free', { style: 'parallax', intensity: 'strong' });
+    const t = ambientTransforms('left', 'free', { style: 'parallax', intensity: 'strong' })!;
+    expect(scaleOf(t.to)).toBeCloseTo(e.scale, 4);
+    expect(translateOf(t.to)[0]! / 100).toBeCloseTo(e.dx, 4);
+  });
+
+  it('pans as a FRACTION of the box, not the percentage the CSS carries', () => {
+    const e = ambientEndState('down', 'slot', { style: 'drift', intensity: 'medium' });
+    expect(e.dy).toBeCloseTo(AMBIENT_AMPLITUDE.medium.shift * AMBIENT_DEPTH.slot / 100, 10);
+  });
+});
+
+describe('settledViewport', () => {
+  it('is the whole box when nothing moves', () => {
+    expect(settledViewport('none', 'slot', DEFAULT_AMBIENT)).toEqual({ x: 0, y: 0, w: 1, h: 1 });
+    expect(settledViewport('in', 'slot', { style: 'none', intensity: 'medium' })).toEqual({ x: 0, y: 0, w: 1, h: 1 });
+  });
+
+  it('is the whole box for `out`, which ENDS at rest — the tight frame is its start', () => {
+    expect(settledViewport('out', 'free', { style: 'parallax', intensity: 'strong' })).toEqual({
+      x: 0, y: 0, w: 1, h: 1,
+    });
+  });
+
+  it('eats the edges of a push-in by exactly 1 − 1/s', () => {
+    // parallax/medium on a slot: zoom 0.15, no pan → s = 1.15 about the centre.
+    const r = settledViewport('in', 'slot', DEFAULT_AMBIENT);
+    expect(r.w).toBeCloseTo(1 / 1.15, 6);
+    expect(r.h).toBeCloseTo(1 / 1.15, 6);
+    expect(r.x).toBeCloseTo(0.5 * (1 - 1 / 1.15), 6);
+    expect(r.y).toBeCloseTo(0.5 * (1 - 1 / 1.15), 6);
+  });
+
+  it('closes on the focal point, not the middle of the frame', () => {
+    const r = settledViewport('in', 'slot', DEFAULT_AMBIENT, { x: 0.2, y: 0.8 });
+    expect(r.x).toBeCloseTo(0.2 * (1 - 1 / 1.15), 6);
+    expect(r.y).toBeCloseTo(0.8 * (1 - 1 / 1.15), 6);
+    expect(r.w).toBeCloseTo(1 / 1.15, 6);
+    // A subject at 20%/80% stays inside the surviving window; the far edges go.
+    expect(r.x).toBeLessThan(0.2);
+    expect(r.x + r.w).toBeGreaterThan(0.2);
+  });
+
+  it('shows the far side of a pan — the layer moves left, so the right survives', () => {
+    // parallax/medium on a slot: shift 4.4%, cover 8.8% → s = 1.238, dx = −0.044.
+    const r = settledViewport('left', 'slot', DEFAULT_AMBIENT);
+    expect(r.w).toBeCloseTo(1 / 1.238, 6);
+    expect(r.x).toBeCloseTo(0.5 * (1 - 1 / 1.238) + 0.044, 6);
+    expect(r.x + r.w).toBeLessThanOrEqual(1);   // the cover zoom holds the edge out
+    expect(r.x).toBeGreaterThan(0.5 * (1 - 1 / 1.238)); // pushed right of centre
+    expect(r.y).toBeCloseTo(0.5 * (1 - 1 / 1.238), 6);  // nothing vertical moved
+  });
+
+  it('never reports photo that is not there, even with the origin on an edge', () => {
+    const r = settledViewport('left', 'free', { style: 'parallax', intensity: 'strong' }, { x: 1, y: 1 });
+    expect(r.x).toBeGreaterThanOrEqual(0);
+    expect(r.x + r.w).toBeLessThanOrEqual(1);
+    expect(r.y + r.h).toBeLessThanOrEqual(1);
+  });
+
+  it('gets tighter the nearer the layer, exactly as the parallax does', () => {
+    const w = (layer: 'background' | 'slot' | 'free') =>
+      settledViewport('in', layer, DEFAULT_AMBIENT).w;
+    expect(w('background')).toBeGreaterThan(w('slot'));
+    expect(w('slot')).toBeGreaterThan(w('free'));
+  });
+});
+
+describe('settledBounds', () => {
+  it('grows the box symmetrically about a centred focal point', () => {
+    // parallax/medium on a free overlay: depth 1.5 → s = 1.225.
+    const b = settledBounds('in', 'free', DEFAULT_AMBIENT);
+    expect(b.w).toBeCloseTo(1.225, 6);
+    expect(b.x).toBeCloseTo(-(1.225 - 1) / 2, 6);
+    expect(b.y).toBeCloseTo(-(1.225 - 1) / 2, 6);
+  });
+
+  it('pins the corner the focal point sits on', () => {
+    const b = settledBounds('in', 'free', DEFAULT_AMBIENT, { x: 0, y: 0 });
+    expect(b.x).toBeCloseTo(0, 10);
+    expect(b.y).toBeCloseTo(0, 10);
+  });
+
+  it('is the exact inverse of settledViewport — the visible window maps to the box', () => {
+    const focal = { x: 0.3, y: 0.65 };
+    const v = settledViewport('up', 'slot', { style: 'parallax', intensity: 'strong' }, focal);
+    const { scale: s, dx, dy } = ambientEndState('up', 'slot', { style: 'parallax', intensity: 'strong' });
+    const fwd = (p: number, o: number, d: number) => o + s * (p - o + d);
+    expect(fwd(v.x, focal.x, dx)).toBeCloseTo(0, 6);
+    expect(fwd(v.x + v.w, focal.x, dx)).toBeCloseTo(1, 6);
+    expect(fwd(v.y, focal.y, dy)).toBeCloseTo(0, 6);
+    expect(fwd(v.y + v.h, focal.y, dy)).toBeCloseTo(1, 6);
+  });
+
+  it('leaves the box alone when there is nothing to settle into', () => {
+    expect(settledBounds('none', 'free', DEFAULT_AMBIENT)).toEqual({ x: 0, y: 0, w: 1, h: 1 });
+    expect(settledBounds('out', 'free', DEFAULT_AMBIENT)).toEqual({ x: 0, y: 0, w: 1, h: 1 });
+  });
+});
+
+describe('hasSettledShift', () => {
+  it('is true only when the ending framing differs from the resting one', () => {
+    expect(hasSettledShift('in', 'slot', DEFAULT_AMBIENT)).toBe(true);
+    expect(hasSettledShift('right', 'background', DEFAULT_AMBIENT)).toBe(true);
+    expect(hasSettledShift('out', 'slot', DEFAULT_AMBIENT)).toBe(false);
+    expect(hasSettledShift('none', 'slot', DEFAULT_AMBIENT)).toBe(false);
+    expect(hasSettledShift('in', 'slot', { style: 'none', intensity: 'medium' })).toBe(false);
   });
 });
 

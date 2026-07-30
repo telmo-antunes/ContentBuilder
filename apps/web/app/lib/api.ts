@@ -12,6 +12,7 @@ import type {
   SlidePhoto,
   AssetType,
   Format,
+  TweakSuggestion,
 } from '@contentbuilder/shared';
 import { api } from './config';
 
@@ -142,7 +143,7 @@ export const createProject = (data: {
   stage?: 'idea' | 'drafting' | 'ready' | 'shipped';
   /** Authored-first slide payloads (e.g. duplicating an existing project). */
   slides?: Array<
-    Partial<Pick<Slide, 'order' | 'imageNeed' | 'mediaAssetId' | 'overrides' | 'photos' | 'authored'>>
+    Partial<Pick<Slide, 'order' | 'imageNeed' | 'overrides' | 'photos' | 'authored'>>
   >;
 }) => request<Project>('/projects', { method: 'POST', body: JSON.stringify(data) });
 
@@ -312,6 +313,12 @@ export const deleteMedia = (businessId: string, assetId: string) =>
 export interface BrandKitState {
   draft: BrandKit | null;
   approved: BrandKit | null;
+  /**
+   * Learned from repeated slide tweaks on the APPROVED kit's posts — at most
+   * one quiet recipe nudge (density step or surface flip). Applying it goes
+   * through the ordinary recipe-knobs PATCH; dismissing snoozes it 14 days.
+   */
+  suggestion?: TweakSuggestion | null;
 }
 
 export interface BrandKitEdit {
@@ -335,6 +342,10 @@ export const createManualKit = (businessId: string) =>
 
 export const patchBrandKit = (kitId: string, data: BrandKitEdit) =>
   request<BrandKit>(`/brandkits/${kitId}`, { method: 'PATCH', body: JSON.stringify(data) });
+
+/** "Not now" on the learned tweak suggestion — snoozes it for 14 days. */
+export const dismissKitSuggestion = (kitId: string) =>
+  request<BrandKit>(`/brandkits/${kitId}/suggestion/dismiss`, { method: 'POST' });
 
 /** (Re)design the brand's complete package — layouts + matched backgrounds (one AI call). */
 export const regenerateBrandPackage = (kitId: string) =>
@@ -360,6 +371,32 @@ export const selectRecipeCandidate = (kitId: string, candidateId: string) =>
   request<BrandKit & { recipe?: BrandRecipe; recipeCandidates?: RecipeCandidate[] }>(
     `/brandkits/${kitId}/recipe/select`,
     { method: 'POST', body: JSON.stringify({ candidateId }) },
+  );
+
+/** The one concern a refinement rewrites — the keys of `recipe.layers`. */
+export type RecipeLayer = 'background' | 'type' | 'components';
+
+/** What the refinement did — `mode: 'sheet'` means the stored recipe had no
+ *  layer split, so the whole stylesheet was rewritten scoped to the instruction. */
+export interface RecipeRefineDiff {
+  layer: RecipeLayer;
+  mode: 'layer' | 'sheet';
+  charsBefore: number;
+  charsAfter: number;
+  repairs: string[];
+  dropped: string[];
+}
+
+/**
+ * Refine ONE layer of the kit's recipe from a one-line instruction — the
+ * surgical alternative to a full re-author, so the rest of a design you like
+ * survives untouched. Design tier: ~15–40s.
+ */
+export const refineRecipeLayer = (kitId: string, layer: RecipeLayer, instruction: string) =>
+  request<BrandKit & { recipe?: BrandRecipe; refine?: RecipeRefineDiff }>(
+    `/brandkits/${kitId}/recipe/refine`,
+    { method: 'POST', body: JSON.stringify({ layer, instruction }) },
+    300_000,
   );
 
 export async function uploadMedia(businessId: string, file: File): Promise<MediaAsset> {

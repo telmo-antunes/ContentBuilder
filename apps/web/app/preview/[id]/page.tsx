@@ -19,7 +19,7 @@ import { Icon } from '../../components/Icon';
 import { Skeleton } from '../../components/Skeleton';
 import { SlideRenderer } from '../../../lib/render/SlideRenderer';
 import { ScaledSlide } from '../../../lib/render/SlideFrame';
-import { toRenderKit, resolveSlideImage } from '../../../lib/render/projectRender';
+import { toRenderKit, resolveSlidePhotos } from '../../../lib/render/projectRender';
 
 export default function PreviewPage() {
   const { id } = useParams<{ id: string }>();
@@ -179,7 +179,7 @@ export default function PreviewPage() {
                       slide={s}
                       brandKit={kit}
                       format={project.format}
-                      image={resolveSlideImage(s, project.media)}
+                      photos={resolveSlidePhotos(s, project.media)}
                       theme={s.overrides?.theme ?? theme}
                       slideIndex={i}
                       slideTotal={total}

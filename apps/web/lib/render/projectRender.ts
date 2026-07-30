@@ -1,5 +1,5 @@
 import type { BrandKit, MediaAsset, PhotoMove, Slide } from '@contentbuilder/shared';
-import type { LayoutImage, RenderBrandKit } from './types';
+import type { RenderBrandKit } from './types';
 
 /** Neutral fallback kit (used only if a project somehow lacks an approved kit). */
 const FALLBACK_KIT: RenderBrandKit = {
@@ -87,14 +87,3 @@ export function resolveSlidePhotos(slide: Slide, media: MediaAsset[]): SlidePhot
   return out;
 }
 
-/** Resolve a slide's attached image (by mediaAssetId) into a LayoutImage. */
-export function resolveSlideImage(slide: Slide, media: MediaAsset[]): LayoutImage | null {
-  if (!slide.mediaAssetId) return null;
-  const asset = media.find((m) => m._id === slide.mediaAssetId);
-  if (!asset) return null;
-  return {
-    url: asset.url,
-    focalPoint: slide.overrides?.focalPoint,
-    treatment: slide.overrides?.imageTreatment,
-  };
-}

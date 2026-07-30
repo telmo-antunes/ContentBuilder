@@ -41,7 +41,6 @@ export function AuthoredSlide({
   authored,
   format,
   logoUrl,
-  photoUrl,
   photos,
   editing = false,
   motion = false,
@@ -52,9 +51,6 @@ export function AuthoredSlide({
   /** The target canvas — selects the recipe's per-format vertical tuning. */
   format: Format;
   logoUrl?: string;
-  /** A real photo for a photo-role slide; the recipe's `.photo` layers it as
-   *  `var(--cb-photo)` under a legibility scrim. Absent → the recipe's fallback. */
-  photoUrl?: string;
   /** The user's own photos: slot fills, a background, and free overlays. */
   photos?: SlidePhotoSet;
   /** Show empty-slot affordances. Off for export — a placeholder the user never
@@ -126,8 +122,7 @@ export function AuthoredSlide({
   // Set the logo/photo URLs in the stylesheet (a data: URL's ";base64," breaks an
   // inline style attr, so these live in a <style> rule, not the style attribute).
   const safeUrl = (u: string) => u.replace(/["\\<>]/g, '');
-  // A background photo the user set beats the composer's own photo URL.
-  const bgPhoto = photos?.background?.url ?? photoUrl;
+  const bgPhoto = photos?.background?.url;
   const vars = [
     logoUrl ? `--cb-logo:url("${safeUrl(logoUrl)}")` : '',
     // Still published for any recipe that wants it, but nothing depends on it:

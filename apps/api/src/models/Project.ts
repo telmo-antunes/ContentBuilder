@@ -38,16 +38,17 @@ const slidePhotoSchema = new Schema(
 
 /**
  * Slides are authored-first. Block-era fields (`layoutType`, `blocks`, most of
- * `overrides.*`) are gone from the schema; documents stored before the pivot
- * may still carry them, and Mongoose strict mode simply ignores those stored
- * fields on read — nothing crashes, nothing surfaces them.
+ * `overrides.*`) and the pre-photos-layer `mediaAssetId` are gone from the
+ * schema; documents stored before those pivots may still carry them, and
+ * Mongoose strict mode simply ignores those stored fields on read — nothing
+ * crashes, nothing surfaces them. (`npm run migrate:photos` folds a stored
+ * `mediaAssetId` into `photos` so the picture isn't merely ignored.)
  */
 const slideSchema = new Schema(
   {
     id: { type: String, required: true },
     order: { type: Number, required: true },
     imageNeed: { type: String, enum: ['none', 'upload'], default: 'none' },
-    mediaAssetId: { type: Schema.Types.ObjectId, ref: 'MediaAsset' },
     /** The user's own photos on this slide (slot fills, background, overlays). */
     photos: { type: [slidePhotoSchema], default: [] },
     /** The stock-search phrase the AI art director chose (prefills the editor's stock picker). */
