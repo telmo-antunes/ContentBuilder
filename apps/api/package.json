@@ -10,7 +10,8 @@
     "seed": "tsx src/seed.ts",
     "eval:compose": "tsx src/eval/run.ts",
     "migrate:photos": "tsx src/scripts/migrateSlidePhotos.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "migrate:recipes": "tsx src/scripts/migrateRecipeGates.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.106.0",

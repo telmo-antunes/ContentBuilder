@@ -152,6 +152,20 @@ export default function SlidePhotoPanel({
   }, []);
 
   const photos = useMemo(() => slide.photos ?? [], [slide.photos]);
+  /**
+   * Photographs harvested from the brand's OWN website.
+   *
+   * Every "Analyze website" downloads up to four of these and stores them
+   * labelled "From your website" — and until now no screen listed them, so they
+   * were write-only data. They are better on-brand material than stock, and
+   * already paid for.
+   */
+  const sitePhotos = useMemo(
+    () => media.filter((m) => m.label === 'From your website'),
+    [media],
+  );
+  /** Which placement the site-photo picker is filling, if open. */
+  const [sitePick, setSitePick] = useState<PhotoTarget | null>(null);
   const html = slide.authored?.html ?? '';
   const slots = useMemo(() => authoredSlots(html), [html]);
   const assetOf = (id: string) => media.find((m) => m._id === id);
@@ -290,6 +304,44 @@ export default function SlidePhotoPanel({
         : t.id
           ? 'this placed photo'
           : 'a new placed photo';
+
+  /** Put an asset the brand already owns into a placement. */
+  const placeExisting = (target: PhotoTarget, assetId: string) => {
+    const next = [...photos];
+    const upsert = (match: (p: SlidePhoto) => boolean, entry: Omit<SlidePhoto, 'id'>) => {
+      const i = next.findIndex(match);
+      if (i >= 0) next[i] = { ...next[i]!, ...entry };
+      else next.push({ id: uid(), ...entry });
+    };
+    if (target.kind === 'slot') {
+      upsert((p) => p.placement === 'slot' && p.slot === target.slot, {
+        mediaAssetId: assetId,
+        placement: 'slot',
+        slot: target.slot,
+        fit: 'cover',
+      });
+    } else if (target.kind === 'background') {
+      upsert((p) => p.placement === 'background', {
+        mediaAssetId: assetId,
+        placement: 'background',
+        fit: 'cover',
+      });
+    } else {
+      const asset = assetOf(assetId);
+      const entry: SlidePhoto = {
+        id: uid(),
+        mediaAssetId: assetId,
+        placement: 'free',
+        frame: asset ? frameForAsset(asset, format) : { x: 0.28, y: 0.34, w: 0.44, h: 0.32 },
+        fit: 'cover',
+        z: 1,
+      };
+      next.push(entry);
+      onSelectFree(entry.id);
+    }
+    setSitePick(null);
+    onChange(next);
+  };
 
   const patch = (id: string, p: Partial<SlidePhoto>) =>
     onChange(photos.map((x) => (x.id === id ? { ...x, ...p } : x)));
@@ -645,6 +697,43 @@ export default function SlidePhotoPanel({
         >
           Search stock photos
         </button>
+      )}
+
+      {sitePhotos.length > 0 && (
+        <button
+          className="btn sm"
+          style={{ width: '100%', justifyContent: 'center', marginTop: 6 }}
+          disabled={disabled}
+          onClick={() => setSitePick({ kind: 'free' })}
+        >
+          Use a photo from your website ({sitePhotos.length})
+        </button>
+      )}
+
+      {/* The brand's own site photography — no upload, no search, no cost. */}
+      {sitePick && (
+        <section className="stk" aria-label="Photos from your website">
+          <div className="stk-head">
+            <span className="stk-lab">From your website</span>
+            <span className="stk-for">for {stockTargetLabel(sitePick)}</span>
+            <button className="btn sm ghost" onClick={() => setSitePick(null)}>
+              Close
+            </button>
+          </div>
+          <div className="stk-grid">
+            {sitePhotos.map((m) => (
+              <button
+                key={m._id}
+                className="stk-hit"
+                disabled={disabled}
+                title={`${m.width}×${m.height}`}
+                onClick={() => placeExisting(sitePick, m._id)}
+              >
+                <img src={m.url} alt="" />
+              </button>
+            ))}
+          </div>
+        </section>
       )}
 
       {/* Pexels search, aimed at whichever placement opened it. */}

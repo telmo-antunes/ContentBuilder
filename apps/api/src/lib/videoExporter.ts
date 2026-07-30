@@ -21,8 +21,22 @@ import { getStorage } from '../storage';
  * stepped frame-by-frame, so output is identical regardless of render speed.
  */
 
-const FPS = 30;
-const FRAME_MS = 1000 / FPS;
+/**
+ * Capture and playback rates are DELIBERATELY different.
+ *
+ * Every captured frame is a full headless screenshot, measured at ~0.35s each
+ * on a working machine. At 30fps a 7-slide deck of 10-second clips is 2100
+ * screenshots — about twelve minutes, which is longer than anyone will wait and
+ * longer than the client was willing to poll.
+ *
+ * The motion here is a slow ambient drift and a short reveal, so 12 distinct
+ * frames a second carries it with no visible difference; ffmpeg is told the
+ * input is 12fps and asked for a 30fps file, duplicating frames to fill. Same
+ * clip length, same smoothness to the eye, 2.5x less work.
+ */
+const CAPTURE_FPS = 12;
+const OUTPUT_FPS = 30;
+const FRAME_MS = 1000 / CAPTURE_FPS;
 // The clip's length is the caller's choice now (see `opts.seconds`); the old
 // fixed 1400ms settled-hold is gone, since the drift spans the whole clip and
 // any remainder holds the settled frame automatically.
@@ -105,7 +119,7 @@ export async function renderSlidesToVideo(
   const ordered = [...project.slides].sort((a, b) => a.order - b.order);
   const seconds = clampVideoSeconds(opts?.seconds ?? VIDEO_SECONDS_DEFAULT);
   /** Exactly how many frames the finished clip must contain. */
-  const targetFrames = Math.max(1, Math.round(seconds * FPS));
+  const targetFrames = Math.max(1, Math.round(seconds * CAPTURE_FPS));
 
   const page = await browser.newPage();
   await page.setViewport({ width, height, deviceScaleFactor: 1 });
@@ -246,8 +260,9 @@ async function encode(frames: Buffer[], isCancelled?: IsCancelled): Promise<Buff
     await runFfmpeg(
       [
         '-y',
-        '-framerate', String(FPS),
+        '-framerate', String(CAPTURE_FPS),
         '-i', join(dir, '%05d.png'),
+        '-r', String(OUTPUT_FPS),
         '-c:v', 'libx264',
         '-pix_fmt', 'yuv420p',
         '-preset', 'medium',

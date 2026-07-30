@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   FORMAT_LABELS,
@@ -135,6 +135,15 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
    * which is also what you expected the app to do.
    */
   const frozen = exporting !== null;
+  /**
+   * Slides the render check already knows are clipped. The badge warned in the
+   * editor, but nothing stood between a known-broken slide and the finished
+   * file — so the one moment it matters said nothing at all.
+   */
+  const overflowCount = useMemo(
+    () => (project?.slides ?? []).filter((s) => overflow[s.id]).length,
+    [project, overflow],
+  );
   const refuseWhileExporting = useCallback((): boolean => {
     if (!frozen) return false;
     toast('This post is being exported — it will be editable again in a moment.');
@@ -531,8 +540,21 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
         videoCancelRef.current = false;
         toast('Rendering one video per slide…');
 
-        // Poll until the job produces the clips (or fails), tracking real progress.
-        for (let i = 0; i < 220; i++) {
+        /**
+         * Poll until the job finishes, STALLS, or is cancelled — never on a
+         * fixed clip count.
+         *
+         * The old loop gave up after 220 polls (5.5 minutes). A seven-slide deck
+         * at ten seconds each needs longer than that to render, so the client
+         * abandoned a job that was working perfectly and reported a timeout —
+         * while the server carried on and finished into nothing. Progress is
+         * reported for real, so the honest condition is "has it stopped moving",
+         * not "has it taken a while".
+         */
+        let lastPct = -1;
+        let stalledPolls = 0;
+        const STALL_LIMIT = 120; // 3 minutes with no movement at all
+        for (;;) {
           await new Promise((r) => setTimeout(r, 1500));
           // Cancelled from the button — it already told the server and toasted.
           if (videoCancelRef.current) return;
@@ -560,9 +582,18 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
             if (!videoCancelRef.current) toast('Video export cancelled');
             return;
           }
-          if (typeof body?.percent === 'number') setVideoPct(body.percent);
+          if (typeof body?.percent === 'number') {
+            if (body.percent === lastPct) stalledPolls += 1;
+            else {
+              stalledPolls = 0;
+              lastPct = body.percent;
+            }
+            setVideoPct(body.percent);
+          }
+          if (stalledPolls >= STALL_LIMIT) {
+            throw new Error('The export stopped making progress — please try again.');
+          }
         }
-        throw new Error('Video export timed out.');
       } catch (e) {
         toast(e instanceof Error ? e.message : 'Export failed', 'error');
       } finally {
@@ -697,6 +728,14 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                   <>
                     <span className="expw-scrim" onClick={() => setExportOpen(false)} />
                     <div className="expm" role="menu">
+                      {overflowCount > 0 && (
+                        <p className="expm-warn">
+                          <Icon name="warning" size={12} />
+                          {overflowCount} slide{overflowCount === 1 ? '' : 's'} overflow the canvas and
+                          will be clipped in the file. Fix {overflowCount === 1 ? 'it' : 'them'} first,
+                          or export anyway.
+                        </p>
+                      )}
                       <button
                         className="expm-opt"
                         role="menuitem"
