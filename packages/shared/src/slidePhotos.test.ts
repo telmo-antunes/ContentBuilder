@@ -224,3 +224,43 @@ describe('slotOverrideCss', () => {
     expect(w('md')).toBeLessThan(w('lg'));
   });
 });
+
+/**
+ * The list layout. A flex row could not promise a hanging indent — the marker
+ * and the item were siblings in one line box, so a long item wrapped back
+ * underneath the bullet. Grid puts the marker in its own gutter, which is what
+ * makes every line of the item (and its supporting detail) share a left edge.
+ */
+describe('enumeration rows', () => {
+  const css = slideMediaCss(1350);
+
+  it('lays a row out as a grid, not a flex line', () => {
+    expect(css).toMatch(/\.row\.row\{[^}]*display:grid/);
+    expect(css).toMatch(/\.row\.row\{[^}]*grid-template-columns:auto minmax\(0,1fr\)/);
+  });
+
+  it('supplies the gutter marker itself, so a row with no marker still aligns', () => {
+    expect(css).toMatch(/\.row\.row::before\{[^}]*content:"—"/);
+    expect(css).toMatch(/\.row\.row::before\{[^}]*grid-column:1/);
+  });
+
+  it('steps aside for a brand that authored a real marker', () => {
+    expect(css).toContain('.row.row:has(> span:not(:empty))::before{content:none}');
+  });
+
+  it('gives an empty marker element no space — it was a phantom gap', () => {
+    expect(css).toContain('.cb-slide .row.row > span:empty{display:none}');
+  });
+
+  it('puts the supporting detail in the ITEM column, never pushed right', () => {
+    const rule = css.match(/\.cb-slide \.row\.row > em[^{]*\{([^}]*)\}/)![1]!;
+    expect(rule).toContain('grid-column:2');
+    // The brand's own `margin-left:auto` is what made it drift.
+    expect(rule).toContain('margin-left:0');
+  });
+
+  it('out-specifies the brand rule it has to override', () => {
+    // `.cb-slide .panel .row` is (0,3,0); a bare `.cb-slide .row` would lose.
+    expect(css).not.toMatch(/\.cb-slide \.row\{/);
+  });
+});

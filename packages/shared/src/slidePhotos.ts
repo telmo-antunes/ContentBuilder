@@ -153,20 +153,29 @@ export function slideMediaCss(canvasHeight = 1350, align?: string): string {
     `.cb-free-layer.under{z-index:0}`,
     `.cb-free-img{position:absolute;display:block;border-radius:var(--cb-radius,0px)}`,
     // ── enumeration rows ─────────────────────────────────────────────────
-    // Brands author a list row as a single line — marker, item, then the detail
-    // pushed right with `margin-left:auto`. That only works while both fit on
-    // one line, and at the sizes the legibility floor guarantees they never do:
-    // the detail wrapped and drifted right with nothing to align to, which is
-    // what made lists look broken.
+    // A GRID, so the marker gets its own gutter and every line of the item —
+    // including wrapped ones and the supporting detail — starts at the same
+    // left edge. A flex row could not promise that: the marker and the text
+    // were siblings in one line box, so a long item wrapped back underneath
+    // the bullet instead of hanging off it.
     //
-    // So the detail is given its own line, indented under the item, and the
-    // marker element — which composers emit EMPTY, leaving a phantom gap where
-    // a bullet should be — is filled. Doubled class to out-specify the brand's
-    // own `.panel .row`; this sheet is emitted after it, so order decides.
-    `.cb-slide .row.row{display:flex;flex-wrap:wrap;align-items:baseline;column-gap:0.5em;row-gap:0.14em}`,
+    // Brands author a list row as one line, with the detail pushed right by
+    // `margin-left:auto`. That only holds while both fit, and at the sizes the
+    // legibility floor guarantees they never do. Doubled class to out-specify
+    // the brand's own `.panel .row`; this sheet is emitted after it.
+    `.cb-slide .row.row{display:grid;grid-template-columns:auto minmax(0,1fr);` +
+      `align-items:baseline;column-gap:0.5em;row-gap:0.14em}`,
+    // The gutter marker is OURS by default, so the text column is stable even
+    // when the composer emitted no marker element at all.
+    `.cb-slide .row.row::before{content:"—";color:var(--cb-accent);grid-column:1;grid-row:1}`,
+    // …but a brand that authored a real marker keeps it, and ours steps aside.
+    `.cb-slide .row.row:has(> span:not(:empty))::before{content:none}`,
+    // Composers emit the marker element EMPTY, which rendered as a phantom gap
+    // where a bullet belonged. It is redundant now, so it takes no space.
+    `.cb-slide .row.row > span:empty{display:none}`,
+    // The detail sits under the item, in the item's column — never right-drifting.
     `.cb-slide .row.row > em,.cb-slide .row.row > i,.cb-slide .row.row > small{` +
-      `flex:1 0 100%;margin-left:0;font-style:normal;padding-left:1.15em}`,
-    `.cb-slide .row.row > span:empty::before{content:"—";color:var(--cb-accent)}`,
+      `grid-column:2;margin-left:0;font-style:normal}`,
   ]
     .filter(Boolean)
     .join('\n');

@@ -26,6 +26,7 @@ import {
 import { aiJson, aiMessage, modelFor, textOf, type AiJsonResult, type AiJsonTool } from '../ai';
 import { config } from '../../config';
 import { sanitizeAuthoredHtml } from '../htmlSanitize';
+import { lintAuthored } from './lintAuthored';
 import { pruneSlideMarkup, topLevelBlocks } from './dedupeBlocks';
 import {
   escapeHtml,
@@ -876,11 +877,26 @@ export async function composeSlide(
     safe = emphasized;
   }
 
+  /**
+   * STRUCTURAL LINT — the third mechanical guard, alongside the verbatim guard
+   * above and the placeholder guard below.
+   *
+   * Those two check that the COPY survived and that a photo slide has a hole.
+   * Neither looked at the SHAPE of the markup, which is how an empty bullet
+   * marker — styled by the recipe as though it held a character — shipped as a
+   * phantom gap and made every list look broken.
+   */
+  const lint = lintAuthored(safe, { hasListVocabulary: recipe.components.some((c) => /row|item|list/i.test(c.className)) });
+  if (lint.findings.length) {
+    for (const f of lint.findings) console.warn(`[compose] ${input.role}: ${f.kind} — ${f.detail}`);
+  }
+
   // Mechanical placeholder guard, the twin of the verbatim guard above: if this
   // slide was meant to hold a photograph, it must LEAVE A HOLE for one. A model
   // that forgets the slot would silently produce a slide the user can't put an
   // image on, so append one rather than trusting the prompt.
-  const withSlot = input.photo && authoredSlots(safe).length === 0 ? safe + DEFAULT_SLOT : safe;
+  const linted = lint.html;
+  const withSlot = input.photo && authoredSlots(linted).length === 0 ? linted + DEFAULT_SLOT : linted;
   // The role travels WITH the slide so the renderer can apply the recipe's
   // per-role motion (a stat pops, a quote fades) in animated exports.
   // `bg` is no longer set here: a full-bleed photo is the USER's choice now,
