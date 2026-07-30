@@ -1248,6 +1248,39 @@ input[type='color'] {
 }
 .vid-prog-sub { color: var(--muted); font-size: 12px; line-height: 1.5; margin: 10px 0 0; max-width: 72ch; }
 
+/* ── One export control, two formats ──────────────────────────────────────── */
+.expw { position: relative; }
+.expw-scrim { position: fixed; inset: 0; z-index: 40; }
+.expm {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 41; width: 272px;
+  background: var(--panel); border: 1px solid var(--border-strong); border-radius: 12px;
+  box-shadow: var(--shadow-lg, 0 12px 40px rgba(0,0,0,.45)); padding: 6px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.expm-opt {
+  display: flex; align-items: flex-start; gap: 10px; width: 100%; text-align: left;
+  padding: 9px 10px; border: 0; border-radius: 9px; background: none; cursor: pointer;
+  color: var(--text); transition: background var(--dur-2) var(--ease);
+}
+.expm-opt:hover { background: var(--panel-2); }
+.expm-opt > svg { flex: 0 0 auto; margin-top: 2px; color: var(--accent); }
+.expm-opt span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.expm-opt b { font-size: 12.5px; font-weight: 600; }
+.expm-opt em { font-style: normal; font-size: 10.5px; color: var(--faint); line-height: 1.4; }
+.expm-sec {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 8px 10px 6px; margin-top: 2px; border-top: 1px solid var(--border);
+  font-size: 11px; color: var(--muted);
+}
+.expm-sec input { width: 62px; padding: 4px 7px; font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* An export in flight — the post is frozen, so say so. */
+.expfreeze {
+  display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--muted);
+  padding: 8px 12px; border: 1px solid var(--border); border-radius: 9px;
+  background: var(--panel-2); margin-top: 10px;
+}
+
 /* ── "The AI is working" — an anticipatory, animated loading panel ─────────── */
 .work { position: relative; overflow: hidden; border-radius: 16px; border: 1px solid var(--border); background: var(--panel); isolation: isolate; }
 .work-bare { border: none; background: transparent; border-radius: 0; }

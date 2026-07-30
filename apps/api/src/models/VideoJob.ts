@@ -32,6 +32,18 @@ const videoJobSchema = new Schema(
     cancelRequested: { type: Boolean, default: false },
     /** Slugified project title at job creation — drives the download filename. */
     title: { type: String, required: true },
+    /** How long each slide holds, in seconds. */
+    seconds: { type: Number, required: false },
+    /**
+     * The post EXACTLY as it was when export started — slides, kit and media.
+     *
+     * The renderer used to be pointed at `?projectId=`, which made it fetch the
+     * project live for every single slide. Editing while an export ran therefore
+     * produced a TORN file: early slides from the old version, later ones from
+     * the new, with nothing to warn you. Rendering from this snapshot means an
+     * export is a photograph of one moment, and you stay free to keep working.
+     */
+    snapshot: { type: Schema.Types.Mixed, required: false },
     /** Where the finished export lives (set only once state is 'done'). */
     artifact: {
       type: new Schema(

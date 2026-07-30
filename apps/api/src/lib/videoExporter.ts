@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import ffmpegPath from 'ffmpeg-static';
 import { dimensionsFor, type Format } from '@contentbuilder/shared';
+import { clampVideoSeconds, VIDEO_SECONDS_DEFAULT } from '@contentbuilder/shared';
 import { config } from '../config';
 import { getBrowser } from './browser';
 import { getStorage } from '../storage';
@@ -87,6 +88,13 @@ export async function renderSlidesToVideo(
   onProgress?: (percent: number) => void,
   /** Checked per slide and per frame batch — a true return aborts the render. */
   isCancelled?: IsCancelled,
+  opts?: {
+    /** How long each slide holds. The ambient drift is stretched to match, so a
+     *  longer clip keeps breathing instead of freezing on a still frame. */
+    seconds?: number;
+    /** Render from this job's frozen snapshot rather than the live project. */
+    srcJob?: string;
+  },
 ): Promise<RenderedClip[]> {
   if (!ffmpegPath) throw new Error('ffmpeg binary unavailable');
   const { width, height } = dimensionsFor(project.format);
@@ -94,7 +102,9 @@ export async function renderSlidesToVideo(
   const storage = getStorage();
   const base = config.webUrl.replace(/\/+$/, '');
   const ordered = [...project.slides].sort((a, b) => a.order - b.order);
-  const holdFrames = Math.round(HOLD_MS / FRAME_MS);
+  const seconds = clampVideoSeconds(opts?.seconds ?? VIDEO_SECONDS_DEFAULT);
+  /** Exactly how many frames the finished clip must contain. */
+  const targetFrames = Math.max(1, Math.round(seconds * FPS));
 
   const page = await browser.newPage();
   await page.setViewport({ width, height, deviceScaleFactor: 1 });
@@ -113,7 +123,13 @@ export async function renderSlidesToVideo(
       const slide = ordered[i]!;
       await throwIfCancelled();
       report(i, 0);
-      const url = `${base}/render?projectId=${project._id}&slideId=${encodeURIComponent(slide.id)}&motion=1`;
+      // `srcJob` points the renderer at this export's FROZEN snapshot, so every
+      // slide comes from the same moment and editing mid-export cannot tear the
+      // file. `sec` stretches the ambient drift across the whole clip.
+      const url =
+        `${base}/render?projectId=${project._id}&slideId=${encodeURIComponent(slide.id)}&motion=1` +
+        `&sec=${seconds}` +
+        (opts?.srcJob ? `&srcJob=${encodeURIComponent(opts.srcJob)}` : '');
       await gotoAndSettle(page, url, slide.id);
       report(i, 0.08);
 
@@ -130,7 +146,9 @@ export async function renderSlidesToVideo(
           return Number.isFinite(end) ? Math.max(max, end) : max;
         }, 0);
       });
-      const revealFrames = Math.max(1, Math.ceil(motionMs / FRAME_MS));
+      // Never longer than the clip the user asked for, and never so short that
+      // the reveal is cut off mid-entrance.
+      const revealFrames = Math.min(targetFrames, Math.max(1, Math.ceil(motionMs / FRAME_MS)));
       const el = await page.$('[data-slide-root]');
       if (!el) throw new Error(`Render route produced no slide for ${slide.id}`);
 
@@ -195,7 +213,9 @@ export async function renderSlidesToVideo(
       });
       await new Promise((r) => setTimeout(r, 120));
       const settled = Buffer.from(await el.screenshot({ type: 'png' }));
-      for (let h = 0; h < holdFrames; h++) frames.push(settled);
+      // Whatever is left of the requested duration holds on the settled frame —
+      // usually nothing, since the drift now spans the clip.
+      for (let h = frames.length; h < targetFrames; h++) frames.push(settled);
 
       const name = `${String(i + 1).padStart(2, '0')}.mp4`;
       await throwIfCancelled();

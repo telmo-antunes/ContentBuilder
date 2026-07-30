@@ -20,6 +20,7 @@ export default function RenderStage({
   slideTotal,
   showCounter,
   motion = false,
+  ambientSeconds,
 }: {
   authored?: { html: string; bg?: string; role?: string };
   /** The user's own photos: slot fills, a background, and free overlays. */
@@ -32,6 +33,8 @@ export default function RenderStage({
   showCounter: boolean;
   /** Play the reveal choreography (animated/video export). */
   motion?: boolean;
+  /** Clip length; the ambient drift is stretched across it. */
+  ambientSeconds?: number;
 }) {
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, margin: 0, padding: 0, zIndex: 2147483647 }}>
@@ -46,6 +49,7 @@ export default function RenderStage({
         slideTotal={slideTotal}
         showCounter={showCounter}
         motion={motion}
+        ambientSeconds={ambientSeconds}
         // Publish the ground-truth overflow result on the DOM so the export /
         // any headless pass driving this route can read it off the page.
         onOverflow={(o) => {

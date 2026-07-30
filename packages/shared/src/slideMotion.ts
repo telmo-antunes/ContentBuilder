@@ -63,8 +63,29 @@ export const AMBIENT_AMPLITUDE: Record<AmbientIntensity, { scale: number; shift:
   strong: { scale: 0.24, shift: 7 },
 };
 
-/** How long one ambient move takes. Also the floor for a clip's length. */
+/**
+ * How long one ambient move takes when nobody says otherwise. Also the floor
+ * for a clip's length.
+ */
 export const AMBIENT_SECONDS = 7;
+
+/**
+ * How long each slide holds in a video export.
+ *
+ * Ten seconds is the default because these are Instagram carousels read at
+ * arm's length: the reveal takes ~2s, and what's left has to be long enough to
+ * actually read the slide before it moves on. The ambient drift is stretched to
+ * whatever this is, so a longer clip breathes rather than freezing on a still.
+ */
+export const VIDEO_SECONDS_DEFAULT = 10;
+export const VIDEO_SECONDS_MIN = 3;
+export const VIDEO_SECONDS_MAX = 30;
+
+export const clampVideoSeconds = (n: unknown): number => {
+  const v = Math.round(Number(n));
+  if (!Number.isFinite(v)) return VIDEO_SECONDS_DEFAULT;
+  return Math.min(VIDEO_SECONDS_MAX, Math.max(VIDEO_SECONDS_MIN, v));
+};
 
 /** Per-photo override. 'auto' lets the brand + the focal point decide. */
 export const PHOTO_MOVES = ['auto', 'none', 'in', 'out', 'left', 'right', 'up', 'down'] as const;
@@ -264,6 +285,8 @@ export function ambientPhotoCss(
   layer: AmbientLayer,
   spec: AmbientSpec,
   focal?: { x: number; y: number },
+  /** Stretch the drift across a clip of this length (video export). */
+  seconds = AMBIENT_SECONDS,
 ): string {
   const t = ambientTransforms(move, layer, spec);
   if (!t) return '';
@@ -274,7 +297,7 @@ export function ambientPhotoCss(
     // `alternate` so a long hold never jumps: the move eases out and comes back
     // rather than cutting from fully-zoomed to the start.
     `${selector}{transform-origin:${ox}% ${oy}%;` +
-      `animation:${keyframeName} ${AMBIENT_SECONDS}s ease-in-out both;will-change:transform}`,
+      `animation:${keyframeName} ${seconds}s ease-in-out both;will-change:transform}`,
   ].join('\n');
 }
 
@@ -286,7 +309,7 @@ export function ambientPhotoCss(
  * would drag the whole composition with it. Moving the background position
  * moves only the painted layers.
  */
-export function ambientArtCss(scope: string, spec: AmbientSpec): string {
+export function ambientArtCss(scope: string, spec: AmbientSpec, seconds = AMBIENT_SECONDS): string {
   if (spec.style === 'none') return '';
   const amp = AMBIENT_AMPLITUDE[spec.intensity];
   const d = (amp.shift * AMBIENT_DEPTH.art).toFixed(2);
@@ -295,6 +318,6 @@ export function ambientArtCss(scope: string, spec: AmbientSpec): string {
       `to{background-position:calc(50% + ${d}%) calc(50% + ${d}%)}}`,
     // Doubled class to match a recipe's own `.cb-slide.photo` specificity; this
     // sheet is emitted after the recipe's, so source order decides.
-    `.${scope} .cb-slide.cb-slide{animation:cb-amb-art ${AMBIENT_SECONDS}s ease-in-out both}`,
+    `.${scope} .cb-slide.cb-slide{animation:cb-amb-art ${seconds}s ease-in-out both}`,
   ].join('\n');
 }

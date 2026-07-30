@@ -6,7 +6,9 @@ import { ZipArchive } from 'archiver';
 import { z } from 'zod';
 import {
   MAX_DRAFT_PARAGRAPH_CHARS,
+  VIDEO_SECONDS_DEFAULT,
   authoredSlots,
+  clampVideoSeconds,
   defaultThemeForCategory,
   isSlotName,
   migrateRecipe,
@@ -779,23 +781,71 @@ projectsRouter.post(
       throw new ApiError(400, 'Video export needs AI-composed slides.');
     }
 
+    const seconds = clampVideoSeconds(
+      (req.body as { secondsPerSlide?: unknown } | undefined)?.secondsPerSlide ?? VIDEO_SECONDS_DEFAULT,
+    );
+
     // Opportunistic cleanup, like the old Map sweep — never blocks the start.
     void sweepExpiredVideoJobs().catch(() => {});
+
+    /**
+     * SNAPSHOT the post as it is right now — slides, kit and media, in exactly
+     * the shape `GET /projects/:id` returns, because that is what the render
+     * route consumes.
+     *
+     * Without this the renderer fetched the project LIVE for every slide, so
+     * editing during an export produced a torn file (early slides old, later
+     * ones new). Freezing here means an export is a photograph of one moment
+     * and you are free to carry on working — which is the behaviour a
+     * background job should have, rather than locking the editor.
+     */
+    const [snapKit, snapMedia] = await Promise.all([
+      approvedKitFor(String(project.get('businessId'))),
+      MediaAssetModel.find({ businessId: project.get('businessId') }).sort({ createdAt: -1 }).limit(500).lean(),
+    ]);
+    const snapshot = {
+      ...(project.toJSON() as Record<string, unknown>),
+      _id: String(project._id),
+      brandKit: snapKit,
+      media: snapMedia,
+    };
 
     const job = await VideoJobModel.create({
       projectId: id,
       state: 'queued',
       percent: 0,
       title: slugify(project.get('title')),
+      seconds,
+      snapshot,
     });
 
     // Fire and forget — the client polls. The runner writes every outcome to
     // the job doc; this catch is only for the truly unexpected.
-    void runVideoJob(String(job._id), project.toJSON() as never).catch((err) =>
+    void runVideoJob(String(job._id), project.toJSON() as never, { seconds }).catch((err) =>
       console.error('[video] job runner crashed:', err),
     );
 
-    res.status(202).json({ jobId: String(job._id), state: 'queued' });
+    res.status(202).json({ jobId: String(job._id), state: 'queued', seconds });
+  }),
+);
+
+/**
+ * The frozen render payload for an in-flight export.
+ *
+ * The render route hits this with `?srcJob=` so every slide of one export is
+ * captured from the same moment. Falls back to nothing when the job has no
+ * snapshot (a job queued before this existed), and the caller then renders live
+ * exactly as before.
+ */
+projectsRouter.get(
+  '/:id/export-source/:jobId',
+  asyncHandler(async (req, res) => {
+    requireObjectId(req.params.id, 'Project');
+    const job = (await VideoJobModel.findById(requireObjectId(req.params.jobId, 'Job')).lean()) as
+      | { snapshot?: unknown }
+      | null;
+    if (!job?.snapshot) throw new ApiError(404, 'No snapshot for this job');
+    res.json(job.snapshot);
   }),
 );
 

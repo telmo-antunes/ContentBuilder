@@ -30,6 +30,7 @@ export function SlideRenderer({
   slideTotal,
   showCounter = false,
   motion = false,
+  ambientSeconds,
 }: {
   slide: RenderableSlide;
   brandKit: RenderBrandKit;
@@ -52,6 +53,8 @@ export function SlideRenderer({
   showCounter?: boolean;
   /** Play the reveal choreography (animated/video export). */
   motion?: boolean;
+  /** Clip length for a video export; the ambient drift spans it. */
+  ambientSeconds?: number;
 }) {
   // Kits whose render fonts aren't bundled (real site fonts) load from Google
   // Fonts on demand — every render site (thumbs, review, export) goes through
@@ -101,6 +104,7 @@ export function SlideRenderer({
             // Empty-slot affordances belong to editing surfaces only.
             editing={editing ?? !forExport}
             motion={motion}
+            ambientSeconds={ambientSeconds}
             onOverflow={onOverflow}
           />
         ) : (

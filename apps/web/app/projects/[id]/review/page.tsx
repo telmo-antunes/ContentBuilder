@@ -6,6 +6,10 @@ import {
   FORMAT_LABELS,
   authoredSlots,
   contrastRatio,
+  VIDEO_SECONDS_DEFAULT,
+  VIDEO_SECONDS_MAX,
+  VIDEO_SECONDS_MIN,
+  clampVideoSeconds,
   dimensionsFor,
   recipeAmbient,
   type BlockFrame,
@@ -113,6 +117,9 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
   const [phoneShare, setPhoneShare] = useState<string | null>(null);
   /** The running video job, so the Cancel button can reach it. */
   const [videoJob, setVideoJob] = useState<string | null>(null);
+  /** Seconds each slide holds in a video export. */
+  const [videoSeconds, setVideoSeconds] = useState(VIDEO_SECONDS_DEFAULT);
+  const [exportOpen, setExportOpen] = useState(false);
   const videoCancelRef = useRef(false);
 
   /**
@@ -121,8 +128,22 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
    * feel broken. A failed write reloads the project so what you see is the
    * truth rather than an optimistic lie.
    */
+  /**
+   * An export is a photograph of one moment: the job snapshots the post when it
+   * starts, so an edit made mid-render would silently NOT appear in the file.
+   * Rather than let that confuse you, the post is read-only until the job ends —
+   * which is also what you expected the app to do.
+   */
+  const frozen = exporting !== null;
+  const refuseWhileExporting = useCallback((): boolean => {
+    if (!frozen) return false;
+    toast('This post is being exported — it will be editable again in a moment.');
+    return true;
+  }, [frozen]);
+
   const savePhotos = useCallback(
     async (slideId: string, photos: SlidePhoto[], uploaded?: MediaAsset) => {
+      if (refuseWhileExporting()) return;
       setProject((p) =>
         p
           ? {
@@ -144,7 +165,7 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
         getProject(projectId).then(setProject).catch(() => {});
       }
     },
-    [projectId],
+    [projectId, refuseWhileExporting],
   );
 
   const load = useCallback(() => {
@@ -229,7 +250,7 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
 
   const saveEdit = useCallback(
     async (allSlides: Slide[]) => {
-      if (!editId) return;
+      if (!editId || refuseWhileExporting()) return;
       setSaving(true);
       try {
         const nextSlides = allSlides.map((s) =>
@@ -247,7 +268,7 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
         setSaving(false);
       }
     },
-    [editId, editEls, projectId],
+    [editId, editEls, projectId, refuseWhileExporting],
   );
 
   // Canvas → list sync: selecting an element on the slide brings its row in
@@ -298,6 +319,7 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
   /** Instant deterministic tweaks — no AI, no waiting. */
   const applyTweak = useCallback(
     async (slideId: string, tweak: 'bigger-headline' | 'smaller-headline' | 'invert' | 'un-invert') => {
+      if (refuseWhileExporting()) return;
       setWorking(tweak);
       try {
         const updated = await tweakSlide(projectId, slideId, tweak);
@@ -308,7 +330,7 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
         setWorking(null);
       }
     },
-    [projectId],
+    [projectId, refuseWhileExporting],
   );
 
   /**
@@ -443,18 +465,33 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
   );
 
   /** Save a fetched blob response as a download. */
+  /**
+   * Hand a streamed export to the browser as a download.
+   *
+   * The object URL is revoked on a TIMER, not on the next line. Revoking
+   * immediately after `.click()` races the browser: the download has not begun
+   * reading the blob yet, so the URL dies under it and nothing is ever saved —
+   * silently, because the click itself "succeeded". A PNG zip usually won that
+   * race; a multi-megabyte video zip reliably lost it, which is why video
+   * exports finished, said "downloaded", and produced no file.
+   */
   const saveBlob = useCallback(async (res: Response, fallback: string) => {
     const blob = await res.blob();
+    // An empty body is a server-side failure wearing a success costume.
+    if (blob.size === 0) throw new Error('The export came back empty — nothing was saved.');
     const name =
       (res.headers.get('Content-Disposition') ?? '').match(/filename="?([^"]+)"?/)?.[1] ?? fallback;
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = name;
+    a.rel = 'noopener';
     document.body.appendChild(a);
     a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    window.setTimeout(() => {
+      a.remove();
+      URL.revokeObjectURL(url);
+    }, 60_000);
   }, []);
 
   /**
@@ -479,7 +516,11 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
           return;
         }
 
-        const start = await fetch(api(`/projects/${projectId}/export-video`), { method: 'POST' });
+        const start = await fetch(api(`/projects/${projectId}/export-video`), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ secondsPerSlide: videoSeconds }),
+        });
         if (!start.ok) {
           const msg = await start.json().catch(() => null);
           throw new Error(msg?.error ?? `Video export failed (HTTP ${start.status})`);
@@ -529,7 +570,7 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
         setVideoJob(null);
       }
     },
-    [projectId, saveBlob],
+    [projectId, saveBlob, videoSeconds],
   );
 
   /** Stop the running video job: stop polling at once, then tell the server. */
@@ -631,35 +672,94 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
               <button className="btn" onClick={openHistory} title="Snapshots of this project — save one or restore an earlier state">
                 <Icon name="history" /> History
               </button>
-              {authored && (
+              {/* ONE export affordance. Two buttons sat side by side competing
+                  for the same job; the format is a choice you make once you've
+                  decided to export, not a permanent pair of controls. */}
+              <div className="expw">
                 <button
-                  className="btn"
-                  onClick={() => runExport('video')}
+                  className="btn primary"
+                  onClick={() => setExportOpen((v) => !v)}
                   disabled={exporting !== null}
-                  title={`Render each slide as its own animated MP4 (${slides.length} clip${slides.length === 1 ? '' : 's'})`}
+                  aria-expanded={exportOpen}
+                  aria-haspopup="menu"
                 >
-                  {exporting === 'video' ? (
+                  {exporting === 'zip' ? (
+                    'Exporting…'
+                  ) : exporting === 'video' ? (
                     `Rendering… ${videoPct}%`
                   ) : (
                     <>
-                      <Icon name="video" /> Video
+                      <Icon name="download" /> Export
                     </>
                   )}
                 </button>
-              )}
-              <button className="btn primary" onClick={() => runExport('zip')} disabled={exporting !== null}>
-                {exporting === 'zip' ? (
-                  'Exporting…'
-                ) : (
+                {exportOpen && exporting === null && (
                   <>
-                    <Icon name="download" /> Export
+                    <span className="expw-scrim" onClick={() => setExportOpen(false)} />
+                    <div className="expm" role="menu">
+                      <button
+                        className="expm-opt"
+                        role="menuitem"
+                        onClick={() => {
+                          setExportOpen(false);
+                          void runExport('zip');
+                        }}
+                      >
+                        <Icon name="download" />
+                        <span>
+                          <b>Images</b>
+                          <em>
+                            {slides.length} PNG{slides.length === 1 ? '' : 's'} at 1080px, ready to post
+                          </em>
+                        </span>
+                      </button>
+                      {authored && (
+                        <>
+                          <button
+                            className="expm-opt"
+                            role="menuitem"
+                            onClick={() => {
+                              setExportOpen(false);
+                              void runExport('video');
+                            }}
+                          >
+                            <Icon name="video" />
+                            <span>
+                              <b>Video</b>
+                              <em>
+                                {slides.length} animated MP4{slides.length === 1 ? '' : 's'}, one per slide
+                              </em>
+                            </span>
+                          </button>
+                          <label className="expm-sec">
+                            <span>Seconds per slide</span>
+                            <input
+                              type="number"
+                              min={VIDEO_SECONDS_MIN}
+                              max={VIDEO_SECONDS_MAX}
+                              value={videoSeconds}
+                              onChange={(e) => setVideoSeconds(clampVideoSeconds(e.target.value))}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </label>
+                        </>
+                      )}
+                    </div>
                   </>
                 )}
-              </button>
+              </div>
             </>
           )}
         </div>
       </div>
+
+      {frozen && (
+        <div className="expfreeze" role="status">
+          <Icon name="video" size={12} />
+          Exporting this post as it is now — editing is paused until it finishes, so the file
+          matches what you see.
+        </div>
+      )}
 
       {/* Determinate loader — real render progress, one clip per slide. */}
       {exporting === 'video' && (

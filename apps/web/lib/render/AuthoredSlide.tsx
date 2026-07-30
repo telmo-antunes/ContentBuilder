@@ -44,6 +44,7 @@ export function AuthoredSlide({
   photos,
   editing = false,
   motion = false,
+  ambientSeconds,
   onOverflow,
 }: {
   recipe: BrandRecipe;
@@ -58,6 +59,8 @@ export function AuthoredSlide({
   editing?: boolean;
   /** Play the reveal choreography (for animated/video export). Off = still PNG. */
   motion?: boolean;
+  /** Stretch the ambient drift across a clip of this length (video export). */
+  ambientSeconds?: number;
   /** Reports whether the composition exceeds the canvas (see the effect below). */
   onOverflow?: (overflow: boolean) => void;
 }) {
@@ -177,7 +180,7 @@ export function AuthoredSlide({
   const ambient = recipeAmbient(recipe);
   const ambientCss = motion
     ? [
-        ambientArtCss(scope, ambient),
+        ambientArtCss(scope, ambient, ambientSeconds),
         bg
           ? ambientPhotoCss(
               `.${scope} .cb-bg-photo`,
@@ -186,6 +189,7 @@ export function AuthoredSlide({
               'background',
               ambient,
               bg.focal,
+              ambientSeconds,
             )
           : '',
         ...authoredSlots(html)
@@ -200,6 +204,7 @@ export function AuthoredSlide({
                   'slot',
                   ambient,
                   p.focal,
+                  ambientSeconds,
                 )
               : '';
           }),
@@ -211,6 +216,7 @@ export function AuthoredSlide({
             'free',
             ambient,
             p.focal,
+            ambientSeconds,
           ),
         ),
       ]

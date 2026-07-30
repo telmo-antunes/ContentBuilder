@@ -25,7 +25,11 @@ export function videoArtifactKey(projectId: string, jobId: string, ext: 'mp4' | 
  * StorageProvider → mark the doc done. Never throws — every outcome (done,
  * error, cancelled) is written to the job document for the poll route to read.
  */
-export async function runVideoJob(jobId: string, project: { _id: string }): Promise<void> {
+export async function runVideoJob(
+  jobId: string,
+  project: { _id: string },
+  opts?: { seconds?: number },
+): Promise<void> {
   const projectId = String(project._id);
   const storage = getStorage();
 
@@ -66,7 +70,11 @@ export async function runVideoJob(jobId: string, project: { _id: string }): Prom
   };
 
   try {
-    const clips = await renderSlidesToVideo(project as never, onProgress, isCancelled);
+    const clips = await renderSlidesToVideo(project as never, onProgress, isCancelled, {
+      seconds: opts?.seconds,
+      // Render every slide from the snapshot taken when this job started.
+      srcJob: jobId,
+    });
 
     // Packaging + persisting the artifact is the 'encoding' tail of the job.
     await VideoJobModel.updateOne(
