@@ -240,7 +240,8 @@ describe('enumeration rows', () => {
   });
 
   it('supplies the gutter marker itself, so a row with no marker still aligns', () => {
-    expect(css).toMatch(/\.row\.row::before\{[^}]*content:"—"/);
+    // The gutter is ours; the glyph is the brand's to choose.
+    expect(css).toMatch(/\.row\.row::before\{[^}]*content:var\(--cb-marker,"—"\)/);
     expect(css).toMatch(/\.row\.row::before\{[^}]*grid-column:1/);
   });
 

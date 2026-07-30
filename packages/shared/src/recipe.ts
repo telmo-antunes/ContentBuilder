@@ -838,6 +838,71 @@ export const RECIPE_STRUCTURAL_CLASSES: ReadonlySet<string> = new Set([
  * report styled-but-unadvertised classes so the vocabulary can be completed.
  * Deterministic: no model call, no judgement.
  */
+/**
+ * A list-row class: `.row`, `.item`, `.entry`… but never `.logo-row`.
+ *
+ * The boundary has to include `.` and whitespace — these are matched against a
+ * SELECTOR (`.cb-slide .panel .row em`), not a bare class name, so requiring
+ * `^` or `-` before the word silently matched nothing at all.
+ */
+const LIST_ROW_CLASS = /(^|[\s.\-_])(row|item|entry|bullet|point)([\s.\-_>:,+~]|$)/i;
+const NOT_A_LIST_ROW = /(logo|brand|nav|meta|foot|head)[-_]?row/i;
+
+/**
+ * Strip the list SKELETON out of an authored recipe.
+ *
+ * A list row's structure is app capability, not brand taste — exactly like the
+ * geometry of an image slot. The app owns one layout (a marker in its own
+ * gutter, the item hanging off it, the detail on its own line beneath) because
+ * that is the only arrangement that survives the legibility floor: brands kept
+ * authoring a single flex line with the detail pushed right by
+ * `margin-left:auto`, which works at 26px and collapses into a right-drifting
+ * mess at the 34px+ a phone actually needs.
+ *
+ * Rather than have every render fight the stored CSS, the conflicting
+ * declarations are removed HERE, once, at author time — the same "repair, don't
+ * warn" contract as `ensureRecipeContrast`. Brands keep everything that is
+ * genuinely theirs: colour, size, dividers between rows, and the marker glyph
+ * (set `--cb-marker` to choose it).
+ */
+export function ensureListSkeleton(recipe: BrandRecipe): {
+  recipe: BrandRecipe;
+  repairs: string[];
+} {
+  const repairs: string[] = [];
+
+  const clean = (css: string): string =>
+    css.replace(/([^{}]+)\{([^}]*)\}/g, (whole, selector: string, body: string) => {
+      const sel = selector.trim();
+      if (!LIST_ROW_CLASS.test(sel) || NOT_A_LIST_ROW.test(sel)) return whole;
+      let next = body;
+      // The detail pushed to the far right — the single declaration that made
+      // lists collapse once the type got big enough to read.
+      next = next.replace(/(?:^|;)\s*margin(?:-left|-inline-start)\s*:\s*auto\s*(?=;|$)/gi, '');
+      // A one-line row: the app lays rows out as a grid so the item can hang
+      // off its marker, which a flex line cannot express.
+      next = next.replace(/(?:^|;)\s*display\s*:\s*(?:flex|inline-flex)\s*(?=;|$)/gi, '');
+      if (next === body) return whole;
+      repairs.push(sel);
+      const tidy = next.replace(/;\s*;/g, ';').replace(/^\s*;/, '').trim();
+      return `${selector}{${tidy}}`;
+    });
+
+  const layers = recipe.layers
+    ? {
+        background: recipe.layers.background,
+        type: recipe.layers.type,
+        components: clean(recipe.layers.components),
+      }
+    : undefined;
+  const stylesheet = layers ? recipe.stylesheet : clean(recipe.stylesheet);
+
+  return {
+    recipe: { ...recipe, ...(layers ? { layers } : {}), stylesheet },
+    repairs: [...new Set(repairs)],
+  };
+}
+
 export function validateRecipeConsistency(recipe: BrandRecipe): {
   recipe: BrandRecipe;
   dropped: string[];

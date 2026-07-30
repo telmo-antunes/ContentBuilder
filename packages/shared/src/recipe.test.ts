@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  ensureListSkeleton,
   brandRecipeSchema,
   composeRecipeLayers,
   recipeCssVars,
@@ -23,7 +24,7 @@ import {
   RECIPE_VAR_PREFIX,
 } from './recipe';
 import { contrastRatio } from './colorContrast';
-import { APP_IMAGE_CLASSES } from './slidePhotos';
+import { APP_IMAGE_CLASSES, slideMediaCss } from './slidePhotos';
 
 const minimal = {
   tokens: {
@@ -640,5 +641,73 @@ describe('versioning + migration (R10)', () => {
 
   it('survives a bogus version instead of throwing (documents outlive code)', () => {
     expect(() => migrateRecipe({ ...minimal, version: 'banana' })).not.toThrow();
+  });
+});
+
+/**
+ * A list row's SKELETON is app capability, not brand taste. Brands kept
+ * authoring one flex line with the detail pushed right by `margin-left:auto` —
+ * fine at 26px, a right-drifting mess at the 34px+ a phone needs. Rather than
+ * override it at every render, it is stripped once at author time.
+ */
+describe('ensureListSkeleton', () => {
+  const withCss = (css: string) => ({ ...minimal, stylesheet: css }) as never;
+
+  it('strips the margin-left:auto that made the detail drift', () => {
+    const r = ensureListSkeleton(
+      withCss('.cb-slide .panel .row em{margin-left:auto;font-size:26px;color:#8c857a}'),
+    );
+    expect(r.recipe.stylesheet).not.toContain('margin-left:auto');
+    expect(r.recipe.stylesheet).toContain('font-size:26px');
+    expect(r.recipe.stylesheet).toContain('color:#8c857a');
+    expect(r.repairs.length).toBe(1);
+  });
+
+  it('strips display:flex from the row, which cannot hang an item off a marker', () => {
+    const r = ensureListSkeleton(withCss('.cb-slide .panel .row{display:flex;gap:22px;padding:16px 0}'));
+    expect(r.recipe.stylesheet).not.toContain('display:flex');
+    expect(r.recipe.stylesheet).toContain('gap:22px');
+    expect(r.recipe.stylesheet).toContain('padding:16px 0');
+  });
+
+  it('keeps everything that is genuinely the brand’s', () => {
+    const css = '.cb-slide .panel .row + .row{border-top:1px solid var(--cb-line)}';
+    expect(ensureListSkeleton(withCss(css)).recipe.stylesheet).toBe(css);
+  });
+
+  it('never touches a logo row — it is not an enumeration', () => {
+    const css = '.cb-slide .logo-row{display:flex;align-items:center;gap:22px}';
+    const r = ensureListSkeleton(withCss(css));
+    expect(r.recipe.stylesheet).toBe(css);
+    expect(r.repairs).toHaveLength(0);
+  });
+
+  it('leaves unrelated rules alone', () => {
+    const css = '.cb-slide .headline{display:flex;margin-left:auto}';
+    expect(ensureListSkeleton(withCss(css)).recipe.stylesheet).toBe(css);
+  });
+
+  it('patches the components LAYER when a recipe has layers', () => {
+    const r = ensureListSkeleton({
+      ...minimal,
+      layers: { background: '.cb-slide{background:#000}', type: '', components: '.cb-slide .row{display:flex}' },
+    } as never);
+    expect(r.recipe.layers!.components).not.toContain('display:flex');
+    // …and leaves the other layers byte-identical, which is the point of layers.
+    expect(r.recipe.layers!.background).toBe('.cb-slide{background:#000}');
+  });
+
+  it('is idempotent — a repaired recipe repairs to itself', () => {
+    const once = ensureListSkeleton(withCss('.cb-slide .row{display:flex;gap:8px}'));
+    const twice = ensureListSkeleton(once.recipe);
+    expect(twice.recipe.stylesheet).toBe(once.recipe.stylesheet);
+    expect(twice.repairs).toHaveLength(0);
+  });
+
+  it('lets the brand keep choosing the bullet glyph', () => {
+    // The gutter is ours; the character in it is theirs.
+    const css = '.cb-slide{--cb-marker:"·"}';
+    expect(ensureListSkeleton(withCss(css)).recipe.stylesheet).toBe(css);
+    expect(slideMediaCss(1350)).toContain('content:var(--cb-marker,"—")');
   });
 });

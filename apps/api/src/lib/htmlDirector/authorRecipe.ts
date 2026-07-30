@@ -33,6 +33,7 @@ import {
   clampText,
   composeRecipeLayers,
   migrateRecipe,
+  ensureListSkeleton,
   ensureRecipeContrast,
   validateRecipeConsistency,
   relativeLuminance,
@@ -154,6 +155,7 @@ HARD RULES:
 - Fonts: displayFamily / bodyFamily / accentFamily MUST come from the ALLOWED list, matched to the brand's character; reference as var(--cb-display) / var(--cb-body) / var(--cb-accent-family).
 - No <script>, no @import, no external URLs except inline data: URIs (grain). The logo is var(--cb-logo).
 - Do NOT set width/height/aspect-ratio/max-width/object-fit on .cb-shot — the app owns its geometry, and overriding it breaks the shape the composer asked for. Style its SURFACE only.
+- Same for a LIST ROW: the app lays a row out as a marker in its own gutter with the item hanging off it and the detail on its own line beneath. Do NOT set display:flex on the row, and NEVER push the detail right with margin-left:auto — that reads fine at 26px and collapses into a right-drifting mess at the sizes a phone needs. Style the SURFACE: the row's colour and size, a hairline between rows, the detail's quieter tone. To choose the bullet, set the --cb-marker custom property on .cb-slide (e.g. --cb-marker: "\u00b7"), and do not author a marker element.
 - The three layers together under ~4500 characters (the per-format overrides in "formats" are separate). ${ENUMS}
 - INVENT this brand's own colours/fonts/voice/signature/graphic — never reuse the examples'.`;
 
@@ -581,7 +583,14 @@ function applyCritique(raw: Json, draft: BrandRecipe): BrandRecipe {
 function gate(recipe: BrandRecipe, label: string): BrandRecipe {
   const contrast = ensureRecipeContrast(recipe);
   for (const r of contrast.repairs) console.warn(`[recipe:${label}] contrast repair — ${r}`);
-  const consistency = validateRecipeConsistency(contrast.recipe);
+  // A list row's SKELETON belongs to the app (see ensureListSkeleton). Strip the
+  // brand's competing structure once, here, instead of overriding it at every
+  // render — the recipe that gets stored is then already correct.
+  const list = ensureListSkeleton(contrast.recipe);
+  for (const sel of list.repairs) {
+    console.warn(`[recipe:${label}] list skeleton stripped from "${sel}" — the app owns row layout`);
+  }
+  const consistency = validateRecipeConsistency(list.recipe);
   if (consistency.dropped.length) {
     console.warn(
       `[recipe:${label}] dropped undefined component classes: ${consistency.dropped.join(', ')}`,

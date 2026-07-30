@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type Anthropic from '@anthropic-ai/sdk';
 import sharp from 'sharp';
-import {
+import { ensureListSkeleton,
   brandRecipeSchema,
   ensureRecipeContrast,
   validateRecipeConsistency,
@@ -305,7 +305,10 @@ describe('the critic patches instead of re-typing', () => {
     conversation(dynatosRecipe, JSON.stringify(detailMastersRecipe));
     const out = await authorRecipe(DARK, { model: 'claude-test' });
     expect(out.tokens).toEqual(detailMastersRecipe.tokens);
-    expect(out.stylesheet).toBe(detailMastersRecipe.stylesheet);
+    // The critic's recipe is adopted wholesale — but still passes through the
+    // deterministic gates on the way out, so compare against the gated form
+    // rather than the raw fixture (this one has a list skeleton to strip).
+    expect(out.stylesheet).toBe(ensureListSkeleton(detailMastersRecipe).recipe.stylesheet);
     expect(out.signature).toEqual(detailMastersRecipe.signature);
   });
 

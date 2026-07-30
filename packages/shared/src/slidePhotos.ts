@@ -166,8 +166,10 @@ export function slideMediaCss(canvasHeight = 1350, align?: string): string {
     `.cb-slide .row.row{display:grid;grid-template-columns:auto minmax(0,1fr);` +
       `align-items:baseline;column-gap:0.5em;row-gap:0.14em}`,
     // The gutter marker is OURS by default, so the text column is stable even
-    // when the composer emitted no marker element at all.
-    `.cb-slide .row.row::before{content:"—";color:var(--cb-accent);grid-column:1;grid-row:1}`,
+    // when the composer emits no marker element at all — which it no longer
+    // does: emitting one was how an empty span became a phantom gap.
+    // The glyph is the brand's to choose (`--cb-marker`); only the gutter is ours.
+    `.cb-slide .row.row::before{content:var(--cb-marker,"—");color:var(--cb-accent);grid-column:1;grid-row:1}`,
     // …but a brand that authored a real marker keeps it, and ours steps aside.
     `.cb-slide .row.row:has(> span:not(:empty))::before{content:none}`,
     // Composers emit the marker element EMPTY, which rendered as a phantom gap
