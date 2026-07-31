@@ -14,6 +14,7 @@
 import {
   PHONE_SCALE,
   authoredSlots,
+  brandMarkVariants,
   ensureListSkeleton,
   typeFloorReport,
   type BrandRecipe,
@@ -93,6 +94,14 @@ export function postDetector(
       const hasList = Boolean(recipe?.components.some((c) => /row|item|list/i.test(c.className)));
       if (hasList) return [];
       return withHtml.length ? ['composed before the brand had a list vocabulary'] : [];
+    }
+    case 'brandMarkDrift': {
+      // Only meaningful across a deck: one slide cannot disagree with itself.
+      if (withHtml.length < 2) return [];
+      const n = brandMarkVariants(withHtml.map((s) => s.authored!.html!));
+      return n > 1
+        ? [`the brand mark is built ${n} different ways across these slides — saving the post makes them agree`]
+        : [];
     }
     default:
       return [];

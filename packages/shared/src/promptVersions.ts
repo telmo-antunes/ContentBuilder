@@ -35,7 +35,8 @@ export type DetectorId =
   | 'secretList'
   | 'noImageSlots'
   | 'noAmbientMotion'
-  | 'noListVocabulary';
+  | 'noListVocabulary'
+  | 'brandMarkDrift';
 
 /**
  * A short phrase naming what a detector found, for chips on individual slides
@@ -48,6 +49,7 @@ export const DETECTOR_LABEL: Record<DetectorId, string> = {
   noImageSlots: 'nowhere to put a photograph',
   noAmbientMotion: 'photographs that sit still in video',
   noListVocabulary: 'no list vocabulary to write rows with',
+  brandMarkDrift: 'a brand mark built differently here',
 };
 
 export interface PromptRelease {
@@ -227,6 +229,17 @@ export const TOUCHPOINT_REGISTRY: Record<TouchpointId, Touchpoint> = {
           'No empty marker elements, which rendered as a gap where a bullet belonged.',
         ],
         detector: 'noListVocabulary',
+      },
+      {
+        version: 4,
+        date: '2026-07-31',
+        summary: 'The brand mark is the same mark on every slide.',
+        improves: [
+          'The logo is treated as an identity to reproduce, not a composition to re-derive slide by slide.',
+          'No loose text in the logo wrapper — it inherited the body face instead of the brand’s.',
+          'Nothing is placed inside the element that carries the logo image, where words landed on top of the picture.',
+        ],
+        detector: 'brandMarkDrift',
       },
     ],
   },

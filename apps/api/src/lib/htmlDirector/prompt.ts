@@ -80,6 +80,7 @@ HARD RULES
 - NEVER emit an empty element. An element with no content is invisible and can still take up space.
 - ROWS are an enumeration, and must READ as one — never concatenate them into a paragraph. Wrap them in the brand's list container and give each entry its own row element (a .panel with one .row per entry, or whatever list vocabulary this brand defines). Keep them parallel: same class, same rhythm, one per entry.
 - A row is JUST the item's text plus, optionally, its detail in the brand's note element. Do NOT add a bullet, dash, number or marker element — the stylesheet draws the marker in its own gutter, and an extra one leaves a gap or a double bullet.
+- THE BRAND MARK IS FIXED. When the pattern calls for the logo, build it EXACTLY as the brand's logo/wordmark/monogram classes describe — same elements, same nesting, same words, every single time. It is an identity, not a composition: it does not vary by slide, and there is nothing about this slide that should change it. Put no loose text directly inside the wrapper (a wrapper is a layout box; text in it inherits nothing), and leave any class that carries the logo IMAGE empty — words placed in it land on top of the picture.
 
 IMAGE SLOTS
 - When this slide is marked "image: true", leave a HOLE for a photograph the user will supply — never describe one, never link one, never invent a src.

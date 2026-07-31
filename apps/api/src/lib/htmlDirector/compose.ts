@@ -19,6 +19,7 @@ import {
   authoredSlots,
   clampText,
   currentVersions,
+  ensureBrandMark,
   recipeEmphasisWrap,
   recipePatternVariant,
   type BrandRecipe,
@@ -958,6 +959,20 @@ export async function composeProject(
       kept.push(inputs[i]!);
     }
   }
+  /**
+   * ONE BRAND MARK PER DECK. The composer works a slide at a time and has no
+   * memory of the last one, which is right for a headline and wrong for a logo
+   * — it assembled the same brand's mark two different ways in one two-slide
+   * post. The prompt asks for consistency; this guarantees it.
+   */
+  const marks = ensureBrandMark(out.map((s) => s.authored.html));
+  if (marks.repaired) {
+    out.forEach((s, i) => {
+      s.authored.html = marks.htmls[i]!;
+    });
+    console.warn(`[compose] deck: brand mark normalised on ${marks.repaired} slide(s)`);
+  }
+
   const substituted = out.filter((s) => s.source === 'fragment').length;
   if (substituted) {
     console.warn(

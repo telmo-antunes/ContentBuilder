@@ -10,6 +10,7 @@ import {
   authoredSlots,
   clampVideoSeconds,
   defaultThemeForCategory,
+  ensureBrandMark,
   isSlotName,
   migrateRecipe,
   slidePhotoSchema,
@@ -76,8 +77,16 @@ function normalizePhotos(s: SlideInput): SlidePhoto[] {
   return out;
 }
 
-/** Normalize incoming slides: ensure each has an id, and reindex `order`. */
+/**
+ * Normalize incoming slides: ensure each has an id, and reindex `order`.
+ *
+ * Also the one place that sees a WHOLE deck on every path that stores one, so
+ * it is where the brand mark is made to agree across slides — decks composed
+ * before that gate existed repair themselves the first time they are saved,
+ * with no AI call and nothing for the user to press.
+ */
 export function normalizeSlides(slides: SlideInput[]) {
+  const marks = ensureBrandMark(slides.map((s) => s.authored?.html ?? ''));
   return slides.map((s, i) => ({
     id: s.id ?? randomUUID(),
     order: i,
@@ -92,7 +101,7 @@ export function normalizeSlides(slides: SlideInput[]) {
     // refine on an authored slide wipe its markup.
     authored: s.authored
       ? {
-          html: sanitizeAuthoredHtml(s.authored.html),
+          html: sanitizeAuthoredHtml(marks.htmls[i] ?? s.authored.html),
           ...(s.authored.bg ? { bg: s.authored.bg } : {}),
           ...(s.authored.role ? { role: s.authored.role } : {}),
           ...(s.authored.pv ? { pv: s.authored.pv } : {}),

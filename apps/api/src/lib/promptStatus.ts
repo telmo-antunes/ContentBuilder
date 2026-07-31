@@ -11,6 +11,7 @@
 import {
   DETECTOR_LABEL,
   TOUCHPOINT_REGISTRY,
+  ensureBrandMark,
   updateStatus,
   type BrandRecipe,
   type DetectorId,
@@ -78,10 +79,25 @@ export function postUpdateStatus(
   // Which slides earned the flag. Re-run only the detectors that already fired
   // deck-wide, against one slide at a time.
   const fired = [...new Set(deck.findings.map((f) => f.detector))] as DetectorId[];
+
+  /**
+   * The brand mark is the one finding a slide cannot reach on its own — a mark
+   * is only wrong RELATIVE to the rest of the deck. So the odd slides out are
+   * exactly the ones the repair would rewrite, asked of the repair itself:
+   * the thing that flags and the thing that fixes cannot drift apart.
+   */
+  const odd = new Set<number>();
+  if (fired.includes('brandMarkDrift')) {
+    const htmls = authored.map((s) => s.authored!.html!);
+    ensureBrandMark(htmls).htmls.forEach((next, i) => {
+      if (next !== htmls[i]) odd.add(i);
+    });
+  }
+
   const flagged: SlideUpdateFlag[] = [];
   authored.forEach((s, i) => {
     const reasons = fired
-      .filter((d) => postDetector([s], recipe, d).length > 0)
+      .filter((d) => (d === 'brandMarkDrift' ? odd.has(i) : postDetector([s], recipe, d).length > 0))
       .map((d) => DETECTOR_LABEL[d]);
     if (reasons.length) flagged.push({ id: s.id ?? String(i), order: s.order ?? i, reasons });
   });
