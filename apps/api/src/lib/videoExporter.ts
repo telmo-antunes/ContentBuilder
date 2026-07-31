@@ -22,24 +22,32 @@ import { getStorage } from '../storage';
  */
 
 /**
- * Capture and playback rates are DELIBERATELY different.
+ * THIRTY FRAMES A SECOND, captured and encoded — no duplication in between.
  *
- * Every captured frame is a full headless screenshot, measured at ~0.35s each
- * on a working machine. At 30fps a 7-slide deck of 10-second clips is 2100
- * screenshots — about twelve minutes, which is longer than anyone will wait and
- * longer than the client was willing to poll.
+ * Every captured frame is a full headless screenshot, ~0.35s each on a working
+ * machine, so this used to be unaffordable: ambient drift ran the length of the
+ * clip, every frame of it was distinct, and a 7-slide deck of 10-second clips
+ * came to 2100 screenshots — about twelve minutes. The exporter captured 12
+ * distinct frames a second instead and had ffmpeg duplicate them up to a 30fps
+ * file. The file said 30; the motion in it moved at 12.
  *
- * The motion here is a slow ambient drift and a short reveal, so 12 distinct
- * frames a second carries it with no visible difference; ffmpeg is told the
- * input is 12fps and asked for a 30fps file, duplicating frames to fill. Same
- * clip length, same smoothness to the eye, 2.5x less work.
+ * Ambient motion now RESOLVES within AMBIENT_SECONDS and the rest of the clip
+ * holds still, which changes the arithmetic completely: only the opening
+ * seconds need distinct frames, and the remainder is one settled frame repeated
+ * — free, however many times it is repeated. A 10-second clip costs 90
+ * screenshots instead of 300, so the same 7-slide deck is ~630 rather than
+ * 2100, and genuine 30fps is cheaper than the 12fps compromise used to be at
+ * full length. Measured: a 2-slide 10s deck renders in 52s, so seven slides is
+ * around three minutes — and the client polls until progress STALLS rather
+ * than against a fixed budget, so there is nothing left to outrun.
+ *
+ * So there is one rate now. If ambient ever spans the whole clip again, this
+ * decision has to be revisited with it.
  */
-const CAPTURE_FPS = 12;
-const OUTPUT_FPS = 30;
-const FRAME_MS = 1000 / CAPTURE_FPS;
-// The clip's length is the caller's choice now (see `opts.seconds`); the old
-// fixed 1400ms settled-hold is gone, since the drift spans the whole clip and
-// any remainder holds the settled frame automatically.
+const FPS = 30;
+const FRAME_MS = 1000 / FPS;
+// The clip's length is the caller's choice (see `opts.seconds`); whatever is
+// left after the motion lands holds the settled frame automatically.
 
 /** Thrown when a cancel request interrupts the render/encode loop. */
 export class VideoExportCancelled extends Error {
@@ -104,8 +112,8 @@ export async function renderSlidesToVideo(
   /** Checked per slide and per frame batch — a true return aborts the render. */
   isCancelled?: IsCancelled,
   opts?: {
-    /** How long each slide holds. The ambient drift is stretched to match, so a
-     *  longer clip keeps breathing instead of freezing on a still frame. */
+    /** How long each slide holds. The ambient move always takes the same
+     *  AMBIENT_SECONDS at the top; a longer clip holds the framing for longer. */
     seconds?: number;
     /** Render from this job's frozen snapshot rather than the live project. */
     srcJob?: string;
@@ -119,7 +127,7 @@ export async function renderSlidesToVideo(
   const ordered = [...project.slides].sort((a, b) => a.order - b.order);
   const seconds = clampVideoSeconds(opts?.seconds ?? VIDEO_SECONDS_DEFAULT);
   /** Exactly how many frames the finished clip must contain. */
-  const targetFrames = Math.max(1, Math.round(seconds * CAPTURE_FPS));
+  const targetFrames = Math.max(1, Math.round(seconds * FPS));
 
   const page = await browser.newPage();
   await page.setViewport({ width, height, deviceScaleFactor: 1 });
@@ -249,9 +257,9 @@ async function encode(frames: Buffer[], isCancelled?: IsCancelled): Promise<Buff
     await runFfmpeg(
       [
         '-y',
-        '-framerate', String(CAPTURE_FPS),
+        '-framerate', String(FPS),
         '-i', join(dir, '%05d.png'),
-        '-r', String(OUTPUT_FPS),
+        '-r', String(FPS),
         '-c:v', 'libx264',
         '-pix_fmt', 'yuv420p',
         '-preset', 'medium',
