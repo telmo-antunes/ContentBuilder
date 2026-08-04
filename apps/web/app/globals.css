@@ -1799,3 +1799,101 @@ input[type='color'] {
   border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border-strong));
   border-radius: 6px; padding: 3px 7px; box-shadow: var(--shadow-sm);
 }
+
+/* ── Guided setup (/start) ──────────────────────────────────────────────────
+   One road from a brand's name to its first post. Reading width, one card at a
+   time, nothing competing for attention — the opposite of the Desk, which is a
+   board you scan. */
+.ob { max-width: 760px; margin: 0 auto; padding-bottom: 48px; }
+.ob-head h1 { margin: 0 0 14px; }
+
+/* The rail is a MAP, not a progress bar: all four stops always visible, so you
+   can see how much is left before you commit to the first one. */
+.ob-rail { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 22px; padding: 0; }
+.ob-rail li {
+  display: flex; align-items: center; gap: 7px;
+  padding: 5px 13px 5px 6px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 600; letter-spacing: 0.01em;
+  color: var(--faint); border: 1px solid var(--border); background: var(--panel);
+}
+.ob-rail-dot {
+  display: grid; place-items: center; width: 19px; height: 19px; border-radius: 50%;
+  font-size: 10.5px; font-weight: 700; font-variant-numeric: tabular-nums;
+  background: color-mix(in srgb, var(--faint) 16%, transparent); color: var(--faint);
+}
+.ob-rail li.done { color: var(--text); }
+.ob-rail li.done .ob-rail-dot { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--accent); }
+.ob-rail li.now {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+}
+.ob-rail li.now .ob-rail-dot { background: var(--accent); color: var(--on-accent, #0b0f1a); }
+
+.ob-card {
+  border: 1px solid var(--border); border-radius: 14px;
+  background: var(--panel); padding: 22px;
+  animation: bk-suggest-in 0.3s var(--ease) both;
+}
+.ob-title { margin: 0 0 8px; font-size: 21px; }
+.ob-blurb { margin: 0 0 20px; max-width: 62ch; font-size: 13.5px; line-height: 1.65; color: var(--faint); }
+.ob-hint { margin: 8px 0 0; max-width: 62ch; font-size: 12px; line-height: 1.6; color: var(--faint); }
+.ob-card .field { margin-bottom: 16px; }
+.ob-card textarea { width: 100%; resize: vertical; }
+.ob-source {
+  display: inline-flex; align-items: center; gap: 7px; margin: 0 0 16px;
+  font-size: 12.5px; color: var(--accent);
+}
+
+/* What was read off the site, before committing to a design pass. */
+.ob-readout { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; margin-bottom: 20px; }
+.ob-readout dl { flex: 1 1 260px; margin: 0; display: grid; gap: 12px; }
+.ob-readout dt { font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); font-weight: 700; }
+.ob-readout dd { margin: 4px 0 0; font-size: 12.5px; line-height: 1.55; color: var(--text); }
+.ob-sw { display: flex; gap: 6px; }
+.ob-sw span { width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--border-strong); }
+
+/* Two directions, side by side, as live renders — you pick a picture, not a word. */
+.ob-cands { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 4px; }
+.ob-cand { display: flex; flex-direction: column; gap: 9px; align-items: flex-start; }
+.ob-cand strong { font-size: 13px; }
+.ob-cand-note { font-size: 11.5px; line-height: 1.5; color: var(--faint); max-width: 230px; }
+
+.ob-starters { display: flex; flex-direction: column; gap: 6px; margin: -6px 0 18px; }
+.ob-starters > span { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); font-weight: 700; margin-bottom: 2px; }
+.ob-starter {
+  text-align: left; font-size: 12.5px; line-height: 1.5; color: var(--text);
+  padding: 9px 12px; border-radius: 9px; cursor: pointer;
+  border: 1px solid var(--border); background: transparent;
+  transition: border-color 0.18s var(--ease), background 0.18s var(--ease);
+}
+.ob-starter:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); background: color-mix(in srgb, var(--accent) 5%, transparent); }
+
+.ob-formats { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 20px; }
+.ob-formats select { min-width: 168px; }
+
+.ob-foot { margin-top: 18px; font-size: 12.5px; }
+.ob-foot a { color: var(--faint); text-decoration: none; }
+.ob-foot a:hover { color: var(--text); text-decoration: underline; }
+
+/* "Finish setting up" — shown wherever an unfinished brand appears. */
+.ob-resume {
+  display: flex; align-items: center; gap: 11px; flex-wrap: wrap;
+  margin-top: 12px; padding: 10px 14px; border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
+  background: color-mix(in srgb, var(--accent) 6%, var(--panel));
+}
+.ob-resume > svg { color: var(--accent); flex: 0 0 auto; }
+.ob-resume p { flex: 1 1 240px; margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--text); }
+
+/* An unfinished brand on the Desk rail: a way onward, not a status label. */
+.bc-finish {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 9px; border-radius: 999px; text-decoration: none;
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.03em;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
+  transition: background 0.18s var(--ease);
+}
+.bc-finish:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); }

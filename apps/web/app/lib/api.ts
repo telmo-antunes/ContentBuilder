@@ -128,7 +128,7 @@ export const listBusinesses = () => request<BusinessSummary[]>('/businesses');
 
 export const getBusiness = (id: string) => request<BusinessDetail>(`/businesses/${id}`);
 
-export const createBusiness = (data: { name: string; websiteUrl?: string }) =>
+export const createBusiness = (data: { name: string; websiteUrl?: string; profile?: BusinessProfile }) =>
   request<Business>('/businesses', { method: 'POST', body: JSON.stringify(data) });
 
 export const updateBusiness = (

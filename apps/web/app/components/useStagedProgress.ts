@@ -91,6 +91,21 @@ export const REANALYZE_STAGES: ProgressStage[] = [
   { label: 'Assembling a fresh draft…', atMs: 45000 },
 ];
 
+/**
+ * Composing a post. Named for the two-stage pipeline that actually runs — a
+ * parse that writes the copy for the whole deck, then a per-slide compose that
+ * typesets it — because a wait that describes something else ("Rationing the
+ * palette…" while a post is being written) reads as a placeholder.
+ */
+export const COMPOSE_STAGES: ProgressStage[] = [
+  { label: 'Reading the idea…', atMs: 0 },
+  { label: 'Splitting it into slides…', atMs: 6000 },
+  { label: 'Writing the copy…', atMs: 14000 },
+  { label: 'Typesetting each slide…', atMs: 24000 },
+  { label: 'Checking nothing overflows…', atMs: 40000 },
+  { label: 'Almost there…', atMs: 55000 },
+];
+
 export const RECIPE_STAGES: ProgressStage[] = [
   { label: 'Studying your brand…', atMs: 0 },
   { label: 'Rationing the palette…', atMs: 9000 },

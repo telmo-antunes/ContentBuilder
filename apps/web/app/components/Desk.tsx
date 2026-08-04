@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import type { Format } from '@contentbuilder/shared';
 import {
-  createBusiness,
   deleteBusiness,
   getBoard,
   listBusinesses,
@@ -91,7 +90,6 @@ export default function Desk() {
   const [businesses, setBusinesses] = useState<BusinessSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [moving, setMoving] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -284,40 +282,28 @@ export default function Desk() {
           )}
         </div>
 
-        {adding && (
-          <AddBusiness
-            onCreated={() => {
-              setAdding(false);
-              void reloadBrands();
-            }}
-            onCancel={() => setAdding(false)}
-          />
-        )}
-
-        {businesses.length === 0 && !adding ? (
+        {businesses.length === 0 ? (
           <div className="empty">
             <strong>Welcome.</strong>
             <p className="muted" style={{ margin: '6px 0 12px' }}>
-              Add your first brand — derive its kit from a website (or enter one manually), design its
-              recipe, then compose on-brand posts with AI.
+              Setting up a brand takes four steps: name it, read its website, pick a design
+              direction, and write the first post. It walks you through all four.
             </p>
-            <button className="btn primary" onClick={() => setAdding(true)}>
-              <Icon name="plus" /> New brand
-            </button>
+            <Link className="btn primary" href="/start">
+              <Icon name="plus" /> Set up your first brand
+            </Link>
           </div>
         ) : (
           <DeckScroller className="brand-rail">
             {businesses.map((b) => (
               <BrandRailCard key={b._id} biz={b} onChanged={() => void reloadBrands()} />
             ))}
-            {!adding && (
-              <button type="button" className="newbrand-card" onClick={() => setAdding(true)}>
-                <span>
-                  <Icon name="plus" size={20} />
-                  <span style={{ display: 'block', fontSize: 12.5, marginTop: 4 }}>New brand</span>
-                </span>
-              </button>
-            )}
+            <Link className="newbrand-card" href="/start">
+              <span>
+                <Icon name="plus" size={20} />
+                <span style={{ display: 'block', fontSize: 12.5, marginTop: 4 }}>New brand</span>
+              </span>
+            </Link>
           </DeckScroller>
         )}
       </section>
@@ -325,48 +311,6 @@ export default function Desk() {
   );
 }
 
-function AddBusiness({ onCreated, onCancel }: { onCreated: () => void; onCancel: () => void }) {
-  const [name, setName] = useState('');
-  const [websiteUrl, setWebsiteUrl] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name.trim()) return;
-    setBusy(true);
-    try {
-      await createBusiness({ name: name.trim(), websiteUrl: websiteUrl.trim() || undefined });
-      onCreated();
-    } catch (err) {
-      toast(err instanceof Error ? err.message : String(err), 'error');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <form className="card" onSubmit={submit} style={{ marginBottom: 16 }}>
-      <div className="section-label" style={{ marginTop: 0 }}>New brand</div>
-      <div className="grid-2">
-        <div className="field" style={{ margin: 0 }}>
-          <label htmlFor="biz-name">Business name *</label>
-          <input id="biz-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Apex Auto Detailing" autoFocus required />
-        </div>
-        <div className="field" style={{ margin: 0 }}>
-          <label htmlFor="biz-url">Website URL (optional)</label>
-          <input id="biz-url" value={websiteUrl} onChange={(e) => setWebsiteUrl(e.target.value)} placeholder="https://example.com" />
-        </div>
-      </div>
-      <div className="row" style={{ marginTop: 12 }}>
-        <button className="btn primary" disabled={busy || !name.trim()} type="submit">
-          {busy ? 'Adding…' : 'Add brand'}
-        </button>
-        <button className="btn ghost" type="button" onClick={onCancel} disabled={busy}>Cancel</button>
-        <span className="muted" style={{ fontSize: 13 }}>No website? Add it and enter a kit manually.</span>
-      </div>
-    </form>
-  );
-}
 
 /** One brand on the rail: its kit colours, status, and door into the brand room. */
 function BrandRailCard({ biz, onChanged }: { biz: BusinessSummary; onChanged: () => void }) {
@@ -447,12 +391,16 @@ function BrandRailCard({ biz, onChanged }: { biz: BusinessSummary; onChanged: ()
           {category && <div className="cat">{category}</div>}
         </div>
         <div className="bc-foot" style={{ marginTop: 'auto' }}>
-          {biz.hasApprovedKit ? (
-            <span className="badge ok"><span className="dot" /> Approved</span>
-          ) : biz.hasDraftKit ? (
-            <span className="badge warn"><span className="dot" /> Draft kit</span>
+          {/* An unfinished brand gets a way ONWARD, not just a label saying it
+              is unfinished. "No kit" told you the state and left you to find
+              the four screens that fix it. */}
+          {!biz.hasApprovedKit || biz.projectCount === 0 ? (
+            <Link className="bc-finish" href={`/start?b=${biz._id}`}>
+              <Icon name="sparkle" size={11} />
+              {!biz.hasApprovedKit ? 'Finish setup' : 'First post'}
+            </Link>
           ) : (
-            <span className="badge"><span className="dot" /> No kit</span>
+            <span className="badge ok"><span className="dot" /> Approved</span>
           )}
           <span className="muted" style={{ fontSize: 12 }}>
             {biz.projectCount} post{biz.projectCount === 1 ? '' : 's'}

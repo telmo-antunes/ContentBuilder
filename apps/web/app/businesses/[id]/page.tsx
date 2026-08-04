@@ -145,40 +145,25 @@ export default function BusinessDetailPage() {
             </Link>
           </div>
 
-          {!biz.hasApprovedKit && (
-            <div className="card" style={{ marginBottom: 16, maxWidth: 560 }}>
-              <strong style={{ display: 'block', marginBottom: 8 }}>Getting started</strong>
-              <ol className="list" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-                <li className="row" style={{ gap: 8, alignItems: 'baseline' }}>
-                  <span
-                    aria-hidden="true"
-                    style={{ color: biz.hasProfile ? 'var(--ok)' : 'var(--muted)' }}
-                  >
-                    <Icon name={biz.hasProfile ? 'check' : 'circle'} size={12} />
-                  </span>
-                  <span style={biz.hasProfile ? { color: 'var(--muted)' } : undefined}>
-                    1. Business profile{biz.hasProfile ? '' : ' — fill it in below'}
-                  </span>
-                </li>
-                <li className="row" style={{ gap: 8, alignItems: 'baseline' }}>
-                  <span aria-hidden="true" style={{ color: 'var(--muted)' }}>
-                    <Icon name="circle" size={12} />
-                  </span>
-                  <span>
-                    2. Approve a brand kit{' '}
-                    <Link className="btn sm" href={`/businesses/${biz._id}/brand-kit`} style={{ marginLeft: 4 }}>
-                      {biz.hasDraftKit ? 'Open brand kit' : 'Create brand kit'}
-                    </Link>
-                  </span>
-                </li>
-                <li className="row" style={{ gap: 8, alignItems: 'baseline' }}>
-                  <span aria-hidden="true" style={{ color: 'var(--muted)' }}>
-                    <Icon name="circle" size={12} />
-                  </span>
-                  <span className="muted">3. Create a project (unlocks after a kit is approved)</span>
-                </li>
-              </ol>
-            </div>
+          {/*
+            The old "Getting started" here was a checklist of things to go and
+            find: a numbered list that told you what was missing and left you to
+            walk to each screen yourself. It is a link now, because the guided
+            flow already knows which of those steps you are on and does them in
+            order. This surface only has to notice that setup is unfinished.
+          */}
+          {(!biz.hasApprovedKit || biz.projects.length === 0) && (
+            <aside className="ob-resume" role="status" style={{ marginBottom: 16, maxWidth: 620 }}>
+              <Icon name="sparkle" size={14} />
+              <p>
+                {!biz.hasApprovedKit
+                  ? `${biz.name} isn’t set up yet — there’s no approved design system, so nothing can be composed against it.`
+                  : `${biz.name} is designed and approved. One step left: its first post.`}
+              </p>
+              <Link className="btn sm primary" href={`/start?b=${biz._id}`}>
+                {!biz.hasApprovedKit ? 'Finish setting up' : 'Write the first post'}
+              </Link>
+            </aside>
           )}
 
           <ProfileCard businessId={biz._id} profile={biz.profile} onSaved={reload} />
