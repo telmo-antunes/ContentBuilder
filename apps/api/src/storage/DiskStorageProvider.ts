@@ -11,7 +11,7 @@ import type { SaveOptions, StorageProvider } from './StorageProvider';
 export class DiskStorageProvider implements StorageProvider {
   constructor(
     private readonly baseDir: string,
-    /** Public URL prefix, e.g. "http://localhost:4000/media". */
+    /** Public URL prefix. Root-relative ("/media") so stored URLs survive a port change. */
     private readonly publicBase: string,
   ) {}
 

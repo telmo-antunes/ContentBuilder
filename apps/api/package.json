@@ -10,6 +10,7 @@
     "seed": "tsx src/seed.ts",
     "eval:compose": "tsx src/eval/run.ts",
     "migrate:photos": "tsx src/scripts/migrateSlidePhotos.ts",
+    "migrate:media-urls": "tsx src/scripts/migrateMediaUrls.ts",
     "typecheck": "tsc --noEmit",
     "migrate:recipes": "tsx src/scripts/migrateRecipeGates.ts",
     "prompt:hashes": "tsx src/scripts/promptHashes.ts"
