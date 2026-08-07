@@ -15,6 +15,7 @@ import {
 import ProfileCard from '../../components/ProfileCard';
 import { confirm } from '../../components/ConfirmDialog';
 import { ErrorState } from '../../components/ErrorState';
+import { resumeLabel, summaryStep } from '../../../lib/onboarding';
 import { Icon } from '../../components/Icon';
 import { OverflowMenu } from '../../components/OverflowMenu';
 import { Skeleton } from '../../components/Skeleton';
@@ -30,6 +31,8 @@ export default function BusinessDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [typeFilter, setTypeFilter] = useState<'all' | 'carousel' | 'story'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'rendered' | 'draft'>('all');
+  // Same rule as /start and the Desk rail — one derivation, three surfaces.
+  const setupStep = biz ? summaryStep(biz) : 'done';
 
   const reload = useCallback(async () => {
     setError(null);
@@ -152,16 +155,16 @@ export default function BusinessDetailPage() {
             flow already knows which of those steps you are on and does them in
             order. This surface only has to notice that setup is unfinished.
           */}
-          {(!biz.hasApprovedKit || biz.projects.length === 0) && (
+          {setupStep !== 'done' && (
             <aside className="ob-resume" role="status" style={{ marginBottom: 16, maxWidth: 620 }}>
               <Icon name="sparkle" size={14} />
               <p>
-                {!biz.hasApprovedKit
-                  ? `${biz.name} isn’t set up yet — there’s no approved design system, so nothing can be composed against it.`
-                  : `${biz.name} is designed and approved. One step left: its first post.`}
+                {setupStep === 'post'
+                  ? `${biz.name} is designed and approved. One step left: its first post.`
+                  : `${biz.name} isn’t set up yet — there’s no approved design system, so nothing can be composed against it.`}
               </p>
               <Link className="btn sm primary" href={`/start?b=${biz._id}`}>
-                {!biz.hasApprovedKit ? 'Finish setting up' : 'Write the first post'}
+                {resumeLabel(setupStep)}
               </Link>
             </aside>
           )}

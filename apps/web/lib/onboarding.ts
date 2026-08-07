@@ -61,6 +61,41 @@ export function needsSetup(input: OnboardingInput): boolean {
   return Boolean(input.business) && onboardingStep(input) !== 'done';
 }
 
+/**
+ * The same question, asked of a brand SUMMARY — the shape the Desk rail and the
+ * brand page actually hold, which carries booleans rather than the kit itself.
+ *
+ * This exists so those two surfaces stop open-coding the rule. They previously
+ * each wrote `!hasApprovedKit || projectCount === 0` inline, which is the exact
+ * drift the module header warns about — and they were already wrong: a brand
+ * approved before recipes existed, with posts, reads as finished to them while
+ * `onboardingStep` correctly routes it to the design step. `hasRecipe` closes
+ * that gap, and routing both through here keeps it closed.
+ */
+export function summaryStep(biz: {
+  hasApprovedKit: boolean;
+  hasRecipe: boolean;
+  hasDraftKit: boolean;
+  projectCount: number;
+}): OnboardingStep {
+  return onboardingStep({
+    business: { projectCount: biz.projectCount },
+    kit:
+      biz.hasApprovedKit || biz.hasDraftKit
+        ? {
+            approved: biz.hasApprovedKit ? { recipe: biz.hasRecipe || undefined } : null,
+            draft: biz.hasDraftKit ? {} : null,
+          }
+        : null,
+  });
+}
+
+/** What "finish setting up" should say for a brand at this step. */
+export function resumeLabel(step: OnboardingStep): string | null {
+  if (step === 'done') return null;
+  return step === 'post' ? 'Write the first post' : 'Finish setting up';
+}
+
 export interface StepCopy {
   /** The rail label. One word where possible — this is a map, not prose. */
   short: string;

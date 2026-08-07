@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ONBOARDING_STEPS, needsSetup, onboardingStep, stepIndex } from './onboarding';
+import { ONBOARDING_STEPS, needsSetup, onboardingStep, resumeLabel, stepIndex, summaryStep } from './onboarding';
 
 const biz = (projectCount = 0) => ({ projectCount });
 const recipe = { version: 2 };
@@ -55,6 +55,41 @@ describe('stepIndex', () => {
 
   it('puts `done` past the end, so the rail reads fully complete', () => {
     expect(stepIndex('done')).toBe(ONBOARDING_STEPS.length);
+  });
+});
+
+describe('summaryStep — the shape the Desk rail and brand page actually hold', () => {
+  const sum = (o: Partial<Parameters<typeof summaryStep>[0]> = {}) => ({
+    hasApprovedKit: false,
+    hasRecipe: false,
+    hasDraftKit: false,
+    projectCount: 0,
+    ...o,
+  });
+
+  it('agrees with onboardingStep on every state — one rule, two shapes', () => {
+    expect(summaryStep(sum())).toBe('read');
+    expect(summaryStep(sum({ hasDraftKit: true }))).toBe('design');
+    expect(summaryStep(sum({ hasApprovedKit: true }))).toBe('design');
+    expect(summaryStep(sum({ hasApprovedKit: true, hasRecipe: true }))).toBe('post');
+    expect(summaryStep(sum({ hasApprovedKit: true, hasRecipe: true, projectCount: 2 }))).toBe('done');
+  });
+
+  it('catches the brand the inline rule got WRONG: approved before recipes, with posts', () => {
+    // `!hasApprovedKit || projectCount === 0` called this finished and showed
+    // no way to continue, while /start correctly routed it to the design step.
+    // That disagreement is the whole reason this helper exists.
+    const legacy = sum({ hasApprovedKit: true, hasRecipe: false, projectCount: 4 });
+    expect(summaryStep(legacy)).toBe('design');
+    expect(summaryStep(legacy)).not.toBe('done');
+  });
+
+  it('labels the last step as writing a post rather than finishing setup', () => {
+    expect(resumeLabel(summaryStep(sum({ hasApprovedKit: true, hasRecipe: true })))).toBe(
+      'Write the first post',
+    );
+    expect(resumeLabel(summaryStep(sum({ hasDraftKit: true })))).toBe('Finish setting up');
+    expect(resumeLabel('done')).toBeNull();
   });
 });
 

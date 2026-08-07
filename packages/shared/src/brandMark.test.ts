@@ -36,6 +36,67 @@ describe('findBrandMark', () => {
   });
 });
 
+/**
+ * THESE TESTS EXIST BECAUSE THE FIRST SET DID NOT CATCH THE BUG.
+ *
+ * The original suite asserted only which variant won, on inputs where the
+ * correct mark also happened to have the most elements. Both structural
+ * signals were in fact broken by regex faults, scoring had silently collapsed
+ * to "most elements wins", and every test still passed.
+ *
+ * So each signal is now pinned INDEPENDENTLY, with the weaker tiebreaks
+ * deliberately pointing the other way. If a signal stops firing, the test that
+ * covers it fails on its own rather than being carried by another.
+ */
+describe('canonicalMark — each signal, with the tiebreaks inverted', () => {
+  it('rejects loose text in the wrapper even when the offender is bigger', () => {
+    // Equal element counts; the loose variant is longer, so length would pick
+    // it. Only the loose-text signal can give the right answer here.
+    const clean = '<div class="logo-row"><span class="wordmark">Acme</span></div>';
+    const loose = '<div class="logo-row">Acme Corporation Limited Group<span class="wordmark"></span></div>';
+    expect(canonicalMark([clean, loose])).toBe('<span class="wordmark">Acme</span>');
+  });
+
+  it('rejects words stuffed into the logo image, even when that variant is longer', () => {
+    const empty = '<div class="logo-row"><i class="monogram"></i><b class="wordmark">Acme</b></div>';
+    const stuffed =
+      '<div class="logo-row"><i class="monogram">Acme Corporation Limited</i><b class="wordmark"></b></div>';
+    expect(canonicalMark([empty, stuffed])).toContain('<i class="monogram"></i>');
+  });
+
+  it('holds up when the improvisation has MORE elements than the real mark', () => {
+    // The decisive case, and the one the old suite missed entirely: element
+    // count is the weakest signal, so padding must not be able to win.
+    const busier =
+      '<div class="logo-row">detail<span class="monogram">masters</span><em>a</em><em>b</em><em>c</em><em>d</em></div>';
+    expect(canonicalMark([GOOD, busier])).toContain('class="wordmark"');
+  });
+
+  it('sees loose text beside a NESTED child — the case the old regex could not strip', () => {
+    // `<div class="wordmark"><b>x</b><span>y</span></div>` defeated the old
+    // non-greedy strip, which left a bare `</div>` and cried loose text on a
+    // clean mark. Here the loose text is real and must still be caught.
+    const nestedClean = GOOD;
+    const nestedLoose =
+      '<div class="logo-row">detail<div class="wordmark"><b>detail</b><span class="it">masters</span></div><i class="monogram"></i></div>';
+    expect(canonicalMark([nestedClean, nestedLoose])).toBe(
+      '<i class="monogram"></i><div class="wordmark"><b>detail</b><span class="it">masters</span></div>',
+    );
+  });
+
+  it('counts vocabulary as distinct CLASSES, so padding with bare elements gains nothing', () => {
+    const vocab = '<div class="logo-row"><i class="monogram"></i><b class="wordmark">A</b></div>';
+    const padded = '<div class="logo-row"><i class="monogram"></i><em></em><em></em><em></em><em></em></div>';
+    expect(canonicalMark([vocab, padded])).toContain('class="wordmark"');
+  });
+
+  it('is not confused by a self-closing or void tag at the top level', () => {
+    const withBr = '<div class="logo-row"><i class="monogram"></i><br><b class="wordmark">A</b></div>';
+    // The <br> must not open a depth level and swallow the rest as "inside" it.
+    expect(canonicalMark([withBr])).toContain('class="wordmark"');
+  });
+});
+
 describe('canonicalMark', () => {
   it('picks the structured mark over the improvised one in a two-slide deck', () => {
     // The tie-break that matters: one of each, so frequency cannot decide.

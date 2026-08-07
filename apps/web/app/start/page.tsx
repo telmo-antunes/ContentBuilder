@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -88,6 +88,14 @@ function Start() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<null | 'create' | 'read' | 'design' | 'choose' | 'compose'>(null);
   const [candidates, setCandidates] = useState<RecipeCandidate[] | null>(null);
+  /**
+   * The analyse endpoint reports when what it got back is weak — a near
+   * monochrome palette, nothing to sample. The brand-kit screen uses it to
+   * suggest re-analysing or entering values by hand; this flow was dropping it
+   * on the floor and marching on to spend two Opus calls designing against a
+   * kit it had itself judged poor.
+   */
+  const [lowQuality, setLowQuality] = useState(false);
 
   const load = useCallback(async (id: string) => {
     const [b, k] = await Promise.all([getBusiness(id), getBrandKit(id)]);
@@ -160,7 +168,8 @@ function Start() {
               onRead={async () => {
                 setBusy('read');
                 try {
-                  await analyzeBusiness(business._id);
+                  const res = await analyzeBusiness(business._id);
+                  setLowQuality(Boolean(res.lowQuality));
                   await load(business._id);
                 } catch (e) {
                   toast(e instanceof Error ? e.message : String(e), 'error');
@@ -188,6 +197,7 @@ function Start() {
               business={business}
               kit={kit}
               candidates={candidates}
+              lowQuality={lowQuality}
               busy={busy}
               onDesign={async () => {
                 const k = kit.draft ?? kit.approved;
@@ -399,13 +409,9 @@ function StepRead({
   onRead: () => void;
   onManual: () => void;
 }) {
-  const hasUrl = Boolean(business.websiteUrl);
   // With no site there is nothing to read, so don't offer reading — go straight
   // to the honest alternative rather than showing a disabled primary button.
-  const started = useRef(false);
-  useEffect(() => {
-    if (hasUrl && !busy && !started.current) started.current = true;
-  }, [hasUrl, busy]);
+  const hasUrl = Boolean(business.websiteUrl);
 
   if (busy) {
     return (
@@ -463,6 +469,7 @@ function StepDesign({
   business,
   kit,
   candidates,
+  lowQuality,
   busy,
   onDesign,
   onChoose,
@@ -470,6 +477,8 @@ function StepDesign({
   business: BusinessDetail;
   kit: BrandKitState;
   candidates: RecipeCandidate[] | null;
+  /** The analyse step judged what it read to be weak. Say so before spending. */
+  lowQuality: boolean;
   busy: null | string;
   onDesign: () => void;
   onChoose: (candidateId: string) => void;
@@ -579,6 +588,13 @@ function StepDesign({
             )}
           </dl>
         </div>
+      )}
+      {lowQuality && (
+        <p className="ob-warn">
+          <Icon name="warning" size={13} />
+          What came back off the site is thin — the palette is close to monochrome. Designing from it
+          will work, but adjusting the colours first usually gives a much better result.
+        </p>
       )}
       <div className="row" style={{ gap: 8 }}>
         <button className="btn primary" onClick={onDesign} disabled={busy !== null}>

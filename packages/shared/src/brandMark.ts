@@ -101,29 +101,115 @@ export function findBrandMark(html: string): BrandMark | null {
 /** Whitespace-insensitive identity, so indentation differences are not "different". */
 const norm = (s: string) => s.replace(/\s+/g, ' ').trim();
 
+/** Elements that never have a closing tag, so they never open a depth level. */
+const VOID_TAGS = new Set(['br', 'hr', 'img', 'input', 'source', 'wbr']);
+
+interface MarkChild {
+  tag: string;
+  cls: string;
+  /** This child's own markup, so "is it empty" is a real question. */
+  inner: string;
+}
+
+/**
+ * A fragment's TOP LEVEL: its direct element children, and any text sitting
+ * loose beside them.
+ *
+ * This exists because the first version asked these questions with regexes and
+ * got both answers wrong. `inner.replace(/<[a-z][^>]*>[\s\S]*?<\/[a-z]+>/g, '')`
+ * cannot strip a nested element — on the real mark it consumed
+ * `<div class="wordmark">…</span>` and left a bare `</div>`, which then read as
+ * loose text on a perfectly clean mark. And `\s*\S` after an opening tag was
+ * meant to mean "this element has content", but the very next character is the
+ * `<` of the closing tag, so an EMPTY element always looked full.
+ *
+ * Both signals therefore never fired, and scoring silently collapsed to "the
+ * variant with the most elements wins" — which happened to be right for the
+ * mark that prompted this, and wrong the moment an improvisation is wordier.
+ *
+ * One depth-counting pass answers both questions exactly, so the checks below
+ * are about markup rather than about regex behaviour.
+ */
+function topLevel(fragment: string): { children: MarkChild[]; text: string } {
+  const children: MarkChild[] = [];
+  let text = '';
+  let depth = 0;
+  let cursor = 0;
+  let open: { tag: string; cls: string; innerStart: number } | null = null;
+
+  const tagRe = /<(\/?)([a-z][a-z0-9]*)\b([^>]*?)(\/?)>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = tagRe.exec(fragment))) {
+    const closing = m[1] === '/';
+    const tag = (m[2] ?? '').toLowerCase();
+    const attrs = m[3] ?? '';
+    const selfClosing = m[4] === '/' || VOID_TAGS.has(tag);
+
+    if (depth === 0) text += fragment.slice(cursor, m.index);
+    cursor = tagRe.lastIndex;
+
+    if (selfClosing) {
+      if (depth === 0) children.push({ tag, cls: classOf(attrs), inner: '' });
+      continue;
+    }
+    if (!closing) {
+      if (depth === 0) open = { tag, cls: classOf(attrs), innerStart: tagRe.lastIndex };
+      depth += 1;
+      continue;
+    }
+    // A stray close with nothing open is malformed; ignore rather than go negative.
+    if (depth === 0) continue;
+    depth -= 1;
+    if (depth === 0 && open) {
+      children.push({ tag: open.tag, cls: open.cls, inner: fragment.slice(open.innerStart, m.index) });
+      open = null;
+    }
+  }
+  if (depth === 0) text += fragment.slice(cursor);
+  return { children, text: norm(text) };
+}
+
+/**
+ * Classes that name the element carrying the logo IMAGE rather than words.
+ *
+ * A heuristic, and deliberately the only one here: reading it off the recipe's
+ * CSS (`background: var(--cb-logo)`) would be exact, but the repair also runs
+ * at the wire boundary where no recipe is loaded, and two code paths deciding
+ * the same thing differently is how the original bug happened.
+ */
+const IMAGE_BEARER = /(^|[\s-])(monogram|mark|icon|glyph|symbol|badge|emblem)([\s-]|$)/i;
+
+/** Every distinct class used anywhere in a fragment. */
+function classesIn(fragment: string): Set<string> {
+  const out = new Set<string>();
+  for (const m of fragment.matchAll(/\sclass\s*=\s*["']([^"']*)["']/gi)) {
+    for (const c of (m[1] ?? '').split(/\s+/)) if (c) out.add(c.toLowerCase());
+  }
+  return out;
+}
+
 /**
  * How well one variant behaves as a brand mark. Higher is better.
  *
- * The signals are structural rather than aesthetic, so this stays honest about
- * markup it has never seen:
+ * Two disqualifying faults, then one positive:
  *
- *  1. NO LOOSE TEXT in the wrapper. A wrapper class is a layout box — the
- *     recipe styles its children, not stray text nodes, so anything sitting
- *     directly inside it renders in whatever the slide inherits. This alone
- *     separates the two variants above.
- *  2. MORE ELEMENT CHILDREN. The correct mark uses the vocabulary the brand
- *     authored; an improvisation uses less of it.
- *  3. AN EMPTY IMAGE-BEARING ELEMENT. `.monogram` is painted with the logo and
- *     sized in px — text inside it is text inside a picture.
+ *  1. LOOSE TEXT beside the children. A wrapper class is a layout box; the
+ *     recipe styles its children, so bare text in it renders in whatever the
+ *     slide happens to inherit — which is how "detail" ended up in the body
+ *     face at half the size beside a Playfair wordmark.
+ *  2. WORDS INSIDE THE LOGO IMAGE. That element is a fixed-size box painted
+ *     with `var(--cb-logo)`; text in it lands on top of the picture.
+ *  3. Failing those, MORE OF THE BRAND'S VOCABULARY. Counted as distinct
+ *     CLASSES, not elements: an improvisation padded with unclassed <em>s
+ *     gains nothing, whereas the real mark genuinely uses the classes the
+ *     recipe authored for it.
  */
 function score(inner: string): number {
-  const withoutTags = inner.replace(/<[^>]*>/g, '');
-  const looseText = norm(inner.replace(/<[a-z][^>]*>[\s\S]*?<\/[a-z][a-z0-9]*>/gi, '')).length > 0;
-  const children = (inner.match(/<([a-z][a-z0-9]*)\b[^>]*>/gi) ?? []).length;
-  const monogramHasText = /<[^>]*class\s*=\s*["'][^"']*monogram[^"']*["'][^>]*>\s*\S/i.test(inner);
-  return (
-    (looseText ? 0 : 100) + (monogramHasText ? 0 : 40) + Math.min(children, 6) * 5 + (withoutTags ? 1 : 0)
+  const { children, text } = topLevel(inner);
+  const bearerHasText = children.some(
+    (c) => IMAGE_BEARER.test(c.cls) && c.inner.replace(/<[^>]*>/g, '').trim() !== '',
   );
+  return (text ? -100 : 0) + (bearerHasText ? -60 : 0) + classesIn(inner).size * 8;
 }
 
 /**

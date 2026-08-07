@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { slideSchema } from './schemas';
+import { slidePhotoSchema, slideSchema } from './schemas';
 
 describe('slideSchema (authored-first)', () => {
   it('parses an authored slide and keeps the live override fields', () => {
@@ -50,5 +50,35 @@ describe('slideSchema (authored-first)', () => {
 
   it('rejects a malformed authored payload', () => {
     expect(slideSchema.safeParse({ id: 's1', authored: { bg: 'photo' } }).success).toBe(false);
+  });
+});
+
+/**
+ * THE BOUNDARY IS WHERE MIGRATION HAS TO HAPPEN.
+ *
+ * `resolveMove` carries a map from the retired `in`/`out` moves to `zoom`, and
+ * a test that calls it directly passes — but nothing in production calls it
+ * with those values, because every stored photo is parsed here first. With only
+ * `.catch('auto')` that parse quietly turned an explicit "pull out" into
+ * "automatic", which for a photo with no focal point comes back as a sideways
+ * drift. A stored choice changed without anyone touching it.
+ */
+describe('slidePhotoSchema — retired motion values', () => {
+  const parse = (motion: string) =>
+    slidePhotoSchema.parse({ id: 'p1', mediaAssetId: 'a1', placement: 'slot', slot: 'hero', motion });
+
+  it('migrates `in` and `out` to the move that replaced them', () => {
+    expect(parse('in').motion).toBe('zoom');
+    expect(parse('out').motion).toBe('zoom');
+  });
+
+  it('still falls back to auto for values that were never real', () => {
+    expect(parse('sideways').motion).toBe('auto');
+  });
+
+  it('leaves current values alone', () => {
+    for (const m of ['auto', 'none', 'zoom', 'left', 'right', 'up', 'down']) {
+      expect(parse(m).motion).toBe(m);
+    }
   });
 });

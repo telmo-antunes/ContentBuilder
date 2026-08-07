@@ -20,6 +20,8 @@ import { api } from './config';
 /** Business list/detail view model — core fields plus server-computed summary. */
 export interface BusinessSummary extends Business {
   hasApprovedKit: boolean;
+  /** Does the approved kit carry a recipe? "Approved" alone is not "set up". */
+  hasRecipe: boolean;
   hasDraftKit: boolean;
   hasProfile: boolean;
   projectCount: number;
@@ -352,8 +354,19 @@ export interface BrandKitEdit {
 export const getBrandKit = (businessId: string) =>
   request<BrandKitState>(`/businesses/${businessId}/brandkit`);
 
+/**
+ * The response carries two things the kit itself does not: whether what came
+ * back is weak enough to be worth redoing, and how many site photos were
+ * harvested. Typed here because a caller that cannot see `lowQuality` will
+ * happily design against a palette the server already judged poor.
+ */
+export interface AnalyzeResult extends BrandKit {
+  lowQuality?: boolean;
+  harvested?: number;
+}
+
 export const analyzeBusiness = (businessId: string) =>
-  request<BrandKit>(`/businesses/${businessId}/analyze`, { method: 'POST' });
+  request<AnalyzeResult>(`/businesses/${businessId}/analyze`, { method: 'POST' });
 
 export const createManualKit = (businessId: string) =>
   request<BrandKit>(`/businesses/${businessId}/brandkit`, { method: 'POST' });

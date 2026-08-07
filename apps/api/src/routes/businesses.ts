@@ -32,7 +32,7 @@ async function enrich(businesses: Array<Record<string, any>>) {
   const ids = businesses.map((b) => b._id);
   const [approvedKits, draftIds, counts] = await Promise.all([
     BrandKitModel.find({ businessId: { $in: ids }, status: 'approved' })
-      .select('businessId colors logo createdAt')
+      .select('businessId colors logo recipe createdAt')
       .sort({ createdAt: -1 })
       .lean(),
     BrandKitModel.distinct('businessId', { businessId: { $in: ids }, status: 'draft' }),
@@ -56,6 +56,14 @@ async function enrich(businesses: Array<Record<string, any>>) {
     return {
       ...(b as Record<string, unknown>),
       hasApprovedKit: Boolean(kit),
+      /**
+       * Does the approved kit carry a DESIGN SYSTEM? An approved kit without a
+       * recipe cannot be composed against, so "approved" alone is not the same
+       * as "set up" — and without this every caller had to either guess or
+       * fetch the whole kit. The guided-setup surfaces guessed, and disagreed
+       * with the flow they linked to.
+       */
+      hasRecipe: Boolean(kit?.recipe),
       hasDraftKit: draft.has(id),
       hasProfile: Boolean(b.profile?.category),
       projectCount: countByBiz.get(id) ?? 0,

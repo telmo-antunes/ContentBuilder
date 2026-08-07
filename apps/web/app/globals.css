@@ -1897,3 +1897,14 @@ input[type='color'] {
   transition: background 0.18s var(--ease);
 }
 .bc-finish:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+
+/* A caution inside a setup step — the analysis came back thin. Amber, because
+   unlike the accent-coloured notices this one says something is wrong. */
+.ob-warn {
+  display: flex; align-items: flex-start; gap: 8px;
+  margin: 0 0 16px; padding: 10px 13px; border-radius: 10px;
+  font-size: 12.5px; line-height: 1.55; color: var(--text);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn) 34%, var(--border));
+}
+.ob-warn > svg { color: var(--warn); flex: 0 0 auto; margin-top: 2px; }

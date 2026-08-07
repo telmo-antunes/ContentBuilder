@@ -59,8 +59,17 @@ export const slidePhotoSchema = z.object({
   /**
    * How this photo MOVES in a video export, overriding the brand's ambient
    * character. 'auto' lets the brand and the focal point decide.
+   *
+   * The preprocess is the migration for photos stored under the retired
+   * `in`/`out` vocabulary. Without it `.catch('auto')` silently turned them
+   * into 'auto', and a photo explicitly set to pull out with no focal point
+   * came back as a sideways drift — a stored choice quietly changed. The
+   * matching map inside `resolveMove` never saw those values, because this
+   * boundary always runs first.
    */
-  motion: z.enum(PHOTO_MOVES).catch('auto').optional(),
+  motion: z
+    .preprocess((v) => (v === 'in' || v === 'out' ? 'zoom' : v), z.enum(PHOTO_MOVES).catch('auto'))
+    .optional(),
   /** placement 'slot': resize the hole the composer left, without rewriting
    *  its markup. `shape` re-proportions it, `size` scales its budget. */
   shape: z.enum(['standard', 'wide', 'square', 'tall']).optional(),

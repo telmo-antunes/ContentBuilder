@@ -19,6 +19,7 @@ import { toRenderKit } from '../../lib/render/projectRender';
 import { confirm } from './ConfirmDialog';
 import DeckScroller from './DeckScroller';
 import { ErrorState } from './ErrorState';
+import { summaryStep } from '../../lib/onboarding';
 import { Icon } from './Icon';
 import { OverflowMenu } from './OverflowMenu';
 import { Skeleton } from './Skeleton';
@@ -314,6 +315,7 @@ export default function Desk() {
 
 /** One brand on the rail: its kit colours, status, and door into the brand room. */
 function BrandRailCard({ biz, onChanged }: { biz: BusinessSummary; onChanged: () => void }) {
+  const step = summaryStep(biz);
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(biz.name);
   const [websiteUrl, setWebsiteUrl] = useState(biz.websiteUrl ?? '');
@@ -393,11 +395,13 @@ function BrandRailCard({ biz, onChanged }: { biz: BusinessSummary; onChanged: ()
         <div className="bc-foot" style={{ marginTop: 'auto' }}>
           {/* An unfinished brand gets a way ONWARD, not just a label saying it
               is unfinished. "No kit" told you the state and left you to find
-              the four screens that fix it. */}
-          {!biz.hasApprovedKit || biz.projectCount === 0 ? (
+              the four screens that fix it. The step comes from the SAME
+              derivation the flow itself uses — writing the rule out inline
+              here is how this surface and /start came to disagree. */}
+          {step !== 'done' ? (
             <Link className="bc-finish" href={`/start?b=${biz._id}`}>
               <Icon name="sparkle" size={11} />
-              {!biz.hasApprovedKit ? 'Finish setup' : 'First post'}
+              {step === 'post' ? 'First post' : 'Finish setup'}
             </Link>
           ) : (
             <span className="badge ok"><span className="dot" /> Approved</span>

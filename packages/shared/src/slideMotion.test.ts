@@ -35,6 +35,11 @@ describe('resolveMove', () => {
   it('reads photos stored under the retired `in`/`out` vocabulary', () => {
     // Both used to exist and `in` ended zoomed. They are one settle now, and a
     // stored photo must not fall through to `auto` and change move on reload.
+    //
+    // NOTE: this covers direct callers only. The path that actually runs in
+    // production is the zod boundary, which parses before anything calls this
+    // — see the slidePhotoSchema test, which is the one that would have caught
+    // the original miss.
     expect(resolveMove('in', undefined, 1)).toBe('zoom');
     expect(resolveMove('out', undefined, 1)).toBe('zoom');
   });
