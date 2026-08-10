@@ -90,7 +90,7 @@ export function rewriteAuthoredCopy(html: string, next: ComposeParts): { html: s
   const filled = new Set<string>();
   let out = html.replace(
     /<([a-z][a-z0-9]*)\b([^>]*\bclass="([^"]*)"[^>]*)>([\s\S]*?)<\/\1>/gi,
-    (whole, tag: string, attrs: string, classAttr: string, inner: string) => {
+    (whole, tag: string, attrs: string, classAttr: string) => {
       // A row's own text is handled below; its container must not be rewritten
       // wholesale or the rows inside it would be replaced by one string.
       const classes = classAttr.split(/\s+/).filter(Boolean);

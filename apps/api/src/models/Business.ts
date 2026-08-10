@@ -7,6 +7,13 @@ const businessSchema = new Schema(
   {
     name: { type: String, required: true, trim: true },
     websiteUrl: { type: String, trim: true },
+    /**
+     * Lesson ids this brand's owner has switched off. A lesson is derived from
+     * their own edits, so the only honest response to "no, I did not mean
+     * that" is to stop applying it — never to argue, and never to forget the
+     * observations it came from.
+     */
+    lessonMutes: { type: [String], required: false },
     profile: {
       type: new Schema(
         {

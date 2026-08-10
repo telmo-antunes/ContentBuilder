@@ -32,6 +32,8 @@ import { runVideoJob, sweepExpiredVideoJobs } from '../lib/videoJobs';
 import { getStorage } from '../storage';
 import { generateCaption, type GeneratedCaption } from '../lib/caption';
 import { SITE_PHOTO_LABEL } from '../lib/harvest';
+import { lessonsFor, observeOutcome, recordGeneration } from '../lib/learningLoop';
+import type { ComposeRecord } from '../lib/htmlDirector/compose';
 import { postUpdateStatus } from '../lib/promptStatus';
 import { aiDraftConfigured, config } from '../config';
 
@@ -370,6 +372,16 @@ projectsRouter.patch(
       project.set('settings', { ...(project.get('settings') ?? {}), ...body.settings });
     }
     await project.save();
+    /**
+     * THE SIGNAL. Saving a deck is where a person's corrections land, so it is
+     * where the difference between what the app wrote and what they wanted is
+     * measured. Awaited but never fatal — `observeOutcome` swallows its own
+     * errors, because a post that will not save because the learning loop had a
+     * bad day is a far worse product than one that forgets.
+     */
+    if (body.slides !== undefined) {
+      await observeOutcome(String(project._id), project.get('slides') as never);
+    }
     res.json(project.toJSON());
   }),
 );
@@ -493,7 +505,16 @@ projectsRouter.post(
       brandPhotoPool(businessId),
     ]);
 
+    // WHAT THIS BRAND HAS TAUGHT US, from the corrections its owner made to
+    // previous posts. Empty until the same correction has been made three
+    // times, so a new brand's first decks are written exactly as before.
+    const lessons = await lessonsFor(businessId);
+    if (lessons.length) {
+      console.warn(`[learning] applying ${lessons.length} lesson(s): ${lessons.map((l) => l.id).join(', ')}`);
+    }
+
     let composed;
+    let captured: ComposeRecord | undefined;
     try {
       composed = await composeProject(parsedRecipe.data, brief.idea, {
         format: project.get('format'),
@@ -501,9 +522,13 @@ projectsRouter.post(
         plan: brief.plan,
         locks: brief.locks,
         sources,
+        lessons,
         // Only ask for a photo slot this brand can actually fill — an empty
         // one is a dead grey box, which is worse than no photograph at all.
         photoBudget: pool.length,
+        record: (r) => {
+          captured = r;
+        },
       });
     } catch (err) {
       throw new ApiError(502, `Compose failed: ${publicErrMessage(err, 'AI error')}. You can build manually instead.`);
@@ -550,6 +575,28 @@ projectsRouter.post(
     );
     if (!project.get('stage') || project.get('stage') === 'idea') project.set('stage', 'ready');
     await project.save();
+
+    /**
+     * REMEMBER WHAT MADE THIS. The prompts, the copy they produced and the
+     * markup that shipped out of compose — so that when the user edits it, the
+     * difference between what the app wrote and what they wanted is a fact this
+     * brand can be taught rather than a correction that evaporates on save.
+     */
+    if (captured) {
+      await recordGeneration({
+        projectId: String(project._id),
+        businessId,
+        record: captured,
+        brief: {
+          idea,
+          plan: brief.plan,
+          locks: brief.locks,
+          sources: sources.map((x) => ({ url: x.url, title: x.title, chars: x.text.length })),
+        },
+        slideIds: slides.map((x) => x.id),
+      });
+    }
+
     // The brief's own report rides along with the project: which pages were
     // read, which were skipped and why, and how many slots came back filled.
     res.json({
@@ -1001,6 +1048,9 @@ projectsRouter.post(
     // stage by itself. "Posted" stays manual — we can't see Instagram.
     project.set('stage', 'shipped');
     project.set('exportedAt', new Date());
+    // An export is the strongest signal in the product: this deck, in this
+    // state, was good enough to ship.
+    await observeOutcome(String(project._id), project.get('slides') as never, { exported: true });
     await project.save();
     // What was shipped should always be recoverable.
     await saveVersion(project, 'Exported').catch(() => {});

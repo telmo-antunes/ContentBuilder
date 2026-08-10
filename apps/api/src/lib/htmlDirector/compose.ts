@@ -26,8 +26,11 @@ import {
   recipeEmphasisWrap,
   recipePatternVariant,
   roleHintFor,
+  budgetAfterLessons,
+  lessonsBlock,
   slideCountFor,
   type BrandRecipe,
+  type Lesson,
   type RecipeEmphasisWrap,
 } from '@contentbuilder/shared';
 import { aiJson, aiMessage, modelFor, textOf, type AiJsonResult, type AiJsonTool } from '../ai';
@@ -161,6 +164,46 @@ export interface ComposeOptions {
    * per-slide typesetting runs cheap.
    */
   parseModel?: string;
+  /**
+   * WHAT THIS BRAND HAS TAUGHT THE COPYWRITER — corrections its owner has made
+   * to previous posts, derived deterministically from what they edited (see
+   * `packages/shared/src/learning.ts`). They ride in the USER message and they
+   * move the copy budgets; nothing else about the pipeline changes.
+   */
+  lessons?: readonly Lesson[];
+  /**
+   * Called with the copywriter's USER message the moment it is built. The
+   * message is assembled inside `parseForCompose` from a dozen inputs, and
+   * rebuilding it afterwards to record it would be two sources of truth for the
+   * one string that matters most — so it is reported rather than reconstructed.
+   */
+  onParsePrompt?: (user: string) => void;
+  /**
+   * WHERE THE PROMPTS GO. Called once per compose with the exact inputs that
+   * produced this deck, so they can be recorded and later diffed against what
+   * the user actually shipped. Absent by default: a caller that does not want
+   * to remember anything pays nothing, and the eval passes no sink at all.
+   */
+  record?: (r: ComposeRecord) => void;
+}
+
+/**
+ * The prompts that made one deck, handed to the caller to store. The SYSTEM
+ * halves are deliberately absent — they are identical for every brand, they
+ * live in the prompt registry, and their versions are stamped here instead.
+ */
+export interface ComposeRecord {
+  parseUser: string;
+  models: { parse: string; compose: string };
+  promptVersions: Record<string, number>;
+  slides: Array<{
+    role: string;
+    parts: ComposeParts;
+    html: string;
+    path: ComposePath;
+    /** Only when a model composed it; a substituted slide had no compose call. */
+    composeUser?: string;
+  }>;
 }
 
 function composeModel(opts?: ComposeOptions): string {
@@ -807,6 +850,7 @@ function parseUser(
     locks: readonly string[];
     sources: readonly SourceDoc[];
     handle?: string;
+    lessons?: readonly Lesson[];
   },
 ): string {
   // A plan entry that plainly asks for a shape — "as a list of two", "a pull
@@ -833,6 +877,7 @@ function parseUser(
     opts.handle ? `HANDLE: ${opts.handle}` : '',
     formatGuidance(format),
     countGuidance(opts.range, opts.plan.length),
+    lessonsBlock(opts.lessons ?? []),
     ``,
     `BRIEF: ${idea || '(none — work from the source and the plan)'}`,
     plan,
@@ -974,8 +1019,22 @@ export async function parseForCompose(
       });
   // The copywriting tier — deliberately NOT the per-slide typesetting tier.
   const model = parseModel(opts);
-  const budgets = composeBudgetsFor(format);
-  const user = parseUser(recipe, idea, format, { range, plan, locks, sources, handle: opts?.handle });
+  // A lesson that says "your headlines get cut by 14 characters" is a sentence
+  // in the prompt AND a smaller number in the clamp. The sentence can be
+  // ignored; the number cannot.
+  const budgets = budgetAfterLessons(
+    composeBudgetsFor(format) as unknown as Record<string, number>,
+    opts?.lessons ?? [],
+  ) as unknown as ComposeBudgets;
+  const user = parseUser(recipe, idea, format, {
+    range,
+    plan,
+    locks,
+    sources,
+    handle: opts?.handle,
+    lessons: opts?.lessons,
+  });
+  opts?.onParsePrompt?.(user);
   // Source material makes the reply longer (more slides, richer copy) — a deck
   // truncated mid-JSON is a failed parse, so the ceiling follows the input.
   const maxTokens = sources.length || plan.length > 6 ? 2600 : 1600;
@@ -1431,6 +1490,12 @@ export interface ComposedSlide {
   source: ComposePath;
   /** Prompt versions in force when this slide was written and arranged. */
   pv?: Record<string, number>;
+  /**
+   * The USER message the composer was actually sent, when one was. Absent on
+   * the substituted path, which makes no call at all — the difference matters
+   * to anything replaying this later.
+   */
+  composeUser?: string;
 }
 
 /**
@@ -1606,7 +1671,13 @@ export async function composeSlide(
   // and the renderer derives it from whether they set a background photo.
   // Stamp WHAT MADE THIS SLIDE — the copywriter and the composer versions in
   // force right now — so a post can later be told what a newer prompt improves.
-  return { html: withSlot, role: input.role, source: 'ai', pv: currentVersions('post') as Record<string, number> };
+  return {
+    html: withSlot,
+    role: input.role,
+    source: 'ai',
+    pv: currentVersions('post') as Record<string, number>,
+    composeUser: user,
+  };
 }
 
 /** Full path: idea → authored slides (role + authored markup). */
@@ -1652,7 +1723,14 @@ export async function composeProject(
     plan: opts?.plan ?? brief?.plan,
     locks: opts?.locks ?? brief?.locks,
   };
-  const inputs = await parseForCompose(recipe, brief?.idea ?? idea, o);
+  let lastParseUser = '';
+  const inputs = await parseForCompose(recipe, brief?.idea ?? idea, {
+    ...o,
+    onParsePrompt: (u) => {
+      lastParseUser = u;
+      o.onParsePrompt?.(u);
+    },
+  });
   // Slides are independent of one another, so compose them through a small
   // pool rather than serially — deck latency drops from Σ(slides) to roughly
   // ⌈n / pool⌉ × slide. Output order and the fail-the-batch error semantics of
@@ -1713,6 +1791,27 @@ export async function composeProject(
    * web server every slide reports "unknown" and the deck ships exactly as
    * composed. A compose must never fail because a check could not run.
    */
+  /**
+   * HAND THE PROMPTS BACK. Everything that made this deck — the copywriter's
+   * user message, the per-slide composer messages, the parts it wrote and the
+   * markup it produced — goes to the caller's sink so it can be recorded and,
+   * later, diffed against whatever the user actually ships. Emitted BEFORE the
+   * render check so the record is of what compose produced; the check's repairs
+   * are a separate, deterministic step and are visible in the saved deck.
+   */
+  opts?.record?.({
+    parseUser: lastParseUser,
+    models: { parse: o.parseModel ?? '', compose: o.model ?? '' },
+    promptVersions: currentVersions('post') as Record<string, number>,
+    slides: out.map((slide, i) => ({
+      role: slide.role,
+      parts: kept[i]?.parts ?? {},
+      html: slide.authored.html,
+      path: slide.source,
+      ...(authored[i]?.composeUser ? { composeUser: authored[i]!.composeUser } : {}),
+    })),
+  });
+
   if (opts?.renderCheck ?? (Boolean(opts?.renderProbe) || renderCheckEnabledByDefault())) {
     const checked = await renderCheckDeck(recipe, kept, out.map((s) => s.authored), o.format ?? '1080x1350', {
       openProbe: opts?.renderProbe,

@@ -12,6 +12,7 @@ import type {
   SlidePhoto,
   AssetType,
   Format,
+  Lesson,
   TweakSuggestion,
   UpdateStatus,
 } from '@contentbuilder/shared';
@@ -137,6 +138,23 @@ export const updateBusiness = (
   id: string,
   data: { name?: string; websiteUrl?: string; profile?: BusinessProfile | null },
 ) => request<Business>(`/businesses/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+
+/**
+ * WHAT A BRAND HAS TAUGHT THE COPYWRITER — derived from the edits its owner
+ * made to previous posts, with the evidence attached. Read-only; deriving is
+ * deterministic, so this and the prompt always tell the same story.
+ */
+export const getBrandLessons = (businessId: string) =>
+  request<{ lessons: Array<Lesson & { muted: boolean }>; posts: number; applied: number }>(
+    `/businesses/${businessId}/lessons`,
+  );
+
+/** Stop applying one lesson (or start again). The observations behind it are kept. */
+export const setLessonMuted = (businessId: string, lessonId: string, muted: boolean) =>
+  request<{ lessons: Array<Lesson & { muted: boolean }>; posts: number; applied: number }>(
+    `/businesses/${businessId}/lessons/${encodeURIComponent(lessonId)}`,
+    { method: 'PATCH', body: JSON.stringify({ muted }) },
+  );
 
 export const deleteBusiness = (id: string) =>
   request<{ ok: boolean }>(`/businesses/${id}`, { method: 'DELETE' });
