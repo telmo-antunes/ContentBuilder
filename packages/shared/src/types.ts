@@ -248,6 +248,8 @@ export interface Project {
   /** One direction per slide, in order — the plan the deck was composed
    *  against. Absent when the copywriter was left to shape the deck itself. */
   plan?: string[];
+  /** The pages this post was written from, when the brief cited any. */
+  sources?: Array<{ url: string; title?: string; byline?: string; published?: string; chars?: number }>;
   exportedAt?: string;
   postedAt?: string;
   createdAt: string;

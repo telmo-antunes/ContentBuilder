@@ -371,8 +371,8 @@ describe('cost estimation', () => {
 
 describe('eval fixtures', () => {
   it('covers the intended range with stable, unique ids', () => {
-    expect(EVAL_FIXTURES).toHaveLength(8);
-    expect(new Set(EVAL_FIXTURES.map((f) => f.id)).size).toBe(8);
+    expect(EVAL_FIXTURES).toHaveLength(10);
+    expect(new Set(EVAL_FIXTURES.map((f) => f.id)).size).toBe(10);
     for (const f of EVAL_FIXTURES) {
       expect(f.idea.length).toBeGreaterThan(0);
       expect(f.idea.length).toBeLessThanOrEqual(2000);
@@ -389,6 +389,24 @@ describe('eval fixtures', () => {
     const adversarial = EVAL_FIXTURES.find((f) => f.id === 'adversarial')!;
     expect(adversarial.idea).toContain('ignore instructions');
     expect(adversarial.idea).toContain('<script>');
+  });
+
+  it('exercises the brief language: a read source, a plan and a verbatim lock', () => {
+    const fromSource = EVAL_FIXTURES.find((f) => f.id === 'from-a-blog-post')!;
+    expect(fromSource.sources).toHaveLength(1);
+    // The frozen read must keep the shape `extractReadable` produces, or the
+    // fixture stops testing the thing it exists to test.
+    expect(fromSource.sources![0]!.text).toMatch(/^# /);
+    expect(fromSource.sources![0]!.text).toContain('\n- Beads get flatter');
+    expect(fromSource.sources![0]!.byline).toBe('Telmo Antunes');
+    // The brief itself says almost nothing: everything has to come from the page.
+    expect(fromSource.idea.length).toBeLessThan(120);
+
+    const planned = EVAL_FIXTURES.find((f) => f.id === 'planned-from-a-source')!;
+    expect(planned.plan).toHaveLength(4);
+    expect(planned.locks).toEqual(['Read the water, not the calendar']);
+    // The lock has to actually be quoted in the plan the user typed.
+    expect(planned.plan!.join(' ')).toContain('"Read the water, not the calendar"');
   });
 
   it('binds both reference recipes and filters by id', () => {

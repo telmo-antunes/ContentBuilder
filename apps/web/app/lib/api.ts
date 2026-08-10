@@ -235,6 +235,19 @@ export const getSlideVariants = (projectId: string, slideId: string, count = 2, 
     180_000,
   );
 
+/**
+ * The inverse: NEW WORDS in the arrangement this slide already has. No composer
+ * runs — the copy is spliced into the elements that are there, so the layout
+ * survives exactly. With no `direction` it is "say this better"; with one it is
+ * "say this instead". Nothing is saved until a candidate is applied.
+ */
+export const rewriteSlideCopy = (projectId: string, slideId: string, count = 2, direction?: string) =>
+  request<{ variants: Array<{ html: string; bg?: string; role?: string }> }>(
+    `/projects/${projectId}/slides/${slideId}/rewrite?count=${count}`,
+    { method: 'POST', body: JSON.stringify(direction?.trim() ? { direction: direction.trim() } : {}) },
+    180_000,
+  );
+
 /** Instant deterministic slide tweaks (no AI): headline size, inverse surface. */
 export const tweakSlide = (
   projectId: string,

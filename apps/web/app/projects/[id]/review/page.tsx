@@ -28,6 +28,7 @@ import {
   updateProject,
   getShareInfo,
   getSlideVariants,
+  rewriteSlideCopy,
   listProjectVersions,
   restoreProjectVersion,
   saveProjectVersion,
@@ -332,6 +333,26 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
         setVariants(res.variants);
       } catch (e) {
         toast(e instanceof Error ? e.message : 'Could not get alternatives', 'error');
+      } finally {
+        setWorking(null);
+      }
+    },
+    [projectId],
+  );
+
+  /**
+   * The inverse: keep this arrangement, change the words. No composer runs, so
+   * the layout you liked comes back byte-identical apart from the copy.
+   */
+  const askRewrite = useCallback(
+    async (slideId: string, direction?: string) => {
+      setWorking('rewrite');
+      setVariants(null);
+      try {
+        const res = await rewriteSlideCopy(projectId, slideId, 2, direction);
+        setVariants(res.variants);
+      } catch (e) {
+        toast(e instanceof Error ? e.message : 'Could not rewrite the copy', 'error');
       } finally {
         setWorking(null);
       }
@@ -944,6 +965,22 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
               </div>
             </header>
 
+            {/* WHAT THIS DECK WAS WRITTEN FROM. A slide can make a claim about
+                dwell times or pH; the article that produced it is the only way
+                to check one, and until now nothing but the prompt ever saw it. */}
+            {project.sources?.length ? (
+              <section className="studio-sources">
+                <span className="lab">Written from</span>
+                {project.sources.map((s) => (
+                  <a key={s.url} href={s.url} target="_blank" rel="noreferrer noopener" title={s.url}>
+                    <Icon name="link" size={12} />
+                    {s.title || s.url}
+                    {s.byline ? <span className="by">{s.byline}</span> : null}
+                  </a>
+                ))}
+              </section>
+            ) : null}
+
             {recipe && (
               <section className="studio-recipe">
                 <div className="rh">
@@ -1440,6 +1477,26 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                     ) : (
                       <>
                         <Icon name="sparkle" /> {direction.trim() ? 'Rewrite' : 'Alternatives'}
+                      </>
+                    )}
+                  </button>
+                </div>
+                {/* The two halves of the same idea, side by side: one keeps the
+                    words and changes the layout, the other keeps the layout and
+                    changes the words. */}
+                <div className="row" style={{ marginTop: 8 }}>
+                  <button
+                    className="btn"
+                    style={{ flex: 1, justifyContent: 'center' }}
+                    disabled={!selected?.authored?.html || working !== null}
+                    title="Keep this exact layout — write new copy for it"
+                    onClick={() => selected && askRewrite(selected.id, direction)}
+                  >
+                    {working === 'rewrite' ? (
+                      'Writing…'
+                    ) : (
+                      <>
+                        <Icon name="edit" /> New words
                       </>
                     )}
                   </button>

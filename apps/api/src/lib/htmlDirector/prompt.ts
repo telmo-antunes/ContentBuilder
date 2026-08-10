@@ -42,6 +42,12 @@ export interface ComposeSlideInput {
   format: string;
   /** true when this brand+slide should be photo-forward (cover with imagery). */
   photo?: boolean;
+  /**
+   * What the picture should be OF, in stock-library words. Never reaches the
+   * composer — it is the parse step's note to the USER, and prefills the
+   * Studio's photo picker so it opens on a search instead of an empty box.
+   */
+  imageQuery?: string;
   /** Position in the deck — rotates which composition VARIANT this role uses. */
   index?: number;
 }

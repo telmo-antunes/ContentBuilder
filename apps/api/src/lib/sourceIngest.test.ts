@@ -1,5 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { extractReadable, extractTitle, readSource, readSources, sourceBlock, type FetchLike } from './sourceIngest';
+import {
+  __setClock,
+  clearSourceCache,
+  extractByline,
+  extractReadable,
+  extractTitle,
+  readSource,
+  readSources,
+  sourceBlock,
+  type FetchLike,
+} from './sourceIngest';
 
 /**
  * The SSRF guard resolves a hostname before any fetch is attempted, so these
@@ -7,8 +17,15 @@ import { extractReadable, extractTitle, readSource, readSources, sourceBlock, ty
  * escape hatch skips the lookup entirely; the guard itself is exercised in its
  * own block below, with the flag off.
  */
-beforeEach(() => vi.stubEnv('ALLOW_PRIVATE_URLS', 'true'));
-afterEach(() => vi.unstubAllEnvs());
+beforeEach(() => {
+  vi.stubEnv('ALLOW_PRIVATE_URLS', 'true');
+  clearSourceCache();
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+  __setClock(() => Date.now());
+  clearSourceCache();
+});
 
 const page = (body: string, head = '<title>How often to reapply | DetailMasters</title>') =>
   `<!doctype html><html><head>${head}</head><body>${body}</body></html>`;
@@ -146,5 +163,88 @@ describe('sourceBlock', () => {
     expect(block).toContain('SOURCE 1 — "A title" (https://a.com)');
     expect(block).toContain('the words');
     expect(block).toContain('do not invent claims it does not make');
+  });
+});
+
+describe('extractByline', () => {
+  it('prefers what the page declares', () => {
+    expect(
+      extractByline(
+        '<meta property="article:author" content="Telmo Antunes">' +
+          '<meta property="article:published_time" content="2026-08-09">',
+      ),
+    ).toEqual({ byline: 'Telmo Antunes', published: '2026-08-09' });
+  });
+
+  it('reads JSON-LD when there are no meta tags', () => {
+    const ld = '<script type="application/ld+json">{"author":{"name":"A Writer"},"datePublished":"2026-01-02"}</script>';
+    expect(extractByline(ld)).toEqual({ byline: 'A Writer', published: '2026-01-02' });
+  });
+
+  it('falls back to the visible byline every CMS prints', () => {
+    const html = page('<article><p>By Telmo Antunes · Published August 9, 2026 · 2 min read</p></article>');
+    expect(extractByline(html)).toMatchObject({ byline: 'Telmo Antunes' });
+  });
+
+  it('reports nothing rather than guessing', () => {
+    expect(extractByline(page('<p>An article with no attribution anywhere on it at all.</p>'))).toEqual({});
+  });
+});
+
+describe('sourceBlock — attribution', () => {
+  it('names who may be quoted when the page says', () => {
+    const block = sourceBlock([{ url: 'u', title: 't', text: 'words', byline: 'Telmo Antunes', published: '2026-08-09' }]);
+    expect(block).toContain('Written by Telmo Antunes, published 2026-08-09.');
+    expect(block).toContain('attribute it to Telmo Antunes and nobody else');
+  });
+
+  it('forbids a named attribution when the page names nobody', () => {
+    expect(sourceBlock([{ url: 'u', title: 't', text: 'words' }])).toContain('Do NOT attribute a quote to a named person');
+  });
+});
+
+describe('the source cache', () => {
+  const good = page('<article><p>' + 'Readable prose that clears the minimum length. '.repeat(8) + '</p></article>');
+
+  it('serves a second read of the same URL without touching the network', async () => {
+    const impl = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: () => 'text/html' },
+      text: async () => good,
+    })) as unknown as FetchLike;
+    const first = await readSource('https://a.com/post', impl);
+    const second = await readSource('https://a.com/post', impl);
+    expect(impl).toHaveBeenCalledTimes(1);
+    expect(second).toEqual(first);
+  });
+
+  it('refetches once the entry is stale', async () => {
+    let t = 1_000_000;
+    __setClock(() => t);
+    const impl = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: () => 'text/html' },
+      text: async () => good,
+    })) as unknown as FetchLike;
+    await readSource('https://a.com/post', impl);
+    t += 11 * 60 * 1000;
+    await readSource('https://a.com/post', impl);
+    expect(impl).toHaveBeenCalledTimes(2);
+  });
+
+  it('never caches a failure — a 404 may have been transient', async () => {
+    let ok = false;
+    const impl = vi.fn(async () => ({
+      ok,
+      status: ok ? 200 : 404,
+      headers: { get: () => 'text/html' },
+      text: async () => good,
+    })) as unknown as FetchLike;
+    await expect(readSource('https://a.com/post', impl)).resolves.toHaveProperty('reason');
+    ok = true;
+    await expect(readSource('https://a.com/post', impl)).resolves.toHaveProperty('text');
+    expect(impl).toHaveBeenCalledTimes(2);
   });
 });

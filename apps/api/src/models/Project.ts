@@ -129,6 +129,28 @@ const projectSchema = new Schema(
      * than from a paragraph that lost its structure.
      */
     plan: { type: [String], required: false },
+    /**
+     * The pages this post was WRITTEN FROM. Kept so a claim on a slide can be
+     * checked against the article that produced it — the single most useful
+     * thing to know about an AI-written deck, and until now the only party that
+     * ever saw it was the prompt.
+     */
+    sources: {
+      type: [
+        new Schema(
+          {
+            url: { type: String, required: true },
+            title: { type: String, required: false },
+            byline: { type: String, required: false },
+            published: { type: String, required: false },
+            /** How much readable text was taken from it. */
+            chars: { type: Number, required: false },
+          },
+          { _id: false },
+        ),
+      ],
+      required: false,
+    },
     /** Set automatically on export; `postedAt` is the manual "it went live" tick. */
     exportedAt: { type: Date, required: false },
     postedAt: { type: Date, required: false },

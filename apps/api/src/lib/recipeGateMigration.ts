@@ -20,6 +20,7 @@ import {
   typeFloorReport,
   type BrandRecipe,
 } from '@contentbuilder/shared';
+import { fillRecipeFragmentGaps } from './htmlDirector/fragments';
 import { BrandKitModel } from '../models';
 
 export interface RecipeGateStats {
@@ -29,6 +30,8 @@ export interface RecipeGateStats {
   listSkeletonStripped: string[];
   /** Undersized type that was raised, as `role 30→44`. */
   typeRaised: string[];
+  /** Fragment holes added, as "role: part+part". */
+  fragmentsFilled: string[];
 }
 
 /** The CSS a recipe actually renders from — the layers, or the single blob. */
@@ -55,6 +58,7 @@ export function gateStoredRecipe(recipe: BrandRecipe): {
   recipe: BrandRecipe;
   listSkeletonStripped: string[];
   typeRaised: string[];
+  fragmentsFilled: string[];
 } {
   // 1. The list skeleton belongs to the app; strip the brand's competing one.
   const list = ensureListSkeleton(recipe);
@@ -70,7 +74,19 @@ export function gateStoredRecipe(recipe: BrandRecipe): {
     if (after !== before) next = writePart(next, part, after);
   }
 
-  return { recipe: next, listSkeletonStripped: list.repairs, typeRaised: [...new Set(typeRaised)] };
+  // 3. Fragment gaps. A hole this brand's fragments were authored without sends
+  //    every slide that needs the part to the composer; adding it is free, uses
+  //    only classes the brand already advertises, and pays for itself the first
+  //    time a deck is composed.
+  const filled = fillRecipeFragmentGaps(next);
+  next = filled.recipe;
+
+  return {
+    recipe: next,
+    listSkeletonStripped: list.repairs,
+    typeRaised: [...new Set(typeRaised)],
+    fragmentsFilled: filled.repairs.map((r) => `${r.role}: ${r.added.join('+')}`),
+  };
 }
 
 export async function runRecipeGateMigration(opts: { dryRun?: boolean } = {}): Promise<RecipeGateStats> {
@@ -79,6 +95,7 @@ export async function runRecipeGateMigration(opts: { dryRun?: boolean } = {}): P
     kitsChanged: 0,
     listSkeletonStripped: [],
     typeRaised: [],
+    fragmentsFilled: [],
   };
 
   const kits = await BrandKitModel.find({ recipe: { $exists: true, $ne: null } });
@@ -88,12 +105,14 @@ export async function runRecipeGateMigration(opts: { dryRun?: boolean } = {}): P
     stats.kitsScanned += 1;
 
     const out = gateStoredRecipe(recipe);
-    const changed = out.listSkeletonStripped.length > 0 || out.typeRaised.length > 0;
+    const changed =
+      out.listSkeletonStripped.length > 0 || out.typeRaised.length > 0 || out.fragmentsFilled.length > 0;
     if (!changed) continue;
 
     stats.kitsChanged += 1;
     stats.listSkeletonStripped.push(...out.listSkeletonStripped);
     stats.typeRaised.push(...out.typeRaised);
+    stats.fragmentsFilled.push(...out.fragmentsFilled);
     if (!opts.dryRun) {
       kit.set('recipe', out.recipe);
       // Mixed paths need marking or Mongoose will not persist the change.
@@ -104,6 +123,7 @@ export async function runRecipeGateMigration(opts: { dryRun?: boolean } = {}): P
 
   stats.listSkeletonStripped = [...new Set(stats.listSkeletonStripped)];
   stats.typeRaised = [...new Set(stats.typeRaised)];
+  stats.fragmentsFilled = [...new Set(stats.fragmentsFilled)];
   return stats;
 }
 
@@ -115,6 +135,7 @@ export function formatRecipeGateSummary(s: RecipeGateStats): string {
     lines.push(`  list skeleton stripped from: ${s.listSkeletonStripped.join(', ')}`);
   }
   if (s.typeRaised.length) lines.push(`  type raised: ${s.typeRaised.join(', ')}`);
+  if (s.fragmentsFilled.length) lines.push(`  fragment holes added: ${s.fragmentsFilled.join(', ')}`);
   if (!s.kitsChanged) lines.push('  nothing to do — every stored recipe already matches the gates');
   return lines.join('\n');
 }

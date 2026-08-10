@@ -21,7 +21,8 @@
     "eval:compose": "npm --prefix apps/api run eval:compose --",
     "migrate:photos": "npm --prefix apps/api run migrate:photos --",
     "lint": "eslint .",
-    "migrate:recipes": "npm --prefix apps/api run migrate:recipes --"
+    "migrate:recipes": "npm --prefix apps/api run migrate:recipes --",
+    "media:orphans": "npm --prefix apps/api run media:orphans --"
   },
   "devDependencies": {
     "@types/supertest": "^7.2.0",

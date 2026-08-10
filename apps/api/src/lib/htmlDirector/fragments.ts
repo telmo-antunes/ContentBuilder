@@ -41,11 +41,13 @@
  * producing a slide that lost copy.
  */
 import {
+  RECIPE_REVEAL_ORDER,
   RECIPE_STRUCTURAL_CLASSES,
   SLIDE_ROLES,
   SLOT_ATTR,
   authoredSlots,
   recipeEmphasisWrap,
+  recipePatternVariant,
   type BrandRecipe,
 } from '@contentbuilder/shared';
 import { sanitizeAuthoredHtml } from '../htmlSanitize';
@@ -351,6 +353,185 @@ export function validateRecipeFragments(recipe: BrandRecipe): {
   if (Object.keys(kept).length) next.fragments = kept;
   else delete next.fragments;
   return { recipe: next, dropped };
+}
+
+// ── Filling the gaps a fragment was authored without ────────────────────────
+
+/**
+ * A FRAGMENT WITH A MISSING HOLE COSTS A MODEL CALL, EVERY TIME.
+ *
+ * Substitution is all-or-nothing on purpose: a fragment with no `{{tagline}}`
+ * cannot carry a slide that has a tagline without silently dropping it, so the
+ * whole slide falls back to the composer. That is the right call and the wrong
+ * outcome — on one real brand, three of nine slides took the slow path because
+ * the recipe's `list` fragment was authored without a `{{tagline}}` and its
+ * `cta` without a `{{body}}`. The arrangement was fine. It just had one fewer
+ * hole than the copywriter turned out to need.
+ *
+ * So the gaps are filled in, deterministically:
+ *
+ *   · the ELEMENT is the brand's own — `<div class="tagline">{{tagline}}</div>`,
+ *     using the class the recipe already advertises for that part. Nothing new
+ *     is invented, and a part whose class this brand does not define is skipped.
+ *   · the POSITION comes from the role's own composition pattern ("eyebrow →
+ *     headline → rule → body → fill → panel"), so the hole lands where this
+ *     brand said that part goes. With no pattern, the shared reveal order
+ *     decides, which is the same fallback `spliceMissingParts` uses.
+ *   · anything that would change what the fragment ALREADY says is refused: an
+ *     existing hole is never moved, and a fragment that fails re-validation is
+ *     discarded whole rather than repaired badly.
+ *
+ * No model. No new vocabulary. The brand's own classes, in the brand's own
+ * order, in the gaps its author happened to leave.
+ */
+/** Which class carries which part — the fragment twin of compose's PART_TO_CLASS. */
+const PART_CLASS: Record<FragmentPart, string> = {
+  eyebrow: 'eyebrow',
+  headline: 'headline',
+  tagline: 'tagline',
+  body: 'body',
+  quote: 'quote',
+  attribution: 'attr',
+  stat: 'stat',
+  cta: 'cta',
+  handle: 'handle',
+};
+
+/** The class order this role's fragment should follow, most specific first. */
+function fragmentOrder(recipe: BrandRecipe, role: string): string[] {
+  const order: string[] = [];
+  const pattern = recipePatternVariant(recipe, '1080x1350', role, 0);
+  if (pattern) {
+    for (const token of pattern.slice(pattern.indexOf(':') + 1).split('→')) {
+      const name = token.trim().toLowerCase().match(/^[a-z][\w-]*/)?.[0];
+      if (name && !order.includes(name)) order.push(name);
+    }
+  }
+  for (const sel of RECIPE_REVEAL_ORDER.flat()) {
+    const cls = sel.replace(/^\./, '');
+    if (!order.includes(cls)) order.push(cls);
+  }
+  return order;
+}
+
+/** Does this recipe advertise a component whose FIRST class is `cls`? */
+function definesClass(recipe: BrandRecipe, cls: string): boolean {
+  return recipe.components.some((c) => c.className.trim().split(/\s+/)[0] === cls);
+}
+
+/**
+ * The TOP-LEVEL element ranges of a fragment, with the classes each wears — a
+ * nested `.row` inside a `.panel` is part of the panel, not a position of its
+ * own, so a hole is never inserted between a list and its items.
+ */
+function topLevel(html: string): Array<{ start: number; end: number; classes: string[] }> {
+  const spans = elementSpans(html);
+  return spans
+    .filter((span) => !spans.some((o) => o.start < span.start && span.end <= o.end))
+    .map((span) => {
+      const open = html.slice(span.start, html.indexOf('>', span.start) + 1);
+      const m = open.match(/\bclass\s*=\s*"([^"]*)"/i);
+      return { ...span, classes: (m?.[1] ?? '').trim().split(/\s+/).filter(Boolean) };
+    })
+    .sort((a, b) => a.start - b.start);
+}
+
+export interface FragmentRepair {
+  role: string;
+  /** The parts a hole was added for. */
+  added: string[];
+}
+
+/**
+ * Add the missing holes to ONE fragment. Returns the fragment unchanged when
+ * there is nothing to add, nothing to add it with, or the result would not
+ * re-validate.
+ */
+export function fillFragmentGaps(
+  recipe: BrandRecipe,
+  role: string,
+  fragment: string,
+  wanted: readonly FragmentPart[],
+): { html: string; added: string[] } {
+  const missing = wanted.filter(
+    (p) => !fragment.includes(`{{${p}}}`) && definesClass(recipe, PART_CLASS[p]),
+  );
+  if (!missing.length) return { html: fragment, added: [] };
+
+  const order = fragmentOrder(recipe, role);
+  const rankOf = (cls: string) => {
+    const i = order.indexOf(cls);
+    return i === -1 ? order.length : i;
+  };
+
+  let html = fragment;
+  const added: string[] = [];
+  // Insert least-ranked first so each insertion's position is computed against
+  // markup that already holds everything that comes before it.
+  for (const part of [...missing].sort((a, b) => rankOf(PART_CLASS[a]) - rankOf(PART_CLASS[b]))) {
+    const cls = PART_CLASS[part];
+    const rank = rankOf(cls);
+    const blocks = topLevel(html);
+    // Before the first block the order places AFTER this part; else at the end.
+    let at = html.length;
+    for (const block of blocks) {
+      const ranks = block.classes.map(rankOf).filter((r) => r < order.length);
+      if (ranks.length && Math.min(...ranks) > rank) {
+        at = block.start;
+        break;
+      }
+    }
+    const el = `<div class="${cls}">{{${part}}}</div>`;
+    html = at >= html.length ? `${html}\n${el}` : `${html.slice(0, at)}${el}\n${html.slice(at)}`;
+    added.push(part);
+  }
+
+  // Re-validate through the same gate a stored fragment goes through. A repair
+  // that produces something unusable is not a repair.
+  const checked = checkFragment(recipe, role, html);
+  if ('reason' in checked) return { html: fragment, added: [] };
+  return { html: checked.html, added };
+}
+
+/**
+ * Every part a role's slides realistically carry. Derived from the role itself
+ * rather than from a fixed list, because a `quote` slide has no use for a hole
+ * the copywriter will never fill, and each unused hole is one more element the
+ * substitution has to remove.
+ */
+const ROLE_PARTS: Record<string, FragmentPart[]> = {
+  cover: ['eyebrow', 'headline', 'tagline', 'body', 'handle'],
+  statement: ['eyebrow', 'headline', 'body', 'tagline', 'handle'],
+  quote: ['eyebrow', 'quote', 'attribution', 'handle'],
+  feature: ['eyebrow', 'headline', 'body', 'tagline', 'handle'],
+  stat: ['eyebrow', 'stat', 'tagline', 'body', 'handle'],
+  list: ['eyebrow', 'headline', 'body', 'tagline', 'handle'],
+  cta: ['eyebrow', 'headline', 'tagline', 'body', 'cta', 'handle'],
+};
+
+/**
+ * Fill the gaps in every fragment a recipe has. Deterministic and idempotent —
+ * a second run adds nothing — so it is safe to apply on read.
+ */
+export function fillRecipeFragmentGaps(recipe: BrandRecipe): {
+  recipe: BrandRecipe;
+  repairs: FragmentRepair[];
+} {
+  const fragments = recipe.fragments;
+  if (!fragments || !Object.keys(fragments).length) return { recipe, repairs: [] };
+
+  const next: Record<string, string> = { ...fragments };
+  const repairs: FragmentRepair[] = [];
+  for (const [role, fragment] of Object.entries(fragments)) {
+    const wanted = ROLE_PARTS[role];
+    if (!wanted || typeof fragment !== 'string') continue;
+    const out = fillFragmentGaps(recipe, role, fragment, wanted);
+    if (!out.added.length) continue;
+    next[role] = out.html;
+    repairs.push({ role, added: out.added });
+  }
+  if (!repairs.length) return { recipe, repairs: [] };
+  return { recipe: { ...recipe, fragments: next }, repairs };
 }
 
 // ── Substitution ────────────────────────────────────────────────────────────

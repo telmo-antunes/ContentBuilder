@@ -19,9 +19,9 @@ import {
   type BrandRecipe,
   type SlidePhoto,
 } from '@contentbuilder/shared';
-import { composeProject, composeSlide, parseSlideDirection } from '../lib/htmlDirector/compose';
+import { composeProject, composeSlide, parseSlideCopy, parseSlideDirection } from '../lib/htmlDirector/compose';
 import { resolveBrief } from '../lib/sourceIngest';
-import { partsFromAuthored } from '../lib/htmlDirector/reparse';
+import { authoredShape, partsFromAuthored, rewriteAuthoredCopy } from '../lib/htmlDirector/reparse';
 import { addHeadlineVariant, removeHeadlineVariant } from '../lib/htmlDirector/renderCheck';
 import { sanitizeAuthoredHtml } from '../lib/htmlSanitize';
 import { ProjectModel, ProjectVersionModel, BusinessModel, BrandKitModel, MediaAssetModel, VideoJobModel, VIDEO_JOB_ACTIVE_STATES } from '../models';
@@ -524,6 +524,9 @@ projectsRouter.post(
       ...s,
       imageNeed: 'none' as const,
       photos: filled.photos[i] ?? [],
+      // The copywriter's own words for the picture this slide wants — what the
+      // Studio's stock picker opens on, instead of an empty search box.
+      ...(composed[i]!.imageQuery ? { imageQuery: composed[i]!.imageQuery } : {}),
     }));
     project.set('slides', slides);
     project.set('status', 'draft');
@@ -532,6 +535,19 @@ projectsRouter.post(
     // starts from the same brief rather than from a flattened paragraph.
     project.set('idea', idea);
     project.set('plan', brief.plan.length ? brief.plan : undefined);
+    // What it was written FROM, so the Studio can link back to it.
+    project.set(
+      'sources',
+      sources.length
+        ? sources.map((x) => ({
+            url: x.url,
+            title: x.title,
+            ...(x.byline ? { byline: x.byline } : {}),
+            ...(x.published ? { published: x.published } : {}),
+            chars: x.text.length,
+          }))
+        : undefined,
+    );
     if (!project.get('stage') || project.get('stage') === 'idea') project.set('stage', 'ready');
     await project.save();
     // The brief's own report rides along with the project: which pages were
@@ -539,7 +555,7 @@ projectsRouter.post(
     res.json({
       ...project.toJSON(),
       brief: {
-        sources: sources.map((s) => ({ url: s.url, title: s.title, chars: s.text.length })),
+        sources: sources.map((s) => ({ url: s.url, title: s.title, byline: s.byline, chars: s.text.length })),
         failures,
         plan: brief.plan,
         locks: brief.locks,
@@ -644,6 +660,71 @@ projectsRouter.post(
       }
     }
     if (!variants.length) throw new ApiError(502, 'No usable alternatives came back — try again.');
+    res.json({ variants });
+  }),
+);
+
+/**
+ * NEW WORDS, SAME LAYOUT — the exact inverse of the endpoint above.
+ *
+ * "Alternatives" keeps the copy and re-arranges it. This keeps the arrangement
+ * and re-writes the copy, which is what you want when a slide is composed well
+ * and simply says the wrong thing. No composer runs at all: the new text is
+ * spliced into the elements that are already there, so the layout it kept is
+ * the layout it had, byte for byte apart from the words.
+ */
+projectsRouter.post(
+  '/:id/slides/:slideId/rewrite',
+  asyncHandler(async (req, res) => {
+    const id = requireObjectId(req.params.id, 'Project');
+    if (!aiDraftConfigured()) throw new ApiError(400, 'AI is not configured.');
+    const project = await ProjectModel.findById(id);
+    if (!project) throw new ApiError(404, 'Project not found');
+
+    const slides = (project.get('slides') as Array<{ toObject?: () => SlideInput }>).map((x) =>
+      typeof x.toObject === 'function' ? x.toObject() : (x as SlideInput),
+    );
+    const slide = slides.find((x) => x.id === req.params.slideId);
+    if (!slide?.authored?.html) throw new ApiError(400, 'This slide is not AI-composed.');
+
+    const stored = (await approvedKitFor(String(project.get('businessId')))) as { recipe?: unknown } | null;
+    if (!stored?.recipe) throw new ApiError(400, 'This brand has no design recipe yet.');
+    const recipe = migrateRecipe(stored.recipe);
+
+    const direction = String((req.body as { direction?: unknown } | undefined)?.direction ?? '')
+      .trim()
+      .slice(0, MAX_SLIDE_DIRECTION_CHARS);
+    const html = slide.authored.html;
+    const shape = authoredShape(html);
+    if (!shape.parts.length) throw new ApiError(400, 'This slide has no copy to rewrite.');
+
+    const count = Math.min(3, Math.max(1, Number(req.query.count) || 2));
+    const variants: Array<{ html: string; bg?: string; role?: string }> = [];
+    for (let v = 0; v < count; v += 1) {
+      try {
+        const parts = await parseSlideCopy(recipe, shape, {
+          format: project.get('format'),
+          role: (slide.authored.role ?? 'statement') as never,
+          says: partsFromAuthored(html),
+          direction,
+          post: { title: project.get('title'), idea: project.get('idea') },
+        });
+        const next = rewriteAuthoredCopy(html, parts);
+        // The same guard chain a composed slide gets: sanitise, then re-apply
+        // the brand's headline accent to copy that has never seen it.
+        const safe = sanitizeAuthoredHtml(next.html);
+        if (safe && !variants.some((x) => x.html === safe)) {
+          variants.push({
+            html: safe,
+            ...(slide.authored.bg ? { bg: slide.authored.bg } : {}),
+            ...(slide.authored.role ? { role: slide.authored.role } : {}),
+          });
+        }
+      } catch (err) {
+        console.warn('[rewrite] one candidate failed:', err instanceof Error ? err.message : err);
+      }
+    }
+    if (!variants.length) throw new ApiError(502, 'No usable rewrite came back — try again.');
     res.json({ variants });
   }),
 );

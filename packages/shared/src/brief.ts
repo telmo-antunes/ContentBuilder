@@ -199,6 +199,35 @@ export function parseBrief(idea: string, explicitPlan?: readonly string[]): Pars
   };
 }
 
+// ── Reading a role out of a plan entry ──────────────────────────────────────
+
+/**
+ * The words a person actually uses to ask for a slide of a given shape. A plan
+ * entry is a sentence, not a form field, so "the two wear signals, as a list of
+ * two" has to be recognised as a list without the user learning a vocabulary.
+ */
+const ROLE_HINTS: Array<[string, RegExp]> = [
+  ['list', /\b(?:as a |a )?(?:list|bullets?|checklist|enumerat\w+|rundown)\b|\b\d+\s+(?:things|ways|reasons|habits|signs|steps|mistakes|tips)\b/i],
+  ['quote', /\b(?:a )?(?:pull[- ]?quote|quotation|testimonial)\b|\bquote (?:from|by)\b/i],
+  ['stat', /\b(?:as a |a |one )?(?:stat|statistic|big number|percentage|figure)\b/i],
+  ['cta', /\b(?:call to action|cta|the ask|close|closing slide|sign[- ]?off|book|get in touch)\b/i],
+  ['cover', /\b(?:cover|the hook|opening slide|open(?:er|ing)?)\b/i],
+];
+
+/**
+ * Which slide role a plan entry is asking for, if it is asking for one.
+ *
+ * Reported as a HINT, never as a decision: the copywriter is told what the
+ * entry looks like it wants and still owns the judgement, because "five habits"
+ * is a strong signal and "the close" is a weak one, and a rule that overrides
+ * the writer on the weak ones would be worse than no rule.
+ */
+export function roleHintFor(direction: string): string | undefined {
+  const text = String(direction ?? '');
+  for (const [role, re] of ROLE_HINTS) if (re.test(text)) return role;
+  return undefined;
+}
+
 /**
  * Does `text` contain `lock`, ignoring case, whitespace runs and the difference
  * between a straight and a typographic apostrophe or dash?

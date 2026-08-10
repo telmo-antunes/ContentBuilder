@@ -25,6 +25,7 @@ import {
   parseBrief,
   recipeEmphasisWrap,
   recipePatternVariant,
+  roleHintFor,
   slideCountFor,
   type BrandRecipe,
   type RecipeEmphasisWrap,
@@ -36,6 +37,7 @@ import { lintAuthored } from './lintAuthored';
 import { pruneSlideMarkup, topLevelBlocks } from './dedupeBlocks';
 import {
   escapeHtml,
+  fillRecipeFragmentGaps,
   fragmentVerbatimGaps,
   stripFences,
   substituteFragment,
@@ -86,6 +88,13 @@ const parseResultSchema = z.object({
         parts: partsSchema,
         /** Does this slide want a photograph? Drives the placeholder the user fills. */
         image: z.boolean().catch(false).default(false),
+        /**
+         * WHAT the photograph should be of, in the words you would type into a
+         * stock library. The parse step already knows what the slide is about;
+         * without this the Studio's stock picker opened on an empty box and the
+         * user had to invent the search themselves.
+         */
+        imageQuery: z.string().max(80).optional(),
       }),
     )
     .min(1)
@@ -319,6 +328,87 @@ interface BudgetViolation {
   label: string;
   length: number;
   budget: number;
+}
+
+// ── Two slides making the same point ────────────────────────────────────────
+
+/**
+ * Words too common to mean anything when two slides share them. Deliberately
+ * tiny and generic: a domain word ("coating", "beading") repeating across
+ * slides is exactly the signal we want to keep, so only true function words go.
+ */
+const STOPWORDS = new Set([
+  'the', 'a', 'an', 'and', 'or', 'but', 'of', 'to', 'in', 'on', 'at', 'by', 'for', 'from', 'with',
+  'is', 'are', 'was', 'were', 'be', 'it', 'its', 'that', 'this', 'these', 'those', 'you', 'your',
+  'we', 'our', 'they', 'their', 'not', 'no', 'so', 'as', 'if', 'than', 'then', 'what', 'when',
+]);
+
+/** A slide's meaningful words — everything it says, deduplicated. */
+function contentWords(parts: ComposeParts): Set<string> {
+  const text = [
+    parts.eyebrow, parts.headline, parts.tagline, parts.body, parts.quote, parts.stat, parts.cta,
+    ...(parts.rows ?? []).flatMap((r) => [r.text, r.note ?? '']),
+  ]
+    .filter((v): v is string => typeof v === 'string' && v.length > 0)
+    .join(' ')
+    .toLowerCase();
+  const out = new Set<string>();
+  for (const w of text.split(/[^a-z0-9']+/)) {
+    if (w.length > 3 && !STOPWORDS.has(w)) out.add(w);
+  }
+  return out;
+}
+
+/** Jaccard overlap of two word sets — 1 is identical, 0 shares nothing. */
+function overlap(a: Set<string>, b: Set<string>): number {
+  if (!a.size || !b.size) return 0;
+  let shared = 0;
+  for (const w of a) if (b.has(w)) shared += 1;
+  return shared / (a.size + b.size - shared);
+}
+
+/** Above this two slides are saying the same thing in different words. */
+const SAME_POINT = 0.5;
+
+/**
+ * Below this a slide has too little to say for the comparison to mean anything.
+ * A pure statement slide — an eyebrow and one short line — can carry four
+ * meaningful words, and two of those sharing three of them is a coincidence,
+ * not a repetition. Judging them anyway spends a corrective re-parse on noise.
+ */
+const MIN_WORDS_TO_JUDGE = 6;
+
+export interface RepeatedPair {
+  a: number;
+  b: number;
+  score: number;
+}
+
+/**
+ * WHICH SLIDES REPEAT EACH OTHER.
+ *
+ * A carousel earns a swipe by telling you something new on every frame, and the
+ * copywriter — writing all of them in one pass from one article — regularly
+ * spends two on the same point in different words. The system prompt asks for
+ * variety; nothing checked. This is the check: cheap set overlap over each
+ * slide's meaningful words, no model, no embedding.
+ *
+ * The COVER and the CTA are exempt on purpose. A cover restates the deck's
+ * thesis and a call to action restates the offer — that is their job, and
+ * flagging them would fire on every well-made deck forever.
+ */
+export function repeatedSlides(slides: ParsedSlide[]): RepeatedPair[] {
+  const words = slides.map((s) => contentWords(s.parts));
+  const out: RepeatedPair[] = [];
+  for (let i = 0; i < slides.length; i += 1) {
+    for (let j = i + 1; j < slides.length; j += 1) {
+      if (slides[i]!.role === 'cover' || slides[j]!.role === 'cta') continue;
+      if (words[i]!.size < MIN_WORDS_TO_JUDGE || words[j]!.size < MIN_WORDS_TO_JUDGE) continue;
+      const score = overlap(words[i]!, words[j]!);
+      if (score >= SAME_POINT) out.push({ a: i, b: j, score });
+    }
+  }
+  return out;
 }
 
 /** Every budgeted part that is over its budget (by any amount). */
@@ -580,6 +670,7 @@ RULES
 - HOW MANY SLIDES: you are told the range the material looks like it needs. Give the deck the number of slides the content actually earns inside that range — never pad a thin idea out to hit a quota, never cram two ideas onto one slide to come in under it.
 - Write in the brand voice provided. No hashtags, no emoji.
 - "image": set true when this slide would be genuinely STRONGER with a photograph — it shows a place, a product, a person, a result, a before/after. Set false when the slide is a pure typographic statement, a pulled quote, or a big number, where a photo would only decorate. Judge each slide on its own; a deck may have several, one, or none.
+- With "image": true, also give "imageQuery" — 2–5 words naming the picture as you would search a stock library for it ("ceramic coating applied to car bonnet", not "a nice photo"). It is what the user's photo picker opens on.
 - A slide marked "image": true gets an eyebrow and a headline ONLY. Omit "body" AND "rows" entirely on those slides — a photograph takes nearly half the canvas, and neither a paragraph nor a list can share what is left. If the content is a list, it is not a photo slide: keep the rows and set "image": false.`;
 
 /**
@@ -611,6 +702,11 @@ const PARSE_TOOL: AiJsonTool = {
             image: {
               type: 'boolean',
               description: 'true only when this slide would be genuinely STRONGER with a photograph.',
+            },
+            imageQuery: {
+              type: 'string',
+              description:
+                'Only when image is true: 2–5 words describing the picture, as you would type them into a stock photo library.',
             },
             parts: {
               type: 'object',
@@ -713,9 +809,17 @@ function parseUser(
     handle?: string;
   },
 ): string {
+  // A plan entry that plainly asks for a shape — "as a list of two", "a pull
+  // quote", "the close" — says so in the numbered line, so the copywriter does
+  // not have to re-derive it from the prose it just read.
   const plan = opts.plan.length
     ? `SLIDE PLAN (one slide per entry, in this order):\n` +
-      opts.plan.map((p, i) => `  ${i + 1}. ${p}`).join('\n')
+      opts.plan
+        .map((p, i) => {
+          const hint = roleHintFor(p);
+          return `  ${i + 1}. ${p}${hint ? `   [reads as role "${hint}"]` : ''}`;
+        })
+        .join('\n')
     : '';
   const locks = opts.locks.length
     ? `VERBATIM — use each of these EXACTLY, word for word, in the slide it belongs to:\n` +
@@ -881,22 +985,34 @@ export async function parseForCompose(
   );
   let slides = stripMarkdownFromDeck(readDeck(parsePayload(reply), 'first pass'));
 
-  // ONE corrective re-parse, carrying every complaint at once. Two things can
+  // ONE corrective re-parse, carrying every complaint at once. Three things can
   // be wrong: a part that burst its budget flagrantly (>10% over — anything
-  // milder is clamped below), and copy the user LOCKED that came back reworded.
+  // milder is clamped below), copy the user LOCKED that came back reworded, and
+  // two slides that make the same point in different words.
   // A clean parse pays for exactly one call.
   const flagrant = budgetViolationsOf(slides, budgets).filter((v) => v.length > v.budget * 1.1);
   const lost = missingLocks(JSON.stringify(slides), locks);
-  if (flagrant.length || lost.length) {
+  const repeats = repeatedSlides(slides);
+  if (flagrant.length || lost.length || repeats.length) {
     if (flagrant.length) {
       console.warn(`[compose] parse: ${flagrant.length} part(s) burst their budgets — one corrective re-parse`);
     }
     if (lost.length) console.warn(`[compose] parse: ${lost.length} verbatim string(s) were not used — correcting`);
+    for (const r of repeats) {
+      console.warn(
+        `[compose] parse: slides ${r.a + 1} and ${r.b + 1} make the same point (${Math.round(r.score * 100)}% of their words agree) — correcting`,
+      );
+    }
     const correction = [
       flagrant.length ? `Some parts exceed the hard copy budgets:` : '',
       ...flagrant.map((v) => `- slide ${v.slide + 1} ${v.label} is ${v.length} chars, budget ${v.budget}`),
       lost.length ? `These strings had to appear EXACTLY as written and do not:` : '',
       ...lost.map((l) => `- ${JSON.stringify(l)}`),
+      repeats.length ? `These pairs of slides make the same point twice — a reader learns nothing from the second:` : '',
+      ...repeats.map(
+        (r) =>
+          `- slide ${r.a + 1} and slide ${r.b + 1}. Give one of them a different point from the material, or cut it and return one fewer slide.`,
+      ),
       `Fix every flagged item, keep everything else identical. Return the corrected STRICT JSON only.`,
     ]
       .filter(Boolean)
@@ -918,9 +1034,13 @@ export async function parseForCompose(
       const corrected = stripMarkdownFromDeck(readDeck(parsePayload(retry), 'correction'));
       // Keep whichever attempt honours more of the user's own words — a retry
       // that fixed the budgets by dropping a locked line is not an improvement.
+      // Repetition breaks a tie: same locks kept, fewer slides saying the same
+      // thing wins.
       const before = locks.length - lost.length;
       const after = locks.length - missingLocks(JSON.stringify(corrected), locks).length;
-      slides = after >= before ? corrected : slides;
+      const better =
+        after > before || (after === before && repeatedSlides(corrected).length <= repeats.length);
+      slides = better ? corrected : slides;
     } catch {
       console.warn('[compose] parse: corrective re-parse failed — clamping the original instead');
     }
@@ -941,6 +1061,9 @@ export async function parseForCompose(
     parts: s.parts as ComposeParts,
     format,
     photo: s.image,
+    // Kept even on a slide whose slot was demoted: the photo panel can still
+    // put a background or a free overlay there, and the search is just as good.
+    ...(s.imageQuery ? { imageQuery: s.imageQuery } : {}),
     index,
   }));
 }
@@ -1014,8 +1137,85 @@ export async function parseSlideDirection(
     parts: s.parts as ComposeParts,
     format,
     photo: s.image,
+    ...(s.imageQuery ? { imageQuery: s.imageQuery } : {}),
     index: opts?.index ?? 0,
   };
+}
+
+/**
+ * NEW WORDS FOR AN ARRANGEMENT THAT ALREADY WORKS.
+ *
+ * `parseSlideDirection` writes a whole slide and lets the composer arrange it.
+ * This does the opposite: the arrangement is fixed and known — these part
+ * names, this many rows — so the copywriter is asked for exactly that shape and
+ * nothing else, and the result is spliced into the existing markup rather than
+ * recomposed. It is the call behind the Studio's "New words".
+ */
+export async function parseSlideCopy(
+  recipe: BrandRecipe,
+  shape: { parts: string[]; rows: number },
+  opts?: ComposeOptions & {
+    role?: SlideRole;
+    /** What the slide says today — the point to re-express, unless directed otherwise. */
+    says?: ComposeParts;
+    /** Optional instruction; without one this is simply "say it better". */
+    direction?: string;
+    post?: { title?: string; idea?: string };
+  },
+): Promise<ComposeParts> {
+  const format = opts?.format ?? '1080x1350';
+  const direction = (opts?.direction ?? '').trim();
+  const locks = opts?.locks ?? extractQuotedCopy(direction);
+  const budgets = composeBudgetsFor(format);
+  const says = Object.entries(opts?.says ?? {})
+    .filter(([, v]) => typeof v === 'string' && v.length > 0)
+    .map(([k, v]) => `    ${k}: ${JSON.stringify(v)}`)
+    .join('\n');
+
+  const user = [
+    parseUser(recipe, direction || 'Say the same thing better.', format, {
+      range: { min: 1, max: 1, target: 1, fixed: true },
+      plan: [],
+      locks,
+      sources: opts?.sources ?? [],
+      handle: opts?.handle,
+    }),
+    ``,
+    `THIS IS A REWRITE OF ONE SLIDE THAT IS ALREADY LAID OUT. Return exactly ONE slide.`,
+    opts?.post?.title ? `  the post is titled: ${JSON.stringify(opts.post.title)}` : '',
+    says ? `  it currently says:\n${says}` : '',
+    ``,
+    `THE LAYOUT IS FIXED AND YOU MUST FILL IT EXACTLY:`,
+    `  - include these parts, all of them, and NOTHING else: ${shape.parts.join(', ') || 'headline'}`,
+    shape.rows > 0
+      ? `  - "rows" must have EXACTLY ${shape.rows} ${shape.rows === 1 ? 'entry' : 'entries'} — there is room for that many and no more.`
+      : `  - do NOT use "rows": this layout has no list in it.`,
+    `  - do not add a part the list above does not name; there is no element on this slide to put it in.`,
+    direction
+      ? `Follow the BRIEF above.`
+      : `Keep the same point — this is a rewording, not a new slide. Find a sharper way to say it.`,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const reply = await aiJson(
+    { model: parseModel(opts), max_tokens: 900, system: PARSE_SYSTEM, messages: [{ role: 'user', content: user }] },
+    PARSE_TOOL,
+  );
+  const parsed = stripMarkdownFromDeck(readDeck(parsePayload(reply), 'slide copy'));
+  const clamped = clampSlidesToBudgets(parsed.slice(0, 1), budgets, locks);
+  const parts = { ...(clamped[0]!.parts as ComposeParts) };
+
+  // Hold the reply to the shape, mechanically: a part the layout has no element
+  // for would be silently lost, and a surplus row would leave an empty card.
+  const allowed = new Set(shape.parts);
+  for (const key of Object.keys(parts) as Array<keyof ComposeParts>) {
+    if (key === 'emphasis' || key === 'rows') continue;
+    if (!allowed.has(key)) delete parts[key];
+  }
+  if (shape.rows > 0) parts.rows = (parts.rows ?? []).slice(0, shape.rows);
+  else delete parts.rows;
+  return parts;
 }
 
 // ── Verbatim repair (retry, then deterministic splice) ──────────────────────
@@ -1411,13 +1611,15 @@ export async function composeSlide(
 
 /** Full path: idea → authored slides (role + authored markup). */
 export async function composeProject(
-  recipe: BrandRecipe,
+  recipeIn: BrandRecipe,
   idea: string,
   opts?: ComposeOptions,
 ): Promise<
   Array<{
     role: SlideRole;
     authored: { html: string; bg?: string; role?: string };
+    /** The parse step's stock-search phrase for this slide's picture, if any. */
+    imageQuery?: string;
     /** Which path composed this slide — telemetry only; nothing stores it. */
     source: ComposePath;
   }>
@@ -1426,6 +1628,19 @@ export async function composeProject(
   // (quality tier, once per deck), the per-slide composes typeset it (cheap
   // tier, once per slide). One lookup each, no per-slide Settings round-trip.
   const [composeM, parseM] = await Promise.all([modelFor('compose'), modelFor('parse')]);
+  /**
+   * FILL THE FRAGMENT GAPS FIRST. A hole the brand's author happened not to
+   * write sends every slide that needs that part to the composer — a paid model
+   * call for an arrangement the recipe already describes. Adding the hole is
+   * free, deterministic, idempotent, and uses only classes the brand advertises,
+   * so it is done here rather than left to a migration: every brand already in
+   * the database composes cheaper on its very next deck.
+   */
+  const filled = fillRecipeFragmentGaps(recipeIn);
+  for (const r of filled.repairs) {
+    console.warn(`[compose] recipe: filled the "${r.role}" fragment's missing hole(s): ${r.added.join(', ')}`);
+  }
+  const recipe = filled.recipe;
   // A caller that did not pre-parse the brief still gets the brief LANGUAGE: an
   // inline "Slide 3: …" plan and any "quoted" copy are lifted out here, so a
   // script or a script-shaped call behaves exactly like the composer screen.
@@ -1446,6 +1661,7 @@ export async function composeProject(
   const out: Array<{
     role: SlideRole;
     authored: { html: string; bg?: string; role?: string };
+    imageQuery?: string;
     source: ComposePath;
   }> = [];
   const kept: ComposeSlideInput[] = [];
@@ -1455,7 +1671,12 @@ export async function composeProject(
       // `source` is telemetry, not part of the slide: `authored` keeps exactly
       // the shape the Project schema stores.
       const { source, ...slide } = a;
-      out.push({ role: inputs[i]!.role, authored: slide, source });
+      out.push({
+        role: inputs[i]!.role,
+        authored: slide,
+        ...(inputs[i]!.imageQuery ? { imageQuery: inputs[i]!.imageQuery } : {}),
+        source,
+      });
       kept.push(inputs[i]!);
     }
   }

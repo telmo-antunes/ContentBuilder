@@ -35,6 +35,14 @@ export interface SourceDoc {
   title: string;
   /** Readable text, structure-marked, already capped. */
   text: string;
+  /**
+   * Who wrote it and when, when the page says so. A carousel that pulls a line
+   * out of an article and attributes it needs the real name: without this the
+   * copywriter attributed a quote to whoever it could infer, which is a
+   * fabrication risk on somebody else's words.
+   */
+  byline?: string;
+  published?: string;
 }
 
 /** Why a cited URL produced nothing. Surfaced to the user, never thrown. */
@@ -128,6 +136,44 @@ function articleScope(html: string): string {
   return html;
 }
 
+/**
+ * WHO WROTE IT AND WHEN, when the page is willing to say.
+ *
+ * Read from the machine-readable declarations first (JSON-LD, `article:*` and
+ * `<meta name="author">`), then from the visible byline pattern every CMS
+ * produces — "By Telmo Antunes · Published August 9, 2026 · 2 min read". A page
+ * that declares nothing simply has no byline, and the copywriter is told
+ * nothing rather than something invented.
+ */
+export function extractByline(html: string): { byline?: string; published?: string } {
+  const meta = (re: RegExp): string | undefined => {
+    const m = html.match(re);
+    return m?.[1] ? textOf(m[1]).slice(0, 120) : undefined;
+  };
+  let byline =
+    meta(/<meta\b[^>]*(?:name|property)\s*=\s*["'](?:author|article:author)["'][^>]*content\s*=\s*["']([^"']+)["']/i) ??
+    meta(/<meta\b[^>]*content\s*=\s*["']([^"']+)["'][^>]*(?:name|property)\s*=\s*["'](?:author|article:author)["']/i) ??
+    meta(/"author"\s*:\s*\{[^}]*"name"\s*:\s*"([^"]+)"/i) ??
+    meta(/"author"\s*:\s*"([^"]+)"/i);
+  let published =
+    meta(/<meta\b[^>]*(?:name|property)\s*=\s*["'](?:article:published_time|datePublished|date)["'][^>]*content\s*=\s*["']([^"']+)["']/i) ??
+    meta(/"datePublished"\s*:\s*"([^"]+)"/i) ??
+    meta(/<time\b[^>]*datetime\s*=\s*["']([^"']+)["']/i);
+
+  // The visible line, when nothing was declared: "By <name> · Published <date>".
+  if (!byline || !published) {
+    const visible = textOf(html).match(
+      /\bBy\s+([A-Z][\p{L}'’.-]*(?:\s+[A-Z][\p{L}'’.-]*){0,3})(?:\s*[·|,–—-]\s*Published\s+([^·|]{4,30}))?/u,
+    );
+    byline ??= visible?.[1]?.trim();
+    published ??= visible?.[2]?.trim();
+  }
+  return {
+    ...(byline ? { byline: byline.replace(/^by\s+/i, '').trim().slice(0, 120) } : {}),
+    ...(published ? { published: published.trim().slice(0, 40) } : {}),
+  };
+}
+
 /** The `<title>`, minus the site-name tail most CMSs append. */
 export function extractTitle(html: string): string {
   const og = html.match(/<meta\b[^>]*property\s*=\s*["']og:title["'][^>]*content\s*=\s*["']([^"']+)["']/i);
@@ -193,6 +239,57 @@ export function extractReadable(html: string, budget = SOURCE_CHAR_BUDGET): stri
 
 // ── Fetching ────────────────────────────────────────────────────────────────
 
+// ── A tiny read-through cache ───────────────────────────────────────────────
+
+/**
+ * WHY CACHE AT ALL. Re-composing a post is the single most common thing a user
+ * does — a deck they did not like, a plan they just wrote, a slide count they
+ * want to see again — and every one of those refetched the same article and
+ * re-extracted it from scratch. The page has not changed in the ninety seconds
+ * since the last attempt, so the second compose should start writing straight
+ * away rather than waiting on somebody else's server.
+ *
+ * Deliberately small and dumb: successes only (a 404 must be retried, in case
+ * it was transient or the page has since been published), in memory (nothing to
+ * invalidate across a restart), and evicted oldest-first past a hard cap.
+ */
+const CACHE_TTL_MS = 10 * 60 * 1000;
+const CACHE_MAX = 32;
+const cache = new Map<string, { at: number; doc: SourceDoc }>();
+
+/** Injected by tests so a TTL can be exercised without waiting for one. */
+let now = () => Date.now();
+export function __setClock(fn: () => number): void {
+  now = fn;
+}
+
+/** Forget everything read so far. Tests, and the only honest response to "refetch". */
+export function clearSourceCache(): void {
+  cache.clear();
+}
+
+function cached(url: string): SourceDoc | undefined {
+  const hit = cache.get(url);
+  if (!hit) return undefined;
+  if (now() - hit.at > CACHE_TTL_MS) {
+    cache.delete(url);
+    return undefined;
+  }
+  // Refresh insertion order so the cap evicts the least recently USED.
+  cache.delete(url);
+  cache.set(url, hit);
+  return hit.doc;
+}
+
+function remember(url: string, doc: SourceDoc): void {
+  cache.set(url, { at: now(), doc });
+  while (cache.size > CACHE_MAX) {
+    const oldest = cache.keys().next();
+    if (oldest.done) break;
+    cache.delete(oldest.value);
+  }
+}
+
 /** Read ONE page. Resolves to a failure rather than throwing. */
 export async function readSource(
   url: string,
@@ -204,8 +301,14 @@ export async function readSource(
   } catch (err) {
     return { url, reason: err instanceof Error ? err.message : 'blocked' };
   }
+  const key = safe.toString();
+  const hit = cached(key);
+  if (hit) {
+    console.warn(`[source] ${hit.url}: served from cache (${hit.text.length} chars)`);
+    return hit;
+  }
   try {
-    const res = await fetchImpl(safe.toString(), {
+    const res = await fetchImpl(key, {
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       headers: { 'user-agent': USER_AGENT, accept: 'text/html,application/xhtml+xml' },
     });
@@ -219,7 +322,9 @@ export async function readSource(
     const html = (await res.text()).slice(0, MAX_BYTES);
     const text = extractReadable(html);
     if (text.length < 200) return { url, reason: 'no readable article text on the page' };
-    return { url, title: extractTitle(html) || safe.hostname, text };
+    const doc: SourceDoc = { url: key, title: extractTitle(html) || safe.hostname, text, ...extractByline(html) };
+    remember(key, doc);
+    return doc;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return { url, reason: /abort|timeout/i.test(message) ? 'the page took too long to respond' : message };
@@ -269,11 +374,18 @@ export async function resolveBrief(
 export function sourceBlock(sources: readonly SourceDoc[]): string {
   if (!sources.length) return '';
   return sources
-    .map(
-      (s, i) =>
-        `SOURCE ${i + 1} — "${s.title}" (${s.url})\n` +
+    .map((s, i) => {
+      const credit = [s.byline ? `by ${s.byline}` : '', s.published ? `published ${s.published}` : '']
+        .filter(Boolean)
+        .join(', ');
+      return (
+        `SOURCE ${i + 1} — "${s.title}" (${s.url})${credit ? `\nWritten ${credit}.` : ''}\n` +
         `This is the material the post is made from. Use ITS facts, ITS structure and ITS best lines; do not invent claims it does not make.\n` +
-        `"""\n${s.text}\n"""`,
-    )
+        (s.byline
+          ? `If you pull a line out as a quote, attribute it to ${s.byline} and nobody else.\n`
+          : `Do NOT attribute a quote to a named person — this page does not say who wrote it.\n`) +
+        `"""\n${s.text}\n"""`
+      );
+    })
     .join('\n\n');
 }

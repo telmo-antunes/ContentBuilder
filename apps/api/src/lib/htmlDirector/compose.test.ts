@@ -1055,3 +1055,90 @@ describe('prose is shortened by the sentence, not mid-thought', () => {
     expect(body.startsWith(got.replace(/[.,]$/, ''))).toBe(true);
   });
 });
+
+describe('a deck that says the same thing twice', () => {
+  const slide = (parts: Record<string, unknown>, role = 'statement') => ({ role, parts });
+
+  it('catches two slides making one point, and corrects once', async () => {
+    const twice = JSON.stringify({
+      slides: [
+        slide({ headline: 'Coatings are sold with a number attached' }, 'cover'),
+        slide({ headline: 'Beading flattens as the coating wears down', body: 'Water clings in patches instead of sheeting off the panel.' }),
+        slide({ headline: 'As the coating wears, beading flattens', body: 'Water clings to the panel in patches rather than sheeting.' }),
+        slide({ headline: 'Book an inspection today' }, 'cta'),
+      ],
+    });
+    const fixed = JSON.stringify({
+      slides: [
+        slide({ headline: 'Coatings are sold with a number attached' }, 'cover'),
+        slide({ headline: 'Beading flattens as the coating wears down', body: 'Water clings in patches instead of sheeting off the panel.' }),
+        slide({ headline: 'Brush washes abrade the clear coat', body: 'Automatic machines grind grit across every horizontal surface.' }),
+        slide({ headline: 'Book an inspection today' }, 'cta'),
+      ],
+    });
+    reply.mockReturnValueOnce(twice).mockReturnValueOnce(fixed);
+    const out = await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' });
+
+    expect(aiCalls).toHaveLength(2);
+    expect(userOf(aiCalls[1]!, 2)).toContain('make the same point twice');
+    expect(userOf(aiCalls[1]!, 2)).toContain('slide 2 and slide 3');
+    expect(out[2]!.parts.headline).toBe('Brush washes abrade the clear coat');
+  });
+
+  it('exempts the cover and the cta — restating the thesis is their job', async () => {
+    reply.mockReturnValue(
+      JSON.stringify({
+        slides: [
+          slide({ headline: 'Reapply a ceramic coating later than you think', body: 'The number on the bottle is a best case, never a deadline.' }, 'cover'),
+          slide({ headline: 'Reapply a ceramic coating later than you think', body: 'The number on the bottle is a best case, never a deadline.' }, 'cta'),
+        ],
+      }),
+    );
+    await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' });
+    expect(aiCalls).toHaveLength(1); // nothing to correct
+  });
+
+  it('will not judge a slide with too little to say', async () => {
+    reply.mockReturnValue(
+      JSON.stringify({
+        slides: [
+          slide({ eyebrow: 'Read water', headline: 'Read the water' }),
+          slide({ eyebrow: 'Read water', headline: 'Read the water' }),
+        ],
+      }),
+    );
+    await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' });
+    expect(aiCalls).toHaveLength(1);
+  });
+
+  it('keeps the original when the correction dropped locked copy to fix the repeat', async () => {
+    const lock = 'Read the water, not the calendar';
+    const first = JSON.stringify({
+      slides: [
+        slide({ headline: lock, body: 'Beading flattens and water clings in patches as it wears.' }),
+        slide({ headline: 'Beading flattens as it wears', body: 'Water clings in patches instead of sheeting off the panel.' }),
+      ],
+    });
+    const worse = JSON.stringify({
+      slides: [slide({ headline: 'Something else entirely', body: 'With none of the words you asked for.' })],
+    });
+    reply.mockReturnValueOnce(first).mockReturnValueOnce(worse);
+    const out = await parseForCompose(detailMastersRecipe, 'idea', { model: 'm', locks: [lock] });
+    expect(out[0]!.parts.headline).toBe(lock);
+  });
+});
+
+describe('a plan entry that asks for a shape', () => {
+  it('tells the copywriter which role each entry reads as', async () => {
+    reply.mockReturnValue(JSON.stringify({ slides: [{ role: 'statement', parts: { headline: 'A line' } }] }));
+    await parseForCompose(detailMastersRecipe, 'idea', {
+      model: 'm',
+      plan: ['The two wear signals, as a list of two', 'A pull quote from the piece', 'Just say something true'],
+    });
+    const user = userOf(aiCalls[0]!);
+    expect(user).toContain('1. The two wear signals, as a list of two   [reads as role "list"]');
+    expect(user).toContain('2. A pull quote from the piece   [reads as role "quote"]');
+    expect(user).toContain('3. Just say something true');
+    expect(user).not.toContain('3. Just say something true   [reads as role');
+  });
+});
