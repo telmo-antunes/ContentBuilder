@@ -36,7 +36,9 @@ export type DetectorId =
   | 'noImageSlots'
   | 'noAmbientMotion'
   | 'noListVocabulary'
-  | 'brandMarkDrift';
+  | 'brandMarkDrift'
+  | 'emptyList'
+  | 'strandedSpacer';
 
 /**
  * A short phrase naming what a detector found, for chips on individual slides
@@ -50,6 +52,8 @@ export const DETECTOR_LABEL: Record<DetectorId, string> = {
   noAmbientMotion: 'photographs that sit still in video',
   noListVocabulary: 'no list vocabulary to write rows with',
   brandMarkDrift: 'a brand mark built differently here',
+  emptyList: 'a list slide with nothing in it',
+  strandedSpacer: 'content stranded under the top edge',
 };
 
 export interface PromptRelease {
@@ -194,6 +198,20 @@ export const TOUCHPOINT_REGISTRY: Record<TouchpointId, Touchpoint> = {
         ],
         detector: 'secretList',
       },
+      {
+        version: 4,
+        date: '2026-08-10',
+        summary: 'Writes from the article you linked, follows your slide plan, and keeps your exact words.',
+        improves: [
+          'A brief that cites a page is written FROM that page — its real headline, its real structure, its actual lines — instead of from the URL.',
+          'A per-slide plan is an order: one slide per entry, in that order, each doing what its entry says.',
+          'Anything you put in "quotes" is used word for word, and is never shortened by a copy budget.',
+          'A list slide can no longer lose its list to a photograph — the rows win, because they are the content.',
+          'The deck is as long as the material earns; the manual slide-count dial is gone.',
+          'Nothing is truncated with an ellipsis any more — over-long copy ends on a finished clause.',
+        ],
+        detector: 'emptyList',
+      },
     ],
   },
 
@@ -240,6 +258,17 @@ export const TOUCHPOINT_REGISTRY: Record<TouchpointId, Touchpoint> = {
           'Nothing is placed inside the element that carries the logo image, where words landed on top of the picture.',
         ],
         detector: 'brandMarkDrift',
+      },
+      {
+        version: 5,
+        date: '2026-08-10',
+        summary: 'A slide fills its canvas instead of piling up under the top edge.',
+        improves: [
+          'A spacer left dangling by an absent handle or an unused photo slot no longer grows into empty canvas.',
+          'The kicker stays pinned to the top edge and the statement settles on the baseline — the brand’s own arrangement, restored.',
+          'A slide asks for a photograph only where the brand’s composition can actually hold one.',
+        ],
+        detector: 'strandedSpacer',
       },
     ],
   },

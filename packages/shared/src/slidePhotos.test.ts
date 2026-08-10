@@ -245,8 +245,19 @@ describe('enumeration rows', () => {
     expect(css).toMatch(/\.row\.row::before\{[^}]*grid-column:1/);
   });
 
-  it('steps aside for a brand that authored a real marker', () => {
-    expect(css).toContain('.row.row:has(> span:not(:empty))::before{content:none}');
+  it('steps aside for a brand that authored a real marker — named as one', () => {
+    // By CLASS, not by tag. "Any non-empty <span> is a bullet" also swallowed
+    // the quiet detail `<span class="sm">`, which is the commonest way a recipe
+    // writes one.
+    expect(css).toMatch(/\.row\.row:has\(> \.tick:not\(:empty\)\)::before[^{]*\{content:none\}/);
+    expect(css).toContain('.cb-slide .row.row:has(> .bullet:not(:empty))::before');
+    expect(css).not.toContain(':has(> span:not(:empty))');
+  });
+
+  it('puts a marker element in the gutter, whatever the brand calls it', () => {
+    const rule = css.match(/\.cb-slide \.row\.row > \.tick[^{]*\{([^}]*)\}/)![1]!;
+    expect(rule).toContain('grid-column:1');
+    expect(rule).toContain('grid-row:1');
   });
 
   it('gives an empty marker element no space — it was a phantom gap', () => {
@@ -258,6 +269,21 @@ describe('enumeration rows', () => {
     expect(rule).toContain('grid-column:2');
     // The brand's own `margin-left:auto` is what made it drift.
     expect(rule).toContain('margin-left:0');
+  });
+
+  it('recognises a detail named by class, not only one written as <em>', () => {
+    // The real failure: `<div class="row">Item<span class="sm">detail</span></div>`
+    // auto-placed the detail into the marker's narrow gutter column, where it
+    // wrapped a word or two at a time down the right-hand side of the panel.
+    const rule = css.match(/\.cb-slide \.row\.row > \.sm[^{]*\{([^}]*)\}/)![1]!;
+    expect(rule).toContain('grid-column:2');
+    expect(rule).toContain('margin-left:0');
+    for (const cls of ['.note', '.detail', '.sub', '.meta']) {
+      expect(css).toContain(`.cb-slide .row.row > ${cls}`);
+    }
+    // …and it must NOT be forced upright: only the <em>/<i> tags carry an
+    // italic the row never asked for.
+    expect(rule).not.toContain('font-style');
   });
 
   it('out-specifies the brand rule it has to override', () => {

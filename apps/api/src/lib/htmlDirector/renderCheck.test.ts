@@ -209,6 +209,26 @@ describe('step 2 — dropping the least essential block', () => {
     const html = '<div class="tagline">One decision, repeated.</div>';
     expect(dropLeastEssential(html, detailMastersRecipe, input())).toEqual({ html });
   });
+
+  it('never guts a list — the rows ARE the slide, however long they run', () => {
+    // The real failure: "Five habits that shorten the life" shipped with the
+    // five habits dropped, leaving a promise over blank canvas. An eyebrow and
+    // a headline are labels, not substance, so the panel has nothing to fall
+    // back on and the ladder must climb to the re-compose instead.
+    const html =
+      '<div class="eyebrow">Coating killers</div>' +
+      '<div class="headline sm">Five habits that shorten the life</div>' +
+      '<div class="panel"><div class="row">Brush washes</div><div class="row">Direct sun</div></div>';
+    expect(dropLeastEssential(html, detailMastersRecipe, input({ role: 'list' }))).toEqual({ html });
+  });
+
+  it('still drops the paragraph beside a panel — the rows say it better', () => {
+    const html =
+      '<div class="headline">A line</div>' +
+      '<div class="body">Brush washes, direct sun, and bird droppings.</div>' +
+      '<div class="panel"><div class="row">Brush washes</div><div class="row">Direct sun</div></div>';
+    expect(dropLeastEssential(html, detailMastersRecipe, input({ role: 'list' })).dropped).toBe('div.body');
+  });
 });
 
 // ── checkSlideOverflow ──────────────────────────────────────────────────────

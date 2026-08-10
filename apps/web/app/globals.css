@@ -1225,15 +1225,27 @@ input[type='color'] {
 .create-hero h1 .it { font-style: italic; font-weight: 400; color: var(--accent-2); }
 .create-hero .lede { color: var(--muted); font-size: 15px; line-height: 1.6; max-width: 54ch; margin: 14px auto 0; }
 
-/* Slide count — a flexible stepper, not a fixed picker. */
-.slide-step { display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--border); border-radius: 10px; padding: 3px; background: var(--panel); }
-.slide-step-btn { width: 28px; height: 28px; border: none; background: transparent; color: var(--muted); border-radius: 7px;
-  font-size: 18px; line-height: 1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+/* What the brief was understood to mean — the links it will read, the copy it
+   will keep word for word. Shown before a compose is spent, so a mis-parsed
+   brief is caught by the eye rather than by the result. */
+.brief-read { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.brief-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 4px 10px;
+  border: 1px solid var(--border); border-radius: 999px; background: var(--panel-2); color: var(--muted);
+  font-size: 12px; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.brief-chip .icon { flex: 0 0 auto; color: var(--accent-2); }
+.brief-chip.lock { color: var(--text); border-color: color-mix(in srgb, var(--accent-2) 40%, var(--border)); }
+
+/* The slide plan — one row per slide, in deck order. */
+.plan-row { display: grid; grid-template-columns: 26px 1fr auto; align-items: start; gap: 10px; margin-bottom: 8px; }
+.plan-row textarea { min-height: 0; resize: vertical; font-size: 13px; line-height: 1.5; }
+.plan-num { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 30px;
+  font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.plan-tools { display: inline-flex; gap: 2px; padding-top: 3px; }
+.plan-tools .icon-btn { width: 26px; height: 26px; border: 1px solid transparent; background: transparent; color: var(--faint);
+  border-radius: 7px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
   transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease); }
-.slide-step-btn:hover:not(:disabled) { background: var(--panel-2); color: var(--text); }
-.slide-step-btn:disabled { opacity: 0.3; cursor: default; }
-.slide-step-val { min-width: 66px; text-align: center; font-size: 13px; color: var(--text); font-variant-numeric: tabular-nums; }
-.slide-step-val .u { color: var(--faint); font-size: 12px; }
+.plan-tools .icon-btn:hover:not(:disabled) { background: var(--panel-2); color: var(--text); }
+.plan-tools .icon-btn:disabled { opacity: 0.25; cursor: default; }
 
 /* ── Video export: a determinate 0→100% loader ─────────────────────────────── */
 .vid-prog { border: 1px solid var(--border); border-radius: 14px; background: var(--panel); padding: 14px 16px; margin-bottom: 18px; }
@@ -1908,3 +1920,10 @@ input[type='color'] {
   border: 1px solid color-mix(in srgb, var(--warn) 34%, var(--border));
 }
 .ob-warn > svg { color: var(--warn); flex: 0 0 auto; margin-top: 2px; }
+
+/* Direct one slide — the per-slide half of the brief language, in the Studio. */
+.slide-direction { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.slide-direction label { display: block; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--faint); font-weight: 600; margin-bottom: 6px; }
+.slide-direction textarea { min-height: 0; resize: vertical; font-size: 13px; line-height: 1.5; }
+.slide-direction p { font-size: 11.5px; line-height: 1.5; margin: 6px 0 0; }

@@ -12,6 +12,8 @@ Internal web app that turns a business into on-brand Instagram content. It first
   - **Contrast repair** — ink is held to WCAG AA body text and the accent to AA large text against the ground; failing colors are walked toward white/black until they pass.
   - **Type floor** — every canvas is 1080px wide and read on a ~393pt phone (≈ px / 2.75), so a deterministic pass raises any undersized type to a legible minimum.
   - **Class consistency** — components advertised to the composer but never defined in the stylesheet are dropped; authored HTML and CSS are sanitized.
+  - **Vertical rhythm** — a `.fill` spacer left dangling at the end of a composition (its handle absent, its photo slot unused) grows into empty canvas and leaves the bottom half of the poster blank; the slack is moved behind the top-edge labels instead, and a separator that separates nothing is dropped.
+  - **Structural honesty** — a list never loses its rows to a photograph or to the overflow repair, prose never ships in the `.handle`, over-long copy ends on a finished clause rather than an ellipsis, and markdown emphasis the copywriter typed is read as the accent it meant rather than printed as asterisks.
   - **Render-verify (optional)** — the recipe's own output can be rendered, screenshotted, and revised by a vision model before it ships (`POST /brandkits/:kitId/recipe?verify=1`).
 
 The app runs without an Anthropic key: website analysis falls back to heuristic color roles, and the AI compose/candidate/caption buttons disable. Manual kit entry, editing, rendering, and export all keep working.
@@ -32,8 +34,8 @@ The app runs without an Anthropic key: website analysis falls back to heuristic 
 3. **Analyze** — `POST /businesses/:id/analyze` drives Puppeteer at the site: screenshot, pixel-sampled palette, DOM-computed color roles, detected fonts (kept when they exist on Google Fonts, else mapped to a bundled lookalike), DOM logo. A vision pass assigns color roles, a style descriptor, and a voice line (heuristics without a key). The site's biggest photos are harvested into the brand's media library. Low-quality captures retry once and are flagged.
 4. **Kit approval** — every kit is a draft until a human approves it. Edits to kit colors/fonts re-point the recipe's tokens (with a live diff preview in the UI), and contrast is re-checked.
 5. **Recipe** — authored automatically on first approval, or explicitly from the brand-kit screen. You can also author 2–3 **candidates** concurrently, each with a different creative direction, and pick one visually (`/recipe/candidates` → `/recipe/select`). Direct knobs (accent, display case, density, motion style/pace) apply instantly without a re-author.
-6. **Compose** — `/projects/new`: pick a brand, carousel or story plus a format, write the idea; `POST /projects/:id/compose` replaces the slides (the previous state is version-snapshotted). Slides that want imagery arrive with an empty photo slot to fill.
-7. **Studio** — `/projects/:id/review`: reorder the deck, re-compose a single slide into alternatives, apply instant deterministic tweaks (headline size, inverse surface), edit copy on-canvas, attach photos (uploads, harvested site photos, a Pexels stock picker; background / slot / free placements), replay the motion, write or regenerate the caption, browse and restore version history (up to 20 snapshots).
+6. **Compose** — `/projects/new`: pick a brand, carousel or story plus a format, and write the **brief**; `POST /projects/:id/compose` replaces the slides (the previous state is version-snapshotted). The brief is a small language, not just a paragraph — see [The brief](#the-brief) below. How many slides the deck gets is derived from the material, not dialled in. A slide that wants imagery arrives with the brand's own photograph already in its slot, and only ever asks for a slot the brand can fill.
+7. **Studio** — `/projects/:id/review`: reorder the deck, **direct one slide** (a prompt, or exact copy in quotes, that rewrites that slide alone), re-compose a single slide into alternatives, apply instant deterministic tweaks (headline size, inverse surface), edit copy on-canvas, attach photos (uploads, harvested site photos, a Pexels stock picker; background / slot / free placements), replay the motion, write or regenerate the caption, browse and restore version history (up to 20 snapshots).
 8. **Export** — PNG zip or animated MP4 (details below). The Share button surfaces LAN links: `/preview/:id` (live, swipeable, works before any export) and `/share/:id` (phone hand-off that feeds exported PNGs to the native share sheet).
 9. **Desk** — the home page: every post across every brand on a lifecycle board (`idea → drafting → ready → shipped`). Exporting advances a post to `shipped` automatically; the rest is drag/edit.
 
@@ -45,7 +47,7 @@ Every touchpoint resolves its model as: per-feature override saved in Settings (
 | --- | --- | --- | --- |
 | Brand vision (color roles, style, voice) | `ANTHROPIC_MODEL_FREE` → `ANTHROPIC_MODEL` | Once per analyze | Heuristic color roles |
 | Recipe author (the design system) | `ANTHROPIC_MODEL_DESIGN` → `_FREE` → `_SMALL` → `ANTHROPIC_MODEL` | Once per brand (approval or on demand; ×2–3 for candidates) | Disabled |
-| Parse (idea → the deck's copy) | `ANTHROPIC_MODEL_FREE` → `_SMALL` → `ANTHROPIC_MODEL` | Once per post | Disabled |
+| Parse (brief + source → the deck's copy) | `ANTHROPIC_MODEL_FREE` → `_SMALL` → `ANTHROPIC_MODEL` | Once per post (twice if a budget or a verbatim line needs correcting); once per slide for a Studio rewrite | Disabled |
 | Compose (copy → authored slides; slide variants) | `ANTHROPIC_MODEL_SMALL` → `ANTHROPIC_MODEL` | Once per slide (skipped entirely when the recipe has fragments) | Disabled |
 | Caption | `ANTHROPIC_MODEL_FREE` → `_SMALL` → `ANTHROPIC_MODEL` | On demand per post | Disabled |
 
@@ -58,6 +60,43 @@ gets the cheap tier. Each is independently overridable from Settings
 (`parseModel`, `composeModel`).
 
 (`ANTHROPIC_MODEL_FREE` is historical naming — it is the vision/judgment tier, not a free tier.)
+
+## The brief
+
+What you type into the composer is parsed (`packages/shared/src/brief.ts`), not merely
+forwarded. Nothing here costs a model call — it is all string work, and the composer
+screen runs the same parser so it can show you what it understood *before* you spend a
+compose on it.
+
+- **A link is read.** Any `http(s)` URL in the brief is fetched, reduced to readable text
+  with its structure intact — headings, paragraphs, list items in document order — and
+  handed to the copywriter as THE MATERIAL (`apps/api/src/lib/sourceIngest.ts`). "Create a
+  carousel based on this blog post <url>" now writes from the post's real headline, real
+  structure and best actual lines instead of from the slug. SSRF-guarded by the same gate
+  analyze uses, capped, and best-effort: a link that will not load is reported back with
+  the reason and the deck is written from your own words.
+- **A plan is an order.** The composer's optional slide-plan editor takes one direction per
+  slide; a brief that already contains `Slide 1: … / Slide 2: …` is lifted into the same
+  shape automatically. A plan fixes the deck exactly: one slide per entry, in that order.
+- **Quotes are verbatim.** Anything in `"double quotes"` must appear word for word in the
+  slide it belongs to. It survives the copywriter (a corrective re-parse fires if it does
+  not), and it is never shortened by a copy budget.
+- **The deck length is derived.** With no plan, the count follows the volume of material,
+  weighted by kind — your words are already slide-shaped, an article is prose that has to
+  be cut down. The old manual stepper is gone.
+
+The same language works on ONE slide: the Studio's *Direct this slide* box rewrites the
+selected slide alone from a prompt, honouring quoted copy, leaving the rest of the deck
+untouched.
+
+### Photographs are never a placeholder
+
+A slide only asks for a photo slot when the brand can actually fill one — the role's
+recipe fragment has a hole for it, AND the brand's media library has an unspent picture
+whose bytes are really in storage. Composing then attaches the brand's own photographs
+(harvested site images first, then uploads; never stock) into the slots it left. An empty
+`cb-shot` renders as a dead grey rectangle over a third of the poster, which is strictly
+worse than a slide composed as pure type.
 
 ## Environment variables
 

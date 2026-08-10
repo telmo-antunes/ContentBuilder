@@ -154,6 +154,8 @@ export const createProject = (data: {
   format: Format;
   /** Save the prompt now and compose later (creates an Ideas card). */
   idea?: string;
+  /** The per-slide plan, parked with the prompt. */
+  plan?: string[];
   stage?: 'idea' | 'drafting' | 'ready' | 'shipped';
   /** Authored-first slide payloads (e.g. duplicating an existing project). */
   slides?: Array<
@@ -172,6 +174,8 @@ export const updateProject = (
     /** Re-editing a parked Ideas card before composing it. Type/format only
      *  take effect while the project still has no slides. */
     idea?: string;
+    /** An empty array clears the plan — it means "stop pinning the slides". */
+    plan?: string[];
     type?: AssetType;
     format?: Format;
   },
@@ -195,20 +199,39 @@ export const saveSlidePhotos = (projectId: string, slideId: string, photos: Slid
 export const generateProjectCaption = (id: string) =>
   request<Project>(`/projects/${id}/caption`, { method: 'POST' });
 
-/** AI-compose: turn an idea into on-brand AUTHORED slides using the brand recipe. */
-export const composeProjectAI = (id: string, idea: string, slideCount?: number) =>
-  request<Project>(
+/** What the compose made of the brief: what it read, what it skipped, what it pinned. */
+export interface BriefReport {
+  sources: Array<{ url: string; title: string; chars: number }>;
+  failures: Array<{ url: string; reason: string }>;
+  plan: string[];
+  locks: string[];
+  photosAttached: number;
+}
+
+/**
+ * AI-compose: turn a brief into on-brand AUTHORED slides using the brand recipe.
+ *
+ * There is no slide-count argument any more — the deck is as long as the
+ * material earns. `plan` is the slide-plan editor's rows: one direction per
+ * slide, in order, which fixes both the length and what each slide is about.
+ */
+export const composeProjectAI = (id: string, idea: string, plan?: string[]) =>
+  request<Project & { brief?: BriefReport }>(
     `/projects/${id}/compose`,
-    { method: 'POST', body: JSON.stringify({ idea, ...(slideCount ? { slideCount } : {}) }) },
-    180_000,
+    { method: 'POST', body: JSON.stringify({ idea, ...(plan?.length ? { plan } : {}) }) },
+    240_000,
   );
 
-/** Alternative arrangements for ONE slide — same copy, different composition.
- *  Nothing is saved until the user applies one. */
-export const getSlideVariants = (projectId: string, slideId: string, count = 2) =>
+/**
+ * Alternatives for ONE slide. With no `direction` this is a rearrangement: the
+ * copy is recovered from the markup and only the composition changes. With one,
+ * the copywriter rewrites this slide alone from your instruction — and anything
+ * you put in "quotes" is used word for word. Nothing is saved until you apply one.
+ */
+export const getSlideVariants = (projectId: string, slideId: string, count = 2, direction?: string) =>
   request<{ variants: Array<{ html: string; bg?: string; role?: string }> }>(
     `/projects/${projectId}/slides/${slideId}/variants?count=${count}`,
-    { method: 'POST' },
+    { method: 'POST', body: JSON.stringify(direction?.trim() ? { direction: direction.trim() } : {}) },
     180_000,
   );
 

@@ -32,8 +32,14 @@ const LEGITIMATELY_EMPTY = /^(fill|rule|divider|hr|scrim|spacer|monogram|logo|gl
 /** Classes that read as a list marker — a bullet, dash, arrow, tick, number. */
 const MARKER_HINT = /(^|[-_])(tick|bullet|dot|dash|mark|marker|num|no|check|arrow|caret|chev)([-_]|$)/;
 
+/**
+ * The longest a `.handle` can plausibly be, and still be one. Every recipe sets
+ * it as the smallest, faintest line on the poster — an @name or a domain.
+ */
+const HANDLE_MAX = 40;
+
 export interface LintFinding {
-  kind: 'empty-element-dropped' | 'paragraph-is-a-list';
+  kind: 'empty-element-dropped' | 'paragraph-is-a-list' | 'prose-in-the-handle';
   detail: string;
 }
 
@@ -64,11 +70,30 @@ function sentenceCount(text: string): number {
  */
 export function lintAuthored(
   html: string,
-  opts: { hasListVocabulary?: boolean } = {},
+  opts: { hasListVocabulary?: boolean; proseClass?: string } = {},
 ): { html: string; findings: LintFinding[] } {
   const findings: LintFinding[] = [];
   if (!html) return { html, findings };
   let out = html;
+
+  // ── prose in the handle ───────────────────────────────────────────────
+  // `.handle` is the @name at the very bottom, set in the smallest and
+  // faintest type the brand has. A composer with a sentence left over and no
+  // paragraph element in the pattern will put it there, and a whole thought
+  // ships as a footnote nobody can read. The COPY is real, so it is moved to
+  // the brand's prose class rather than dropped — same words, right element.
+  if (opts.proseClass) {
+    out = out.replace(
+      /<(div|p)((?:[^>"']|"[^"]*"|'[^']*')*\bclass\s*=\s*"[^"]*\bhandle\b[^"]*"(?:[^>"']|"[^"]*"|'[^']*')*)>([\s\S]*?)<\/\1\s*>/gi,
+      (whole, tag: string, attrs: string, inner: string) => {
+        const text = inner.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+        if (text.length <= HANDLE_MAX && text.split(' ').length <= 3) return whole;
+        findings.push({ kind: 'prose-in-the-handle', detail: `moved to .${opts.proseClass}: "${text.slice(0, 60)}…"` });
+        const classes = classesOf(attrs).map((c) => (c === 'handle' ? opts.proseClass! : c));
+        return `<${tag} class="${classes.join(' ')}">${inner}</${tag}>`;
+      },
+    );
+  }
 
   // ── empty elements ────────────────────────────────────────────────────
   // Matches an element with nothing (or only whitespace) between its tags.

@@ -80,6 +80,20 @@ const GLYPHS = {
       <path d="M21 12a9 9 0 01-9 9 9.5 9.5 0 01-6.9-3L3 16M3 21v-5h5" />
     </>
   ),
+  /** A cited source — the page a brief says the post is made from. */
+  link: (
+    <>
+      <path d="M10.5 13.5a4 4 0 005.7 0l3.3-3.3a4 4 0 10-5.7-5.7l-1.6 1.6" />
+      <path d="M13.5 10.5a4 4 0 00-5.7 0l-3.3 3.3a4 4 0 105.7 5.7l1.6-1.6" />
+    </>
+  ),
+  /** Copy the user locked with quotation marks — used word for word. */
+  quote: (
+    <>
+      <path d="M9.5 6.5C7 7.6 5.5 9.9 5.5 12.6v4.9h5.2v-5.2H8.1c0-2 .6-3.4 2.2-4.3z" />
+      <path d="M19 6.5c-2.5 1.1-4 3.4-4 6.1v4.9h5.2v-5.2h-2.6c0-2 .6-3.4 2.2-4.3z" />
+    </>
+  ),
 } satisfies Record<string, ReactNode>;
 
 export type IconName = keyof typeof GLYPHS;
