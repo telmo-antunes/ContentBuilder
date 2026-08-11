@@ -102,7 +102,7 @@ So the loop is closed, in four deterministic steps:
 | Step | Where | What happens |
 | --- | --- | --- |
 | **Capture** | `apps/api/src/models/Generation.ts` | Every compose stores what made it: the copywriter's USER message, each slide's composer message, the copy parts it wrote and the markup it shipped. (The SYSTEM prompts are not stored — they are identical for every brand and already versioned in the prompt registry.) |
-| **Signal** | `apps/api/src/lib/learningLoop.ts` | Saving or exporting a post diffs what shipped against what was generated, **by copy part**, not by markup — so a font size the type floor raised is never mistaken for a person's edit. |
+| **Signal** | `apps/api/src/lib/learningLoop.ts` | Saving or exporting a post diffs what shipped against what was generated, **by copy part**, not by markup — so a font size the type floor raised is never mistaken for a person's edit. Three things the copy diff *cannot* see are recorded as they happen: which slide you **dragged**, a **tweak** you pressed, and an **arrangement** you swapped for an alternative. |
 | **Lesson** | `packages/shared/src/learning.ts` | The signal is aggregated until it repeats. A lesson exists only when at least **three** independent corrections agree, and it carries the posts it came from. |
 | **Apply** | the parse step | Lessons ride in the copywriter's USER message — and where a lesson is numeric, it moves the copy budget too. A sentence can be ignored; a clamp cannot. |
 
@@ -113,7 +113,22 @@ about.
 
 What it can currently learn: a part you consistently **shorten** (with the median
 amount), a part you consistently **delete**, a **role** whose slides you keep
-cutting, and words you always take out or always put in.
+cutting or keep **moving** (and in which direction), a role whose **arrangement**
+you keep swapping out, and words you always take out or always put in.
+
+Two of those deserve a note, because they are where the signal is easiest to get
+wrong:
+
+- **Pressing "smaller headline" counts the same as retyping the headline
+  shorter.** Both are you saying the line is too long for the canvas; only one
+  leaves a copy diff, and counting only that one taught nothing to anyone who
+  uses the button. Presses are netted — pressing "bigger" after "smaller" is a
+  withdrawal, not two opinions.
+- **A reorder records the slide you dragged, not the ones it pushed.** Moving one
+  slide to the front displaces every slide it passed, so a single drag produces
+  three or four movements and only one was a decision. Recording all of them
+  taught *"you move the statement slide later"* from a user who had dragged the
+  stat slide earlier — true, and the wrong lesson.
 
 **You can see all of it, and switch any of it off.** The brand screen lists every
 lesson with its evidence — the actual before/after of the edits it came from —

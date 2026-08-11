@@ -32,7 +32,7 @@ import { runVideoJob, sweepExpiredVideoJobs } from '../lib/videoJobs';
 import { getStorage } from '../storage';
 import { generateCaption, type GeneratedCaption } from '../lib/caption';
 import { SITE_PHOTO_LABEL } from '../lib/harvest';
-import { lessonsFor, observeOutcome, recordGeneration } from '../lib/learningLoop';
+import { lessonsFor, noteSlideSignal, observeOutcome, recordGeneration } from '../lib/learningLoop';
 import type { ComposeRecord } from '../lib/htmlDirector/compose';
 import { postUpdateStatus } from '../lib/promptStatus';
 import { aiDraftConfigured, config } from '../config';
@@ -780,6 +780,12 @@ const tweakSchema = z.object({
   tweak: z.enum(['bigger-headline', 'smaller-headline', 'invert', 'un-invert']),
 });
 
+/** The visible length of a slide's headline — the magnitude behind a size tweak. */
+function headlineLengthOf(html: string): number {
+  const m = html.match(/<([a-z][a-z0-9]*)\b[^>]*\bclass="[^"]*\bheadline\b[^"]*"[^>]*>([\s\S]*?)<\/\1>/i);
+  return m ? (m[2] ?? '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim().length : 0;
+}
+
 /** Instant, deterministic slide tweaks — no AI, no waiting, fully reversible. */
 projectsRouter.post(
   '/:id/slides/:slideId/tweak',
@@ -848,7 +854,48 @@ projectsRouter.post(
       console.warn('[tweak] could not record signal:', err instanceof Error ? err.message : err);
     }
 
+    /**
+     * …and the same press teaches the COPYWRITER, not just the recipe.
+     *
+     * "Smaller headline" is the user saying this line is too long for the
+     * canvas. The recipe counter reads that as "your type runs big"; it is
+     * equally a statement that the copy runs long, and the copy is the cheaper
+     * of the two to fix. Recorded with the headline's length so the lesson has
+     * a magnitude rather than just a direction.
+     */
+    await noteSlideSignal(String(project._id), String(req.params.slideId), {
+      tweak: {
+        kind: tweak,
+        ...(tweak === 'smaller-headline' || tweak === 'bigger-headline'
+          ? { chars: headlineLengthOf(slide.authored.html) }
+          : {}),
+      },
+    });
+
     res.json(project.toJSON());
+  }),
+);
+
+/**
+ * THE USER PICKED AN ALTERNATIVE ARRANGEMENT for this slide.
+ *
+ * Applying a candidate goes through the ordinary slide save, which changes the
+ * markup and leaves every word where it was — so the outcome diff reads it as
+ * "kept" and the clearest possible statement about a composition ("not that
+ * one") taught nothing. This is the one path that can say so, and the Studio
+ * calls it after the save it just made.
+ */
+projectsRouter.post(
+  '/:id/slides/:slideId/chose',
+  asyncHandler(async (req, res) => {
+    const id = requireObjectId(req.params.id, 'Project');
+    const kind = String((req.body as { kind?: unknown } | undefined)?.kind ?? 'arrangement');
+    // Only an ARRANGEMENT swap needs recording here. New copy already shows up
+    // in the outcome diff as an edit, which is a better signal than this one.
+    if (kind === 'arrangement') {
+      await noteSlideSignal(id, String(req.params.slideId), { rearranged: true });
+    }
+    res.json({ ok: true });
   }),
 );
 

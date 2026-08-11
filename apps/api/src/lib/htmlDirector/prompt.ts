@@ -50,7 +50,18 @@ export interface ComposeSlideInput {
   imageQuery?: string;
   /** Position in the deck — rotates which composition VARIANT this role uses. */
   index?: number;
+  /**
+   * Start that rotation further along. Set from a `rearranges-role` lesson: the
+   * arrangement the rotation lands on is the one this brand keeps swapping out,
+   * so the composer reaches past it. Never changes the slide's position in the
+   * deck — only which of the role's authored arrangements it follows.
+   */
+  variantBias?: number;
 }
+
+/** The rotation position for this slide's composition variant. */
+export const variantIndexOf = (input: ComposeSlideInput): number =>
+  (input.index ?? 0) + (input.variantBias ?? 0);
 
 /** Render the recipe into the compact spec the composer reasons over. */
 export function recipeSpecBlock(recipe: BrandRecipe, format: string, role?: string, index?: number): string {
@@ -132,7 +143,7 @@ export function buildComposeMessages(
   const canvas = dims ? `${dims.w}×${dims.h} (${dims.label})` : input.format;
   const user = [
     `BRAND SPEC`,
-    recipeSpecBlock(recipe, input.format, input.role, input.index),
+    recipeSpecBlock(recipe, input.format, input.role, variantIndexOf(input)),
     ``,
     `THIS SLIDE`,
     `  role: ${input.role}`,

@@ -28,6 +28,7 @@ import {
   roleHintFor,
   budgetAfterLessons,
   lessonsBlock,
+  variantBiasFromLessons,
   slideCountFor,
   type BrandRecipe,
   type Lesson,
@@ -49,7 +50,13 @@ import {
 import { renderCheckDeck, renderCheckEnabledByDefault, type OpenProbe } from './renderCheck';
 import { balanceVertical } from './balance';
 import { sourceBlock, type SourceDoc } from '../sourceIngest';
-import { buildComposeMessages, type ComposeParts, type ComposeSlideInput, type SlideRole } from './prompt';
+import {
+  buildComposeMessages,
+  variantIndexOf,
+  type ComposeParts,
+  type ComposeSlideInput,
+  type SlideRole,
+} from './prompt';
 
 const SLIDE_ROLES = ['cover', 'statement', 'quote', 'feature', 'stat', 'list', 'cta'] as const;
 
@@ -171,6 +178,11 @@ export interface ComposeOptions {
    * move the copy budgets; nothing else about the pipeline changes.
    */
   lessons?: readonly Lesson[];
+  /**
+   * Per role, how far past the usual composition variant to start. Derived from
+   * the brand's `rearranges-role` lessons — see `variantBiasFromLessons`.
+   */
+  variantBias?: Record<string, number>;
   /**
    * Called with the copywriter's USER message the moment it is built. The
    * message is assembled inside `parseForCompose` from a dozen inputs, and
@@ -851,6 +863,11 @@ function parseUser(
     sources: readonly SourceDoc[];
     handle?: string;
     lessons?: readonly Lesson[];
+  /**
+   * Per role, how far past the usual composition variant to start. Derived from
+   * the brand's `rearranges-role` lessons — see `variantBiasFromLessons`.
+   */
+  variantBias?: Record<string, number>;
   },
 ): string {
   // A plan entry that plainly asks for a shape — "as a list of two", "a pull
@@ -1123,6 +1140,7 @@ export async function parseForCompose(
     // Kept even on a slide whose slot was demoted: the photo panel can still
     // put a background or a free overlay there, and the search is just as good.
     ...(s.imageQuery ? { imageQuery: s.imageQuery } : {}),
+    ...(opts?.variantBias?.[s.role] ? { variantBias: opts.variantBias[s.role] } : {}),
     index,
   }));
 }
@@ -1306,7 +1324,7 @@ const PART_TO_CLASS: Record<string, string> = {
  */
 function spliceOrderFor(recipe: BrandRecipe, input: ComposeSlideInput): string[] {
   const order: string[] = [];
-  const pattern = recipePatternVariant(recipe, input.format, input.role, input.index ?? 0);
+  const pattern = recipePatternVariant(recipe, input.format, input.role, variantIndexOf(input));
   if (pattern) {
     const flow = pattern.slice(pattern.indexOf(':') + 1);
     for (const token of flow.split('→')) {
@@ -1722,6 +1740,9 @@ export async function composeProject(
     parseModel: opts?.parseModel ?? parseM,
     plan: opts?.plan ?? brief?.plan,
     locks: opts?.locks ?? brief?.locks,
+    // "You keep re-arranging the feature slides" is only actionable if the
+    // composer reaches past the arrangement they keep rejecting.
+    variantBias: opts?.variantBias ?? variantBiasFromLessons(opts?.lessons ?? []),
   };
   let lastParseUser = '';
   const inputs = await parseForCompose(recipe, brief?.idea ?? idea, {

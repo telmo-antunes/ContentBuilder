@@ -4,6 +4,7 @@ import {
   budgetAfterLessons,
   deriveLessons,
   lessonsBlock,
+  variantBiasFromLessons,
   type ObservedGeneration,
   type PartEdit,
 } from './learning';
@@ -179,5 +180,135 @@ describe('applying the lessons', () => {
       gen('3', [shorten('headline', 'Short', 'A much longer headline than before')]),
     ]);
     expect(budgetAfterLessons({ headline: 60 }, grew).headline).toBe(60);
+  });
+});
+
+// ── The three signals the copy diff cannot see ──────────────────────────────
+
+/** A generation whose slides carry non-copy signals rather than edits. */
+function moved(id: string, slides: Array<{ role: string; moved?: number; rearranged?: boolean; tweaks?: Array<{ kind: string; chars?: number }> }>): ObservedGeneration {
+  const at = `2026-08-0${id}T00:00:00.000Z`;
+  return {
+    id,
+    projectId: `p${id}`,
+    title: `Post ${id}`,
+    at,
+    outcome: {
+      at,
+      exported: true,
+      added: 0,
+      slides: slides.map((s, i) => ({
+        slideId: `s${i}`,
+        role: s.role,
+        verdict: 'kept' as const,
+        ...(s.moved !== undefined ? { moved: s.moved } : {}),
+        ...(s.rearranged ? { rearranged: true } : {}),
+        ...(s.tweaks ? { tweaks: s.tweaks as never } : {}),
+      })),
+    },
+  };
+}
+
+describe('a reorder is an edit the copy diff cannot see', () => {
+  it('learns where a role belongs when the moves agree on a direction', () => {
+    const l = deriveLessons([
+      moved('1', [{ role: 'quote', moved: 2 }]),
+      moved('2', [{ role: 'quote', moved: 3 }]),
+      moved('3', [{ role: 'quote', moved: 2 }]),
+    ]).find((x) => x.id === 'moves-role:quote:later')!;
+    expect(l.observations).toBe(3);
+    expect(l.amount).toBe(2);
+    expect(l.instruction).toContain('nearer the end');
+    expect(l.summary).toBe('You move quote slides later — 3 times.');
+    expect(l.evidence[0]!.after).toContain('places later');
+  });
+
+  it('learns nothing when a role is shoved both ways — that is a reshuffle', () => {
+    expect(
+      deriveLessons([
+        moved('1', [{ role: 'stat', moved: 2 }]),
+        moved('2', [{ role: 'stat', moved: -2 }]),
+        moved('3', [{ role: 'stat', moved: 2 }]),
+      ]).some((x) => x.kind === 'moves-role'),
+    ).toBe(false);
+  });
+
+  it('ignores a slide that did not actually move', () => {
+    expect(
+      deriveLessons([
+        moved('1', [{ role: 'stat', moved: 0 }]),
+        moved('2', [{ role: 'stat', moved: 0 }]),
+        moved('3', [{ role: 'stat', moved: 0 }]),
+      ]),
+    ).toEqual([]);
+  });
+});
+
+describe('pressing "smaller headline" is the same statement as retyping it shorter', () => {
+  const press = [{ kind: 'smaller-headline', chars: 50 }];
+
+  it('counts a press as a shortening, with a magnitude taken from the line', () => {
+    const l = deriveLessons([
+      moved('1', [{ role: 'statement', tweaks: press }]),
+      moved('2', [{ role: 'statement', tweaks: press }]),
+      moved('3', [{ role: 'statement', tweaks: press }]),
+    ]).find((x) => x.id === 'shorter:headline')!;
+    expect(l.observations).toBe(3);
+    expect(l.amount).toBe(9); // 18% of a 50-character headline
+    expect(l.evidence[0]!.after).toContain('smaller headline');
+  });
+
+  it('nets a withdrawal — bigger after smaller is not two opinions', () => {
+    const both = [{ kind: 'smaller-headline', chars: 50 }, { kind: 'bigger-headline' }];
+    expect(
+      deriveLessons([
+        moved('1', [{ role: 'statement', tweaks: both }]),
+        moved('2', [{ role: 'statement', tweaks: both }]),
+        moved('3', [{ role: 'statement', tweaks: both }]),
+      ]),
+    ).toEqual([]);
+  });
+
+  it('pools presses with typed edits — two ways of saying one thing', () => {
+    const typed = gen('1', [shorten('headline', 'A headline of about forty characters!!', 'A headline of about thirty')]);
+    const lessons = deriveLessons([typed, moved('2', [{ role: 'statement', tweaks: press }]), moved('3', [{ role: 'statement', tweaks: press }])]);
+    const l = lessons.find((x) => x.id === 'shorter:headline')!;
+    expect(l.observations).toBe(3);
+  });
+
+  it('says nothing about an invert — that is a surface, not a sentence', () => {
+    const inv = [{ kind: 'invert' }];
+    expect(
+      deriveLessons([
+        moved('1', [{ role: 'statement', tweaks: inv }]),
+        moved('2', [{ role: 'statement', tweaks: inv }]),
+        moved('3', [{ role: 'statement', tweaks: inv }]),
+      ]),
+    ).toEqual([]);
+  });
+});
+
+describe('swapping an arrangement rejects a composition', () => {
+  it('learns that a role’s first arrangement is the wrong one', () => {
+    const l = deriveLessons([
+      moved('1', [{ role: 'feature', rearranged: true }]),
+      moved('2', [{ role: 'feature', rearranged: true }]),
+      moved('3', [{ role: 'feature', rearranged: true }]),
+    ]).find((x) => x.id === 'rearranges-role:feature')!;
+    expect(l.observations).toBe(3);
+    expect(l.instruction).toContain('is not the one they want');
+  });
+
+  it('moves the composer exactly one variant along — no further', () => {
+    const lessons = deriveLessons([
+      moved('1', [{ role: 'feature', rearranged: true }]),
+      moved('2', [{ role: 'feature', rearranged: true }]),
+      moved('3', [{ role: 'feature', rearranged: true }]),
+    ]);
+    expect(variantBiasFromLessons(lessons)).toEqual({ feature: 1 });
+  });
+
+  it('biases nothing for a brand that has never swapped one', () => {
+    expect(variantBiasFromLessons([])).toEqual({});
   });
 });

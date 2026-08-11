@@ -44,7 +44,7 @@ import {
 } from '@contentbuilder/shared';
 import { config } from '../../config';
 import { topLevelBlocks, type SlideBlock } from './dedupeBlocks';
-import type { ComposeSlideInput } from './prompt';
+import { variantIndexOf, type ComposeSlideInput } from './prompt';
 
 // ── Public shape ────────────────────────────────────────────────────────────
 
@@ -538,7 +538,7 @@ export interface DropResult {
 
 /** The classes this slide's composition pattern actually names. */
 function patternClasses(recipe: BrandRecipe, input: ComposeSlideInput): Set<string> {
-  const pattern = recipePatternVariant(recipe, input.format, input.role, input.index ?? 0);
+  const pattern = recipePatternVariant(recipe, input.format, input.role, variantIndexOf(input));
   const out = new Set<string>();
   if (!pattern) return out;
   for (const token of pattern.slice(pattern.indexOf(':') + 1).split('→')) {

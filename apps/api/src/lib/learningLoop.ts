@@ -23,6 +23,7 @@ import {
   type ObservedGeneration,
   type PartEdit,
   type SlideOutcome,
+  type TweakPress,
 } from '@contentbuilder/shared';
 import { GenerationModel, BusinessModel } from '../models';
 import { partsFromAuthored } from './htmlDirector/reparse';
@@ -130,6 +131,34 @@ export function diffSlide(
 }
 
 /**
+ * WHICH SLIDE WAS ACTUALLY DRAGGED, and how far.
+ *
+ * Moving one slide to the front pushes every slide it passed down by one, so a
+ * single drag produces three or four displacements and only one of them was a
+ * decision. Recording all of them taught "you move the statement slide later"
+ * from a user who had dragged the stat slide earlier — true, and the wrong
+ * lesson. The largest displacement is the drag; everything else is its wake.
+ *
+ * Ties are all kept: swapping two adjacent slides moves both by one, and which
+ * of the pair was picked up is genuinely unknowable.
+ */
+export function draggedSlides(
+  generatedOrder: readonly string[],
+  shippedOrder: readonly string[],
+): Map<string, number> {
+  const now = new Map(shippedOrder.map((id, i) => [id, i]));
+  const moved = new Map<string, number>();
+  generatedOrder.forEach((id, was) => {
+    const is = now.get(id);
+    if (typeof is === 'number' && is !== was) moved.set(id, is - was);
+  });
+  if (!moved.size) return moved;
+  const furthest = Math.max(...[...moved.values()].map(Math.abs));
+  for (const [id, delta] of moved) if (Math.abs(delta) !== furthest) moved.delete(id);
+  return moved;
+}
+
+/**
  * Diff a whole shipped deck against what was generated, and store the verdict
  * on the generation record.
  *
@@ -154,7 +183,29 @@ export async function observeOutcome(
     if (!generated.length) return undefined;
 
     const byId = new Map(shippedSlides.filter((s) => s.id).map((s) => [String(s.id), s]));
-    const slides = generated.map((g) => diffSlide(g, byId.get(g.id)));
+    /**
+     * Tweak presses and arrangement swaps are EVENTS, recorded the moment they
+     * happen. Re-observing a deck must carry them forward rather than recompute
+     * them — nothing in the final markup says a button was ever pressed.
+     */
+    const previous = new Map<string, SlideOutcome>(
+      ((gen.get('outcome') as GenerationOutcome | undefined)?.slides ?? []).map((s) => [s.slideId, s]),
+    );
+
+    const displacement = draggedSlides(
+      generated.map((g) => g.id),
+      shippedSlides.map((s) => String(s.id ?? '')),
+    );
+
+    const slides = generated.map((g) => {
+      const out = diffSlide(g, byId.get(g.id));
+      const was = previous.get(g.id);
+      if (was?.tweaks?.length) out.tweaks = was.tweaks;
+      if (was?.rearranged) out.rearranged = true;
+      const delta = displacement.get(g.id);
+      if (delta !== undefined) out.moved = delta;
+      return out;
+    });
     const generatedIds = new Set(generated.map((g) => g.id));
     const outcome: GenerationOutcome = {
       at: new Date().toISOString(),
@@ -168,15 +219,64 @@ export async function observeOutcome(
 
     const edited = slides.filter((s) => s.verdict === 'edited').length;
     const dropped = slides.filter((s) => s.verdict === 'dropped').length;
-    if (edited || dropped || outcome.added) {
+    const moved = slides.filter((s) => typeof s.moved === 'number').length;
+    if (edited || dropped || moved || outcome.added) {
       console.warn(
-        `[learning] ${projectId}: ${edited} slide(s) edited, ${dropped} dropped, ${outcome.added} added`,
+        `[learning] ${projectId}: ${edited} slide(s) edited, ${dropped} dropped, ${moved} moved, ${outcome.added} added`,
       );
     }
     return outcome;
   } catch (err) {
     console.warn('[learning] could not observe this outcome:', err instanceof Error ? err.message : err);
     return undefined;
+  }
+}
+
+/**
+ * RECORD AN EVENT ON ONE SLIDE — a tweak press, or an arrangement swapped for
+ * an alternative.
+ *
+ * Neither leaves a trace the outcome diff can find later: a "smaller headline"
+ * changes a class rather than a word, and applying an alternative changes the
+ * markup while leaving every word exactly where it was. Both are the user
+ * telling you something specific, and both were silently discarded.
+ *
+ * Written straight onto the generation's outcome, creating a bare one if the
+ * deck has not been saved since it was composed. Best-effort throughout: this
+ * is bookkeeping about a button press, and it may never fail the press.
+ */
+export async function noteSlideSignal(
+  projectId: string,
+  slideId: string,
+  signal: { tweak?: TweakPress; rearranged?: boolean },
+): Promise<void> {
+  try {
+    const gen = await GenerationModel.findOne({ projectId }).sort({ createdAt: -1 });
+    if (!gen) return;
+    const generated = (gen.get('slides') ?? []) as Array<{ id: string; role?: string }>;
+    const made = generated.find((g) => g.id === slideId);
+    if (!made) return; // a slide the app never wrote can teach nothing about writing
+
+    const outcome: GenerationOutcome = (gen.get('outcome') as GenerationOutcome | undefined) ?? {
+      at: new Date().toISOString(),
+      exported: false,
+      added: 0,
+      slides: generated.map((g) => ({ slideId: g.id, role: g.role ?? 'statement', verdict: 'kept' as const })),
+    };
+    const row =
+      outcome.slides.find((sl) => sl.slideId === slideId) ??
+      ({ slideId, role: made.role ?? 'statement', verdict: 'kept' } as SlideOutcome);
+    if (!outcome.slides.includes(row)) outcome.slides.push(row);
+
+    if (signal.tweak) row.tweaks = [...(row.tweaks ?? []), signal.tweak];
+    if (signal.rearranged) row.rearranged = true;
+    outcome.at = new Date().toISOString();
+
+    gen.set('outcome', outcome);
+    gen.markModified('outcome');
+    await gen.save();
+  } catch (err) {
+    console.warn('[learning] could not record that signal:', err instanceof Error ? err.message : err);
   }
 }
 

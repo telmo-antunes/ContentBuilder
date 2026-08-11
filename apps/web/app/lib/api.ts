@@ -266,6 +266,21 @@ export const rewriteSlideCopy = (projectId: string, slideId: string, count = 2, 
     180_000,
   );
 
+/**
+ * Tell the app you kept an ALTERNATIVE ARRANGEMENT for this slide.
+ *
+ * Applying a candidate goes through the ordinary slide save, which changes the
+ * markup and leaves every word where it was — so the outcome diff reads it as
+ * untouched, and "not that composition" is the clearest thing a person can say
+ * about a layout. Fire-and-forget: it is bookkeeping, and it must never get in
+ * the way of the apply it follows.
+ */
+export const noteSlideChoice = (projectId: string, slideId: string, kind: 'arrangement' | 'copy') =>
+  request<{ ok: boolean }>(`/projects/${projectId}/slides/${slideId}/chose`, {
+    method: 'POST',
+    body: JSON.stringify({ kind }),
+  }).catch(() => undefined);
+
 /** Instant deterministic slide tweaks (no AI): headline size, inverse surface. */
 export const tweakSlide = (
   projectId: string,

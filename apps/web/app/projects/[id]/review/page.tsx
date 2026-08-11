@@ -28,6 +28,7 @@ import {
   updateProject,
   getShareInfo,
   getSlideVariants,
+  noteSlideChoice,
   rewriteSlideCopy,
   listProjectVersions,
   restoreProjectVersion,
@@ -100,6 +101,13 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
   // Alternative arrangements for the selected slide — shown side by side, applied
   // only on click, so a single weak slide no longer means re-composing the deck.
   const [variants, setVariants] = useState<Array<{ html: string; bg?: string; role?: string }> | null>(null);
+  /**
+   * Which question produced the candidates on screen. An ARRANGEMENT swap keeps
+   * every word, so nothing in the saved deck records that a composition was
+   * rejected — it has to be reported explicitly. A COPY rewrite needs no such
+   * help: the words changed, and the save-time diff sees that by itself.
+   */
+  const [variantKind, setVariantKind] = useState<'arrangement' | 'copy'>('arrangement');
   /**
    * A direction for the SELECTED slide — the per-slide half of the brief
    * language. Empty asks for a rearrangement of the copy already there; filled,
@@ -328,6 +336,8 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
     async (slideId: string, direction?: string) => {
       setWorking('variants');
       setVariants(null);
+      // A direction makes this a rewrite, whatever button was pressed.
+      setVariantKind(direction?.trim() ? 'copy' : 'arrangement');
       try {
         const res = await getSlideVariants(projectId, slideId, 2, direction);
         setVariants(res.variants);
@@ -348,6 +358,7 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
     async (slideId: string, direction?: string) => {
       setWorking('rewrite');
       setVariants(null);
+      setVariantKind('copy');
       try {
         const res = await rewriteSlideCopy(projectId, slideId, 2, direction);
         setVariants(res.variants);
@@ -371,14 +382,17 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
         const updated = await updateProject(projectId, { slides: next as Slide[] });
         setProject((prev) => (prev ? { ...prev, slides: updated.slides } : prev));
         setVariants(null);
-        toast('Arrangement applied', 'ok');
+        // AFTER the save, so the outcome diff has already run over the new deck
+        // and this only adds the one thing the diff could not have seen.
+        void noteSlideChoice(projectId, slideId, variantKind);
+        toast(variantKind === 'copy' ? 'New copy applied' : 'Arrangement applied', 'ok');
       } catch {
-        toast('Could not apply that arrangement', 'error');
+        toast('Could not apply that', 'error');
       } finally {
         setWorking(null);
       }
     },
-    [projectId],
+    [projectId, variantKind],
   );
 
   /** Instant deterministic tweaks — no AI, no waiting. */

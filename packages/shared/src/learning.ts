@@ -49,6 +49,17 @@ export interface PartEdit {
   after: string;
 }
 
+/**
+ * One press of a deterministic slide tweak. `chars` is how long the headline
+ * was when the button was pressed — a "smaller headline" is a statement about
+ * a specific line's length, and without it the press is an opinion with no
+ * magnitude attached.
+ */
+export interface TweakPress {
+  kind: 'smaller-headline' | 'bigger-headline' | 'invert' | 'un-invert';
+  chars?: number;
+}
+
 /** What became of one generated slide. */
 export interface SlideOutcome {
   slideId: string;
@@ -57,6 +68,28 @@ export interface SlideOutcome {
   verdict: 'kept' | 'edited' | 'dropped';
   /** Only on 'edited'. */
   edits?: PartEdit[];
+  /**
+   * How far the user moved this slide, in positions: negative is earlier in the
+   * deck, positive later. Absent when it did not move.
+   *
+   * A reorder is an edit the copy diff cannot see — the slide's words are
+   * identical, and only the deck's argument changed — so it was recorded as
+   * 'kept' and taught nothing.
+   */
+  moved?: number;
+  /**
+   * Deterministic tweaks pressed on this slide. "Smaller headline" is the user
+   * saying the copy is too long WITHOUT retyping it, which the copy diff also
+   * cannot see; it belongs in the same evidence pile as an edit that shortens
+   * the line by hand.
+   */
+  tweaks?: TweakPress[];
+  /**
+   * The user replaced this slide's ARRANGEMENT with an alternative. The copy is
+   * untouched by definition on that path, so this is the only trace of a
+   * composition being rejected.
+   */
+  rearranged?: boolean;
 }
 
 /** What became of one whole generation. */
@@ -92,7 +125,11 @@ export type LessonKind =
   /** A word the user takes out and never puts in. */
   | 'avoids-word'
   /** A word the user puts in and never takes out. */
-  | 'prefers-word';
+  | 'prefers-word'
+  /** The user consistently moves slides of this role earlier, or later. */
+  | 'moves-role'
+  /** The user consistently re-arranges slides of this role. */
+  | 'rearranges-role';
 
 export interface Lesson {
   /** Stable across derivations, so muting one sticks. */
@@ -120,6 +157,16 @@ export const MIN_ROLE_DROPS = 2;
 const SHORTEN_RATIO = 0.15;
 /** …and at least this many characters, so an 8-char eyebrow cannot qualify on 2. */
 const SHORTEN_FLOOR = 6;
+/** A slide has to travel at least this far for the move to be a preference. */
+const MIN_MOVE = 1;
+/**
+ * A "smaller headline" press is a statement that the line is too long, but it
+ * does not say by how much. The `.sm` variant is roughly a fifth off the type
+ * size, so the copy equivalent is about this share of the line — stated here
+ * rather than buried, because it is the one number in this file that is a
+ * judgement rather than a measurement.
+ */
+const TWEAK_SHRINK_SHARE = 0.18;
 /** How many posts back a lesson may look. Older than this is a different brand. */
 export const LESSON_WINDOW = 20;
 /** How many evidence rows a lesson carries. Enough to be checked, not a log. */
@@ -170,6 +217,11 @@ export function deriveLessons(generations: readonly ObservedGeneration[]): Lesso
   const lessons: Lesson[] = [];
 
   // ── 1. Parts the user shortens ────────────────────────────────────────
+  //
+  // Two ways of saying the same thing count the same. Retyping a headline
+  // shorter and pressing "smaller headline" are both the user telling you the
+  // line is too long for the canvas; only one of them leaves a copy diff, and
+  // counting only that one taught nothing to the people who use the button.
   for (const part of LEARNABLE_PARTS) {
     const shrinks: number[] = [];
     const evidence: Lesson['evidence'] = [];
@@ -183,6 +235,25 @@ export function deriveLessons(generations: readonly ObservedGeneration[]): Lesso
           if (evidence.length < MAX_EVIDENCE) {
             evidence.push({ projectId: gen.projectId, title: gen.title, before: edit.before, after: edit.after });
           }
+        }
+        if (part !== 'headline') continue;
+        // NET, like the recipe's own tweak counters: pressing bigger after
+        // smaller is a withdrawal, not two opinions.
+        const presses = slide.tweaks ?? [];
+        const net =
+          presses.filter((t) => t.kind === 'smaller-headline').length -
+          presses.filter((t) => t.kind === 'bigger-headline').length;
+        if (net <= 0) continue;
+        const chars = presses.find((t) => t.kind === 'smaller-headline')?.chars ?? 0;
+        const implied = Math.max(SHORTEN_FLOOR, Math.round(chars * TWEAK_SHRINK_SHARE));
+        for (let i = 0; i < net; i += 1) shrinks.push(implied);
+        if (evidence.length < MAX_EVIDENCE) {
+          evidence.push({
+            projectId: gen.projectId,
+            title: gen.title,
+            before: `${chars}-character headline`,
+            after: 'you pressed “smaller headline”',
+          });
         }
       }
     }
@@ -295,6 +366,84 @@ export function deriveLessons(generations: readonly ObservedGeneration[]): Lesso
     });
   }
 
+  // ── 5. Roles the user moves ───────────────────────────────────────────
+  //
+  // A reorder leaves the copy untouched, so nothing in the rules above can see
+  // it — and yet "the quote always ends up last" is one of the clearest
+  // statements a person can make about how their deck should argue.
+  const moves = new Map<string, { deltas: number[]; evidence: Lesson['evidence'] }>();
+  for (const gen of recent) {
+    for (const slide of gen.outcome!.slides) {
+      if (typeof slide.moved !== 'number' || Math.abs(slide.moved) < MIN_MOVE) continue;
+      const row = moves.get(slide.role) ?? { deltas: [], evidence: [] };
+      row.deltas.push(slide.moved);
+      if (row.evidence.length < MAX_EVIDENCE) {
+        row.evidence.push({
+          projectId: gen.projectId,
+          title: gen.title,
+          before: `${slide.role} slide`,
+          after: `moved ${Math.abs(slide.moved)} ${Math.abs(slide.moved) === 1 ? 'place' : 'places'} ${slide.moved < 0 ? 'earlier' : 'later'}`,
+        });
+      }
+      moves.set(slide.role, row);
+    }
+  }
+  for (const [role, row] of moves) {
+    if (row.deltas.length < MIN_OBSERVATIONS) continue;
+    // They must agree on the DIRECTION. A role shoved forward as often as back
+    // is a deck being reshuffled, not a position being preferred.
+    const later = row.deltas.filter((d) => d > 0).length;
+    const earlier = row.deltas.filter((d) => d < 0).length;
+    if (Math.min(later, earlier) > 0) continue;
+    const amount = Math.abs(median(row.deltas));
+    const where = later ? 'later' : 'earlier';
+    lessons.push({
+      id: `moves-role:${role}:${where}`,
+      kind: 'moves-role',
+      subject: role,
+      observations: row.deltas.length,
+      amount,
+      instruction: `This brand always moves its "${role}" slide ${where} in the deck — order the slides so it already sits ${later ? 'nearer the end' : 'nearer the start'}.`,
+      summary: `You move ${role} slides ${where} — ${plural(row.deltas.length, 'time')}.`,
+      evidence: row.evidence,
+    });
+  }
+
+  // ── 6. Roles whose ARRANGEMENT gets rejected ──────────────────────────
+  //
+  // Asking for alternatives and applying one is the user saying the
+  // composition was wrong while the words were right. That path changes no
+  // copy at all, so it was recorded as 'kept' and taught nothing.
+  const rearranged = new Map<string, { count: number; evidence: Lesson['evidence'] }>();
+  for (const gen of recent) {
+    for (const slide of gen.outcome!.slides) {
+      if (!slide.rearranged) continue;
+      const row = rearranged.get(slide.role) ?? { count: 0, evidence: [] };
+      row.count += 1;
+      if (row.evidence.length < MAX_EVIDENCE) {
+        row.evidence.push({
+          projectId: gen.projectId,
+          title: gen.title,
+          before: `the ${slide.role} arrangement`,
+          after: 'you swapped it for an alternative',
+        });
+      }
+      rearranged.set(slide.role, row);
+    }
+  }
+  for (const [role, row] of rearranged) {
+    if (row.count < MIN_OBSERVATIONS) continue;
+    lessons.push({
+      id: `rearranges-role:${role}`,
+      kind: 'rearranges-role',
+      subject: role,
+      observations: row.count,
+      instruction: `This brand re-arranges its "${role}" slides — the first composition you reach for is not the one they want.`,
+      summary: `You re-arrange ${role} slides — ${plural(row.count, 'time')}.`,
+      evidence: row.evidence,
+    });
+  }
+
   // Strongest first: the most-agreed lesson is the most worth obeying, and the
   // prompt block below is capped, so the order decides what survives the cap.
   return lessons.sort((a, b) => b.observations - a.observations);
@@ -320,6 +469,26 @@ export function lessonsBlock(lessons: readonly Lesson[]): string {
     `WHAT THIS BRAND HAS TAUGHT YOU — these are corrections its owner made to your previous posts, more than once each. Follow them:`,
     ...use.map((l) => `  · ${l.instruction}`),
   ].join('\n');
+}
+
+/**
+ * WHICH COMPOSITION VARIANT TO REACH FOR FIRST, per role.
+ *
+ * A recipe usually authors several arrangements per role and the composer
+ * rotates through them by deck position. A `rearranges-role` lesson says the
+ * one that rotation lands on is the wrong one for this brand — so the rotation
+ * starts one further along, and the alternative the user kept picking is what
+ * they get without asking.
+ *
+ * Deliberately a nudge of exactly ONE. The lesson is "not that one", not "that
+ * specific other one": the user picked from two or three candidates and the
+ * app never learned which, so moving further than a step would be inventing a
+ * preference nobody expressed.
+ */
+export function variantBiasFromLessons(lessons: readonly Lesson[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const l of lessons) if (l.kind === 'rearranges-role') out[l.subject] = 1;
+  return out;
 }
 
 /**
