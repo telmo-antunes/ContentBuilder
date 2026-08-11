@@ -51,6 +51,44 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
+### The layout engine stacks; it does not compose
+
+- **Kind:** Gap
+- **Severity:** cost me a fix
+- **First seen:** 2026-08-11 — `how-often-ceramic-coating`, whole deck
+- **What happened:** blocks are placed in order from a top anchor with fixed
+  gaps, and leftover vertical space is abandoned wherever it falls. One slide
+  carried ~430px of empty ground between its headline and its list; two others
+  ended with 230–280px of dead black. When content runs long instead of short
+  the same mechanism collides it — a headline's descenders sat on the CTA chip
+  with zero gap, and the overflow guard passed the slide because nothing left
+  the frame.
+- **Why it matters:** it is the single behaviour behind most of a 20-point
+  design review. It also produces one composition for every slide, so a deck
+  reads at feed scale as one slide repeated — the opposite of what a carousel
+  is for.
+- **Direction:** compute total content height first, then place slack
+  deliberately as a property of the chosen layout. Needs a set of layout
+  archetypes to choose between (full-bleed, split, list, statement, CTA) rather
+  than one column for everything.
+- **Partly addressed 2026-08-11:** the measurement exists now — see Resolved for
+  the collision and slack gates and the contact sheet. The engine change itself
+  is untouched.
+
+### Widows and orphans are not checked
+
+- **Kind:** Defect
+- **Severity:** minor
+- **First seen:** 2026-08-11 — `how-often-ceramic-coating`, slide 4 row 3
+- **What happened:** *"Bird droppings and tree sap left on / paint"* — one short
+  word alone on its second line, which also made that row 65% taller than its
+  neighbours and broke the list's rhythm.
+- **Why it matters:** cheap to detect, and it is the kind of thing that reads as
+  machine-set rather than typeset.
+- **Direction:** measure line boxes per text block; a final line carrying a
+  single short word should trigger a rebalance or a size step-down. Same probe
+  pass as the collision gate.
+
 ### The `stat` role filled its stat and its headline with the same sentence
 
 - **Kind:** Defect
@@ -203,6 +241,28 @@ Rules that keep this file worth reading:
 ---
 
 ## Resolved
+
+### Layout faults were invisible at review scale
+
+*Resolved 2026-08-11.* Two additions, both cheap.
+
+**Measurement.** `AuthoredSlide` now reports two verdicts beside `overflow`,
+from the same layout-space pass: `collide` (any two painted boxes closer than
+6px — measured as a gap rather than as ink, because a descender paints outside
+its line box and that is exactly how a headline ended up on a CTA chip with the
+overflow guard reporting "fits"), and `slack` (the largest contiguous empty
+band as a fraction of frame height, counting the runs above the first box and
+below the last). `renderCheck` reads both; `MAX_SLACK` is 0.15.
+
+**A contact sheet in every export.** `buildContactSheet` composes the deck three
+to a row at 350px — roughly feed scale — and the export zip carries it as
+`contact-sheet.png`. Every fault in the review that was not a collision was
+invisible in the studio's thumbnail strip and obvious in the sheet, including
+the ~430px hole and the deck's monotony. Never fatal: a montage that fails to
+compose must not cost someone their export.
+
+What remains is the response to those verdicts — the engine still ships a
+flagged slide rather than repairing it — and the engine change itself.
 
 ### The `.cb-shot` gradient made a dark carousel cover unreadable in a promo story
 
