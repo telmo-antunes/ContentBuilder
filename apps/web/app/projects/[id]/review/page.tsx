@@ -959,6 +959,22 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                     <div className="k">Slides</div>
                     <div className="v">{slides.length}</div>
                   </div>
+                  {/* Who this post addresses — a care guide composed in the
+                      studio-owner voice is wrong on every slide, and this is
+                      where that gets noticed before export rather than after
+                      posting. */}
+                  {project.settings?.audience && (
+                    <div>
+                      <div className="k">Audience</div>
+                      <div className="v">{project.settings.audience}</div>
+                    </div>
+                  )}
+                  {project.settings?.dmKeyword && (
+                    <div>
+                      <div className="k">DM keyword</div>
+                      <div className="v">{project.settings.dmKeyword}</div>
+                    </div>
+                  )}
                   <div>
                     <div className="k">Status</div>
                     <div className={`v${authored ? ' ok' : ''}`}>

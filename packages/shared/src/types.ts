@@ -221,6 +221,10 @@ export interface ProjectSettings {
   theme?: ThemePreset;
   /** Show a "1 / N" counter on each slide. */
   slideCounter?: boolean;
+  /** The ONE DM keyword for this post — slide, caption and notes all read it. */
+  dmKeyword?: string;
+  /** Who reads this post; picks the voice register and shows on review. */
+  audience?: 'car owner' | 'studio owner';
 }
 
 /** The social caption + hashtags for a post, written in the brand voice. */

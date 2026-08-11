@@ -128,6 +128,19 @@ export const slideSchema = z.object({
 const settingsSchema = z.object({
   theme: themeEnum.optional(),
   slideCounter: z.boolean().optional(),
+  /**
+   * The ONE DM keyword for this post. The final slide, the caption and the
+   * hand-off notes all read from here — a review found the payload saying GROW,
+   * the slide saying COATING and the caption empty, with nothing comparing
+   * them. One value, set once, used everywhere.
+   */
+  dmKeyword: z.string().trim().max(24).optional(),
+  /**
+   * Who reads this post. Chooses the voice register and shows on the review
+   * page — a car-care guide composed in the studio-owner voice addresses the
+   * wrong person on every slide, and nothing used to notice.
+   */
+  audience: z.enum(['car owner', 'studio owner']).optional(),
 });
 
 /** The generated social caption + hashtags for a post. */
@@ -149,6 +162,8 @@ export const createProjectSchema = z
     /** The per-slide plan, parked alongside the prompt on an Ideas card. */
     plan: z.array(z.string().trim().max(MAX_SLIDE_DIRECTION_CHARS)).max(MAX_PLAN_SLIDES).optional(),
     stage: z.enum(['idea', 'drafting', 'ready', 'shipped']).optional(),
+    /** Arrives with the hand-off payload; editable like everything else. */
+    caption: captionSchema.optional(),
   })
   .refine((d) => isFormat(d.format) && isValidTypeFormat(d.type as AssetType, d.format as Format), {
     message: 'Invalid type/format combination',

@@ -43,6 +43,16 @@ import { aiDraftConfigured, config } from '../config';
 const composeSchema = z.object({
   idea: z.string().trim().min(1, 'An idea is required').max(MAX_DRAFT_PARAGRAPH_CHARS),
   /**
+   * Acknowledge composing with no photographs at all.
+   *
+   * A deck with no imagery is seven near-identical panels — the review that
+   * prompted this watched one ship after TWO upstream warnings, because a
+   * warning nobody must answer is a warning nobody reads. When the brand pool
+   * is empty this flag is required, which turns "it happened" into "someone
+   * chose it".
+   */
+  textOnly: z.boolean().optional(),
+  /**
    * How many slides. Optional, and normally ABSENT: the deck length is derived
    * from the brief (a plan fixes it; otherwise the volume of material decides).
    * Kept on the wire so a script or the eval can still pin it.
@@ -176,13 +186,26 @@ async function buildCaption(project: {
   ]);
   const b = business as { profile?: Record<string, unknown> } | null;
   const k = kit as { voice?: string; styleDescriptor?: string } | null;
-  return generateCaption({
+  const caption = await generateCaption({
     title: project.get('title') as string,
     slides: project.get('slides') as never,
     voice: k?.voice,
     styleDescriptor: k?.styleDescriptor,
     profile: b?.profile as never,
   });
+
+  /**
+   * ONE KEYWORD, EVERYWHERE. The project's dmKeyword is the single source; a
+   * caption that ends on a different keyword than the final slide shows sends
+   * the reader's DM into the void. Appended deterministically rather than asked
+   * of the model, because "the caption must contain X" is exactly the kind of
+   * instruction a model treats as a suggestion.
+   */
+  const kw = (project.get('settings') as { dmKeyword?: string } | undefined)?.dmKeyword;
+  if (kw && !caption.text.toUpperCase().includes(kw.toUpperCase())) {
+    caption.text = `${caption.text.trimEnd()}\n\nDM ${kw} and we'll send you the full guide.`;
+  }
+  return caption;
 }
 
 // Create a project — only on a business that has an APPROVED brand kit.
@@ -208,10 +231,13 @@ projectsRouter.post(
       ...(body.idea ? { idea: body.idea } : {}),
       ...(body.plan?.length ? { plan: body.plan } : {}),
       stage: body.stage ?? (initialSlides.length ? 'drafting' : 'idea'),
+      ...(body.caption ? { caption: body.caption } : {}),
       settings: {
         // Default the theme from the business profile (profile → visual default).
         theme: body.settings?.theme ?? defaultThemeForCategory((business as any).profile?.category),
         slideCounter: body.settings?.slideCounter ?? false,
+        ...(body.settings?.dmKeyword ? { dmKeyword: body.settings.dmKeyword } : {}),
+        ...(body.settings?.audience ? { audience: body.settings.audience } : {}),
       },
     });
     res.status(201).json(created.toJSON());
@@ -421,8 +447,16 @@ const PHOTO_POOL_LIMIT = 24;
  * step into asking for a slot it cannot fill.
  */
 async function brandPhotoPool(businessId: string) {
+  /** Below this a photo cannot fill even the smallest slot without visible softness. */
+  const MIN_POOL_DIMENSION = 800;
+
   const docs = await MediaAssetModel.find({
     businessId,
+    // A logo, an avatar or a favicon harvested from the site lists fine and
+    // ships as a blurry stamp — the review's "2 photos from your website" were
+    // 640px site chrome. Size is a property the query can see; usefulness is
+    // not, so the floor stands in for it.
+    $or: [{ width: { $gte: MIN_POOL_DIMENSION } }, { height: { $gte: MIN_POOL_DIMENSION } }],
     /**
      * A rendered carousel cover is NOT brand imagery.
      *
@@ -490,14 +524,28 @@ projectsRouter.post(
   '/:id/compose',
   asyncHandler(async (req, res) => {
     const id = requireObjectId(req.params.id, 'Project');
-    const { idea, slideCount, plan } = parseBody(composeSchema, req.body);
+    const { idea, slideCount, plan, textOnly } = parseBody(composeSchema, req.body);
     if (!aiDraftConfigured()) {
       throw new ApiError(400, 'AI is not configured (set ANTHROPIC_API_KEY + ANTHROPIC_MODEL_SMALL).');
     }
     const project = await ProjectModel.findById(id);
     if (!project) throw new ApiError(404, 'Project not found');
 
-    const kit = await approvedKitFor(String(project.get('businessId')));
+    // The photo-pool gate runs FIRST: it needs no recipe, and "add photos or
+    // say text-only on purpose" is a decision the user can act on immediately,
+    // where the recipe error sends them to a different screen entirely.
+    const businessId = String(project.get('businessId'));
+    const pool = await brandPhotoPool(businessId);
+    if (pool.length === 0 && !textOnly) {
+      throw new ApiError(
+        400,
+        'This brand has no usable photos, so every slide would sit on the same background — '
+          + 'a deck like that gives nobody a reason to swipe. Add photos to the brand library, '
+          + 'or pass textOnly: true to compose a text-only deck on purpose.',
+      );
+    }
+
+    const kit = await approvedKitFor(businessId);
     // Stored recipes are migrated on read, so a brand authored against an older
     // shape keeps working instead of failing to parse.
     const stored = kit && (kit as { recipe?: unknown }).recipe;
@@ -518,11 +566,7 @@ projectsRouter.post(
     // string it had never opened; now the page's own headline, structure and
     // lines are the material. Never fatal — a link that will not load is
     // reported back and the deck is written from the user's words alone.
-    const businessId = String(project.get('businessId'));
-    const [{ brief, sources, failures }, pool] = await Promise.all([
-      resolveBrief(idea, plan),
-      brandPhotoPool(businessId),
-    ]);
+    const { brief, sources, failures } = await resolveBrief(idea, plan);
 
     // WHAT THIS BRAND HAS TAUGHT US, from the corrections its owner made to
     // previous posts. Empty until the same correction has been made three
@@ -532,10 +576,17 @@ projectsRouter.post(
       console.warn(`[learning] applying ${lessons.length} lesson(s): ${lessons.map((l) => l.id).join(', ')}`);
     }
 
+    // The voice register rides with the brief: the copywriter is told who is
+    // reading before it writes a word, and the instruction survives re-compose.
+    const audience = project.get('settings')?.audience as string | undefined;
+    const briefIdea = audience === 'car owner'
+      ? `${brief.idea}\n\nReader: a car owner, about their own car. Never address a business owner; never mention CRM, bookings, software or business growth.`
+      : brief.idea;
+
     let composed;
     let captured: ComposeRecord | undefined;
     try {
-      composed = await composeProject(parsedRecipe.data, brief.idea, {
+      composed = await composeProject(parsedRecipe.data, briefIdea, {
         format: project.get('format'),
         slideCount,
         plan: brief.plan,

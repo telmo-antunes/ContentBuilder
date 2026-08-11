@@ -212,6 +212,16 @@ export const TOUCHPOINT_REGISTRY: Record<TouchpointId, Touchpoint> = {
         ],
         detector: 'emptyList',
       },
+      {
+        version: 5,
+        date: '2026-08-11',
+        summary: 'Compresses the brief instead of embellishing it.',
+        improves: [
+          'The no-invented-claims rule now applies to the brief itself, not only to a linked source. A real deck stated three things its post did not say — one inverted the post\'s central point — because the rule only guarded the SOURCE path.',
+          'A slide built from a bare heading states the heading and stops, instead of guessing what the material under it would have said.',
+          'A list the brief presents as ordered keeps its order — items are no longer added, dropped or re-ranked.',
+        ],
+      },
     ],
   },
 
