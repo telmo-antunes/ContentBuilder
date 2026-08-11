@@ -1108,3 +1108,73 @@ describe('failInterruptedVideoJobs', () => {
     expect((await VideoJobModel.findById(cancelled!._id))?.get('state')).toBe('cancelled');
   });
 });
+
+// ── Promo story ───────────────────────────────────────────────────────────────
+describe('POST /projects/:id/promo-story', () => {
+  const carouselWithCover = async () => {
+    const biz = await seedBusiness();
+    await seedApprovedKit(String(biz._id));
+    const created = await request(app())
+      .post('/projects')
+      .send({ businessId: String(biz._id), title: 'Win back lapsed clients', type: 'carousel', format: '1080x1350' });
+    await request(app())
+      .patch(`/projects/${created.body._id}`)
+      .send({ slides: [{ id: 's1', order: 0, authored: { html: '<h1 class="headline">Cover</h1>', role: 'cover' } }] });
+    return created.body._id as string;
+  };
+
+  it('refuses a project that is not a carousel', async () => {
+    const biz = await seedBusiness();
+    await seedApprovedKit(String(biz._id));
+    const story = await request(app())
+      .post('/projects')
+      .send({ businessId: String(biz._id), title: 'S', type: 'story', format: '1080x1920' });
+    const res = await request(app()).post(`/projects/${story.body._id}/promo-story`);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/only a carousel/i);
+  });
+
+  it('refuses a carousel with no slides', async () => {
+    const biz = await seedBusiness();
+    await seedApprovedKit(String(biz._id));
+    const empty = await request(app())
+      .post('/projects')
+      .send({ businessId: String(biz._id), title: 'C', type: 'carousel', format: '1080x1350' });
+    const res = await request(app()).post(`/projects/${empty.body._id}/promo-story`);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/no slides/i);
+  });
+
+  /**
+   * The blank-frame guard. A cover with no authored markup renders to the empty
+   * ~7KB PNG that the retired slide format produces, and a promo story showing
+   * an empty rectangle is worse than no promo story at all.
+   */
+  it('refuses a cover with no authored markup rather than rendering a blank frame', async () => {
+    const biz = await seedBusiness();
+    await seedApprovedKit(String(biz._id));
+    const created = await request(app())
+      .post('/projects')
+      .send({ businessId: String(biz._id), title: 'C', type: 'carousel', format: '1080x1350' });
+    await request(app())
+      .patch(`/projects/${created.body._id}`)
+      .send({ slides: [{ id: 's1', order: 0 }] });
+    const res = await request(app()).post(`/projects/${created.body._id}/promo-story`);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/no authored markup/i);
+  });
+
+  it('refuses a brand with no design recipe', async () => {
+    // seedApprovedKit stores no `recipe`, so this is the ordinary state of a
+    // kit approved before recipes existed.
+    const id = await carouselWithCover();
+    const res = await request(app()).post(`/projects/${id}/promo-story`);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/no design recipe/i);
+  });
+
+  it('404s on an unknown project', async () => {
+    const res = await request(app()).post(`/projects/${new mongoose.Types.ObjectId()}/promo-story`);
+    expect(res.status).toBe(404);
+  });
+})

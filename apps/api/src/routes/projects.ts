@@ -12,6 +12,7 @@ import {
   authoredSlots,
   clampVideoSeconds,
   defaultThemeForCategory,
+  dimensionsFor,
   ensureBrandMark,
   isSlotName,
   migrateRecipe,
@@ -1269,5 +1270,172 @@ projectsRouter.post(
     const existing = await VideoJobModel.findOne({ _id: req.params.jobId, projectId });
     if (!existing) throw new ApiError(404, 'Video job not found');
     res.json({ state: existing.get('state'), percent: existing.get('percent') ?? 0 });
+  }),
+);
+
+// ── Promo story ───────────────────────────────────────────────────────────────
+
+/** Stories are the only vertical format; named so the intent reads at the call site. */
+const STORY_FORMAT = '1080x1920' as const;
+
+/** Marks a rendered carousel cover in the media library, next to SITE_PHOTO_LABEL. */
+export const PROMO_COVER_LABEL = 'Carousel cover';
+
+const promoStorySchema = z.object({
+  /** The hook. Defaults to the carousel's own title. */
+  headline: z.string().trim().max(120).optional(),
+  /** Small label above the hook. */
+  eyebrow: z.string().trim().max(40).optional(),
+  /** What the frame asks the viewer to do. */
+  cta: z.string().trim().max(60).optional(),
+  /** Overrides the story project's title. */
+  title: z.string().trim().max(120).optional(),
+});
+
+/**
+ * A STORY THAT PROMOTES A CAROUSEL.
+ *
+ * The carousel is the work; the story is the poster for it. Followers see
+ * stories far more often than they see the feed, so the frame that drives
+ * people to a carousel is worth more than another frame re-arguing its
+ * contents — which is why this shows the carousel's actual cover rather than
+ * composing a fresh design. Recognition is the entire mechanism.
+ *
+ * Deliberately derivative, and therefore deliberately cheap:
+ *   · the cover is RENDERED from the carousel's own first slide, through the
+ *     same exporter the zip uses, so it is pixel-identical to what ships;
+ *   · the frame is composed through the ordinary compose path, which for a
+ *     brand carrying a `cta` fragment substitutes deterministically and calls
+ *     no model at all.
+ *
+ * The result is a normal draft story project — editable, exportable, and
+ * deletable — not a special kind of object. Posting stays the user's.
+ */
+projectsRouter.post(
+  '/:id/promo-story',
+  asyncHandler(async (req, res) => {
+    const id = requireObjectId(req.params.id, 'Project');
+    const body = parseBody(promoStorySchema, req.body ?? {});
+
+    const carousel = await ProjectModel.findById(id);
+    if (!carousel) throw new ApiError(404, 'Project not found');
+    if (carousel.get('type') !== 'carousel') {
+      throw new ApiError(400, 'Only a carousel can be promoted with a story.');
+    }
+
+    const slides = (carousel.get('slides') ?? []) as Array<{ id: string; order: number; authored?: { html?: string } }>;
+    const cover = [...slides].sort((a, b) => a.order - b.order)[0];
+    if (!cover) throw new ApiError(400, 'This carousel has no slides yet.');
+    if (!cover.authored?.html) {
+      // Rendering it anyway would produce the blank ~7KB frame that the
+      // pre-recipe slide format is known for, and a promo story showing an
+      // empty rectangle is worse than no promo story.
+      throw new ApiError(400, 'The carousel cover has no authored markup — compose the carousel first.');
+    }
+
+    const businessId = String(carousel.get('businessId'));
+    const kit = await approvedKitFor(businessId);
+    const stored = kit && (kit as { recipe?: unknown }).recipe;
+    let recipe: BrandRecipe | null = null;
+    if (stored) {
+      try { recipe = migrateRecipe(stored); } catch { recipe = null; }
+    }
+    if (!recipe) throw new ApiError(400, 'This brand has no design recipe yet — generate the brand recipe first.');
+
+    // 1. Render ONLY the cover, at the CAROUSEL's dimensions — this is a
+    //    picture OF the carousel, so it keeps the carousel's shape and sits
+    //    inside the story rather than being stretched to fill it.
+    let rendered;
+    try {
+      rendered = await renderSlidesToPng({
+        _id: String(carousel._id),
+        format: carousel.get('format') as never,
+        slides: [{ id: cover.id, order: 0 }],
+      });
+    } catch (err) {
+      throw new ApiError(502, `Could not render the carousel cover: ${publicErrMessage(err, 'render error')}`);
+    }
+    const shot = rendered[0];
+    if (!shot) throw new ApiError(502, 'The cover rendered to nothing.');
+
+    // 2. Keep it as an ordinary media asset, so the editor's own picker can
+    //    swap or reuse it and orphan sweeping treats it like anything else.
+    const { width, height } = dimensionsFor(carousel.get('format') as never);
+    const asset = await MediaAssetModel.create({
+      businessId,
+      type: 'upload',
+      key: shot.key,
+      url: shot.url,
+      width,
+      height,
+      label: PROMO_COVER_LABEL,
+    });
+
+    // 3. Compose one frame. `cta` is the role whose whole job is to point
+    //    somewhere else, which is exactly what this frame does.
+    const carouselTitle = String(carousel.get('title') ?? '').trim();
+    const parts = {
+      eyebrow: body.eyebrow ?? 'NOVO POST',
+      headline: body.headline ?? (carouselTitle || 'Novo carrossel'),
+      cta: body.cta ?? 'Vê o carrossel completo',
+    };
+
+    let composed;
+    try {
+      composed = await composeSlide(recipe, {
+        role: 'cta',
+        parts,
+        format: STORY_FORMAT,
+        photo: true,
+        index: 1,
+      });
+    } catch (err) {
+      throw new ApiError(502, `Could not compose the story frame: ${publicErrMessage(err, 'AI error')}`);
+    }
+
+    // 4. Put the cover in the frame's slot when the arrangement left one, and
+    //    behind it when it did not — a `free` photo over an unfilled slot just
+    //    covers it and leaves the empty box showing at the edges.
+    const slotNames = authoredSlots(composed.html);
+    const slot = slotNames[0];
+    const photo: SlidePhoto = slidePhotoSchema.parse({
+      id: randomUUID(),
+      mediaAssetId: String(asset._id),
+      ...(slot ? { placement: 'slot', slot } : { placement: 'background' }),
+      fit: 'contain',
+      shape: 'tall',
+      alt: `Cover of the carousel “${carouselTitle}”`,
+    });
+
+    const story = await ProjectModel.create({
+      businessId,
+      title: body.title ?? `${carouselTitle || 'Carousel'} — promo story`,
+      type: 'story',
+      format: STORY_FORMAT,
+      status: 'draft',
+      stage: 'ready',
+      promotes: String(carousel._id),
+      slides: [{
+        id: randomUUID(),
+        order: 0,
+        photos: [photo],
+        authored: {
+          html: composed.html,
+          ...(composed.bg ? { bg: composed.bg } : {}),
+          role: 'cta',
+          ...(composed.pv ? { pv: composed.pv } : {}),
+        },
+      }],
+      settings: { theme: carousel.get('settings')?.theme, slideCounter: false },
+    });
+
+    res.status(201).json({
+      storyProjectId: String(story._id),
+      story: story.toJSON(),
+      coverAssetId: String(asset._id),
+      composedBy: composed.source,
+      /** Where the cover landed, so a caller can tell a slot fill from a fallback. */
+      placement: photo.placement,
+    });
   }),
 );
