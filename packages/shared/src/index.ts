@@ -7,6 +7,7 @@ export * from './colorContrast';
 export * from './schemas';
 export * from './recipe';
 export * from './archetypes';
+export * from './lineBreaks';
 export * from './slidePhotos';
 export * from './slideMotion';
 export * from './typeFloor';

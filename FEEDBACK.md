@@ -94,20 +94,6 @@ Rules that keep this file worth reading:
   the collision and slack gates and the contact sheet. The engine change itself
   is untouched.
 
-### Widows and orphans are not checked
-
-- **Kind:** Defect
-- **Severity:** minor
-- **First seen:** 2026-08-11 — `how-often-ceramic-coating`, slide 4 row 3
-- **What happened:** *"Bird droppings and tree sap left on / paint"* — one short
-  word alone on its second line, which also made that row 65% taller than its
-  neighbours and broke the list's rhythm.
-- **Why it matters:** cheap to detect, and it is the kind of thing that reads as
-  machine-set rather than typeset.
-- **Direction:** measure line boxes per text block; a final line carrying a
-  single short word should trigger a rebalance or a size step-down. Same probe
-  pass as the collision gate.
-
 ### The `stat` role filled its stat and its headline with the same sentence
 
 - **Kind:** Defect
@@ -149,29 +135,6 @@ Rules that keep this file worth reading:
   wrong on a phone, at phone size.
 - **Direction:** a stacked, phone-width view; the ScaledSlide component already
   renders at arbitrary width.
-
-### The copywriter's internal reasoning rendered onto a slide
-
-- **Kind:** Defect
-- **Severity:** blocked shipping
-- **First seen:** 2026-08-11 — `how-often-ceramic-coating` promo story
-- **What happened:** asked to compose a `cta` frame carrying only two copy parts
-  (eyebrow + cta), the model returned prose reasoning instead of markup, and it
-  rendered on the exported story in body type: *"Wait, I need to re-examine. The
-  copy parts provided are only eyebrow and cta — no headline, no tagline, no
-  handle. I must not fabricate missing elements. Let me also fix the double class
-  attribute on figure."* The whole frame was then duplicated below it.
-- **Why it matters:** the export looked healthy by every measure the pipeline
-  has — 931KB, no blank frame, slots filled. Only looking at the pixels caught
-  it. Anything composed from a sparse parts object is exposed.
-- **Direction:** two separate things. (1) `sanitizeAuthoredHtml` cannot tell
-  prose from copy, but a slide whose text contains first-person
-  meta-commentary ("I need to", "let me", "the copy parts provided") is never
-  legitimate output — worth a cheap detector. (2) A duplicated frame means the
-  reply contained the markup twice; the compose path should take the first
-  complete `.cb-slide` body and discard the rest.
-- **Worked around 2026-08-11** for the promo story by removing the model from
-  that path entirely — see Resolved. The general exposure remains.
 
 ### An image can still contradict its slide, and the checker only catches some of it
 
@@ -260,6 +223,52 @@ Rules that keep this file worth reading:
 ---
 
 ## Resolved
+
+### The copywriter's internal reasoning rendered onto a slide
+
+*Resolved 2026-08-11.* Two guards at `cleanFragment`, the one chokepoint every
+model reply passes through.
+
+`readsAsReasoning` rejects a reply whose visible text is first-person
+meta-commentary about the task. The signal is narrow on purpose — slide copy is
+written to a reader about their world; it never refers to "the copy parts",
+never says "I need to". A false positive throws away a legitimate compose, so
+the markers are phrases that would be wrong even if a human wrote them. Tested
+against the exact text that shipped, and against seven real slide lines that
+must survive.
+
+`firstSlideBody` cuts a reply that emitted the slide twice down to its first
+frame, before the wrapper is stripped — after that the two bodies are
+indistinguishable from one long one.
+
+A rejected reply returns `''`, which is the existing signal for "unusable": the
+caller retries, and failing that the deck ships that slide empty. Better a
+missing slide someone notices than a shipped one nobody reads.
+
+### Widows and bad line breaks
+
+*Resolved 2026-08-11.* `bindDisplayBreaks`, applied at RENDER rather than at
+compose.
+
+The approach is not to choose the breaks — CSS cannot be told "break here"
+without knowing the rendered width, and a hard-coded line end breaks again at
+another size. It is to make the wrong breaks *unavailable*: glue the words that
+must not separate with a non-breaking space and let the browser pick from what
+is left. Two rules, both conservative — no line may end on an article,
+preposition, conjunction or auxiliary, and the last two words are bound so the
+final line cannot be one short word alone.
+
+Placement matters more than the rule. Binding at compose would write invisible
+characters into stored markup and into anything a human later opens in the
+editor; at render it is purely presentational, storage stays clean, and every
+slide already in the database gets it on the next paint with no migration.
+
+Verified on the real deck: *"Have it looked at by / someone who does / this for a
+living."* became *"Have it looked / at by someone / who does this / for a
+living."*
+
+**Known limit:** the binder works per text node, so it cannot glue across an
+inline tag. A break can still land badly at an emphasis-wrap boundary.
 
 ### Three elevation treatments on one deck, and a glow in the same corner every time
 

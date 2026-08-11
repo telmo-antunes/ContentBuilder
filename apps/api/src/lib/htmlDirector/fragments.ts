@@ -77,6 +77,63 @@ export function unwrapCbSlide(html: string): string {
   return m ? m[1]!.trim() : t;
 }
 
+/**
+ * PROSE THAT IS NOT COPY.
+ *
+ * A model asked to compose a slide sometimes replies with its own reasoning
+ * instead of markup. `sanitizeAuthoredHtml` cannot help: the text is
+ * well-formed and carries no dangerous tags, so it sails through and renders in
+ * body type. A real export shipped this on a story frame —
+ *
+ *   "Wait, I need to re-examine. The copy parts provided are only eyebrow and
+ *    cta — no headline, no tagline, no handle. I must not fabricate missing
+ *    elements. Let me also fix the double class attribute on figure."
+ *
+ * — at 931KB, no blank frame, every slot filled. Every measure the pipeline had
+ * said the slide was healthy. Only looking at the pixels caught it.
+ *
+ * The signal is first-person meta-commentary about the task. Slide copy is
+ * written to a reader about their world; it never refers to "the copy parts",
+ * never says "I need to", and never addresses itself. Deliberately narrow —
+ * these phrases in a slide would be wrong even if a human wrote them — because
+ * a false positive throws away a legitimate compose.
+ */
+const REASONING_MARKERS: readonly RegExp[] = [
+  /\bI (?:need|must|should|will|have) to\b/i,
+  /\b(?:let me|let's) (?:also |now |first )?(?:fix|check|re-?examine|make sure|verify|correct)\b/i,
+  /\bwait,? (?:I|let|this|that)\b/i,
+  /\bthe (?:copy )?parts (?:provided|given|supplied)\b/i,
+  /\bI (?:must not|cannot|can't) (?:fabricate|invent|add)\b/i,
+  /\b(?:here'?s|this is) (?:the|my) (?:corrected|revised|updated) (?:version|markup|slide)\b/i,
+  /\bas (?:requested|instructed|per the)\b.{0,40}\b(?:prompt|instruction|brief)\b/i,
+];
+
+/** Does this text read as the model talking to itself rather than to a reader? */
+export function readsAsReasoning(text: string): boolean {
+  const t = text.replace(/\s+/g, ' ').trim();
+  if (t.length < 12) return false;
+  return REASONING_MARKERS.some((re) => re.test(t));
+}
+
+/**
+ * Keep the FIRST complete slide body a reply contains, and discard the rest.
+ *
+ * The same failure produced a frame duplicated below itself: the reply carried
+ * the markup twice, and everything downstream treated the concatenation as one
+ * slide. Taking the first is right rather than arbitrary — a model that
+ * re-emits a slide is correcting itself, and by its own convention the
+ * correction comes last... but a truncated tail is far likelier than a
+ * truncated head, and a complete first frame is always safe.
+ */
+export function firstSlideBody(html: string): string {
+  const opens = [...html.matchAll(/<div\s+class="[^"]*\bcb-slide\b[^"]*"\s*>/gi)];
+  if (opens.length > 1) {
+    const second = opens[1]!.index!;
+    return html.slice(0, second).trim();
+  }
+  return html;
+}
+
 export function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
