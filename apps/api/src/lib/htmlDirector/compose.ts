@@ -47,6 +47,8 @@ import {
   stripFences,
   substituteFragment,
   unwrapCbSlide,
+  readsAsReasoning,
+  firstSlideBody,
 } from './fragments';
 import { renderCheckDeck, renderCheckEnabledByDefault, type OpenProbe } from './renderCheck';
 import { balanceVertical } from './balance';
@@ -1467,7 +1469,24 @@ function balanced(html: string, role: SlideRole): string {
 
 /** Sanitised + pruned markup, with the prune guards' telemetry logged. */
 function cleanFragment(raw: string, role: SlideRole): string {
-  const pruned = pruneSlideMarkup(sanitizeAuthoredHtml(unwrapCbSlide(stripFences(raw))));
+  // A reply that carried the slide twice is cut to its first frame BEFORE the
+  // wrapper is stripped — after it, the two bodies are indistinguishable from
+  // one long one.
+  const single = firstSlideBody(stripFences(raw));
+  const pruned = pruneSlideMarkup(sanitizeAuthoredHtml(unwrapCbSlide(single)));
+  /**
+   * Reasoning is not copy. Returning '' is the existing signal for "this reply
+   * is unusable": the caller retries, and failing that the deck ships the slide
+   * empty rather than shipping the model's private thoughts in body type.
+   * Better a missing slide someone notices than a shipped one nobody reads.
+   */
+  if (readsAsReasoning(plain(pruned.html))) {
+    console.warn(
+      `[compose] ${role}: reply reads as the model's own reasoning, not slide copy — discarding it`,
+    );
+    return '';
+  }
+
   for (const d of pruned.dropped) {
     console.warn(
       d.spacer

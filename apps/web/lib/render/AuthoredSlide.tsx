@@ -3,6 +3,7 @@
 import { useEffect, useId, useMemo, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import {
+  bindDisplayBreaks,
   isArchetype,
   authoredSlots,
   ambientArtCss,
@@ -323,7 +324,17 @@ export function AuthoredSlide({
    */
   const styleStr = `${varRule}\n${scopedCss}\n${slotRules}\n${bgLayerCss}${motionCss}${freeMotionCss}\n${ambientCss}`;
   const styleHtmlObj = useMemo(() => ({ __html: styleStr }), [styleStr]);
-  const slideHtmlObj = useMemo(() => ({ __html: html }), [html]);
+  /**
+   * BIND THE LINE BREAKS AT RENDER, not at compose.
+   *
+   * It only replaces spaces with non-breaking ones, so it cannot change what a
+   * slide says — but doing it upstream would write invisible characters into
+   * stored markup, and into anything a human later opens in the editor. Here it
+   * is purely presentational: storage stays clean, the editor round-trips
+   * ordinary text, and every slide already in the database gets the benefit on
+   * its next paint with no migration.
+   */
+  const slideHtmlObj = useMemo(() => ({ __html: bindDisplayBreaks(html) }), [html]);
   // Setting a background photo puts the slide into the recipe's photo treatment
   // (its `.photo` rules layer `--cb-photo` under a legibility scrim), even
   // though the composer no longer decides that — the user does.

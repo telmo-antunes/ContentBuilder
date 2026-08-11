@@ -11,6 +11,8 @@ import {
   fragmentVerbatimGaps,
   substituteFragment,
   validateRecipeFragments,
+  readsAsReasoning,
+  firstSlideBody,
 } from './fragments';
 import type { ComposeSlideInput } from './prompt';
 
@@ -442,5 +444,66 @@ describe('ensurePhotoHole', () => {
     const { recipe, repairs } = fillRecipeFragmentGaps(withFragments({ statement: STATEMENT }));
     expect(repairs.find((r) => r.role === 'statement')?.added).toContain('photo slot');
     expect(authoredSlots(recipe.fragments?.statement ?? '')).toEqual(['hero']);
+  });
+})
+
+describe('readsAsReasoning', () => {
+  /** The exact text that shipped on an exported story frame. */
+  const LEAKED =
+    'Wait, I need to re-examine. The copy parts provided are only eyebrow and cta — ' +
+    'no headline, no tagline, no handle. I must not fabricate missing elements. ' +
+    'Let me also fix the double class attribute on figure.';
+
+  it('catches the reply that actually shipped', () => {
+    expect(readsAsReasoning(LEAKED)).toBe(true);
+  });
+
+  it.each([
+    'I need to check the coating before winter.',
+    'Let me fix that for you.',
+    'Wait, I have a question about my booking.',
+  ])('catches meta-commentary even in isolation: %s', (t) => {
+    expect(readsAsReasoning(t)).toBe(true);
+  });
+
+  /**
+   * A false positive throws away a legitimate compose, so the markers are
+   * deliberately narrow. Real slide copy addresses a reader about their world.
+   */
+  it.each([
+    'Your coating is probably fine.',
+    'Tight beads that sheet off cleanly: healthy.',
+    'Automatic washes with brushes do more damage than age does.',
+    'Have it looked at by someone who does this for a living.',
+    'We need to talk about your paint.',
+    'This is the corrected finish your car deserves.',
+    'Book an inspection before the first frost.',
+  ])('leaves real slide copy alone: %s', (t) => {
+    expect(readsAsReasoning(t)).toBe(false);
+  });
+
+  it('ignores anything too short to be prose', () => {
+    expect(readsAsReasoning('I need to')).toBe(false);
+    expect(readsAsReasoning('')).toBe(false);
+  });
+});
+
+describe('firstSlideBody', () => {
+  it('keeps the first frame when a reply emitted the slide twice', () => {
+    const one = '<div class="cb-slide"><div class="headline">First</div></div>';
+    const two = '<div class="cb-slide"><div class="headline">Second</div></div>';
+    const out = firstSlideBody(`${one}\n${two}`);
+    expect(out).toBe(one);
+    expect(out).not.toContain('Second');
+  });
+
+  it('leaves a single frame byte-identical', () => {
+    const one = '<div class="cb-slide"><div class="headline">Only</div></div>';
+    expect(firstSlideBody(one)).toBe(one);
+  });
+
+  it('leaves a bare fragment — the normal case — untouched', () => {
+    const frag = '<div class="headline">No wrapper here</div>';
+    expect(firstSlideBody(frag)).toBe(frag);
   });
 })
