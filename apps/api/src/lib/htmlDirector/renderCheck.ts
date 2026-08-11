@@ -282,8 +282,41 @@ async function readOverflow(page: Page, url: string): Promise<OverflowState> {
     { timeout: MOUNT_TIMEOUT_MS },
   );
   await new Promise((r) => setTimeout(r, SETTLE_MS));
-  const value = await page.evaluate(() => (globalThis as any).document?.body?.dataset?.overflow);
-  return value === 'true' ? 'overflows' : value === 'false' ? 'fits' : 'unknown';
+  const read = await page.evaluate(() => {
+    const ds = (globalThis as any).document?.body?.dataset ?? {};
+    return { overflow: ds.overflow, collide: ds.collide, slack: ds.slack };
+  });
+  const state: OverflowState =
+    read.overflow === 'true' ? 'overflows' : read.overflow === 'false' ? 'fits' : 'unknown';
+  lastLayout.set(url, {
+    collide: read.collide === 'true',
+    slack: Number.isFinite(Number(read.slack)) ? Number(read.slack) : 0,
+  });
+  return state;
+}
+
+/**
+ * Layout verdicts from the most recent probe of each slide URL.
+ *
+ * Carried beside the overflow state rather than folded into `OverflowState`
+ * because they are not the same decision: an overflow is repaired by the
+ * ladder, whereas a collision or a slack failure is reported for a human to
+ * judge. Keyed by URL, which is unique per slide within a scaffold.
+ */
+const lastLayout = new Map<string, LayoutVerdict>();
+
+export interface LayoutVerdict {
+  /** Two painted boxes closer than the minimum clearance — see AuthoredSlide. */
+  collide: boolean;
+  /** Largest contiguous empty band, as a fraction of frame height. */
+  slack: number;
+}
+
+/** The share of a frame a single empty band may occupy before it reads as a hole. */
+export const MAX_SLACK = 0.15;
+
+export function layoutVerdictFor(url: string): LayoutVerdict | undefined {
+  return lastLayout.get(url);
 }
 
 /**

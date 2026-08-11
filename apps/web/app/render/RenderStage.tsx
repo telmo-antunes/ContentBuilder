@@ -49,8 +49,14 @@ export default function RenderStage({
         motion={motion}
         // Publish the ground-truth overflow result on the DOM so the export /
         // any headless pass driving this route can read it off the page.
-        onOverflow={(o) => {
+        onOverflow={(o, layout) => {
           if (typeof document !== 'undefined') document.body.dataset.overflow = o ? 'true' : 'false';
+          // Published beside `overflow` so one probe pass returns every layout
+          // verdict — the API reads all three from the same measurement.
+          if (typeof document !== 'undefined' && layout) {
+            document.body.dataset.collide = layout.collide ? 'true' : 'false';
+            document.body.dataset.slack = layout.slack.toFixed(4);
+          }
         }}
       />
     </div>

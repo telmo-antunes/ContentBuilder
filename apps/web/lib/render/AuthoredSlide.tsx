@@ -60,7 +60,7 @@ export function AuthoredSlide({
   motion?: boolean;
   /** Stretch the ambient drift across a clip of this length (video export). */
   /** Reports whether the composition exceeds the canvas (see the effect below). */
-  onOverflow?: (overflow: boolean) => void;
+  onOverflow?: (overflow: boolean, layout?: { collide: boolean; slack: number }) => void;
 }) {
   const scope = 'cbs' + useId().replace(/[^a-zA-Z0-9]/g, '');
   const slideRef = useRef<HTMLDivElement | null>(null);
@@ -95,15 +95,51 @@ export function AuthoredSlide({
       const padBottom = parseFloat(cs.paddingBottom || '0');
       const contentBottom = el.clientHeight - padBottom;
       const TOL = 2; // absorbs sub-pixel rounding
-      const over = Array.from(el.children).some((child) => {
-        if (!(child instanceof HTMLElement)) return false;
-        if (child.offsetHeight === 0) return false; // spacers / empty nodes
-        return (
-          child.offsetTop + child.offsetHeight > contentBottom + TOL ||
-          child.offsetTop < padTop - TOL
-        );
-      });
-      onOverflow(over);
+
+      // Painted boxes only, in document order. `.fill` spacers are excluded by
+      // the zero-height test — they ARE the mechanism that produces slack, so
+      // counting them as content would hide exactly what we are looking for.
+      const boxes = Array.from(el.children)
+        .filter((c): c is HTMLElement => c instanceof HTMLElement && c.offsetHeight > 0)
+        .map((c) => ({ top: c.offsetTop, bottom: c.offsetTop + c.offsetHeight }))
+        .sort((a, b) => a.top - b.top);
+
+      const over = boxes.some((b) => b.bottom > contentBottom + TOL || b.top < padTop - TOL);
+
+      /**
+       * COLLISION. Two painted boxes that touch or overlap.
+       *
+       * Measured as the gap between consecutive boxes rather than as ink: a
+       * descender paints outside its line box, so a headline whose box merely
+       * abuts the next element still renders its `g` on top of that element.
+       * A real deck shipped exactly that — "for a living" sitting on the gold
+       * CTA chip — with zero gap and no overflow, so the existing check passed
+       * it. Anything under MIN_CLEARANCE is treated as a collision.
+       */
+      const MIN_CLEARANCE = 6;
+      let collide = false;
+      for (let i = 1; i < boxes.length; i += 1) {
+        const prev = boxes[i - 1]!;
+        if (boxes[i]!.top - prev.bottom < MIN_CLEARANCE) { collide = true; break; }
+      }
+
+      /**
+       * SLACK. The largest contiguous empty band, as a fraction of the frame.
+       *
+       * Counts the run above the first box and below the last as well as the
+       * gaps between, because a deck's dead space shows up in all three places
+       * — one slide carried ~430px between a headline and a list, another
+       * ~280px of nothing under its final element.
+       */
+      let maxGap = boxes.length
+        ? Math.max(boxes[0]!.top - padTop, contentBottom - boxes[boxes.length - 1]!.bottom)
+        : 0;
+      for (let i = 1; i < boxes.length; i += 1) {
+        maxGap = Math.max(maxGap, boxes[i]!.top - boxes[i - 1]!.bottom);
+      }
+      const slack = el.clientHeight > 0 ? maxGap / el.clientHeight : 0;
+
+      onOverflow(over, { collide, slack });
     };
     measure();
     const fonts = (document as Document & { fonts?: FontFaceSet }).fonts;

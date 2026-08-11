@@ -20,6 +20,7 @@ import {
   SLOT_CLASS,
   slidePhotoSchema,
   type BrandRecipe,
+  type Format,
   type SlidePhoto,
 } from '@contentbuilder/shared';
 import { composeProject, composeSlide, parseSlideCopy, parseSlideDirection } from '../lib/htmlDirector/compose';
@@ -31,6 +32,7 @@ import { ProjectModel, ProjectVersionModel, BusinessModel, BrandKitModel, MediaA
 import { ApiError, asyncHandler, parseBody, publicErrMessage, requireObjectId } from '../lib/http';
 import { createProjectSchema, slideSchema, updateProjectSchema, type SlideInput } from '../lib/validation';
 import { renderSlidesToPng, slugify } from '../lib/exporter';
+import { buildContactSheet } from '../lib/contactSheet';
 import { runVideoJob, sweepExpiredVideoJobs } from '../lib/videoJobs';
 import { findImageCopyContradictions, type SlidePairing } from '../lib/imageCopyCheck';
 import { getStorage } from '../storage';
@@ -1206,6 +1208,29 @@ projectsRouter.post(
     });
     archive.pipe(res);
     for (const slide of rendered) archive.append(slide.buffer, { name: slide.name });
+
+    /**
+     * The deck at feed scale, in the zip.
+     *
+     * Every layout fault a review has ever raised on this pipeline was
+     * invisible in the studio's thumbnail strip and obvious at the size a phone
+     * renders a slide. Shipping the sheet alongside the frames means the next
+     * person to open an export sees what a reader sees, without being asked to
+     * go and look.
+     *
+     * Never fatal: the zip's job is the slides, and a montage that failed to
+     * compose must not cost someone their export.
+     */
+    try {
+      const sheet = await buildContactSheet(
+        rendered.map((r) => ({ buffer: r.buffer })),
+        project.get('format') as Format,
+      );
+      archive.append(sheet, { name: 'contact-sheet.png' });
+    } catch (err) {
+      console.warn('[export] contact sheet skipped:', err instanceof Error ? err.message : err);
+    }
+
     await archive.finalize();
   }),
 );
