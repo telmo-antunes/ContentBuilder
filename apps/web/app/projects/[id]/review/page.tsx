@@ -1051,7 +1051,15 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                   </div>
                   <div>
                     <div className="k">Type</div>
-                    <div className="v">{recipe.tokens.displayFamily}</div>
+                    {/* BOTH faces. Showing only the display family made a
+                        reviewer conclude no body face was set — it is
+                        (`bodyFamily`), and it is what every line of body copy
+                        on every slide renders in. A panel that names half the
+                        typography reads as the whole of it. */}
+                    <div className="v">
+                      {recipe.tokens.displayFamily}
+                      <span style={{ opacity: 0.55 }}> · {recipe.tokens.bodyFamily}</span>
+                    </div>
                   </div>
                   <div>
                     <div className="k">Signature</div>
@@ -1441,6 +1449,10 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                     <div className="studio-tok">
                       <span className="lab">Display</span>
                       <span className="val">{recipe.tokens.displayFamily}</span>
+                    </div>
+                    <div className="studio-tok">
+                      <span className="lab">Body</span>
+                      <span className="val">{recipe.tokens.bodyFamily}</span>
                     </div>
                     {contrast !== null && (
                       <div className="studio-tok">

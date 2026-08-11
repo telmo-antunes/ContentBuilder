@@ -290,6 +290,17 @@ export const TOUCHPOINT_REGISTRY: Record<TouchpointId, Touchpoint> = {
         ],
         detector: 'strandedSpacer',
       },
+      {
+        version: 6,
+        date: '2026-08-11',
+        summary: 'One elevation model, and background art that does not repeat.',
+        improves: [
+          'A brand answers "what does a raised surface look like?" ONCE. A real deck shipped a photo frame with a drop shadow, a list panel with a hairline and a flat, hard-cornered button, all on the same seven slides.',
+          'Every surface derives its corners from the same radius token, so two things on one slide cannot disagree about the brand’s geometry.',
+          'The background glow is authored through custom properties instead of one fixed position, so it can vary down a deck — a light source in exactly the same corner on every frame reads as a rendering artifact, not as art.',
+          'The glow is kept inside the frame, or bled deliberately on more than one edge, rather than clipped hard at a single corner.',
+        ],
+      },
     ],
   },
 

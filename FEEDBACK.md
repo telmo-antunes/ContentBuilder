@@ -51,6 +51,25 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
+### The review page names half the typography
+
+- **Kind:** Defect
+- **Severity:** cost me a fix
+- **First seen:** 2026-08-11 — `how-often-ceramic-coating`
+- **Corrected 2026-08-11:** reported originally as "the recipe defines no body
+  typeface". It does — `tokens.bodyFamily` is `Inter`, and `.cb-slide` sets
+  `font-family: var(--cb-body)`, so every line of body copy renders in it. The
+  *symptom* was real and the *diagnosis* was wrong, which is worth recording:
+  the fix would otherwise have gone to the recipe author instead of to the page.
+- **What happened:** the review page showed `Type: Playfair Display` and nothing
+  else, in both the recipe panel and the token strip. A reviewer reasonably
+  concluded no body face was set and that the sans on every slide was a browser
+  default.
+- **Why it matters:** a panel that names half the typography reads as the whole
+  of it. The wrong conclusion here would have cost a re-author of a brand whose
+  type was already correct.
+- **Fixed 2026-08-11** — both places now show the display and body faces.
+
 ### The layout engine stacks; it does not compose
 
 - **Kind:** Gap
@@ -241,6 +260,27 @@ Rules that keep this file worth reading:
 ---
 
 ## Resolved
+
+### Three elevation treatments on one deck, and a glow in the same corner every time
+
+*Addressed 2026-08-11, in the recipe author rather than the app.*
+
+A real deck carried a photo frame with a drop shadow, a list panel with a 1px
+hairline and a flat, hard-cornered button — three answers to "what does a raised
+surface look like?" on the same seven slides. Its background glow sat at exactly
+`72% 0%` on every frame, clipped at the same corner, which reads as a rendering
+artifact rather than as art.
+
+Both are brand-authored CSS, so both are fixed where brands are authored:
+recipe-author **v6** now requires one radius scale and one elevation model
+across `.cb-shot`, `.panel` and `.cta`, and asks for the glow's position to be
+authored through custom properties with defaults so it can vary down a deck.
+
+**This does not retouch existing recipes**, deliberately. Rewriting a stored
+brand's stylesheet by regex to unify its corners would be a worse failure than
+the inconsistency it fixed. detailmasters' recipe still has all three
+treatments; re-authoring it is a brand decision with a cost, and the version
+registry now says exactly what a re-author would buy.
 
 ### Nothing responded to a layout gate
 
