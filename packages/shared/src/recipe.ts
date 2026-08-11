@@ -20,6 +20,7 @@ import { AA_LARGE, AA_TEXT, contrastRatio, hexToRgb, relativeLuminance } from '.
 import { APP_IMAGE_CLASSES, slideMediaCss } from './slidePhotos';
 import { AMBIENT_INTENSITIES, AMBIENT_STYLES, DEFAULT_AMBIENT, type AmbientSpec } from './slideMotion';
 import { slideArchetypeCss } from './archetypes';
+import { slideTypesettingCss } from './lineBreaks';
 import { enforceTypeFloor, typeBaseCss } from './typeFloor';
 
 /** CSS custom-property prefix for every brand token the renderer injects. */
@@ -433,7 +434,8 @@ export function recipeStylesheetFor(recipe: BrandRecipe, format: string): string
   // it owns where a slide's leftover space lands, and it can only take that
   // decision off the markup by outranking the brand's own `.fill` spacers.
   const archetypes = slideArchetypeCss();
-  return [typeBaseCss(), authored, surface, media, archetypes].filter(Boolean).join('\n');
+  const typesetting = slideTypesettingCss();
+  return [typeBaseCss(), authored, surface, media, archetypes, typesetting].filter(Boolean).join('\n');
 }
 
 /**
