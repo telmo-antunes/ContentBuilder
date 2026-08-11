@@ -408,7 +408,9 @@ describe('renderCheckDeck', () => {
     expect(out.aiCalls).toBe(0);
     expect(seen).toHaveLength(3); // one render each, no repairs
     expect(closed()).toBe(1);
-    expect(warnings().some((w) => w.includes('none overflow'))).toBe(true);
+    // Reworded when the layout gates joined: 'nothing overflowed' stopped
+    // being the same statement as 'nothing is wrong'.
+    expect(warnings().some((w) => w.includes('nothing to repair'))).toBe(true);
   });
 
   it('repairs only the slide that overflows and reports a summary', async () => {
@@ -557,5 +559,79 @@ describe('layoutFaults', () => {
 
   it('ignores the headline cap when the archetype does not set one', () => {
     expect(layoutFaults({ state: 'fits', collide: false, slack: 0, headlineLines: 9 }, undefined)).toEqual([]);
+  });
+});
+
+describe('renderCheckDeck — the layout gates run too', () => {
+  const CAP = '<div class="headline">A headline that runs long</div>';
+
+  /**
+   * The gap this closes: before it, the deck pass only ever looked at overflow,
+   * so a slide could ship with a collision or a hole and nothing would run.
+   */
+  it('repairs a slide that fits but collides', async () => {
+    let nth = 0;
+    const openProbe = async () => ({
+      async measure() {
+        // First pass: fits, but two boxes are touching. After the shrink: clean.
+        nth += 1;
+        return [nth === 1
+          ? { state: 'fits' as const, collide: true, slack: 0, headlineLines: 2 }
+          : { state: 'fits' as const, collide: false, slack: 0, headlineLines: 2 }];
+      },
+      async close() {},
+    });
+
+    const out = await renderCheckDeck(
+      detailMastersRecipe,
+      [{ role: 'statement' as const, parts: {}, format: '1080x1350' as const, index: 0 }],
+      [{ html: CAP, role: 'statement', archetype: 'statement' }],
+      '1080x1350',
+      { openProbe },
+    );
+
+    expect(out.slides[0]!.html).toContain('headline sm');
+    expect(out.notes.join(' ')).toContain('smaller-headline');
+  });
+
+  it('reports a fault nothing could fix rather than shipping it silently', async () => {
+    const openProbe = async () => ({
+      // Never improves: the hole survives every attempt.
+      async measure() {
+        return [{ state: 'fits' as const, collide: false, slack: 0.42, headlineLines: 2 }];
+      },
+      async close() {},
+    });
+
+    const out = await renderCheckDeck(
+      detailMastersRecipe,
+      [{ role: 'statement' as const, parts: {}, format: '1080x1350' as const, index: 0 }],
+      [{ html: CAP, role: 'statement', archetype: 'statement' }],
+      '1080x1350',
+      { openProbe },
+    );
+
+    expect(out.notes.join(' ')).toContain('UNFIXED');
+    expect(out.notes.join(' ')).toContain('slack 42%');
+  });
+
+  it('leaves a clean slide untouched and spends no measurement on it', async () => {
+    const openProbe = async () => ({
+      async measure() {
+        return [{ state: 'fits' as const, collide: false, slack: 0.05, headlineLines: 2 }];
+      },
+      async close() {},
+    });
+
+    const out = await renderCheckDeck(
+      detailMastersRecipe,
+      [{ role: 'statement' as const, parts: {}, format: '1080x1350' as const, index: 0 }],
+      [{ html: CAP, role: 'statement', archetype: 'statement' }],
+      '1080x1350',
+      { openProbe },
+    );
+
+    expect(out.slides[0]!.html).toBe(CAP);
+    expect(out.notes).toEqual([]);
   });
 });

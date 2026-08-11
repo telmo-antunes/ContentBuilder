@@ -41,6 +41,7 @@ import {
   recipePatternVariant,
   type BrandRecipe,
   type Format,
+  archetypeFor,
 } from '@contentbuilder/shared';
 import { config } from '../../config';
 import { topLevelBlocks, type SlideBlock } from './dedupeBlocks';
@@ -69,6 +70,8 @@ export interface CheckSlide {
   /** A per-slide surface class (e.g. the recipe's `inverse`) — measured as it ships. */
   bg?: string;
   role?: string;
+  /** How the slide is composed. Carries the headline cap the layout ladder enforces. */
+  archetype?: string;
 }
 
 /**
@@ -810,6 +813,15 @@ export interface DeckCheckResult {
   unresolved: number[];
   aiCalls: number;
   ms: number;
+  /**
+   * What each ladder did, and what it could not fix.
+   *
+   * Returned rather than only logged: a gate that fires and repairs nothing is
+   * the single most useful thing this pass learns, and until now it existed
+   * solely as a line in the server's console — where nobody composing a deck
+   * would ever see it.
+   */
+  notes: string[];
 }
 
 /**
@@ -835,6 +847,7 @@ export async function renderCheckDeck(
     repaired: 0,
     unresolved: [],
     aiCalls: 0,
+    notes: [],
     ms: 0,
   };
   if (!slides.length) return nothing;
@@ -857,10 +870,22 @@ export async function renderCheckDeck(
     const verdicts = await probe.measure(slides.map((s, index) => ({ index, html: s.html })));
     const measured = verdicts.filter((v) => v.state !== 'unknown').length;
     const overflowing = verdicts.flatMap((v, i) => (v.state === 'overflows' ? [i] : []));
-    if (!overflowing.length) {
+
+    /**
+     * Which slides have a NON-overflow fault. Computed before the early return,
+     * because "nothing overflowed" is not the same as "nothing is wrong" — that
+     * conflation is exactly what let a collision and a 430px hole ship.
+     */
+    const faulty = verdicts.flatMap((v, i) =>
+      v.state === 'fits' && layoutFaults(v, archetypeFor(slides[i]?.archetype)?.maxHeadlineLines).length
+        ? [i]
+        : [],
+    );
+
+    if (!overflowing.length && !faulty.length) {
       const ms = Date.now() - t0;
       console.warn(
-        `[render-check] ${measured}/${slides.length} slide(s) measured in ${ms}ms — none overflow`,
+        `[render-check] ${measured}/${slides.length} slide(s) measured in ${ms}ms — nothing to repair`,
       );
       return { ...nothing, measured, ms };
     }
@@ -884,10 +909,52 @@ export async function renderCheckDeck(
       ),
     );
 
+    /**
+     * The other gates, on the slides the overflow ladder did not take.
+     *
+     * Kept as a separate pass rather than folded in, because the two ladders
+     * are not interchangeable: `repairOverflow` can spend a re-compose as its
+     * last rung, and a slide that merely has a hole in it does not warrant a
+     * model call. Disjoint by construction — a slide is in one set or the
+     * other, never both.
+     */
+    const layoutRepairs = await Promise.all(
+      faulty.map((i) => {
+        const v = verdicts[i]!;
+        const cap = archetypeFor(slides[i]?.archetype)?.maxHeadlineLines;
+        return (
+          repairLayout(recipe, inputs[i] ?? fallbackInput(slides[i]!, fmt, i), slides[i]!.html, v, cap, {
+            measure: async (html) => (await probe.measure([{ index: i, html }]))[0] ?? UNKNOWN_VERDICT,
+          })
+            .then((r) => ({ index: i, ...r }))
+            .catch((err) => {
+              console.warn(
+                `[render-check] slide ${i + 1}: layout repair failed — shipping as composed: ${
+                  err instanceof Error ? err.message : String(err)
+                }`,
+              );
+              return { index: i, html: slides[i]!.html, steps: [], remaining: [], aiCalls: 0 };
+            })
+        );
+      }),
+    );
+
     const unresolved: number[] = [];
     const notes: string[] = [];
     let aiCalls = 0;
     let repaired = 0;
+
+    for (const r of layoutRepairs) {
+      out[r.index] = { ...out[r.index]!, html: r.html };
+      if (r.steps.length) {
+        notes.push(`slide ${r.index + 1}: ${r.steps.join(' → ')}`);
+        repaired += 1;
+      }
+      // A fault nothing could fix is reported rather than silently shipped —
+      // the gates exist to be seen, not to be quietly satisfied.
+      if (r.remaining.length) notes.push(`slide ${r.index + 1}: ${r.remaining.join(', ')} (UNFIXED)`);
+    }
+
     overflowing.forEach((slideIndex, n) => {
       const r = repairs[n]!;
       out[slideIndex] = { ...out[slideIndex]!, html: r.html };
@@ -906,7 +973,7 @@ export async function renderCheckDeck(
         `${overflowing.length} overflowed · ${repaired} repaired · ${unresolved.length} unresolved · ` +
         `${aiCalls} extra AI call(s) — ${notes.join('; ')}`,
     );
-    return { slides: out, measured, overflowed: overflowing.length, repaired, unresolved, aiCalls, ms };
+    return { slides: out, measured, overflowed: overflowing.length, repaired, unresolved, aiCalls, ms, notes };
   } catch (err) {
     console.warn(
       `[render-check] check failed — deck ships unchecked: ${
