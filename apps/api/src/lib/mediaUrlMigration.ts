@@ -133,7 +133,11 @@ export async function runMediaUrlMigration(
       changedUrls += urlsInDoc;
 
       if (!dryRun) {
-        await collection.updateOne({ _id }, { $set: rest });
+        // The driver types _id as ObjectId, but these collections are read back
+        // untyped and a few (e.g. settings) key on a string. Match by whatever
+        // _id the document actually carried.
+        const filter = { _id } as unknown as Parameters<typeof collection.updateOne>[0];
+        await collection.updateOne(filter, { $set: rest });
       }
     }
 
