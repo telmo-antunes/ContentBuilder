@@ -224,6 +224,27 @@ Rules that keep this file worth reading:
 
 ## Resolved
 
+### A third of every slide's width went unused
+
+*Resolved 2026-08-11.* The recipe capped `.body` at `max-width: 26ch`. On a
+1080px canvas with 88px gutters that is 593px of a 904px measure — copy wrapped
+at about 31 characters and the right third of every slide sat empty. Typographic
+guidance puts a comfortable measure at 45–75 characters; the review that raised
+it asked for 45–60.
+
+Fixed with `enforceMeasureFloor`, a sibling of `enforceTypeFloor` and for the
+same reason: applied at render, it repairs every brand already in the database
+on the next paint, with no re-authoring and no AI spend, and it keeps holding if
+a future recipe drifts narrow again.
+
+A FLOOR, not a value — a brand that authored a generous measure keeps it. And
+display copy is excluded: a `.tagline` or `.headline` held to a narrow column is
+a legitimate choice, and widening it would be overruling the brand on something
+it got right. Only continuous prose is floored.
+
+Verified: slide 3's body went from five lines to four and now reaches within
+~70px of the right margin instead of stopping 310px short.
+
 ### The copywriter's internal reasoning rendered onto a slide
 
 *Resolved 2026-08-11.* Two guards at `cleanFragment`, the one chokepoint every

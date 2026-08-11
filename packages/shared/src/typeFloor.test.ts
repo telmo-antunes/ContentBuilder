@@ -4,8 +4,7 @@ import {
   TYPE_FLOOR_PX,
   enforceTypeFloor,
   pxForPt,
-  typeFloorReport,
-} from './typeFloor';
+  typeFloorReport, enforceMeasureFloor, MEASURE_FLOOR_CH } from './typeFloor';
 
 const sizeOf = (css: string, cls: string) =>
   Number(css.match(new RegExp(`\\.${cls}\\{[^}]*font-size:\\s*([\\d.]+)px`))![1]);
@@ -84,5 +83,51 @@ describe('typeFloorReport', () => {
     const r = typeFloorReport('.cb-slide .body{font-size:33px}.cb-slide .headline{font-size:112px}');
     expect(r).toHaveLength(1);
     expect(r[0]).toMatchObject({ role: 'body', from: 33, to: TYPE_FLOOR_PX.body });
+  });
+});
+
+describe('enforceMeasureFloor', () => {
+  /**
+   * The real value that shipped: a third of every slide's width unused, copy
+   * wrapping at ~31 characters.
+   */
+  it('opens up a cramped reading measure', () => {
+    const out = enforceMeasureFloor('.cb-slide .body{ font-size:38px; max-width:26ch }');
+    expect(out).toContain(`max-width:${MEASURE_FLOOR_CH}ch`);
+  });
+
+  it('leaves a generous measure exactly as authored', () => {
+    const css = '.cb-slide .body{ max-width:48ch }';
+    expect(enforceMeasureFloor(css)).toBe(css);
+  });
+
+  /**
+   * A display line held to a narrow column is a legitimate design decision.
+   * Widening it would be overruling the brand on something it got right.
+   */
+  it.each(['tagline', 'headline', 'quote', 'stat'])('never touches display copy: %s', (cls) => {
+    const css = `.cb-slide .${cls}{ max-width:22ch }`;
+    expect(enforceMeasureFloor(css)).toBe(css);
+  });
+
+  it('floors list rows, which are read the same way prose is', () => {
+    const out = enforceMeasureFloor('.cb-slide .row{ max-width:20ch }');
+    expect(out).toContain(`max-width:${MEASURE_FLOOR_CH}ch`);
+  });
+
+  it('ignores a measure expressed in anything but ch', () => {
+    const css = '.cb-slide .body{ max-width:400px }';
+    expect(enforceMeasureFloor(css)).toBe(css);
+  });
+
+  it('leaves every other declaration in the rule untouched', () => {
+    const out = enforceMeasureFloor('.cb-slide .body{ color:red; max-width:26ch; line-height:1.58 }');
+    expect(out).toContain('color:red');
+    expect(out).toContain('line-height:1.58');
+  });
+
+  it('is a no-op on css that declares no measure', () => {
+    const css = '.cb-slide .body{ font-size:38px }';
+    expect(enforceMeasureFloor(css)).toBe(css);
   });
 });

@@ -21,7 +21,7 @@ import { APP_IMAGE_CLASSES, slideMediaCss } from './slidePhotos';
 import { AMBIENT_INTENSITIES, AMBIENT_STYLES, DEFAULT_AMBIENT, type AmbientSpec } from './slideMotion';
 import { slideArchetypeCss } from './archetypes';
 import { slideTypesettingCss } from './lineBreaks';
-import { enforceTypeFloor, typeBaseCss } from './typeFloor';
+import { enforceMeasureFloor, enforceTypeFloor, typeBaseCss } from './typeFloor';
 
 /** CSS custom-property prefix for every brand token the renderer injects. */
 export const RECIPE_VAR_PREFIX = '--cb';
@@ -427,9 +427,9 @@ export function recipeStylesheetFor(recipe: BrandRecipe, format: string): string
    * already in the database on the next paint, with no re-authoring and no AI
    * spend, and it keeps holding if a future model drifts back to small type.
    */
-  const authored = enforceTypeFloor(
+  const authored = enforceMeasureFloor(enforceTypeFloor(
     [base, extra ? `/* format ${format} */\n${extra}` : ''].filter(Boolean).join('\n'),
-  );
+  ));
   // The archetype layer is app capability like the image layer, and goes LAST:
   // it owns where a slide's leftover space lands, and it can only take that
   // decision off the markup by outranking the brand's own `.fill` spacers.
