@@ -242,6 +242,38 @@ Rules that keep this file worth reading:
 
 ## Resolved
 
+### Leftover space was orphaned wherever it fell
+
+*Partly resolved 2026-08-11.* Archetypes. A slide now carries an `archetype`
+alongside its `role` — role is what it SAYS, archetype is how it is COMPOSED —
+and the archetype owns where the slack lands: `top` (bottom-anchored, the
+brands' own default), `bottom`, `center`, or `between`.
+
+The mechanism is app-owned CSS emitted after the brand sheet, keyed off
+`data-archetype` on the slide root. The load-bearing line is the `> .fill`
+reset: brands bottom-anchor with a flex-grow spacer and the composer scatters
+more per slide, so leaving them live means the archetype and the markup fight
+over the same space and the markup wins.
+
+`assignArchetypes` picks across the WHOLE deck, deterministically and with no
+model call. Two rules: a photo archetype is only reachable when a picture
+actually exists, and no composition may run more than twice.
+
+Building it surfaced a hole worth recording. The first set had only one
+text-only composition, so a deck with no photographs collapsed every role onto
+it and the run rule had nothing to alternate with — which is precisely the deck
+that prompted the review. `banner` (text, bottom-anchored) exists so there are
+always two text compositions to alternate between.
+
+Verified on the real deck: six distinct compositions across seven slides, and
+the ~430px hole between a headline and its list is gone — that slide's slack
+now sits deliberately at the bottom.
+
+**Still open:** the archetypes decide where slack goes, not how much there is.
+A slide whose content genuinely underfills its frame still underfills it; the
+response to a slack-gate failure (scale the type, promote an image, split the
+slide) is not built. Nor is the per-archetype line-count cap enforced.
+
 ### Layout faults were invisible at review scale
 
 *Resolved 2026-08-11.* Two additions, both cheap.

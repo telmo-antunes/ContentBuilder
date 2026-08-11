@@ -19,6 +19,7 @@ import { z } from 'zod';
 import { AA_LARGE, AA_TEXT, contrastRatio, hexToRgb, relativeLuminance } from './colorContrast';
 import { APP_IMAGE_CLASSES, slideMediaCss } from './slidePhotos';
 import { AMBIENT_INTENSITIES, AMBIENT_STYLES, DEFAULT_AMBIENT, type AmbientSpec } from './slideMotion';
+import { slideArchetypeCss } from './archetypes';
 import { enforceTypeFloor, typeBaseCss } from './typeFloor';
 
 /** CSS custom-property prefix for every brand token the renderer injects. */
@@ -428,7 +429,11 @@ export function recipeStylesheetFor(recipe: BrandRecipe, format: string): string
   const authored = enforceTypeFloor(
     [base, extra ? `/* format ${format} */\n${extra}` : ''].filter(Boolean).join('\n'),
   );
-  return [typeBaseCss(), authored, surface, media].filter(Boolean).join('\n');
+  // The archetype layer is app capability like the image layer, and goes LAST:
+  // it owns where a slide's leftover space lands, and it can only take that
+  // decision off the markup by outranking the brand's own `.fill` spacers.
+  const archetypes = slideArchetypeCss();
+  return [typeBaseCss(), authored, surface, media, archetypes].filter(Boolean).join('\n');
 }
 
 /**

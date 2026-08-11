@@ -79,6 +79,8 @@ const slideSchema = new Schema(
           bg: { type: String, required: false },
           /** The composer's slide role — drives per-role motion in video export. */
           role: { type: String, required: false },
+          /** How the slide is composed — owns where its leftover space lands. */
+          archetype: { type: String, required: false },
           /** Prompt versions that wrote + arranged this slide. */
           pv: { type: Schema.Types.Mixed, required: false },
         },

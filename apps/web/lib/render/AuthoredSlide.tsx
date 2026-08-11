@@ -3,6 +3,7 @@
 import { useEffect, useId, useMemo, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import {
+  isArchetype,
   authoredSlots,
   ambientArtCss,
   ambientPhotoCss,
@@ -47,7 +48,7 @@ export function AuthoredSlide({
   onOverflow,
 }: {
   recipe: BrandRecipe;
-  authored: { html: string; bg?: string; role?: string };
+  authored: { html: string; bg?: string; role?: string; archetype?: string };
   /** The target canvas — selects the recipe's per-format vertical tuning. */
   format: Format;
   logoUrl?: string;
@@ -349,6 +350,9 @@ export function AuthoredSlide({
       <div
         ref={slideRef}
         className={`cb-slide${bgClass}`}
+        // The archetype's CSS keys off this attribute, so it has to reach the
+        // DOM — it is what decides where this slide's leftover space lands.
+        data-archetype={isArchetype(authored.archetype) ? authored.archetype : undefined}
         dangerouslySetInnerHTML={slideHtmlObj}
       />
       {layer(over, 'over')}

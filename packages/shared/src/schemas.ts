@@ -116,6 +116,13 @@ export const slideSchema = z.object({
        *  recipe's per-role motion in animated exports. */
       role: z.string().max(24).optional(),
       /**
+       * HOW the slide is composed, as distinct from what it says — see
+       * `archetypes.ts`. Chosen across the whole deck at compose time, so it
+       * cannot be derived per slide on read. Drives where leftover vertical
+       * space lands, and it is what stops seven slides sharing one composition.
+       */
+      archetype: z.string().max(24).optional(),
+      /**
        * WHICH PROMPT VERSIONS wrote and arranged this slide. Stamped at compose
        * so a post can be told what a newer copywriter or composer would improve.
        * Absent means it predates versioning — behind everything.
