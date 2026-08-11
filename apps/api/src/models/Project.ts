@@ -151,6 +151,19 @@ const projectSchema = new Schema(
       ],
       required: false,
     },
+    /**
+     * For a promo story: the carousel it points at.
+     *
+     * A plain ref rather than a subtype — a promo story is an ordinary story
+     * project in every other respect, and making it a special kind of object
+     * would mean teaching the editor, the exporter and the Desk about a
+     * distinction none of them need. Nothing cascades: deleting the carousel
+     * leaves a story that still renders, holding a picture of something that
+     * no longer exists as a project, which is the same situation as any other
+     * exported asset.
+     */
+    promotes: { type: Schema.Types.ObjectId, ref: 'Project', required: false, index: true },
+
     /** Set automatically on export; `postedAt` is the manual "it went live" tick. */
     exportedAt: { type: Date, required: false },
     postedAt: { type: Date, required: false },
