@@ -297,3 +297,58 @@ export function slideArchetypeCss(): string {
 
   return rules.join('\n');
 }
+
+// ── Rhythm ───────────────────────────────────────────────────────────────────
+
+/**
+ * WHICH SLIDE INVERTS.
+ *
+ * A recipe is one ground, so a carousel of seven frames is seven variations on
+ * the same darkness. `surfaces.inverse` exists to break that, but it was left
+ * as a per-slide opt-in the composer almost never took — and a composer looking
+ * at one slide has no way to judge a deck's rhythm anyway. Choosing it here,
+ * where the whole sequence is visible, is the only place the decision makes
+ * sense.
+ *
+ * One per deck, deliberately. Two inversions in seven frames stop reading as a
+ * beat and start reading as an alternating pattern, which is a different and
+ * busier thing.
+ *
+ * Three exclusions, each for a concrete reason:
+ *
+ *   · never the cover — it earns the swipe, and it is the frame most likely to
+ *     carry the photograph a reader recognises;
+ *   · never the closing slide — the CTA lands harder returning TO the brand's
+ *     own ground than sitting on the exception;
+ *   · never a full-bleed slide — an inverted surface under a photograph that
+ *     covers the frame changes nothing except the type it has to fight.
+ *
+ * Returns the index to invert, or undefined when the deck is too short to have
+ * a middle or the brand authored no inverse surface.
+ */
+export function planInversion(
+  archetypes: readonly ArchetypeKey[],
+  hasInverseSurface: boolean,
+): number | undefined {
+  if (!hasInverseSurface) return undefined;
+  // Under five slides there is no "middle" worth marking — the deck is over
+  // before the rhythm registers.
+  if (archetypes.length < 5) return undefined;
+
+  const eligible = archetypes
+    .map((key, i) => ({ key, i }))
+    .filter(({ key, i }) =>
+      i !== 0 &&
+      i !== archetypes.length - 1 &&
+      (ARCHETYPES[key] as Archetype).placement !== 'bleed');
+
+  if (!eligible.length) return undefined;
+
+  // The one nearest the deck's midpoint: a beat belongs where the reader is
+  // deepest in, not near either end where the cover and the CTA already carry
+  // their own weight.
+  const mid = (archetypes.length - 1) / 2;
+  return eligible.reduce((best, c) =>
+    Math.abs(c.i - mid) < Math.abs(best.i - mid) ? c : best,
+  ).i;
+}

@@ -7,6 +7,8 @@ import {
   assignArchetypes,
   isArchetype,
   slideArchetypeCss,
+  planInversion,
+  type ArchetypeKey,
 } from './archetypes';
 
 const deck = (...roles: string[]) => roles.map((role) => ({ role, hasPhoto: false }));
@@ -95,5 +97,55 @@ describe('archetypeFor', () => {
     expect(archetypeFor('nope')).toBeUndefined();
     expect(archetypeFor(undefined)).toBeUndefined();
     expect(archetypeFor('statement')?.slack).toBe('center');
+  });
+});
+
+describe('planInversion', () => {
+  const deck = (...keys: string[]) => keys as never as ArchetypeKey[];
+
+  it('does nothing when the brand authored no inverse surface', () => {
+    expect(planInversion(deck('showcase', 'statement', 'banner', 'list', 'cta'), false)).toBeUndefined();
+  });
+
+  /** Under five slides the deck is over before a rhythm registers. */
+  it('does nothing on a deck too short to have a middle', () => {
+    expect(planInversion(deck('showcase', 'statement', 'cta'), true)).toBeUndefined();
+  });
+
+  it('marks exactly one slide', () => {
+    const out = planInversion(deck('showcase', 'statement', 'banner', 'list', 'pull', 'statement', 'cta'), true);
+    expect(typeof out).toBe('number');
+  });
+
+  it('never the cover — it earns the swipe', () => {
+    const out = planInversion(deck('statement', 'statement', 'banner', 'list', 'cta'), true);
+    expect(out).not.toBe(0);
+  });
+
+  it('never the closing slide — the CTA lands harder returning to the brand ground', () => {
+    const keys = deck('showcase', 'statement', 'banner', 'list', 'cta');
+    expect(planInversion(keys, true)).not.toBe(keys.length - 1);
+  });
+
+  /**
+   * An inverted surface under a photograph that covers the frame changes
+   * nothing except the type it has to fight.
+   */
+  it('never a full-bleed slide', () => {
+    const keys = deck('banner', 'showcase', 'showcase', 'showcase', 'cta');
+    const out = planInversion(keys, true);
+    // Only index 0 and 4 are non-bleed, and both are excluded as ends.
+    expect(out).toBeUndefined();
+  });
+
+  it('picks the eligible slide nearest the middle', () => {
+    // indices 1..5 eligible; midpoint of a 7-slide deck is 3.
+    const out = planInversion(deck('showcase', 'statement', 'banner', 'list', 'pull', 'statement', 'cta'), true);
+    expect(out).toBe(3);
+  });
+
+  it('is deterministic', () => {
+    const keys = deck('showcase', 'statement', 'banner', 'list', 'pull', 'statement', 'cta');
+    expect(planInversion(keys, true)).toBe(planInversion(keys, true));
   });
 });

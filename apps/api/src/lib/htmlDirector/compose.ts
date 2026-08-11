@@ -34,6 +34,7 @@ import {
   type Lesson,
   type RecipeEmphasisWrap,
   assignArchetypes,
+  planInversion,
 } from '@contentbuilder/shared';
 import { aiJson, aiMessage, modelFor, textOf, type AiJsonResult, type AiJsonTool } from '../ai';
 import { config } from '../../config';
@@ -1875,6 +1876,18 @@ export async function composeProject(
     const a = out[i]?.authored;
     if (a) a.archetype = archetypes[i];
   });
+
+  /**
+   * ONE INVERTED SLIDE, chosen here for the same reason the archetypes are:
+   * a composer looking at one slide cannot judge a deck's rhythm. `bg:'inverse'`
+   * has existed as a per-slide opt-in the composer almost never took.
+   */
+  const invertAt = planInversion(archetypes, Boolean(recipe.surfaces?.inverse));
+  if (invertAt !== undefined) {
+    const a = out[invertAt]?.authored;
+    // Never overrides a surface the composer chose deliberately.
+    if (a && !a.bg) a.bg = 'inverse';
+  }
 
   if (opts?.renderCheck ?? (Boolean(opts?.renderProbe) || renderCheckEnabledByDefault())) {
     const checked = await renderCheckDeck(recipe, kept, out.map((s) => s.authored), o.format ?? '1080x1350', {
