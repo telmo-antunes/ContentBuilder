@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import type { AssetType, Format } from '@contentbuilder/shared';
@@ -9,7 +9,10 @@ import {
   ASSET_TYPES,
   FORMAT_LABELS,
   MAX_DRAFT_PARAGRAPH_CHARS,
+  MAX_PLAN_SLIDES,
+  MAX_SLIDE_DIRECTION_CHARS,
   defaultFormatFor,
+  parseBrief,
 } from '@contentbuilder/shared';
 import {
   listBusinesses,
@@ -24,6 +27,15 @@ import { ErrorState } from '../../components/ErrorState';
 import { Icon } from '../../components/Icon';
 import { Skeleton } from '../../components/Skeleton';
 import { toast } from '../../components/Toast';
+
+/** A cited link, shortened to the thing a person recognises. */
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
+}
 
 /** The composer's shape while it loads: centered hero, two form cards. */
 function ComposerSkeleton() {
@@ -57,7 +69,12 @@ function NewProjectForm() {
   const [type, setType] = useState<AssetType>('carousel');
   const [format, setFormat] = useState<Format>('1080x1350');
   const [idea, setIdea] = useState('');
-  const [slideCount, setSlideCount] = useState(5);
+  /**
+   * The slide plan. Empty means "you decide" — how many slides the deck needs
+   * is derived from the brief, which is what replaced the manual slide-count
+   * stepper. Adding rows pins it: one slide per row, in this order.
+   */
+  const [plan, setPlan] = useState<string[]>([]);
   const [aiReady, setAiReady] = useState(false);
 
   const load = useCallback(() => {
@@ -81,6 +98,7 @@ function NewProjectForm() {
           setType(p.type);
           setFormat(p.format);
           setIdea(p.idea ?? '');
+          setPlan(p.plan ?? []);
         })
         .catch((e) => setError(e instanceof Error ? e.message : String(e)))
         .finally(() => setLoadingIdea(false));
@@ -100,13 +118,36 @@ function NewProjectForm() {
   const profileReady = Boolean(selectedBiz?.hasProfile);
   const canCompose = aiReady && profileReady;
 
+  // Memoised on the rows themselves, so the derived brief below is stable
+  // across renders that only touched the textarea the plan doesn't feed.
+  const filledPlan = useMemo(() => plan.map((p) => p.trim()).filter(Boolean), [plan]);
+  /**
+   * What the machine will make of this brief — computed from the SAME parser the
+   * API runs, so the summary under the box is a promise, not a guess. Shows the
+   * page it will read and the words it will keep before a compose is spent.
+   */
+  const brief = useMemo(() => parseBrief(idea, filledPlan), [idea, filledPlan]);
+
   const ideaTooLong = idea.length > MAX_DRAFT_PARAGRAPH_CHARS;
   const canSubmit =
     Boolean(businessId && title.trim() && format) &&
     canCompose &&
-    idea.trim().length > 0 &&
+    (idea.trim().length > 0 || filledPlan.length > 0) &&
     !ideaTooLong &&
     !loadingIdea;
+
+  const setPlanAt = (i: number, value: string) =>
+    setPlan((rows) => rows.map((r, j) => (j === i ? value.slice(0, MAX_SLIDE_DIRECTION_CHARS) : r)));
+  const addPlanRow = () => setPlan((rows) => (rows.length >= MAX_PLAN_SLIDES ? rows : [...rows, '']));
+  const removePlanRow = (i: number) => setPlan((rows) => rows.filter((_, j) => j !== i));
+  const movePlanRow = (i: number, by: -1 | 1) =>
+    setPlan((rows) => {
+      const to = i + by;
+      if (to < 0 || to >= rows.length) return rows;
+      const next = [...rows];
+      [next[i], next[to]] = [next[to]!, next[i]!];
+      return next;
+    });
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -117,14 +158,30 @@ function NewProjectForm() {
       // leaving a duplicate behind in the Ideas column.
       let projectId: string;
       if (ideaFrom) {
-        await updateProject(ideaFrom, { title: title.trim(), idea: idea.trim(), type, format });
+        await updateProject(ideaFrom, { title: title.trim(), idea: idea.trim(), plan: filledPlan, type, format });
         projectId = ideaFrom;
       } else {
-        const created = await createProject({ businessId, title: title.trim(), type, format, idea: idea.trim() });
+        const created = await createProject({
+          businessId,
+          title: title.trim(),
+          type,
+          format,
+          idea: idea.trim(),
+          plan: filledPlan,
+        });
         projectId = created._id;
       }
       try {
-        await composeProjectAI(projectId, idea.trim(), slideCount);
+        const composed = await composeProjectAI(projectId, idea.trim(), filledPlan);
+        // Say what actually happened to the brief — which page was read, which
+        // link was skipped and why. A silently-ignored source is the difference
+        // between "the AI wrote something generic" and "your link 404s".
+        const report = composed.brief;
+        if (report?.failures.length) {
+          toast(`Could not read ${report.failures[0]!.url} — ${report.failures[0]!.reason}`, 'error');
+        } else if (report?.sources.length) {
+          toast(`Read “${report.sources[0]!.title}” and wrote the deck from it.`);
+        }
       } catch (err) {
         // Compose failed after the project was created — the card is parked in
         // Ideas, so the toast plus the untouched form is a safe place to retry.
@@ -263,35 +320,21 @@ function NewProjectForm() {
             <label htmlFor="np-idea" className="section-label" style={{ margin: 0 }}>
               What&apos;s the post about?
             </label>
-            <div className="slide-step">
-              <button
-                type="button"
-                className="slide-step-btn"
-                aria-label="Fewer slides"
-                disabled={slideCount <= 2}
-                onClick={() => setSlideCount((n) => Math.max(2, n - 1))}
-              >
-                <Icon name="minus" size={14} />
-              </button>
-              <span className="slide-step-val">
-                {slideCount} <span className="u">slide{slideCount === 1 ? '' : 's'}</span>
-              </span>
-              <button
-                type="button"
-                className="slide-step-btn"
-                aria-label="More slides"
-                disabled={slideCount >= 12}
-                onClick={() => setSlideCount((n) => Math.min(12, n + 1))}
-              >
-                <Icon name="plus" size={14} />
-              </button>
-            </div>
+            <span className="muted" style={{ fontSize: 12 }}>
+              {filledPlan.length
+                ? `${filledPlan.length} slide${filledPlan.length === 1 ? '' : 's'} — your plan`
+                : 'Slide count: automatic'}
+            </span>
           </div>
           <textarea
             id="np-idea"
             value={idea}
             onChange={(e) => setIdea(e.target.value)}
-            placeholder="e.g. Three small habits that quietly build discipline over a year — why motivation is unreliable, discipline as a system, and showing up on the bad days."
+            placeholder={
+              'e.g. Create a carousel based on this blog post https://…\n' +
+              'or: Three small habits that quietly build discipline over a year.\n' +
+              'Paste a link and it gets read. Put "an exact line" in quotes to use it word for word.'
+            }
             style={{ minHeight: 140 }}
           />
           <div className="row" style={{ justifyContent: 'space-between', marginTop: 6 }}>
@@ -306,6 +349,77 @@ function NewProjectForm() {
               {idea.length}/{MAX_DRAFT_PARAGRAPH_CHARS}
             </span>
           </div>
+
+          {/* What the machine understood, before a compose is spent on it. */}
+          {(brief.urls.length > 0 || brief.locks.length > 0) && (
+            <div className="brief-read">
+              {brief.urls.map((u) => (
+                <span className="brief-chip" key={u} title={u}>
+                  <Icon name="link" size={11} /> will read {hostOf(u)}
+                </span>
+              ))}
+              {brief.locks.map((l) => (
+                <span className="brief-chip lock" key={l} title={l}>
+                  <Icon name="quote" size={11} /> word for word: “{l.length > 42 ? `${l.slice(0, 42)}…` : l}”
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* ── The slide plan ─────────────────────────────────────────────── */}
+        <div className="card" style={{ marginBottom: 14 }}>
+          <div className="row" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
+            <label className="section-label" style={{ margin: 0 }}>
+              Plan the slides <span className="muted" style={{ fontWeight: 400 }}>— optional</span>
+            </label>
+            <button
+              type="button"
+              className="btn sm"
+              onClick={addPlanRow}
+              disabled={plan.length >= MAX_PLAN_SLIDES}
+            >
+              <Icon name="plus" size={12} /> Add slide
+            </button>
+          </div>
+          <p className="muted" style={{ fontSize: 12, marginTop: 0, marginBottom: plan.length ? 12 : 0 }}>
+            Leave this empty and the deck is shaped for you — as many slides as the material earns.
+            Add rows to say what each slide is about, in order. Anything you put in{' '}
+            <b>&ldquo;double quotes&rdquo;</b> is used word for word, exactly as you typed it.
+          </p>
+
+          {plan.map((row, i) => (
+            <div className="plan-row" key={i}>
+              <span className="plan-num">{i + 1}</span>
+              <textarea
+                value={row}
+                onChange={(e) => setPlanAt(i, e.target.value)}
+                placeholder={
+                  i === 0
+                    ? 'The hook. e.g. Open on the promise: "How often should you actually reapply?"'
+                    : 'What this slide says. e.g. The signs of wear, as a list of three.'
+                }
+                rows={2}
+              />
+              <div className="plan-tools">
+                <button type="button" className="icon-btn" aria-label="Move up" disabled={i === 0} onClick={() => movePlanRow(i, -1)}>
+                  <Icon name="arrow-up" size={13} />
+                </button>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  aria-label="Move down"
+                  disabled={i === plan.length - 1}
+                  onClick={() => movePlanRow(i, 1)}
+                >
+                  <Icon name="arrow-down" size={13} />
+                </button>
+                <button type="button" className="icon-btn" aria-label="Remove slide" onClick={() => removePlanRow(i)}>
+                  <Icon name="close" size={13} />
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
 
         <div className="row">
@@ -318,7 +432,13 @@ function NewProjectForm() {
               setBusy(true);
               try {
                 if (ideaFrom) {
-                  await updateProject(ideaFrom, { title: title.trim(), idea: idea.trim(), type, format });
+                  await updateProject(ideaFrom, {
+                    title: title.trim(),
+                    idea: idea.trim(),
+                    plan: filledPlan,
+                    type,
+                    format,
+                  });
                 } else {
                   await createProject({
                     businessId,
@@ -326,6 +446,7 @@ function NewProjectForm() {
                     type,
                     format,
                     idea: idea.trim(),
+                    plan: filledPlan,
                     stage: 'idea',
                   });
                 }

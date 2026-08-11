@@ -42,9 +42,26 @@ export interface ComposeSlideInput {
   format: string;
   /** true when this brand+slide should be photo-forward (cover with imagery). */
   photo?: boolean;
+  /**
+   * What the picture should be OF, in stock-library words. Never reaches the
+   * composer — it is the parse step's note to the USER, and prefills the
+   * Studio's photo picker so it opens on a search instead of an empty box.
+   */
+  imageQuery?: string;
   /** Position in the deck — rotates which composition VARIANT this role uses. */
   index?: number;
+  /**
+   * Start that rotation further along. Set from a `rearranges-role` lesson: the
+   * arrangement the rotation lands on is the one this brand keeps swapping out,
+   * so the composer reaches past it. Never changes the slide's position in the
+   * deck — only which of the role's authored arrangements it follows.
+   */
+  variantBias?: number;
 }
+
+/** The rotation position for this slide's composition variant. */
+export const variantIndexOf = (input: ComposeSlideInput): number =>
+  (input.index ?? 0) + (input.variantBias ?? 0);
 
 /** Render the recipe into the compact spec the composer reasons over. */
 export function recipeSpecBlock(recipe: BrandRecipe, format: string, role?: string, index?: number): string {
@@ -75,6 +92,7 @@ HARD RULES
 - Copy is VERBATIM. Emit each provided text part exactly as given — no rewording, no added words, no new sentences, no punctuation changes. Do not add copy that wasn't provided.
 - Apply the brand SIGNATURE MOVE exactly as its description says (e.g. wrap the emphasis phrase in the specified span; or place the tagline element).
 - Follow the COMPOSITION PATTERN that matches this slide's ROLE. Use a <div class="fill"></div> spacer where the pattern bottom-anchors content.
+- A SPACER IS ONLY WORTH WRITING WHEN SOMETHING FOLLOWS IT. A <div class="fill"></div> at the END of the fragment grows into empty canvas and leaves the bottom half of the poster blank — the classic unfinished-looking slide. Put the spacer where you want the gap: after the top-edge marks (the logo, the eyebrow) and before the statement they introduce, so the label sits on the top edge and the copy settles on the baseline.
 - The canvas (dimensions given below) is large and the stylesheet already sets big, legible type for it — do not fight it. Keep the fragment to the few elements the pattern calls for; embrace negative space. On a taller (story) canvas lean on the fill spacer to spread content; on a square canvas keep it to the essentials.
 - If a copy part is absent, omit its element (don't fabricate a placeholder).
 - NEVER emit an empty element. An element with no content is invisible and can still take up space.
@@ -125,7 +143,7 @@ export function buildComposeMessages(
   const canvas = dims ? `${dims.w}×${dims.h} (${dims.label})` : input.format;
   const user = [
     `BRAND SPEC`,
-    recipeSpecBlock(recipe, input.format, input.role, input.index),
+    recipeSpecBlock(recipe, input.format, input.role, variantIndexOf(input)),
     ``,
     `THIS SLIDE`,
     `  role: ${input.role}`,

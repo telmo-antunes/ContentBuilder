@@ -6,6 +6,8 @@ import { ZipArchive } from 'archiver';
 import { z } from 'zod';
 import {
   MAX_DRAFT_PARAGRAPH_CHARS,
+  MAX_PLAN_SLIDES,
+  MAX_SLIDE_DIRECTION_CHARS,
   VIDEO_SECONDS_DEFAULT,
   authoredSlots,
   clampVideoSeconds,
@@ -17,8 +19,9 @@ import {
   type BrandRecipe,
   type SlidePhoto,
 } from '@contentbuilder/shared';
-import { composeProject, composeSlide } from '../lib/htmlDirector/compose';
-import { partsFromAuthored } from '../lib/htmlDirector/reparse';
+import { composeProject, composeSlide, parseSlideCopy, parseSlideDirection } from '../lib/htmlDirector/compose';
+import { resolveBrief } from '../lib/sourceIngest';
+import { authoredShape, partsFromAuthored, rewriteAuthoredCopy } from '../lib/htmlDirector/reparse';
 import { addHeadlineVariant, removeHeadlineVariant } from '../lib/htmlDirector/renderCheck';
 import { sanitizeAuthoredHtml } from '../lib/htmlSanitize';
 import { ProjectModel, ProjectVersionModel, BusinessModel, BrandKitModel, MediaAssetModel, VideoJobModel, VIDEO_JOB_ACTIVE_STATES } from '../models';
@@ -28,12 +31,28 @@ import { renderSlidesToPng, slugify } from '../lib/exporter';
 import { runVideoJob, sweepExpiredVideoJobs } from '../lib/videoJobs';
 import { getStorage } from '../storage';
 import { generateCaption, type GeneratedCaption } from '../lib/caption';
+import { SITE_PHOTO_LABEL } from '../lib/harvest';
+import { lessonsFor, noteSlideSignal, observeOutcome, recordGeneration } from '../lib/learningLoop';
+import type { ComposeRecord } from '../lib/htmlDirector/compose';
 import { postUpdateStatus } from '../lib/promptStatus';
 import { aiDraftConfigured, config } from '../config';
 
 const composeSchema = z.object({
   idea: z.string().trim().min(1, 'An idea is required').max(MAX_DRAFT_PARAGRAPH_CHARS),
-  slideCount: z.number().int().min(1).max(12).optional(),
+  /**
+   * How many slides. Optional, and normally ABSENT: the deck length is derived
+   * from the brief (a plan fixes it; otherwise the volume of material decides).
+   * Kept on the wire so a script or the eval can still pin it.
+   */
+  slideCount: z.number().int().min(1).max(MAX_PLAN_SLIDES).optional(),
+  /**
+   * The slide-plan editor's rows: one direction per slide, in order. Anything
+   * the user "quoted" inside them is copy to reproduce word for word.
+   */
+  plan: z
+    .array(z.string().trim().max(MAX_SLIDE_DIRECTION_CHARS))
+    .max(MAX_PLAN_SLIDES)
+    .optional(),
 });
 
 export const projectsRouter = Router();
@@ -181,6 +200,7 @@ projectsRouter.post(
       status: 'draft',
       slides: initialSlides,
       ...(body.idea ? { idea: body.idea } : {}),
+      ...(body.plan?.length ? { plan: body.plan } : {}),
       stage: body.stage ?? (initialSlides.length ? 'drafting' : 'idea'),
       settings: {
         // Default the theme from the business profile (profile → visual default).
@@ -332,6 +352,9 @@ projectsRouter.patch(
 
     if (body.title !== undefined) project.set('title', body.title);
     if (body.idea !== undefined) project.set('idea', body.idea);
+    // An empty plan is a real edit — it means "stop pinning the slides" — so it
+    // clears the stored one rather than being read as "leave it alone".
+    if (body.plan !== undefined) project.set('plan', body.plan.length ? body.plan : undefined);
     // Only while it's still just a prompt — once slides exist they were laid
     // out for this canvas, and swapping the canvas under them would break them.
     if ((body.type !== undefined || body.format !== undefined) && !project.get('slides')?.length) {
@@ -349,6 +372,16 @@ projectsRouter.patch(
       project.set('settings', { ...(project.get('settings') ?? {}), ...body.settings });
     }
     await project.save();
+    /**
+     * THE SIGNAL. Saving a deck is where a person's corrections land, so it is
+     * where the difference between what the app wrote and what they wanted is
+     * measured. Awaited but never fatal — `observeOutcome` swallows its own
+     * errors, because a post that will not save because the learning loop had a
+     * bad day is a far worse product than one that forgets.
+     */
+    if (body.slides !== undefined) {
+      await observeOutcome(String(project._id), project.get('slides') as never);
+    }
     res.json(project.toJSON());
   }),
 );
@@ -363,6 +396,74 @@ projectsRouter.delete(
   }),
 );
 
+/** How many of a brand's photos one compose will consider spending. */
+const PHOTO_POOL_LIMIT = 24;
+
+/**
+ * THE BRAND'S OWN PICTURES, ready to be spent on a fresh deck.
+ *
+ * Photos harvested from the brand's website come first: they ARE the brand's
+ * imagery, which is the whole reason analyze downloads them. Uploads follow,
+ * newest first. Nothing from a stock library is ever in here — a composed deck
+ * may arrive carrying the brand's own photographs, never a stranger's.
+ *
+ * EVERY CANDIDATE IS CHECKED AGAINST STORAGE. A media row whose bytes are gone
+ * (a re-seed, a swapped storage dir, a manual clean-up) still lists fine and
+ * renders as a broken image — which is worse than the empty slot this feature
+ * exists to remove. The pool is what can actually be SHOWN, not what is merely
+ * recorded, so an orphaned row can neither be attached nor talk the compose
+ * step into asking for a slot it cannot fill.
+ */
+async function brandPhotoPool(businessId: string) {
+  const docs = await MediaAssetModel.find({ businessId })
+    .sort({ createdAt: -1 })
+    .limit(PHOTO_POOL_LIMIT * 3)
+    .lean<any[]>();
+  const site = docs.filter((d) => d.label === SITE_PHOTO_LABEL);
+  const ordered = [...site, ...docs.filter((d) => d.label !== SITE_PHOTO_LABEL)].slice(0, PHOTO_POOL_LIMIT * 2);
+  const storage = getStorage();
+  const present = await Promise.all(
+    ordered.map(async (d) => ((await storage.exists(String(d.key)).catch(() => false)) ? d : null)),
+  );
+  const usable = present.filter(Boolean).slice(0, PHOTO_POOL_LIMIT) as any[];
+  const orphaned = ordered.length - present.filter(Boolean).length;
+  if (orphaned) console.warn(`[compose] ${orphaned} media record(s) have no file in storage — not offered to the deck`);
+  return usable;
+}
+
+/**
+ * Fill the holes the composer left, with the brand's own photographs.
+ *
+ * An empty `cb-shot` renders as a dead grey rectangle taking a third of the
+ * poster, and until now every composed slide that asked for a picture shipped
+ * exactly that and waited for the user to notice. The compose step now only
+ * asks for a slot it can fill (`photoBudget`), and this spends the pool: one
+ * photo per slot, no repeats while unused photos remain, in deck order.
+ *
+ * These are suggestions with a real picture in them, not decisions — every one
+ * is swappable from the Studio's photo panel exactly like a manual attachment.
+ */
+function fillSlotsFromPool(
+  slides: Array<{ id: string; authored?: { html: string } }>,
+  pool: Array<{ _id: unknown }>,
+): { photos: SlidePhoto[][]; used: number } {
+  const photos: SlidePhoto[][] = slides.map(() => []);
+  let next = 0;
+  slides.forEach((slide, i) => {
+    for (const slot of authoredSlots(slide.authored?.html ?? '')) {
+      if (next >= pool.length) return;
+      photos[i]!.push({
+        id: randomUUID(),
+        mediaAssetId: String((pool[next++] as { _id: unknown })._id),
+        placement: 'slot',
+        slot,
+        fit: 'cover',
+      });
+    }
+  });
+  return { photos, used: next };
+}
+
 // AI compose: turn an idea into on-brand AUTHORED slides using the brand's
 // recipe (its design system). Requires the brand to have a recipe. Replaces the
 // project's slides; the previous state is kept recoverable via a version.
@@ -370,7 +471,7 @@ projectsRouter.post(
   '/:id/compose',
   asyncHandler(async (req, res) => {
     const id = requireObjectId(req.params.id, 'Project');
-    const { idea, slideCount } = parseBody(composeSchema, req.body);
+    const { idea, slideCount, plan } = parseBody(composeSchema, req.body);
     if (!aiDraftConfigured()) {
       throw new ApiError(400, 'AI is not configured (set ANTHROPIC_API_KEY + ANTHROPIC_MODEL_SMALL).');
     }
@@ -393,11 +494,41 @@ projectsRouter.post(
       throw new ApiError(400, 'This brand has no design recipe yet — generate the brand recipe first.');
     }
 
+    // READ WHAT THE BRIEF CITES, and lift its structure out, before writing a
+    // word. A brief naming a blog post used to reach the copywriter as a URL
+    // string it had never opened; now the page's own headline, structure and
+    // lines are the material. Never fatal — a link that will not load is
+    // reported back and the deck is written from the user's words alone.
+    const businessId = String(project.get('businessId'));
+    const [{ brief, sources, failures }, pool] = await Promise.all([
+      resolveBrief(idea, plan),
+      brandPhotoPool(businessId),
+    ]);
+
+    // WHAT THIS BRAND HAS TAUGHT US, from the corrections its owner made to
+    // previous posts. Empty until the same correction has been made three
+    // times, so a new brand's first decks are written exactly as before.
+    const lessons = await lessonsFor(businessId);
+    if (lessons.length) {
+      console.warn(`[learning] applying ${lessons.length} lesson(s): ${lessons.map((l) => l.id).join(', ')}`);
+    }
+
     let composed;
+    let captured: ComposeRecord | undefined;
     try {
-      composed = await composeProject(parsedRecipe.data, idea, {
+      composed = await composeProject(parsedRecipe.data, brief.idea, {
         format: project.get('format'),
         slideCount,
+        plan: brief.plan,
+        locks: brief.locks,
+        sources,
+        lessons,
+        // Only ask for a photo slot this brand can actually fill — an empty
+        // one is a dead grey box, which is worse than no photograph at all.
+        photoBudget: pool.length,
+        record: (r) => {
+          captured = r;
+        },
       });
     } catch (err) {
       throw new ApiError(502, `Compose failed: ${publicErrMessage(err, 'AI error')}. You can build manually instead.`);
@@ -408,25 +539,76 @@ projectsRouter.post(
 
     if (project.get('slides')?.length) await saveVersion(project, 'Before AI compose').catch(() => {});
 
-    // No stock photo is attached here any more. A slide the composer decided
-    // wants imagery carries an EMPTY `cb-shot` slot instead, and the user fills
-    // it with their own upload — a placeholder they replace beats a stock photo
-    // they have to notice and undo.
-    const slides = composed.map((s, i) => ({
-      id: randomUUID(),
-      order: i,
-      imageNeed: 'none',
-      photos: [],
-      authored: s.authored,
+    // Stock photos are still never attached on the user's behalf. The brand's
+    // OWN pictures are a different question — they were harvested from its site
+    // precisely so posts could use them — so a slot arrives filled and swappable
+    // rather than empty and waiting.
+    const base = composed.map((s, i) => ({ id: randomUUID(), order: i, authored: s.authored }));
+    const filled = fillSlotsFromPool(base, pool);
+    const slides = base.map((s, i) => ({
+      ...s,
+      imageNeed: 'none' as const,
+      photos: filled.photos[i] ?? [],
+      // The copywriter's own words for the picture this slide wants — what the
+      // Studio's stock picker opens on, instead of an empty search box.
+      ...(composed[i]!.imageQuery ? { imageQuery: composed[i]!.imageQuery } : {}),
     }));
     project.set('slides', slides);
     project.set('status', 'draft');
-    // Keep the prompt: it's what an Ideas card holds, and it lets you see what a
-    // finished post was actually asked to be.
+    // Keep the prompt AND the plan: it's what an Ideas card holds, it lets you
+    // see what a finished post was actually asked to be, and re-composing later
+    // starts from the same brief rather than from a flattened paragraph.
     project.set('idea', idea);
+    project.set('plan', brief.plan.length ? brief.plan : undefined);
+    // What it was written FROM, so the Studio can link back to it.
+    project.set(
+      'sources',
+      sources.length
+        ? sources.map((x) => ({
+            url: x.url,
+            title: x.title,
+            ...(x.byline ? { byline: x.byline } : {}),
+            ...(x.published ? { published: x.published } : {}),
+            chars: x.text.length,
+          }))
+        : undefined,
+    );
     if (!project.get('stage') || project.get('stage') === 'idea') project.set('stage', 'ready');
     await project.save();
-    res.json(project.toJSON());
+
+    /**
+     * REMEMBER WHAT MADE THIS. The prompts, the copy they produced and the
+     * markup that shipped out of compose — so that when the user edits it, the
+     * difference between what the app wrote and what they wanted is a fact this
+     * brand can be taught rather than a correction that evaporates on save.
+     */
+    if (captured) {
+      await recordGeneration({
+        projectId: String(project._id),
+        businessId,
+        record: captured,
+        brief: {
+          idea,
+          plan: brief.plan,
+          locks: brief.locks,
+          sources: sources.map((x) => ({ url: x.url, title: x.title, chars: x.text.length })),
+        },
+        slideIds: slides.map((x) => x.id),
+      });
+    }
+
+    // The brief's own report rides along with the project: which pages were
+    // read, which were skipped and why, and how many slots came back filled.
+    res.json({
+      ...project.toJSON(),
+      brief: {
+        sources: sources.map((s) => ({ url: s.url, title: s.title, byline: s.byline, chars: s.text.length })),
+        failures,
+        plan: brief.plan,
+        locks: brief.locks,
+        photosAttached: filled.used,
+      },
+    });
   }),
 );
 
@@ -456,27 +638,70 @@ projectsRouter.post(
     if (!stored?.recipe) throw new ApiError(400, 'This brand has no design recipe yet.');
     const recipe = migrateRecipe(stored.recipe);
 
-    // The parts are recovered from the markup, so the COPY is preserved exactly
-    // and only the arrangement changes (a different composition variant).
-    const parts = partsFromAuthored(slide.authored.html);
+    /**
+     * WITHOUT A DIRECTION this is what it has always been: the parts are
+     * recovered from the markup, so the COPY is preserved exactly and only the
+     * arrangement changes.
+     *
+     * WITH ONE, the same brief language applies to a single slide — "make this
+     * one about the wash routine", or a line in quotes to set verbatim. The
+     * copywriter rewrites just this slide; the rest of the deck is untouched.
+     */
+    const direction = String((req.body as { direction?: unknown } | undefined)?.direction ?? '')
+      .trim()
+      .slice(0, MAX_SLIDE_DIRECTION_CHARS);
     const role = (slide.authored.role ?? 'statement') as never;
     const count = Math.min(3, Math.max(2, Number(req.query.count) || 2));
+    const hadPhoto = authoredSlots(slide.authored.html).length > 0;
+
+    let parts = partsFromAuthored(slide.authored.html);
+    let photo = hadPhoto;
+    let rewrittenRole = role;
+    if (direction) {
+      if (!aiDraftConfigured()) throw new ApiError(400, 'AI is not configured.');
+      try {
+        const rewritten = await parseSlideDirection(recipe, direction, {
+          format: project.get('format'),
+          role,
+          index: idx,
+          // A rewrite may only keep a picture where the slide already had one —
+          // the photos are already attached to this slide's slots.
+          photoBudget: hadPhoto ? 1 : 0,
+          // What post this slide belongs to, so a direction is read inside the
+          // carousel's subject rather than as a brief for a new one.
+          post: { title: project.get('title'), idea: project.get('idea'), says: parts },
+        });
+        parts = rewritten.parts;
+        photo = rewritten.photo ?? false;
+        rewrittenRole = rewritten.role as never;
+      } catch (err) {
+        throw new ApiError(502, `Could not rewrite this slide: ${publicErrMessage(err, 'AI error')}`);
+      }
+    }
 
     const variants: Array<{ html: string; bg?: string; role?: string }> = [];
     for (let v = 0; v < count; v++) {
       try {
         const out = await composeSlide(recipe, {
-          role,
+          role: rewrittenRole,
           parts,
           format: project.get('format'),
-          photo: slide.authored.bg === 'photo',
+          photo,
           // Offset the variant index so each candidate follows a different
           // authored arrangement for this role.
           index: idx + v + 1,
         });
         // Only the slide's own fields travel: `composeSlide` also reports WHICH
         // path composed it, and that is telemetry, not part of the response.
-        if (out.html) variants.push({ html: out.html, ...(out.bg ? { bg: out.bg } : {}), ...(out.role ? { role: out.role } : {}) });
+        //
+        // DISTINCT candidates only. Composition by recipe fragment is
+        // deterministic, so a role with a fragment produces byte-identical
+        // markup however many times it is asked — and the Studio offered two
+        // identical "alternatives" side by side, which reads as a broken
+        // feature rather than as a brand with one arrangement for that role.
+        if (out.html && !variants.some((v) => v.html === out.html)) {
+          variants.push({ html: out.html, ...(out.bg ? { bg: out.bg } : {}), ...(out.role ? { role: out.role } : {}) });
+        }
       } catch (err) {
         console.warn('[variants] one candidate failed:', err instanceof Error ? err.message : err);
       }
@@ -486,9 +711,80 @@ projectsRouter.post(
   }),
 );
 
+/**
+ * NEW WORDS, SAME LAYOUT — the exact inverse of the endpoint above.
+ *
+ * "Alternatives" keeps the copy and re-arranges it. This keeps the arrangement
+ * and re-writes the copy, which is what you want when a slide is composed well
+ * and simply says the wrong thing. No composer runs at all: the new text is
+ * spliced into the elements that are already there, so the layout it kept is
+ * the layout it had, byte for byte apart from the words.
+ */
+projectsRouter.post(
+  '/:id/slides/:slideId/rewrite',
+  asyncHandler(async (req, res) => {
+    const id = requireObjectId(req.params.id, 'Project');
+    if (!aiDraftConfigured()) throw new ApiError(400, 'AI is not configured.');
+    const project = await ProjectModel.findById(id);
+    if (!project) throw new ApiError(404, 'Project not found');
+
+    const slides = (project.get('slides') as Array<{ toObject?: () => SlideInput }>).map((x) =>
+      typeof x.toObject === 'function' ? x.toObject() : (x as SlideInput),
+    );
+    const slide = slides.find((x) => x.id === req.params.slideId);
+    if (!slide?.authored?.html) throw new ApiError(400, 'This slide is not AI-composed.');
+
+    const stored = (await approvedKitFor(String(project.get('businessId')))) as { recipe?: unknown } | null;
+    if (!stored?.recipe) throw new ApiError(400, 'This brand has no design recipe yet.');
+    const recipe = migrateRecipe(stored.recipe);
+
+    const direction = String((req.body as { direction?: unknown } | undefined)?.direction ?? '')
+      .trim()
+      .slice(0, MAX_SLIDE_DIRECTION_CHARS);
+    const html = slide.authored.html;
+    const shape = authoredShape(html);
+    if (!shape.parts.length) throw new ApiError(400, 'This slide has no copy to rewrite.');
+
+    const count = Math.min(3, Math.max(1, Number(req.query.count) || 2));
+    const variants: Array<{ html: string; bg?: string; role?: string }> = [];
+    for (let v = 0; v < count; v += 1) {
+      try {
+        const parts = await parseSlideCopy(recipe, shape, {
+          format: project.get('format'),
+          role: (slide.authored.role ?? 'statement') as never,
+          says: partsFromAuthored(html),
+          direction,
+          post: { title: project.get('title'), idea: project.get('idea') },
+        });
+        const next = rewriteAuthoredCopy(html, parts);
+        // The same guard chain a composed slide gets: sanitise, then re-apply
+        // the brand's headline accent to copy that has never seen it.
+        const safe = sanitizeAuthoredHtml(next.html);
+        if (safe && !variants.some((x) => x.html === safe)) {
+          variants.push({
+            html: safe,
+            ...(slide.authored.bg ? { bg: slide.authored.bg } : {}),
+            ...(slide.authored.role ? { role: slide.authored.role } : {}),
+          });
+        }
+      } catch (err) {
+        console.warn('[rewrite] one candidate failed:', err instanceof Error ? err.message : err);
+      }
+    }
+    if (!variants.length) throw new ApiError(502, 'No usable rewrite came back — try again.');
+    res.json({ variants });
+  }),
+);
+
 const tweakSchema = z.object({
   tweak: z.enum(['bigger-headline', 'smaller-headline', 'invert', 'un-invert']),
 });
+
+/** The visible length of a slide's headline — the magnitude behind a size tweak. */
+function headlineLengthOf(html: string): number {
+  const m = html.match(/<([a-z][a-z0-9]*)\b[^>]*\bclass="[^"]*\bheadline\b[^"]*"[^>]*>([\s\S]*?)<\/\1>/i);
+  return m ? (m[2] ?? '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim().length : 0;
+}
 
 /** Instant, deterministic slide tweaks — no AI, no waiting, fully reversible. */
 projectsRouter.post(
@@ -558,7 +854,48 @@ projectsRouter.post(
       console.warn('[tweak] could not record signal:', err instanceof Error ? err.message : err);
     }
 
+    /**
+     * …and the same press teaches the COPYWRITER, not just the recipe.
+     *
+     * "Smaller headline" is the user saying this line is too long for the
+     * canvas. The recipe counter reads that as "your type runs big"; it is
+     * equally a statement that the copy runs long, and the copy is the cheaper
+     * of the two to fix. Recorded with the headline's length so the lesson has
+     * a magnitude rather than just a direction.
+     */
+    await noteSlideSignal(String(project._id), String(req.params.slideId), {
+      tweak: {
+        kind: tweak,
+        ...(tweak === 'smaller-headline' || tweak === 'bigger-headline'
+          ? { chars: headlineLengthOf(slide.authored.html) }
+          : {}),
+      },
+    });
+
     res.json(project.toJSON());
+  }),
+);
+
+/**
+ * THE USER PICKED AN ALTERNATIVE ARRANGEMENT for this slide.
+ *
+ * Applying a candidate goes through the ordinary slide save, which changes the
+ * markup and leaves every word where it was — so the outcome diff reads it as
+ * "kept" and the clearest possible statement about a composition ("not that
+ * one") taught nothing. This is the one path that can say so, and the Studio
+ * calls it after the save it just made.
+ */
+projectsRouter.post(
+  '/:id/slides/:slideId/chose',
+  asyncHandler(async (req, res) => {
+    const id = requireObjectId(req.params.id, 'Project');
+    const kind = String((req.body as { kind?: unknown } | undefined)?.kind ?? 'arrangement');
+    // Only an ARRANGEMENT swap needs recording here. New copy already shows up
+    // in the outcome diff as an edit, which is a better signal than this one.
+    if (kind === 'arrangement') {
+      await noteSlideSignal(id, String(req.params.slideId), { rearranged: true });
+    }
+    res.json({ ok: true });
   }),
 );
 
@@ -758,6 +1095,9 @@ projectsRouter.post(
     // stage by itself. "Posted" stays manual — we can't see Instagram.
     project.set('stage', 'shipped');
     project.set('exportedAt', new Date());
+    // An export is the strongest signal in the product: this deck, in this
+    // state, was good enough to ship.
+    await observeOutcome(String(project._id), project.get('slides') as never, { exported: true });
     await project.save();
     // What was shipped should always be recoverable.
     await saveVersion(project, 'Exported').catch(() => {});

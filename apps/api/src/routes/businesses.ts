@@ -4,6 +4,7 @@ import { BUSINESS_CATEGORIES, BUSINESS_GOALS } from '@contentbuilder/shared';
 import { BusinessModel, BrandKitModel, ProjectModel, MediaAssetModel } from '../models';
 import { getStorage } from '../storage';
 import { ApiError, asyncHandler, parseBody, requireObjectId } from '../lib/http';
+import { allLessonsFor } from '../lib/learningLoop';
 
 export const businessesRouter = Router();
 
@@ -159,5 +160,50 @@ businessesRouter.delete(
     await Promise.all(keys.map((k) => storage.remove(k).catch(() => {})));
 
     res.json({ ok: true, deleted: { kits: kits.length, media: media.length } });
+  }),
+);
+
+/**
+ * WHAT THIS BRAND HAS TAUGHT THE COPYWRITER — derived from the edits its owner
+ * made to previous posts, with the evidence attached.
+ *
+ * Read-only and deterministic: the same generation records always produce the
+ * same lessons, which is what lets this screen and the copywriter's prompt tell
+ * the same story. A brand with fewer than three matching corrections has
+ * learned nothing yet, and says so.
+ */
+businessesRouter.get(
+  '/:id/lessons',
+  asyncHandler(async (req, res) => {
+    const id = requireObjectId(req.params.id, 'Business');
+    const business = await BusinessModel.findById(id).select('_id').lean();
+    if (!business) throw new ApiError(404, 'Business not found');
+    const { lessons, posts } = await allLessonsFor(id);
+    res.json({ lessons, posts, applied: lessons.filter((l) => !l.muted).length });
+  }),
+);
+
+/**
+ * Switch one lesson off (or back on). The observations behind it are kept —
+ * muting says "do not act on this", not "that never happened", and a lesson
+ * that keeps accumulating evidence is worth being able to reconsider.
+ */
+businessesRouter.patch(
+  '/:id/lessons/:lessonId',
+  asyncHandler(async (req, res) => {
+    const id = requireObjectId(req.params.id, 'Business');
+    const body = parseBody(z.object({ muted: z.boolean() }), req.body);
+    const lessonId = String(req.params.lessonId ?? '').slice(0, 120);
+    const business = await BusinessModel.findById(id);
+    if (!business) throw new ApiError(404, 'Business not found');
+
+    const mutes = new Set<string>((business.get('lessonMutes') as string[] | undefined) ?? []);
+    if (body.muted) mutes.add(lessonId);
+    else mutes.delete(lessonId);
+    business.set('lessonMutes', [...mutes]);
+    await business.save();
+
+    const { lessons, posts } = await allLessonsFor(id);
+    res.json({ lessons, posts, applied: lessons.filter((l) => !l.muted).length });
   }),
 );

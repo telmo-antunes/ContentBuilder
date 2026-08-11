@@ -10,5 +10,7 @@ export * from './slidePhotos';
 export * from './slideMotion';
 export * from './typeFloor';
 export * from './text';
+export * from './brief';
+export * from './learning';
 export * from './brandMark';
 export * from './promptVersions';

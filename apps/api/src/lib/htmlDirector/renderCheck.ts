@@ -44,7 +44,7 @@ import {
 } from '@contentbuilder/shared';
 import { config } from '../../config';
 import { topLevelBlocks, type SlideBlock } from './dedupeBlocks';
-import type { ComposeSlideInput } from './prompt';
+import { variantIndexOf, type ComposeSlideInput } from './prompt';
 
 // ── Public shape ────────────────────────────────────────────────────────────
 
@@ -521,6 +521,15 @@ const SACRIFICE_ORDER = ['rule', 'body', 'panel', 'tagline'];
 /** Classes that mean "this slide still says something without its paragraph". */
 const SUBSTANCE = new Set(['panel', 'row', 'quote', 'stat', 'tagline']);
 
+/**
+ * Does this block hold an enumeration — a `.row` per item, wherever the brand's
+ * list container puts them? Checked on the block's whole markup, not its own
+ * classes, because the rows are children of the `.panel` that carries them.
+ */
+function carriesRows(block: SlideBlock): boolean {
+  return /\bclass\s*=\s*(?:"[^"]*\brow\b[^"]*"|'[^']*\brow\b[^']*')/i.test(block.html);
+}
+
 export interface DropResult {
   html: string;
   /** The dropped block's label (e.g. `div.rule`), or undefined when nothing could go. */
@@ -529,7 +538,7 @@ export interface DropResult {
 
 /** The classes this slide's composition pattern actually names. */
 function patternClasses(recipe: BrandRecipe, input: ComposeSlideInput): Set<string> {
-  const pattern = recipePatternVariant(recipe, input.format, input.role, input.index ?? 0);
+  const pattern = recipePatternVariant(recipe, input.format, input.role, variantIndexOf(input));
   const out = new Set<string>();
   if (!pattern) return out;
   for (const token of pattern.slice(pattern.indexOf(':') + 1).split('→')) {
@@ -549,6 +558,18 @@ export function dropLeastEssential(
   const named = patternClasses(recipe, input);
   const hasSubstance = blocks.some((b) => b.classes.some((c) => SUBSTANCE.has(c)));
   const speaking = blocks.filter((b) => b.text.length > 0).length;
+  /**
+   * THE ENUMERATION IS NEVER FURNITURE.
+   *
+   * A `.panel` is the heaviest block on the canvas, so the ladder reached for
+   * it — and a real deck shipped "Five habits that shorten the life" with the
+   * five habits gone, a promise over blank canvas. An eyebrow and a headline
+   * are what a slide is LABELLED with; the rows are what it is FOR. When they
+   * are the only enumeration on the slide, cutting them does not repair the
+   * overflow, it destroys the slide, and the ladder's next rung — re-composing
+   * with the copy declared fixed — is the honest answer instead.
+   */
+  const enumerations = blocks.filter(carriesRows);
 
   let best: { block: SlideBlock; rank: number } | undefined;
   for (const block of blocks) {
@@ -558,6 +579,8 @@ export function dropLeastEssential(
     if (!cls) continue;
     if (cls === 'body' && !hasSubstance) continue; // the slide's only prose is not furniture
     if (block.text.length > 0 && speaking <= 1) continue; // never the last words on the slide
+    // …and never the slide's only enumeration.
+    if (enumerations.length <= 1 && carriesRows(block)) continue;
     // Not named by the pattern → sacrificed first; then by the ladder above.
     const rank = (named.has(cls) ? 10 : 0) + SACRIFICE_ORDER.indexOf(cls);
     if (!best || rank < best.rank) best = { block, rank };

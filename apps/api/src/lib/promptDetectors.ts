@@ -21,6 +21,7 @@ import {
   type DetectorId,
 } from '@contentbuilder/shared';
 import { lintAuthored } from './htmlDirector/lintAuthored';
+import { balanceVertical } from './htmlDirector/balance';
 
 /** The CSS a recipe actually renders from. */
 function recipeCss(recipe: BrandRecipe): string {
@@ -101,6 +102,25 @@ export function postDetector(
       const n = brandMarkVariants(withHtml.map((s) => s.authored!.html!));
       return n > 1
         ? [`the brand mark is built ${n} different ways across these slides — saving the post makes them agree`]
+        : [];
+    }
+    case 'emptyList': {
+      // A slide the composer built as an enumeration and then filled with
+      // nothing: a bordered card with no rows in it, which reads as a bug.
+      const hits = withHtml.filter((s) => {
+        const html = s.authored!.html!;
+        return /class="[^"]*\bpanel\b[^"]*"/i.test(html) && !/class="[^"]*\brow\b[^"]*"/i.test(html);
+      }).length;
+      return hits
+        ? [`${hits} slide${hits === 1 ? '' : 's'} carry an empty list card — the newer copywriter never writes a list it cannot fill`]
+        : [];
+    }
+    case 'strandedSpacer': {
+      // The spacer-at-the-end arrangement: every `.fill` after the last thing
+      // that speaks, so the slack grows into empty canvas below the copy.
+      const hits = withHtml.filter((s) => balanceVertical(s.authored!.html!).moved).length;
+      return hits
+        ? [`${hits} slide${hits === 1 ? '' : 's'} leave their bottom half empty — recomposing anchors the copy to the baseline`]
         : [];
     }
     default:

@@ -196,9 +196,18 @@ async function executeUnit(unit: EvalUnit, model: string): Promise<RunResult> {
   try {
     await warnSink.run(rawWarnings, async () => {
       const t0 = Date.now();
+      // A fixture may carry a FROZEN source read, a plan and verbatim locks —
+      // the three halves of the brief language. Passing them here is what makes
+      // the eval able to catch a regression in any of them; a fixture with none
+      // behaves exactly as it always did.
       const inputs = await parseForCompose(unit.brand.recipe, unit.fixture.idea, {
         format: unit.fixture.format,
-        slideCount: unit.fixture.slideCount,
+        // A planned fixture derives its own length from the plan; only an
+        // unplanned one is pinned, so the deck-length arithmetic stays honest.
+        ...(unit.fixture.plan?.length ? {} : { slideCount: unit.fixture.slideCount }),
+        ...(unit.fixture.sources ? { sources: unit.fixture.sources } : {}),
+        ...(unit.fixture.plan ? { plan: unit.fixture.plan } : {}),
+        ...(unit.fixture.locks ? { locks: unit.fixture.locks } : {}),
       });
       result.parse = {
         latencyMs: Date.now() - t0,

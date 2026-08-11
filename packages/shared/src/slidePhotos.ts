@@ -170,14 +170,45 @@ export function slideMediaCss(canvasHeight = 1350, align?: string): string {
     // does: emitting one was how an empty span became a phantom gap.
     // The glyph is the brand's to choose (`--cb-marker`); only the gutter is ours.
     `.cb-slide .row.row::before{content:var(--cb-marker,"—");color:var(--cb-accent);grid-column:1;grid-row:1}`,
-    // …but a brand that authored a real marker keeps it, and ours steps aside.
-    `.cb-slide .row.row:has(> span:not(:empty))::before{content:none}`,
+    /**
+     * A row's children are told apart BY CLASS, not by tag.
+     *
+     * They used to be told apart by tag: any non-empty `<span>` was read as the
+     * brand's own bullet, and only `<em>/<i>/<small>` counted as the detail. A
+     * brand whose row is `<div class="row">Item<span class="sm">the detail
+     * </span></div>` — which is exactly what the recipe author writes when it
+     * names its own quiet class instead of reaching for `<em>` — therefore hit
+     * both halves of that guess at once: the detail was mistaken for a bullet
+     * (so the real bullet disappeared) AND it fell through the detail rule (so
+     * it auto-placed into the marker's narrow gutter column and wrapped one or
+     * two characters at a time down the right-hand side).
+     *
+     * Class names are the honest signal, because both sides of the app already
+     * use them: `lintAuthored`'s MARKER_HINT vocabulary for the bullet, and the
+     * quiet-detail names every reference recipe reaches for.
+     */
+    `.cb-slide .row.row > .sm,.cb-slide .row.row > .note,.cb-slide .row.row > .detail,` +
+      `.cb-slide .row.row > .sub,.cb-slide .row.row > .meta{grid-column:2;margin-left:0}`,
+    // The tag form of the same thing — and these carry an italic the row never
+    // asked for, so it is normalised away.
+    `.cb-slide .row.row > em,.cb-slide .row.row > i,.cb-slide .row.row > small{` +
+      `grid-column:2;margin-left:0;font-style:normal}`,
+    // A brand that authored a REAL marker keeps it, and ours steps aside.
+    `.cb-slide .row.row:has(> .tick:not(:empty))::before,` +
+      `.cb-slide .row.row:has(> .bullet:not(:empty))::before,` +
+      `.cb-slide .row.row:has(> .dot:not(:empty))::before,` +
+      `.cb-slide .row.row:has(> .dash:not(:empty))::before,` +
+      `.cb-slide .row.row:has(> .marker:not(:empty))::before,` +
+      `.cb-slide .row.row:has(> .num:not(:empty))::before,` +
+      `.cb-slide .row.row:has(> .check:not(:empty))::before,` +
+      `.cb-slide .row.row:has(> .arrow:not(:empty))::before{content:none}`,
+    // A marker element belongs in the gutter, whatever it is called.
+    `.cb-slide .row.row > .tick,.cb-slide .row.row > .bullet,.cb-slide .row.row > .dot,` +
+      `.cb-slide .row.row > .dash,.cb-slide .row.row > .marker,.cb-slide .row.row > .num,` +
+      `.cb-slide .row.row > .check,.cb-slide .row.row > .arrow{grid-column:1;grid-row:1}`,
     // Composers emit the marker element EMPTY, which rendered as a phantom gap
     // where a bullet belonged. It is redundant now, so it takes no space.
     `.cb-slide .row.row > span:empty{display:none}`,
-    // The detail sits under the item, in the item's column — never right-drifting.
-    `.cb-slide .row.row > em,.cb-slide .row.row > i,.cb-slide .row.row > small{` +
-      `grid-column:2;margin-left:0;font-style:normal}`,
   ]
     .filter(Boolean)
     .join('\n');

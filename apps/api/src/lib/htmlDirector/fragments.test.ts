@@ -4,6 +4,8 @@ import { detailMastersRecipe } from './recipes';
 import {
   FRAGMENT_CONVENTION,
   checkFragment,
+  fillFragmentGaps,
+  fillRecipeFragmentGaps,
   fragmentVerbatimGaps,
   substituteFragment,
   validateRecipeFragments,
@@ -307,5 +309,88 @@ describe('the convention the author prompt states', () => {
       .map((l) => l.trim())
       .join('\n');
     expect(checkFragment(detailMastersRecipe, 'list', example)).toHaveProperty('html');
+  });
+});
+
+describe('filling the gaps a fragment was authored without', () => {
+  it('adds the missing hole in the brand’s own class and its own composition order', () => {
+    // The real case: DetailMasters' `list` fragment had no {{tagline}}, so
+    // every list slide with a tagline paid for a model call.
+    const out = fillFragmentGaps(
+      detailMastersRecipe,
+      'feature',
+      `<div class="eyebrow">{{eyebrow}}</div>\n<div class="headline">{{headline}}</div>\n<div class="rule"></div>`,
+      ['eyebrow', 'headline', 'body'],
+    );
+    expect(out.added).toEqual(['body']);
+    expect(out.html).toContain('<div class="body">{{body}}</div>');
+    // The feature pattern reads "eyebrow → headline(.it) → rule → body → …",
+    // so the body lands AFTER the rule, not before the headline.
+    expect(out.html.indexOf('{{body}}')).toBeGreaterThan(out.html.indexOf('class="rule"'));
+  });
+
+  it('changes nothing when every hole is already there', () => {
+    const fragment = `<div class="headline">{{headline}}</div>`;
+    expect(fillFragmentGaps(detailMastersRecipe, 'statement', fragment, ['headline'])).toEqual({
+      html: fragment,
+      added: [],
+    });
+  });
+
+  it('skips a part this brand has no class for', () => {
+    const bare = { ...detailMastersRecipe, components: [{ className: 'headline', use: 'the line' }] };
+    const out = fillFragmentGaps(bare, 'statement', '<div class="headline">{{headline}}</div>', [
+      'headline',
+      'tagline',
+    ]);
+    expect(out.added).toEqual([]);
+  });
+
+  it('is idempotent — a second pass adds nothing', () => {
+    const once = fillRecipeFragmentGaps({
+      ...detailMastersRecipe,
+      fragments: { statement: '<div class="headline">{{headline}}</div>' },
+    });
+    expect(once.repairs.length).toBeGreaterThan(0);
+    expect(fillRecipeFragmentGaps(once.recipe).repairs).toEqual([]);
+  });
+
+  it('leaves a repaired fragment valid — it still passes the stored-fragment gate', () => {
+    const out = fillRecipeFragmentGaps({
+      ...detailMastersRecipe,
+      fragments: { list: '<div class="headline">{{headline}}</div>\n<div class="panel">{{#rows}}<div class="row">{{row.text}}</div>{{/rows}}</div>' },
+    });
+    const repaired = out.recipe.fragments!.list!;
+    expect(checkFragment(detailMastersRecipe, 'list', repaired)).toHaveProperty('html');
+    // …and it can still carry a real slide, rows and all.
+    const filled = substituteFragment(out.recipe, {
+      role: 'list',
+      parts: { eyebrow: 'A kicker', headline: 'A line', rows: [{ text: 'One' }, { text: 'Two' }] },
+      format: '1080x1350',
+    });
+    expect(filled).toHaveProperty('html');
+    expect((filled as { html: string }).html).toContain('A kicker');
+    expect((filled as { html: string }).html).toContain('One');
+  });
+
+  it('never inserts a hole inside a list — the rows own that element', () => {
+    const out = fillRecipeFragmentGaps({
+      ...detailMastersRecipe,
+      fragments: { list: '<div class="panel">{{#rows}}<div class="row">{{row.text}}</div>{{/rows}}</div>' },
+    });
+    const repaired = out.recipe.fragments!.list!;
+    const panelStart = repaired.indexOf('class="panel"');
+    const panelEnd = repaired.indexOf('</div>', repaired.indexOf('{{/rows}}'));
+    for (const part of ['{{eyebrow}}', '{{headline}}', '{{body}}']) {
+      const at = repaired.indexOf(part);
+      if (at === -1) continue;
+      expect(at < panelStart || at > panelEnd).toBe(true);
+    }
+  });
+
+  it('does nothing to a recipe with no fragments at all', () => {
+    const out = fillRecipeFragmentGaps(detailMastersRecipe);
+    expect(out.repairs).toEqual([]);
+    expect(out.recipe).toBe(detailMastersRecipe);
   });
 });

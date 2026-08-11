@@ -46,7 +46,7 @@ import { aiJson, cachedSystem, modelFor, withOpusReasoning, type AiJsonResult, t
 import { sanitizeRecipeCss } from '../cssSanitize';
 import { PROMPT_VERSION } from '../promptVersion';
 import { getStorage } from '../../storage';
-import { FRAGMENT_CONVENTION, validateRecipeFragments } from './fragments';
+import { FRAGMENT_CONVENTION, fillRecipeFragmentGaps, validateRecipeFragments } from './fragments';
 import { dynatosRecipe, detailMastersRecipe, halftonePressRecipe } from './recipes';
 import { LAYER_REMIT, RECIPE_LAYERS } from './refineLayer';
 import { verifyRecipeByRender } from './verifyRecipe';
@@ -616,9 +616,17 @@ function gate(recipe: BrandRecipe, label: string): BrandRecipe {
   for (const d of fragments.dropped) {
     console.warn(`[recipe:${label}] dropped the "${d.role}" reference fragment — ${d.reason}`);
   }
-  const usable = Object.keys(fragments.recipe.fragments ?? {}).length;
+  // A fragment with one fewer hole than its role turns out to need sends every
+  // such slide to the composer — a real model call for an arrangement this
+  // brand already wrote down. The gaps are filled with the brand's own classes,
+  // in its own composition order, so that call is never paid again.
+  const filled = fillRecipeFragmentGaps(fragments.recipe);
+  for (const r of filled.repairs) {
+    console.warn(`[recipe:${label}] "${r.role}" fragment gained a hole for: ${r.added.join(', ')}`);
+  }
+  const usable = Object.keys(filled.recipe.fragments ?? {}).length;
   if (usable) console.warn(`[recipe:${label}] ${usable} usable reference fragment(s)`);
-  return fragments.recipe;
+  return filled.recipe;
 }
 
 /**

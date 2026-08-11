@@ -10,6 +10,7 @@
  */
 import type { BrandRecipe } from '@contentbuilder/shared';
 import { REFERENCE_RECIPES } from '../lib/htmlDirector/recipes';
+import type { SourceDoc } from '../lib/sourceIngest';
 
 export interface EvalFixture {
   /** Stable id, used by `--fixtures` and in reports. */
@@ -20,6 +21,16 @@ export interface EvalFixture {
   slideCount: number;
   /** '1080x1350' (post) or '1080x1920' (story). */
   format: string;
+  /**
+   * A page the brief cites, already read — a FROZEN copy of what
+   * `sourceIngest` would return, so the fixture exercises the source path
+   * without a network call and without depending on a live site's wording.
+   */
+  sources?: SourceDoc[];
+  /** One direction per slide — exercises the plan path when present. */
+  plan?: string[];
+  /** Copy the user quoted, which must survive verbatim. */
+  locks?: string[];
 }
 
 export interface EvalBrand {
@@ -59,6 +70,47 @@ const LONG_RAMBLE = [
  * slots), a story-format narrative on the 9:16 canvas, a near-cap ramble, and
  * a prompt-injection attempt that must come out sanitised.
  */
+
+/**
+ * A FROZEN read of a real blog post — the exact shape `extractReadable`
+ * produces (headings marked, list items marked, document order preserved),
+ * captured once so the source path is measurable without a network call.
+ *
+ * Never edit this to "improve" it: it is an input, and changing it invalidates
+ * every baseline recorded against the two fixtures below.
+ */
+const CERAMIC_COATING_ARTICLE: SourceDoc = {
+  url: 'https://detailmasters.pro/en/blog/how-often-ceramic-coating',
+  title: 'How often should you reapply a ceramic coating?',
+  byline: 'Telmo Antunes',
+  published: '2026-08-09',
+  text: [
+    '# How often should you actually reapply a ceramic coating?',
+    'Less often than the marketing suggests, and later than most owners assume.',
+    'Coatings are usually sold with a number attached... three years, five years, nine. Those numbers describe a best case under ideal conditions, not a deadline.',
+    'A coating does not stop working on a particular date, it wears down unevenly, starting where the car takes the most abuse. So the useful question is not "how long has it been?" but "where is it now?"',
+    '## Read the water, not the calendar',
+    'The cheapest diagnostic you have is a hose.',
+    'On a healthy coating, water pulls into tight beads and sheets off the panel when you blow it. As the coating wears, two things change, usually in this order:',
+    '- Beads get flatter and wider — they sit on the paint instead of standing on it',
+    '- Water stops sheeting and starts clinging in patches',
+    'Check the panels separately. The roof, bonnet and boot lid see the most UV and rain; the lower doors and rear bumper take the most road grit. Those areas will fail first while the sides still look perfect.',
+    '## One thing that is not a failure signal',
+    'A coated car that looks dull is usually a dirty car, not a dead coating.',
+    'A proper decontamination wash often brings back most of what you think you lost. Judge the coating after that wash, not before it.',
+    "## What actually shortens a coating's life",
+    '- Automatic car washes with brushes. They abrade the coating and the clear coat underneath.',
+    '- Washing in direct sun, or letting it air-dry.',
+    '- Bird droppings and tree sap left on the paint.',
+    '- Aggressive or high-pH cleaners.',
+    '- Parking outside, unshaded, all year.',
+    'Two identical cars coated on the same day can be years apart in condition depending on this list alone.',
+    '## Why a detailer will often tell you to wait',
+    'Reapplying a coating properly means removing what is left of the old one, correcting the paint underneath, and starting again. That is a real job, and doing it early wastes both the remaining coating and a little clear coat.',
+    'The coating is doing its job right up until the moment you can measure that it isn\'t.',
+  ].join('\n'),
+};
+
 export const EVAL_FIXTURES: EvalFixture[] = [
   {
     id: 'tips-list',
@@ -128,6 +180,39 @@ export const EVAL_FIXTURES: EvalFixture[] = [
       'opening hours: Monday to Saturday, 8:00 to 18:00, closed Sundays.',
     slideCount: 4,
     format: '1080x1350',
+  },
+  /**
+   * THE SOURCE PATH. A brief that names a page and says almost nothing else —
+   * every headline, row and claim in the result has to come from the article,
+   * which is what makes this fixture worth having: a regression in extraction,
+   * in the SOURCE block, or in the copywriter's willingness to use the material
+   * shows up as generic copy that mentions none of it.
+   */
+  {
+    id: 'from-a-blog-post',
+    idea: 'Create a carousel based on this blog post https://detailmasters.pro/en/blog/how-often-ceramic-coating',
+    slideCount: 8,
+    format: '1080x1350',
+    sources: [CERAMIC_COATING_ARTICLE],
+  },
+  /**
+   * THE PLAN + VERBATIM PATH. The same material, but the deck's shape is the
+   * user's, not the copywriter's: one slide per entry, in this order, with one
+   * line that must come back word for word.
+   */
+  {
+    id: 'planned-from-a-source',
+    idea: 'From this post https://detailmasters.pro/en/blog/how-often-ceramic-coating',
+    slideCount: 4,
+    format: '1080x1350',
+    sources: [CERAMIC_COATING_ARTICLE],
+    plan: [
+      'The hook — why the number on the bottle is not a deadline. Open with "Read the water, not the calendar".',
+      'The two wear signals, as a list of two.',
+      'The one thing that is NOT a failure signal.',
+      'Close: book an inspection, not a reapplication.',
+    ],
+    locks: ['Read the water, not the calendar'],
   },
 ];
 

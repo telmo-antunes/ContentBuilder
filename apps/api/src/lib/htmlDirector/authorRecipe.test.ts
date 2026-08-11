@@ -437,9 +437,27 @@ describe('reference fragments (compose by example)', () => {
     const recipe = await authorRecipe(DARK, RUN);
 
     expect(Object.keys(recipe.fragments ?? {}).sort()).toEqual(['cta', 'statement']);
-    expect(recipe.fragments!['statement']).toBe(FRAGMENTS.statement);
+    // Everything the author wrote survives, in its order…
+    expect(recipe.fragments!['statement']).toContain(FRAGMENTS.statement);
     expect(warn.mock.calls.map((c) => String(c[0]))).toContainEqual(
       expect.stringContaining('dropped the "quote" reference fragment — uses undefined class .panel'),
+    );
+  });
+
+  it('fills in the holes the author left out, so those slides do not pay for a model call', async () => {
+    streamMock.mockImplementation(async () =>
+      ok(JSON.stringify({ ...dynatosRecipe, fragments: FRAGMENTS })),
+    );
+    const recipe = await authorRecipe(DARK, RUN);
+
+    // The authored `statement` fragment has eyebrow/headline/tagline only; a
+    // statement slide routinely carries a body and a handle too, and without a
+    // hole for either the whole slide fell back to the composer.
+    const statement = recipe.fragments!['statement']!;
+    expect(statement).toContain('{{body}}');
+    expect(statement).toContain('{{handle}}');
+    expect(warn.mock.calls.map((c) => String(c[0]))).toContainEqual(
+      expect.stringContaining('"statement" fragment gained a hole for:'),
     );
   });
 

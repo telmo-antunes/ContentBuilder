@@ -245,6 +245,11 @@ export interface Project {
   /** The prompt this post was asked to be. Kept so an idea can exist before it
    *  is composed, and so you can see what a finished post was asked for. */
   idea?: string;
+  /** One direction per slide, in order — the plan the deck was composed
+   *  against. Absent when the copywriter was left to shape the deck itself. */
+  plan?: string[];
+  /** The pages this post was written from, when the brief cited any. */
+  sources?: Array<{ url: string; title?: string; byline?: string; published?: string; chars?: number }>;
   exportedAt?: string;
   postedAt?: string;
   createdAt: string;

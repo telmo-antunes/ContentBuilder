@@ -13,6 +13,7 @@ import {
   type BusinessDetail,
 } from '../../lib/api';
 import ProfileCard from '../../components/ProfileCard';
+import BrandLessons from '../../components/BrandLessons';
 import { confirm } from '../../components/ConfirmDialog';
 import { ErrorState } from '../../components/ErrorState';
 import { resumeLabel, summaryStep } from '../../../lib/onboarding';
@@ -170,6 +171,10 @@ export default function BusinessDetailPage() {
           )}
 
           <ProfileCard businessId={biz._id} profile={biz.profile} onSaved={reload} />
+
+          {/* What this brand has taught the copywriter, from its owner's own
+              edits. Renders nothing at all until a correction has repeated. */}
+          <BrandLessons businessId={biz._id} />
 
           <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 8, flexWrap: 'wrap', gap: 10 }}>
             <h2 style={{ margin: 0 }}>Projects ({biz.projects.length})</h2>

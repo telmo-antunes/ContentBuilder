@@ -14,6 +14,7 @@ import { z } from 'zod';
 // Direct sibling imports (never './index') — the index re-exports this module,
 // so importing back through it would make evaluation order load-bearing.
 import { PHOTO_MOVES } from './slideMotion';
+import { MAX_PLAN_SLIDES, MAX_SLIDE_DIRECTION_CHARS } from './brief';
 import {
   ASSET_TYPES,
   MAX_SLIDES_PER_PROJECT,
@@ -145,6 +146,8 @@ export const createProjectSchema = z
     settings: settingsSchema.optional(),
     /** Save the prompt now, compose later — how an Ideas card is created. */
     idea: z.string().trim().max(MAX_DRAFT_PARAGRAPH_CHARS).optional(),
+    /** The per-slide plan, parked alongside the prompt on an Ideas card. */
+    plan: z.array(z.string().trim().max(MAX_SLIDE_DIRECTION_CHARS)).max(MAX_PLAN_SLIDES).optional(),
     stage: z.enum(['idea', 'drafting', 'ready', 'shipped']).optional(),
   })
   .refine((d) => isFormat(d.format) && isValidTypeFormat(d.type as AssetType, d.format as Format), {
@@ -161,6 +164,7 @@ export const updateProjectSchema = z.object({
   /** Editing a parked Ideas card before composing it. Type/format are only
    *  honoured while the project has no slides — after that they're baked in. */
   idea: z.string().trim().max(MAX_DRAFT_PARAGRAPH_CHARS).optional(),
+  plan: z.array(z.string().trim().max(MAX_SLIDE_DIRECTION_CHARS)).max(MAX_PLAN_SLIDES).optional(),
   type: asEnum(ASSET_TYPES).optional(),
   format: z.string().optional(),
 }).refine(

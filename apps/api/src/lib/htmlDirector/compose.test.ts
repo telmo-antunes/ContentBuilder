@@ -287,13 +287,19 @@ describe('the render check (compose looking at its own output)', () => {
       { role: 'cta', parts: { headline: 'Slide 2 headline stands alone' } },
     ],
   });
-  /** Slide 1 comes back with a rule — the furniture step 2 is allowed to take. */
+  /**
+   * Slide 1 comes back with a rule BETWEEN its headline and a paragraph — the
+   * furniture step 2 is allowed to take. The rule has to be separating
+   * something: a trailing one is decoration with nothing after it, and the tail
+   * guard removes it at compose time, before the render check ever sees it.
+   */
+  const SLIDE_1_BODY = 'The supporting sentence underneath it.';
   const composeReply = (params: Anthropic.MessageCreateParamsNonStreaming): string => {
     if (sysOf(params).includes('STRICT JSON')) return THREE;
     const n = userOf(params).match(/Slide (\d+) headline stands alone/)?.[1] ?? '?';
     return (
       `<div class="headline">Slide ${n} headline stands alone</div>` +
-      (n === '1' ? '<div class="rule"></div>' : '')
+      (n === '1' ? `<div class="rule"></div><div class="body">${SLIDE_1_BODY}</div>` : '')
     );
   };
 
@@ -323,7 +329,8 @@ describe('the render check (compose looking at its own output)', () => {
     });
     expect(out).toHaveLength(3);
     expect(out[1]!.authored.html).toBe(
-      '<div class="headline">Slide 1 headline stands alone</div><div class="rule"></div>',
+      '<div class="headline">Slide 1 headline stands alone</div>' +
+        `<div class="rule"></div><div class="body">${SLIDE_1_BODY}</div>`,
     );
     expect(aiCalls).toHaveLength(4); // parse + 3 composes; nothing was repaired
     expect(warnings().filter((w) => w.includes('deck ships unchecked'))).toHaveLength(1);
@@ -355,7 +362,11 @@ describe('the render check (compose looking at its own output)', () => {
     });
     const out = await composeProject(detailMastersRecipe, 'an idea', { renderProbe: openProbe });
 
-    expect(out[1]!.authored.html).toBe('<div class="headline sm">Slide 1 headline stands alone</div>');
+    // The rule goes; the paragraph it was separating stays — and with nothing
+    // left after it the tail guard would have taken it anyway.
+    expect(out[1]!.authored.html).toBe(
+      `<div class="headline sm">Slide 1 headline stands alone</div><div class="body">${SLIDE_1_BODY}</div>`,
+    );
     expect(aiCalls).toHaveLength(4); // both repair steps are free
     expect(warnings().some((w) => w.includes('dropped div.rule'))).toBe(true);
   });
@@ -483,7 +494,7 @@ describe('parse budgets enforced in code', () => {
     const correction = userOf(retry, 2);
     expect(correction).toContain(`headline is ${longHeadline.length} chars, budget 60`);
     expect(correction).toContain(`rows[0].text is ${longRow.length} chars, budget 42`);
-    expect(correction).toContain('Tighten every flagged part');
+    expect(correction).toContain('Fix every flagged item');
 
     // still over after the retry → deterministic clamps
     const parts = inputs[0]!.parts;
@@ -531,7 +542,7 @@ describe('format-aware parse', () => {
     reply.mockReturnValueOnce(tiny);
     await parseForCompose(detailMastersRecipe, 'idea', { model: 'm', format: '1080x1920' });
     const user = userOf(aiCalls[0]!);
-    expect(user).toContain('eyebrow <= 18');
+    expect(user).toContain('eyebrow <= 21');
     expect(user).toContain('headline <= 48');
     expect(user).toContain('body <= 72');
     expect(user).toContain('cta <= 19');
@@ -817,5 +828,317 @@ describe('compose by example (the recipe composes its own slides)', () => {
     );
     // nothing in the new path so much as logged
     expect(warnings().some((w) => w.includes('fragment'))).toBe(false);
+  });
+});
+
+// ── The brief: sources, a plan, and copy the user locked ────────────────────
+
+describe('the brief reaches the copywriter', () => {
+  const oneSlide = (parts: Record<string, unknown>, extra: Record<string, unknown> = {}) =>
+    JSON.stringify({ slides: [{ role: 'statement', parts, ...extra }] });
+
+  it('puts the read source in the user message, marked as the material', async () => {
+    reply.mockReturnValue(oneSlide({ headline: 'A line' }));
+    await parseForCompose(detailMastersRecipe, 'make a carousel from the post', {
+      model: 'm',
+      sources: [{ url: 'https://dm.pro/post', title: 'Reapplying a coating', text: '# Read the water\n- beads flatten' }],
+    });
+    const user = userOf(aiCalls[0]!);
+    expect(user).toContain('SOURCE 1 — "Reapplying a coating" (https://dm.pro/post)');
+    expect(user).toContain('- beads flatten');
+    expect(user).toContain('BRIEF: make a carousel from the post');
+  });
+
+  it('a plan fixes the deck length and travels as numbered directions', async () => {
+    reply.mockReturnValue(oneSlide({ headline: 'A line' }));
+    await parseForCompose(detailMastersRecipe, 'the angle', {
+      model: 'm',
+      plan: ['the hook', 'the proof', 'the ask'],
+    });
+    const user = userOf(aiCalls[0]!);
+    expect(user).toContain('SLIDES: exactly 3');
+    expect(user).toContain('1. the hook');
+    expect(user).toContain('3. the ask');
+  });
+
+  it('without a plan the count is a range derived from how much material there is', async () => {
+    reply.mockReturnValue(oneSlide({ headline: 'A line' }));
+    await parseForCompose(detailMastersRecipe, 'a short idea', { model: 'm' });
+    expect(userOf(aiCalls[0]!)).toMatch(/SLIDES: 3–5/);
+
+    aiCalls.length = 0;
+    await parseForCompose(detailMastersRecipe, 'a short idea', {
+      model: 'm',
+      sources: [{ url: 'u', title: 't', text: 'x'.repeat(9000) }],
+    });
+    expect(userOf(aiCalls[0]!)).toMatch(/SLIDES: 9–10/);
+  });
+
+  it('names locked copy up front, and corrects the parse once when it is missing', async () => {
+    reply
+      .mockReturnValueOnce(oneSlide({ headline: 'Read the calendar' })) // reworded
+      .mockReturnValueOnce(oneSlide({ headline: 'Read the water, not the calendar' }));
+    const out = await parseForCompose(detailMastersRecipe, 'brief', {
+      model: 'm',
+      locks: ['Read the water, not the calendar'],
+    });
+    expect(userOf(aiCalls[0]!)).toContain('VERBATIM');
+    expect(userOf(aiCalls[1]!, 2)).toContain('had to appear EXACTLY as written');
+    expect(out[0]!.parts.headline).toBe('Read the water, not the calendar');
+  });
+
+  it('never clamps locked copy, however far over budget it runs', async () => {
+    const lock = 'Judge the coating after a proper decontamination wash, never before it';
+    expect(lock.length).toBeGreaterThan(60);
+    reply.mockReturnValue(oneSlide({ headline: lock }));
+    const out = await parseForCompose(detailMastersRecipe, 'brief', { model: 'm', locks: [lock] });
+    expect(out[0]!.parts.headline).toBe(lock);
+    expect(warnings().some((w) => w.includes('carries locked copy'))).toBe(true);
+  });
+
+  it('clamps over-long prose to a finished clause instead of an ellipsis', async () => {
+    const body = 'Proper reapplication means removing what remains, correcting the paint, and starting again.';
+    reply.mockReturnValue(oneSlide({ body: body + ' It is a real job.' }));
+    const out = await parseForCompose(detailMastersRecipe, 'brief', { model: 'm' });
+    expect(out[0]!.parts.body!.endsWith('…')).toBe(false);
+    expect(body.startsWith(out[0]!.parts.body!.replace(/[.,]$/, ''))).toBe(true);
+  });
+
+  it('lifts an inline "Slide N" plan and quoted copy straight out of the idea', async () => {
+    reply.mockImplementation((params) =>
+      sysOf(params).includes('STRICT JSON')
+        ? oneSlide({ headline: 'say this exactly' })
+        : '<div class="headline">say this exactly</div>',
+    );
+    await composeProject(detailMastersRecipe, 'Slide 1: open with "say this exactly"\nSlide 2: then the proof', {
+      renderCheck: false,
+    });
+    const user = userOf(aiCalls[0]!);
+    expect(user).toContain('SLIDES: exactly 2');
+    expect(user).toContain('"say this exactly"');
+    expect(user).toContain('VERBATIM');
+  });
+});
+
+describe('the parsed deck is made structurally honest', () => {
+  const deck = (slides: unknown[]) => JSON.stringify({ slides });
+
+  it('keeps the rows when a slide asks for both a photograph and a list', async () => {
+    reply.mockReturnValue(
+      deck([{ role: 'list', image: true, parts: { headline: 'Two things', rows: [{ text: 'a' }, { text: 'b' }] } }]),
+    );
+    const out = await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' });
+    expect(out[0]!.photo).toBe(false);
+    expect(out[0]!.parts.rows).toHaveLength(2);
+    expect(warnings().some((w) => w.includes('keeping the rows'))).toBe(true);
+  });
+
+  it('re-roles a list that came back with nothing in it', async () => {
+    reply.mockReturnValue(deck([{ role: 'list', parts: { headline: 'Two things', body: 'and their detail' } }]));
+    const out = await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' });
+    expect(out[0]!.role).toBe('feature');
+    expect(warnings().some((w) => w.includes('list with no rows'))).toBe(true);
+  });
+
+  /** A brand whose cover is typographic and whose feature slide holds a picture. */
+  const withFragments = {
+    ...detailMastersRecipe,
+    fragments: {
+      cover: '<div class="headline">{{headline}}</div>',
+      feature: '<div class="headline">{{headline}}</div>\n<figure class="cb-shot" data-cb-slot="hero"></figure>',
+    },
+  };
+
+  it('refuses a photo where the brand’s own composition cannot hold one', async () => {
+    reply.mockReturnValue(deck([{ role: 'cover', image: true, parts: { headline: 'A hook' } }]));
+    const out = await parseForCompose(withFragments, 'idea', { model: 'm', photoBudget: 4 });
+    expect(out[0]!.photo).toBe(false);
+    expect(warnings().some((w) => w.includes('nowhere to put one'))).toBe(true);
+  });
+
+  it('allows one where it can — the feature fragment has a slot', async () => {
+    reply.mockReturnValue(deck([{ role: 'feature', image: true, parts: { headline: 'A hook' } }]));
+    const out = await parseForCompose(withFragments, 'idea', { model: 'm', photoBudget: 4 });
+    expect(out[0]!.photo).toBe(true);
+  });
+
+  it('leaves the judgement alone when no library size was supplied', async () => {
+    reply.mockReturnValue(deck([{ role: 'feature', image: true, parts: { headline: 'A hook' } }]));
+    const out = await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' });
+    expect(out[0]!.photo).toBe(true);
+  });
+
+  it('asks for no photograph at all when the brand has none to fill it with', async () => {
+    reply.mockReturnValue(
+      deck([
+        { role: 'feature', image: true, parts: { headline: 'One' } },
+        { role: 'feature', image: true, parts: { headline: 'Two' } },
+      ]),
+    );
+    const out = await parseForCompose(detailMastersRecipe, 'idea', { model: 'm', photoBudget: 1 });
+    expect(out.map((s) => s.photo)).toEqual([true, false]);
+    expect(warnings().some((w) => w.includes('none left to fill it'))).toBe(true);
+  });
+});
+
+describe('clamping a display line reads as written short, not cut', () => {
+  const oneSlide = (parts: Record<string, unknown>) =>
+    JSON.stringify({ slides: [{ role: 'statement', parts }] });
+
+  it('drops a trailing preposition or article rather than dangling on it', async () => {
+    // Cutting at the word boundary alone left the line dangling on "of".
+    reply.mockReturnValue(oneSlide({ eyebrow: 'A truly workable rule of thumb', headline: 'Anything' }));
+    const out = await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' });
+    expect(out[0]!.parts.eyebrow).toBe('A truly workable rule');
+  });
+
+  it('never strips a line down to nothing', async () => {
+    reply.mockReturnValue(oneSlide({ eyebrow: 'Notwithstandingly extended single token', headline: 'x' }));
+    const out = await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' });
+    expect(out[0]!.parts.eyebrow!.length).toBeGreaterThan(0);
+  });
+});
+
+describe('markdown is not copy', () => {
+  const oneSlide = (parts: Record<string, unknown>) =>
+    JSON.stringify({ slides: [{ role: 'statement', parts }] });
+
+  it('removes the asterisks and promotes what they marked to the accent', async () => {
+    reply.mockReturnValue(
+      oneSlide({ headline: "Not 'how long has it been?' — *where is it now?*", body: 'A **best case**, not a deadline.' }),
+    );
+    const out = await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' });
+    expect(out[0]!.parts.headline).toBe("Not 'how long has it been?' — where is it now?");
+    expect(out[0]!.parts.body).toBe('A best case, not a deadline.');
+    expect(out[0]!.parts.emphasis).toBe('where is it now?');
+  });
+
+  it('does not overrule an emphasis the copywriter named itself', async () => {
+    reply.mockReturnValue(oneSlide({ headline: 'A dull car is *a dirty car*', emphasis: 'a dirty car' }));
+    const out = await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' });
+    expect(out[0]!.parts.emphasis).toBe('a dirty car');
+  });
+
+  it('measures the budget in words that will be printed, not in markers', async () => {
+    // 62 chars with the asterisks, 60 without — inside the headline budget.
+    const marked = '*Reapplying early wastes the coating you have already paid*';
+    expect(marked.length).toBe(59);
+    reply.mockReturnValue(oneSlide({ headline: marked }));
+    const out = await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' });
+    expect(out[0]!.parts.headline).toBe('Reapplying early wastes the coating you have already paid');
+  });
+
+  it('leaves a handle’s underscores alone — they are a name, not emphasis', async () => {
+    reply.mockReturnValue(oneSlide({ headline: 'A line', handle: '@detail_masters_pro' }));
+    const out = await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' });
+    expect(out[0]!.parts.handle).toBe('@detail_masters_pro');
+  });
+});
+
+describe('prose is shortened by the sentence, not mid-thought', () => {
+  it('drops the trailing sentence rather than amputating it', async () => {
+    const body =
+      'Those numbers describe a best case. A coating wears down unevenly, starting where the car takes the most abuse.';
+    expect(body.length).toBeGreaterThan(90);
+    reply.mockReturnValue(JSON.stringify({ slides: [{ role: 'statement', parts: { body } }] }));
+    const out = await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' });
+    expect(out[0]!.parts.body).toBe('Those numbers describe a best case.');
+  });
+
+  it('falls back to a clause when not even the first sentence fits', async () => {
+    const body = 'A coating does not stop working on a particular date, it wears down unevenly across the whole car.';
+    reply.mockReturnValue(JSON.stringify({ slides: [{ role: 'statement', parts: { body } }] }));
+    const out = await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' });
+    const got = out[0]!.parts.body!;
+    expect(got.length).toBeLessThanOrEqual(90);
+    expect(got.endsWith('…')).toBe(false);
+    expect(body.startsWith(got.replace(/[.,]$/, ''))).toBe(true);
+  });
+});
+
+describe('a deck that says the same thing twice', () => {
+  const slide = (parts: Record<string, unknown>, role = 'statement') => ({ role, parts });
+
+  it('catches two slides making one point, and corrects once', async () => {
+    const twice = JSON.stringify({
+      slides: [
+        slide({ headline: 'Coatings are sold with a number attached' }, 'cover'),
+        slide({ headline: 'Beading flattens as the coating wears down', body: 'Water clings in patches instead of sheeting off the panel.' }),
+        slide({ headline: 'As the coating wears, beading flattens', body: 'Water clings to the panel in patches rather than sheeting.' }),
+        slide({ headline: 'Book an inspection today' }, 'cta'),
+      ],
+    });
+    const fixed = JSON.stringify({
+      slides: [
+        slide({ headline: 'Coatings are sold with a number attached' }, 'cover'),
+        slide({ headline: 'Beading flattens as the coating wears down', body: 'Water clings in patches instead of sheeting off the panel.' }),
+        slide({ headline: 'Brush washes abrade the clear coat', body: 'Automatic machines grind grit across every horizontal surface.' }),
+        slide({ headline: 'Book an inspection today' }, 'cta'),
+      ],
+    });
+    reply.mockReturnValueOnce(twice).mockReturnValueOnce(fixed);
+    const out = await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' });
+
+    expect(aiCalls).toHaveLength(2);
+    expect(userOf(aiCalls[1]!, 2)).toContain('make the same point twice');
+    expect(userOf(aiCalls[1]!, 2)).toContain('slide 2 and slide 3');
+    expect(out[2]!.parts.headline).toBe('Brush washes abrade the clear coat');
+  });
+
+  it('exempts the cover and the cta — restating the thesis is their job', async () => {
+    reply.mockReturnValue(
+      JSON.stringify({
+        slides: [
+          slide({ headline: 'Reapply a ceramic coating later than you think', body: 'The number on the bottle is a best case, never a deadline.' }, 'cover'),
+          slide({ headline: 'Reapply a ceramic coating later than you think', body: 'The number on the bottle is a best case, never a deadline.' }, 'cta'),
+        ],
+      }),
+    );
+    await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' });
+    expect(aiCalls).toHaveLength(1); // nothing to correct
+  });
+
+  it('will not judge a slide with too little to say', async () => {
+    reply.mockReturnValue(
+      JSON.stringify({
+        slides: [
+          slide({ eyebrow: 'Read water', headline: 'Read the water' }),
+          slide({ eyebrow: 'Read water', headline: 'Read the water' }),
+        ],
+      }),
+    );
+    await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' });
+    expect(aiCalls).toHaveLength(1);
+  });
+
+  it('keeps the original when the correction dropped locked copy to fix the repeat', async () => {
+    const lock = 'Read the water, not the calendar';
+    const first = JSON.stringify({
+      slides: [
+        slide({ headline: lock, body: 'Beading flattens and water clings in patches as it wears.' }),
+        slide({ headline: 'Beading flattens as it wears', body: 'Water clings in patches instead of sheeting off the panel.' }),
+      ],
+    });
+    const worse = JSON.stringify({
+      slides: [slide({ headline: 'Something else entirely', body: 'With none of the words you asked for.' })],
+    });
+    reply.mockReturnValueOnce(first).mockReturnValueOnce(worse);
+    const out = await parseForCompose(detailMastersRecipe, 'idea', { model: 'm', locks: [lock] });
+    expect(out[0]!.parts.headline).toBe(lock);
+  });
+});
+
+describe('a plan entry that asks for a shape', () => {
+  it('tells the copywriter which role each entry reads as', async () => {
+    reply.mockReturnValue(JSON.stringify({ slides: [{ role: 'statement', parts: { headline: 'A line' } }] }));
+    await parseForCompose(detailMastersRecipe, 'idea', {
+      model: 'm',
+      plan: ['The two wear signals, as a list of two', 'A pull quote from the piece', 'Just say something true'],
+    });
+    const user = userOf(aiCalls[0]!);
+    expect(user).toContain('1. The two wear signals, as a list of two   [reads as role "list"]');
+    expect(user).toContain('2. A pull quote from the piece   [reads as role "quote"]');
+    expect(user).toContain('3. Just say something true');
+    expect(user).not.toContain('3. Just say something true   [reads as role');
   });
 });

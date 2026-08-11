@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   FORMAT_LABELS,
+  MAX_SLIDE_DIRECTION_CHARS,
   authoredSlots,
   contrastRatio,
   VIDEO_SECONDS_DEFAULT,
@@ -27,6 +28,8 @@ import {
   updateProject,
   getShareInfo,
   getSlideVariants,
+  noteSlideChoice,
+  rewriteSlideCopy,
   listProjectVersions,
   restoreProjectVersion,
   saveProjectVersion,
@@ -98,6 +101,20 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
   // Alternative arrangements for the selected slide — shown side by side, applied
   // only on click, so a single weak slide no longer means re-composing the deck.
   const [variants, setVariants] = useState<Array<{ html: string; bg?: string; role?: string }> | null>(null);
+  /**
+   * Which question produced the candidates on screen. An ARRANGEMENT swap keeps
+   * every word, so nothing in the saved deck records that a composition was
+   * rejected — it has to be reported explicitly. A COPY rewrite needs no such
+   * help: the words changed, and the save-time diff sees that by itself.
+   */
+  const [variantKind, setVariantKind] = useState<'arrangement' | 'copy'>('arrangement');
+  /**
+   * A direction for the SELECTED slide — the per-slide half of the brief
+   * language. Empty asks for a rearrangement of the copy already there; filled,
+   * the copywriter rewrites this slide alone, keeping anything in "quotes"
+   * exactly. Cleared whenever the selection moves, since it belongs to a slide.
+   */
+  const [direction, setDirection] = useState('');
   const [working, setWorking] = useState<string | null>(null);
   /** The floating image currently grabbable on the preview. */
   const [freeSel, setFreeSel] = useState<string | null>(null);
@@ -300,16 +317,53 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
     document.querySelector(`[data-aed-key="${canvasEl}"]`)?.scrollIntoView({ block: 'nearest' });
   }, [canvasEl, editId]);
 
-  /** Ask for alternative arrangements of the selected slide (copy untouched). */
+  // A direction and its candidates belong to ONE slide. Moving the selection
+  // must not leave last slide's instruction pointed at this one.
+  useEffect(() => {
+    setDirection('');
+    setVariants(null);
+  }, [sel]);
+
+  /**
+   * Ask for alternatives for the selected slide.
+   *
+   * With no direction this is what it has always been — the same copy, arranged
+   * differently. With one, the copywriter rewrites THIS slide alone from the
+   * instruction, and anything typed in "quotes" is used word for word. Either
+   * way nothing is saved until a candidate is applied.
+   */
   const askVariants = useCallback(
-    async (slideId: string) => {
+    async (slideId: string, direction?: string) => {
       setWorking('variants');
       setVariants(null);
+      // A direction makes this a rewrite, whatever button was pressed.
+      setVariantKind(direction?.trim() ? 'copy' : 'arrangement');
       try {
-        const res = await getSlideVariants(projectId, slideId, 2);
+        const res = await getSlideVariants(projectId, slideId, 2, direction);
         setVariants(res.variants);
       } catch (e) {
         toast(e instanceof Error ? e.message : 'Could not get alternatives', 'error');
+      } finally {
+        setWorking(null);
+      }
+    },
+    [projectId],
+  );
+
+  /**
+   * The inverse: keep this arrangement, change the words. No composer runs, so
+   * the layout you liked comes back byte-identical apart from the copy.
+   */
+  const askRewrite = useCallback(
+    async (slideId: string, direction?: string) => {
+      setWorking('rewrite');
+      setVariants(null);
+      setVariantKind('copy');
+      try {
+        const res = await rewriteSlideCopy(projectId, slideId, 2, direction);
+        setVariants(res.variants);
+      } catch (e) {
+        toast(e instanceof Error ? e.message : 'Could not rewrite the copy', 'error');
       } finally {
         setWorking(null);
       }
@@ -328,14 +382,17 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
         const updated = await updateProject(projectId, { slides: next as Slide[] });
         setProject((prev) => (prev ? { ...prev, slides: updated.slides } : prev));
         setVariants(null);
-        toast('Arrangement applied', 'ok');
+        // AFTER the save, so the outcome diff has already run over the new deck
+        // and this only adds the one thing the diff could not have seen.
+        void noteSlideChoice(projectId, slideId, variantKind);
+        toast(variantKind === 'copy' ? 'New copy applied' : 'Arrangement applied', 'ok');
       } catch {
-        toast('Could not apply that arrangement', 'error');
+        toast('Could not apply that', 'error');
       } finally {
         setWorking(null);
       }
     },
-    [projectId],
+    [projectId, variantKind],
   );
 
   /** Instant deterministic tweaks — no AI, no waiting. */
@@ -922,6 +979,22 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
               </div>
             </header>
 
+            {/* WHAT THIS DECK WAS WRITTEN FROM. A slide can make a claim about
+                dwell times or pH; the article that produced it is the only way
+                to check one, and until now nothing but the prompt ever saw it. */}
+            {project.sources?.length ? (
+              <section className="studio-sources">
+                <span className="lab">Written from</span>
+                {project.sources.map((s) => (
+                  <a key={s.url} href={s.url} target="_blank" rel="noreferrer noopener" title={s.url}>
+                    <Icon name="link" size={12} />
+                    {s.title || s.url}
+                    {s.byline ? <span className="by">{s.byline}</span> : null}
+                  </a>
+                ))}
+              </section>
+            ) : null}
+
             {recipe && (
               <section className="studio-recipe">
                 <div className="rh">
@@ -1406,17 +1479,59 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                     className="btn"
                     style={{ flex: 1, justifyContent: 'center' }}
                     disabled={!selected?.authored?.html || working !== null}
-                    title="Re-arrange this slide only — the copy is kept"
-                    onClick={() => selected && askVariants(selected.id)}
+                    title={
+                      direction.trim()
+                        ? 'Rewrite this slide from your direction'
+                        : 'Re-arrange this slide only — the copy is kept'
+                    }
+                    onClick={() => selected && askVariants(selected.id, direction)}
                   >
                     {working === 'variants' ? (
                       'Thinking…'
                     ) : (
                       <>
-                        <Icon name="sparkle" /> Alternatives
+                        <Icon name="sparkle" /> {direction.trim() ? 'Rewrite' : 'Alternatives'}
                       </>
                     )}
                   </button>
+                </div>
+                {/* The two halves of the same idea, side by side: one keeps the
+                    words and changes the layout, the other keeps the layout and
+                    changes the words. */}
+                <div className="row" style={{ marginTop: 8 }}>
+                  <button
+                    className="btn"
+                    style={{ flex: 1, justifyContent: 'center' }}
+                    disabled={!selected?.authored?.html || working !== null}
+                    title="Keep this exact layout — write new copy for it"
+                    onClick={() => selected && askRewrite(selected.id, direction)}
+                  >
+                    {working === 'rewrite' ? (
+                      'Writing…'
+                    ) : (
+                      <>
+                        <Icon name="edit" /> New words
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Direct THIS slide. Empty = rearrange what is already there. */}
+                <div className="slide-direction">
+                  <label htmlFor="slide-direction">Direct this slide</label>
+                  <textarea
+                    id="slide-direction"
+                    value={direction}
+                    rows={2}
+                    maxLength={MAX_SLIDE_DIRECTION_CHARS}
+                    placeholder={'What should this slide say? Put "an exact line" in quotes to use it word for word.'}
+                    onChange={(e) => setDirection(e.target.value)}
+                  />
+                  <p className="muted">
+                    {direction.trim()
+                      ? 'The copywriter rewrites this slide only — the rest of the deck is untouched.'
+                      : 'Leave empty to keep the copy and only try other arrangements.'}
+                  </p>
                 </div>
               </>
             )}
