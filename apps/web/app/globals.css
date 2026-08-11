@@ -938,6 +938,18 @@ input[type='color'] {
 .studio-rgrid .k { font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); margin-bottom: 8px; }
 .studio-rgrid .v { font-size: 12px; color: var(--muted); line-height: 1.5; }
 .studio-sw { display: inline-block; width: 16px; height: 16px; border-radius: 4px; border: 1px solid var(--border-strong); vertical-align: middle; margin-right: 3px; }
+/* Image/copy contradiction panel — questions for the reviewer, not errors.
+   Styled as a card rather than an alert: most decks come back clean, and a
+   panel that looks like a failure when it says "nothing flagged" trains people
+   to skip it. */
+.studio-card { border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; margin: 30px 0 4px; }
+.studio-cardhead { display: flex; align-items: center; gap: 12px; }
+.studio-cardhead h2 { font-family: var(--display); font-size: 20px; margin: 0; flex: 1; }
+.studio-note { font-size: 13px; color: var(--faint); margin: 10px 0 0; }
+.studio-warn { margin: 12px 0 0; padding: 11px 13px; border-radius: 9px; font-size: 13px; line-height: 1.5;
+  background: rgba(196, 148, 68, 0.08); border-left: 3px solid var(--accent); }
+.studio-warn div { margin-top: 5px; color: var(--faint); }
+
 .studio-sec { display: flex; align-items: baseline; gap: 12px; margin: 30px 0 4px; }
 .studio-sec h2 { font-family: var(--display); font-size: 20px; margin: 0; }
 .studio-sec .count { font-size: 12px; color: var(--faint); }

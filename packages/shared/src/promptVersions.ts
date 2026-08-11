@@ -222,6 +222,16 @@ export const TOUCHPOINT_REGISTRY: Record<TouchpointId, Touchpoint> = {
           'A list the brief presents as ordered keeps its order — items are no longer added, dropped or re-ranked.',
         ],
       },
+      {
+        version: 6,
+        date: '2026-08-11',
+        summary: 'The faithfulness rule reaches the small print.',
+        improves: [
+          'Row notes, taglines and bodies are bound by the same no-invented-claims rule as headlines. A real deck carried three plausible-but-unsourced explanations under a correct list — plausible domain knowledge is the invention hardest to spot.',
+          'An unexplained list item renders bare. An empty supporting line is correct output, not a gap to fill.',
+          'Ranking words ("fastest", "number one") the brief does not use are never asserted.',
+        ],
+      },
     ],
   },
 

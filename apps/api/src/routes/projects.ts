@@ -32,6 +32,7 @@ import { ApiError, asyncHandler, parseBody, publicErrMessage, requireObjectId } 
 import { createProjectSchema, slideSchema, updateProjectSchema, type SlideInput } from '../lib/validation';
 import { renderSlidesToPng, slugify } from '../lib/exporter';
 import { runVideoJob, sweepExpiredVideoJobs } from '../lib/videoJobs';
+import { findImageCopyContradictions, type SlidePairing } from '../lib/imageCopyCheck';
 import { getStorage } from '../storage';
 import { generateCaption, type GeneratedCaption } from '../lib/caption';
 import { SITE_PHOTO_LABEL } from '../lib/harvest';
@@ -204,6 +205,28 @@ async function buildCaption(project: {
   const kw = (project.get('settings') as { dmKeyword?: string } | undefined)?.dmKeyword;
   if (kw && !caption.text.toUpperCase().includes(kw.toUpperCase())) {
     caption.text = `${caption.text.trimEnd()}\n\nDM ${kw} and we'll send you the full guide.`;
+  }
+
+  /**
+   * THE CAPTION'S CLOSING FOLLOWS THE FINAL SLIDE, in the final slide's order.
+   *
+   * A review caught the two disagreeing: the slide made "find a detailer —
+   * link in bio" primary with the DM as a consolation, and the caption
+   * mentioned only the DM — because the two were generated independently. The
+   * slide is the decision; the caption repeats it. When the final slide carries
+   * a cta chip the caption does not mention, it is inserted ABOVE the DM line,
+   * so the primary action stays primary.
+   */
+  const slides = project.get('slides') as Array<{ authored?: { html?: string } }> | undefined;
+  const lastHtml = slides?.[slides.length - 1]?.authored?.html ?? '';
+  const chip = /<div class="cta">([^<]{3,60})<\/div>/.exec(lastHtml)?.[1]?.trim();
+  if (chip && !caption.text.toLowerCase().includes(chip.toLowerCase().slice(0, 18))) {
+    const lines = caption.text.trimEnd().split('\n');
+    const dmAt = lines.findIndex((l) => kw && l.toUpperCase().includes(`DM ${kw.toUpperCase()}`));
+    const primary = `${chip.replace(/\s*·\s*/g, ' — ')}.`;
+    if (dmAt >= 0) lines.splice(dmAt, 0, primary, '');
+    else lines.push('', primary);
+    caption.text = lines.join('\n');
   }
   return caption;
 }
@@ -1342,6 +1365,73 @@ projectsRouter.post(
   }),
 );
 
+/**
+ * POST /projects/:id/image-copy-check
+ *
+ * Asks one question the rest of the pipeline cannot: does each slide's picture
+ * agree with its words? The composer never sees an image and the picker never
+ * reads the copy, so a photo that illustrates the OPPOSITE of its slide passes
+ * every existing gate — which is exactly what shipped in a real build.
+ *
+ * Advisory by design. It returns questions for the review page; nothing here
+ * blocks an export, because a deliberately ironic pairing is legitimate and a
+ * check that refuses one is a check people switch off.
+ */
+projectsRouter.post(
+  '/:id/image-copy-check',
+  asyncHandler(async (req, res) => {
+    const id = requireObjectId(req.params.id, 'Project');
+    const project = await ProjectModel.findById(id).lean<Record<string, any> | null>();
+    if (!project) throw new ApiError(404, 'Project not found');
+
+    const slides = (project.slides ?? []) as Array<{
+      order: number;
+      photos?: Array<{ mediaAssetId?: unknown }>;
+      authored?: { html?: string };
+    }>;
+
+    const ids = new Set<string>();
+    for (const sl of slides) for (const ph of sl.photos ?? []) if (ph.mediaAssetId) ids.add(String(ph.mediaAssetId));
+    const assets = ids.size
+      ? await MediaAssetModel.find({ _id: { $in: [...ids] }, businessId: project.businessId }).lean<any[]>()
+      : [];
+    const byId = new Map(assets.map((a) => [String(a._id), a]));
+
+    const storage = getStorage();
+    const pairings: SlidePairing[] = [];
+    for (const [i, sl] of [...slides].sort((a, b) => a.order - b.order).entries()) {
+      const first = (sl.photos ?? [])[0];
+      const asset = first?.mediaAssetId ? byId.get(String(first.mediaAssetId)) : undefined;
+      if (!asset?.key) continue;
+      // Tags out, entities in: the checker reads the sentence, not the markup.
+      const copy = String(sl.authored?.html ?? '')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&[a-z]+;/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (!copy) continue;
+      try {
+        pairings.push({ index: i + 1, copy, image: await storage.read(asset.key) });
+      } catch {
+        /* bytes gone — the pool guard covers this case elsewhere */
+      }
+    }
+
+    const deckCopy = [...slides]
+      .sort((a, b) => a.order - b.order)
+      .map((sl) =>
+        String(sl.authored?.html ?? '')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/&[a-z]+;/gi, ' ')
+          .replace(/\s+/g, ' ')
+          .trim(),
+      );
+
+    const result = await findImageCopyContradictions(pairings, { deckCopy });
+    res.json(result);
+  }),
+);
+
 // ── Promo story ───────────────────────────────────────────────────────────────
 
 /** Stories are the only vertical format; named so the intent reads at the call site. */
@@ -1489,6 +1579,19 @@ projectsRouter.post(
      * exists for.
      */
     let html = composed.html;
+
+    /**
+     * Keep the frame out of Instagram's own chrome. Authored slides don't
+     * honour STORY_UI_RESERVE — padding belongs to the recipe stylesheet — and
+     * the composed cta fragment bottom-anchors, which put the button under the
+     * reply bar on smaller phones. A trailing fill re-centres the stack; the
+     * general gap (authored stories vs the reserve) is logged as its own
+     * finding rather than patched blind here.
+     */
+    if (!/\n<div class="fill"><\/div>\s*$/.test(html)) {
+      html = `${html.trimEnd()}\n<div class="fill"></div>`;
+    }
+
     if (slot) {
       html = html.replace(
         new RegExp(`(<figure[^>]*\\bdata-cb-slot="${slot.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}"[^>]*\\bclass=")([^"]*)(")`),
@@ -1545,6 +1648,12 @@ projectsRouter.post(
       composedBy: composed.source,
       /** Where the cover landed, so a caller can tell a slot fill from a fallback. */
       placement: photo.placement,
+      /**
+       * Nothing drawn in a story export is tappable. The button is a visual
+       * anchor for a link sticker the poster must place by hand — said here so
+       * every hand-off can repeat it instead of rediscovering it.
+       */
+      note: 'The CTA button is not tappable in a story — place a link sticker over it when posting.',
     });
   }),
 );

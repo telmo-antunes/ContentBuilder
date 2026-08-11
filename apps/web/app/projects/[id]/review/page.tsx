@@ -126,6 +126,16 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
   const [capTags, setCapTags] = useState('');
   const [capDirty, setCapDirty] = useState(false);
   const [capBusy, setCapBusy] = useState<'save' | 'regen' | null>(null);
+
+  /**
+   * Image/copy contradictions — questions, never blocks. Two of three pictures
+   * in a real build illustrated the opposite of their slide, both chosen
+   * deliberately, because nothing in the tool read the pairing.
+   */
+  const [pairBusy, setPairBusy] = useState(false);
+  const [pairing, setPairing] = useState<
+    { contradictions: Array<{ slide: number; says: string; shows: string; question: string }>; checked: number } | null
+  >(null);
   // Version history drawer.
   const [histOpen, setHistOpen] = useState(false);
   const [histVersions, setHistVersions] = useState<ProjectVersion[] | null>(null);
@@ -466,6 +476,18 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
       setCapBusy(null);
     }
   }, [projectId, capText, capTags]);
+
+  const checkImageCopy = useCallback(async () => {
+    setPairBusy(true);
+    try {
+      const res = await fetch(api(`/projects/${projectId}/image-copy-check`), { method: 'POST' });
+      setPairing(await res.json());
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not check the images', 'error');
+    } finally {
+      setPairBusy(false);
+    }
+  }, [projectId, toast]);
 
   const regenCaption = useCallback(async () => {
     setCapBusy('regen');
@@ -1037,11 +1059,49 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                   </div>
                   <div>
                     <div className="k">Voice</div>
-                    <div className="v">{recipe.voice.description || '—'}</div>
+                    {/* When an audience is set, the recipe's base voice is NOT
+                        what drove the slides — a hard reader instruction was
+                        layered on top at compose. Showing the base voice
+                        unlabelled here made the page contradict its own
+                        audience chip, and a reviewer could not tell which was
+                        in force. */}
+                    {project.settings?.audience ? (
+                      <div className="v">
+                        Addressing a {project.settings.audience}
+                        <span style={{ opacity: 0.55 }}>
+                          {' '}
+                          — overrides the recipe's base register ("
+                          {(recipe.voice.description || '').slice(0, 60)}
+                          {(recipe.voice.description || '').length > 60 ? '…' : ''}")
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="v">{recipe.voice.description || '—'}</div>
+                    )}
                   </div>
                 </div>
               </section>
             )}
+
+            <section className="studio-card">
+              <div className="studio-cardhead">
+                <h2>Do the pictures agree with the words?</h2>
+                <button className="btn" onClick={() => void checkImageCopy()} disabled={pairBusy}>
+                  {pairBusy ? 'Looking…' : 'Check images'}
+                </button>
+              </div>
+              {pairing && pairing.contradictions.length === 0 && (
+                <p className="studio-note">
+                  Nothing flagged across {pairing.checked} illustrated slide{pairing.checked === 1 ? '' : 's'}.
+                </p>
+              )}
+              {pairing?.contradictions.map((c) => (
+                <div key={`${c.slide}-${c.question}`} className="studio-warn">
+                  <strong>Slide {c.slide}</strong> — says “{c.says}”, shows “{c.shows}”.
+                  <div>{c.question}</div>
+                </div>
+              ))}
+            </section>
 
             <div className="studio-sec">
               <h2>{project.type === 'story' ? 'The story' : 'The carousel'}</h2>

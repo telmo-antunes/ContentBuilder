@@ -93,6 +93,42 @@ Rules that keep this file worth reading:
 - **Direction:** a stacked, phone-width view; the ScaledSlide component already
   renders at arbitrary width.
 
+### An image can still contradict its slide, and the checker only catches some of it
+
+- **Kind:** Gap
+- **Severity:** minor
+- **First seen:** 2026-08-11 — `how-often-ceramic-coating`, round 2
+- **What happened:** the new `image-copy-check` catches PRACTICE mismatches
+  reliably — a wash-bay photo against a deck that condemns automatic washes was
+  flagged 3 runs out of 3, with no false positives on the corrected deck across
+  2 runs. STATE mismatches are inconsistent: a photo of flat clinging droplets
+  under "water sheets off cleanly" was caught on one run and missed on the next.
+- **Why it matters:** the state case is the harder judgement (is this beading or
+  sheeting?) and it is also the more common one. An inconsistent check is worth
+  having, but it is not a guarantee, and the hand-back should not describe it as
+  one.
+- **Direction:** for state claims the copy usually names the state in words —
+  "tight", "flat", "clinging", "sheeting". Extracting that adjective and asking
+  the narrower question ("does this photo show tight beads or flat ones?") is
+  likely more reliable than asking for contradictions in general.
+
+### Authored story slides ignore STORY_UI_RESERVE
+
+- **Kind:** Gap
+- **Severity:** minor
+- **First seen:** 2026-08-11 — `how-often-ceramic-coating` promo story
+- **What happened:** `safeAreaFor('story')` reserves 250px top and bottom, and
+  `safeInsets` applies it — but an authored slide's padding comes from the
+  recipe stylesheet, which knows nothing about the reserve. The promo story's
+  CTA button sat low enough that Instagram's reply bar could overlap it. Patched
+  for the promo story specifically (a trailing `fill` re-centres the stack);
+  every other authored story has the same exposure.
+- **Why it matters:** it is invisible in the export and only shows up on a phone,
+  after posting.
+- **Direction:** the per-format variant block in a recipe (`formats['1080x1920']`)
+  is the right place — the reserve could be appended there when the recipe is
+  authored, so it applies to every story rather than per-caller.
+
 ### Descenders collide with the block below
 
 - **Kind:** Defect
@@ -230,4 +266,37 @@ Original finding:
   boundary so the output is always grammatical.
 - **Seen again:**
   - *(add dated lines here)*
+
+### Row notes, taglines and bodies were not bound by the faithfulness rule
+
+*Resolved 2026-08-11.* Copywriter v6. The v5 rule held for headlines but not the
+small print: a correct, correctly-ordered list carried three plausible-but-
+unsourced explanations under it, one asserting a ranking ("fastest") the source
+does not make. Plausible domain knowledge is the invention hardest to spot,
+because it does not read as invented. An unexplained item now renders bare, and
+ranking words the brief does not use are never asserted.
+
+### The caption and the final slide disagreed about the primary action
+
+*Resolved 2026-08-11.* The slide made "find a detailer — link in bio" primary
+with the DM secondary; the caption mentioned only the DM, because the two were
+generated independently. The caption's closing is now built from the final
+slide's cta chip, inserted above the DM line so the primary action stays
+primary.
+
+### The review page showed the base voice while an audience override was in force
+
+*Resolved 2026-08-11.* With an audience set, the Voice row now reads
+"Addressing a car owner — overrides the recipe's base register (…)" instead of
+displaying the studio-owner paragraph as though it were current. The page no
+longer contradicts its own audience chip.
+
+### Nothing compared a slide's picture against its copy
+
+*Resolved 2026-08-11.* `POST /projects/:id/image-copy-check` renders each
+illustrated slide's photo and copy to a vision call, together with the whole
+deck's text so a cross-slide conflict is visible, and returns questions for the
+review page. Advisory, never blocking — deliberate irony is legitimate and a
+check that refuses it gets switched off. Partial: see the open finding on state
+mismatches.
 
