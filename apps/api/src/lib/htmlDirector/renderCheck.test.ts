@@ -1,3 +1,4 @@
+import { asVerdict, repairLayout, layoutFaults, type LayoutVerdict } from './renderCheck';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type Anthropic from '@anthropic-ai/sdk';
 
@@ -60,7 +61,7 @@ function fakeProbe(script: (html: string, index: number, nth: number) => Overflo
     async measure(items: readonly { index: number; html: string }[]) {
       return items.map((item) => {
         seen.push({ ...item });
-        return script(item.html, item.index, nth++);
+        return asVerdict(script(item.html, item.index, nth++));
       });
     },
     async close() {
@@ -242,7 +243,7 @@ describe('checkSlideOverflow', () => {
       '1080x1350',
       { openProbe },
     );
-    expect(out).toEqual([
+    expect(out).toMatchObject([
       { overflows: false, state: 'fits' },
       { overflows: true, state: 'overflows' },
     ]);
@@ -258,7 +259,7 @@ describe('checkSlideOverflow', () => {
       '1080x1350',
       { openProbe },
     );
-    expect(out).toEqual([
+    expect(out).toMatchObject([
       { overflows: false, state: 'unknown' },
       { overflows: false, state: 'unknown' },
     ]);
@@ -278,7 +279,9 @@ describe('checkSlideOverflow', () => {
     const out = await checkSlideOverflow(detailMastersRecipe, [{ html: '<p>x</p>' }], '1080x1350', {
       openProbe,
     });
-    expect(out).toEqual([{ overflows: false, state: 'unknown' }]);
+    expect(out).toMatchObject([{ overflows: false, state: 'unknown' }]);
+    // The full measurement rides along, so one pass answers every layout question.
+    expect(out[0]).toHaveProperty('layout');
     expect(closed).toBe(1);
   });
 
@@ -446,5 +449,113 @@ describe('renderCheckDeck', () => {
     expect(out.repaired).toBe(0);
     expect(out.aiCalls).toBe(1);
     expect(warnings().some((w) => w.includes('STILL OVERFLOWS'))).toBe(true);
+  });
+});
+
+// ── The layout ladder ────────────────────────────────────────────────────────
+describe('repairLayout — the bidirectional ladder', () => {
+  const HTML = '<div class="headline">A headline</div>\n<div class="body">Body</div>';
+  const input = { role: 'statement' as const, parts: {}, format: '1080x1350' as const, index: 0 };
+  const v = (over: Partial<LayoutVerdict>): LayoutVerdict => ({
+    state: 'fits', collide: false, slack: 0, headlineLines: 2, ...over,
+  });
+
+  it('does nothing when the slide is clean', async () => {
+    const out = await repairLayout(detailMastersRecipe, input, HTML, v({}), 3, {
+      measure: async () => { throw new Error('must not measure a clean slide'); },
+    });
+    expect(out.steps).toEqual([]);
+    expect(out.remaining).toEqual([]);
+    expect(out.html).toBe(HTML);
+  });
+
+  /**
+   * The case the overflow guard was blind to: a headline resting on the CTA
+   * chip has not left the frame, so `state` is 'fits' and only `collide` fires.
+   */
+  it('shrinks for a collision even though nothing overflowed', async () => {
+    const out = await repairLayout(detailMastersRecipe, input, HTML, v({ collide: true }), 3, {
+      measure: async () => v({ collide: false }),
+    });
+    expect(out.steps).toEqual(['smaller-headline']);
+    expect(out.remaining).toEqual([]);
+    expect(out.html).toContain('headline sm');
+  });
+
+  it('shrinks for a headline over its archetype cap', async () => {
+    const out = await repairLayout(detailMastersRecipe, input, HTML, v({ headlineLines: 5 }), 3, {
+      measure: async () => v({ headlineLines: 3 }),
+    });
+    expect(out.steps).toEqual(['smaller-headline']);
+    expect(out.remaining).toEqual([]);
+  });
+
+  it('grows into excess slack — the direction the overflow ladder never had', async () => {
+    const small = '<div class="headline sm">A headline</div>';
+    const out = await repairLayout(detailMastersRecipe, input, small, v({ slack: 0.4 }), 3, {
+      measure: async () => v({ slack: 0.1 }),
+    });
+    expect(out.steps).toEqual(['larger-headline']);
+    expect(out.html).not.toContain('headline sm');
+  });
+
+  /**
+   * Growing is the risky direction. A step that closes the hole by overflowing
+   * has traded a visible fault for an invisible one.
+   */
+  it('refuses a grow that would overflow, and keeps the slack', async () => {
+    const small = '<div class="headline sm">A headline</div>';
+    const out = await repairLayout(detailMastersRecipe, input, small, v({ slack: 0.4 }), 3, {
+      measure: async () => v({ slack: 0.05, state: 'overflows' }),
+    });
+    expect(out.steps).toEqual([]);
+    expect(out.html).toBe(small);
+    expect(out.remaining).toContain('slack 40%');
+  });
+
+  it('refuses a grow that would collide', async () => {
+    const small = '<div class="headline sm">A headline</div>';
+    const out = await repairLayout(detailMastersRecipe, input, small, v({ slack: 0.4 }), 3, {
+      measure: async () => v({ slack: 0.05, collide: true }),
+    });
+    expect(out.steps).toEqual([]);
+    expect(out.html).toBe(small);
+  });
+
+  it('keeps a shrink only when it reduces the fault count', async () => {
+    const out = await repairLayout(detailMastersRecipe, input, HTML, v({ collide: true }), 3, {
+      // Fixes the collision but opens a hole — no net gain, so it is discarded.
+      measure: async () => v({ collide: false, slack: 0.5 }),
+    });
+    expect(out.steps).toEqual([]);
+    expect(out.html).toBe(HTML);
+  });
+
+  it('never spends a model call', async () => {
+    const out = await repairLayout(detailMastersRecipe, input, HTML, v({ collide: true }), 3, {
+      measure: async () => v({}),
+    });
+    expect(out.aiCalls).toBe(0);
+  });
+
+  it('stops when the renderer has gone dark rather than guessing', async () => {
+    const out = await repairLayout(
+      detailMastersRecipe, input, HTML, v({ state: 'unknown', collide: true }), 3,
+      { measure: async () => { throw new Error('must not measure'); } },
+    );
+    expect(out.steps).toEqual([]);
+  });
+});
+
+describe('layoutFaults', () => {
+  it('names every gate that fired, and nothing else', () => {
+    expect(layoutFaults({ state: 'fits', collide: false, slack: 0.05, headlineLines: 2 }, 3)).toEqual([]);
+    expect(
+      layoutFaults({ state: 'overflows', collide: true, slack: 0.4, headlineLines: 6 }, 3),
+    ).toEqual(['overflows', 'collision', 'slack 40%', 'headline 6 lines']);
+  });
+
+  it('ignores the headline cap when the archetype does not set one', () => {
+    expect(layoutFaults({ state: 'fits', collide: false, slack: 0, headlineLines: 9 }, undefined)).toEqual([]);
   });
 });

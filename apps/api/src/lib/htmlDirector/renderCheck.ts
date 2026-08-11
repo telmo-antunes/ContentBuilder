@@ -59,6 +59,8 @@ export type OverflowState = 'fits' | 'overflows' | 'unknown';
 export interface SlideOverflow {
   overflows: boolean;
   state: OverflowState;
+  /** The full measurement, when one was taken — collision, slack, headline lines. */
+  layout?: LayoutVerdict;
 }
 
 /** The minimum of an authored slide the check needs (compose's own output shape). */
@@ -76,7 +78,7 @@ export interface CheckSlide {
  */
 export interface RenderProbe {
   /** Write each fragment into its slide and measure it. Results are input-ordered. */
-  measure(items: readonly { index: number; html: string }[]): Promise<OverflowState[]>;
+  measure(items: readonly { index: number; html: string }[]): Promise<LayoutVerdict[]>;
   close(): Promise<void>;
 }
 
@@ -268,7 +270,7 @@ function pagePool(browser: Browser, limit: number, viewport: { width: number; he
 }
 
 /** Drive one slide's render and read the guard's verdict off the page. */
-async function readOverflow(page: Page, url: string): Promise<OverflowState> {
+async function readOverflow(page: Page, url: string): Promise<LayoutVerdict> {
   await page.goto(url, { waitUntil: 'load', timeout: GOTO_TIMEOUT_MS });
   await page.waitForSelector('[data-slide-root]', { timeout: MOUNT_TIMEOUT_MS });
   await page.evaluate(async () => {
@@ -284,40 +286,51 @@ async function readOverflow(page: Page, url: string): Promise<OverflowState> {
   await new Promise((r) => setTimeout(r, SETTLE_MS));
   const read = await page.evaluate(() => {
     const ds = (globalThis as any).document?.body?.dataset ?? {};
-    return { overflow: ds.overflow, collide: ds.collide, slack: ds.slack };
+    return { overflow: ds.overflow, collide: ds.collide, slack: ds.slack, lines: ds.headlineLines };
   });
-  const state: OverflowState =
-    read.overflow === 'true' ? 'overflows' : read.overflow === 'false' ? 'fits' : 'unknown';
-  lastLayout.set(url, {
+  const num = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+  return {
+    state: read.overflow === 'true' ? 'overflows' : read.overflow === 'false' ? 'fits' : 'unknown',
     collide: read.collide === 'true',
-    slack: Number.isFinite(Number(read.slack)) ? Number(read.slack) : 0,
-  });
-  return state;
+    slack: num(read.slack),
+    headlineLines: num(read.lines),
+  };
 }
 
 /**
- * Layout verdicts from the most recent probe of each slide URL.
+ * Everything one measurement pass learns about a slide.
  *
- * Carried beside the overflow state rather than folded into `OverflowState`
- * because they are not the same decision: an overflow is repaired by the
- * ladder, whereas a collision or a slack failure is reported for a human to
- * judge. Keyed by URL, which is unique per slide within a scaffold.
+ * One object rather than three calls: the probe already renders the slide, and
+ * a second pass to ask "and how many lines was the headline?" would double the
+ * cost of every check for information the first pass had in hand.
  */
-const lastLayout = new Map<string, LayoutVerdict>();
-
 export interface LayoutVerdict {
+  state: OverflowState;
   /** Two painted boxes closer than the minimum clearance — see AuthoredSlide. */
   collide: boolean;
   /** Largest contiguous empty band, as a fraction of frame height. */
   slack: number;
+  /** Rendered line count of the slide's headline; 0 when it has none. */
+  headlineLines: number;
 }
 
 /** The share of a frame a single empty band may occupy before it reads as a hole. */
 export const MAX_SLACK = 0.15;
 
-export function layoutVerdictFor(url: string): LayoutVerdict | undefined {
-  return lastLayout.get(url);
-}
+/** Lift a bare overflow state into a full verdict — for callers and doubles
+ *  that only care about the one signal. */
+export const asVerdict = (state: OverflowState): LayoutVerdict => ({
+  ...UNKNOWN_VERDICT,
+  state,
+});
+
+/** A verdict with nothing measured — used when the renderer is unreachable. */
+export const UNKNOWN_VERDICT: LayoutVerdict = {
+  state: 'unknown',
+  collide: false,
+  slack: 0,
+  headlineLines: 0,
+};
 
 /**
  * The production probe: one scaffold + one page pool for a whole deck. Throws if
@@ -344,13 +357,13 @@ export const openRenderProbe: OpenProbe = async (recipe, format, slides) => {
           try {
             await scaffold.setSlideHtml(index, html);
           } catch {
-            return 'unknown' as const;
+            return UNKNOWN_VERDICT;
           }
           let page: Page;
           try {
             page = await pool.acquire();
           } catch {
-            return 'unknown' as const;
+            return UNKNOWN_VERDICT;
           }
           try {
             return await readOverflow(page, scaffold.urlFor(index));
@@ -365,7 +378,7 @@ export const openRenderProbe: OpenProbe = async (recipe, format, slides) => {
               );
             }
             failures += 1;
-            return 'unknown' as const;
+            return UNKNOWN_VERDICT;
           } finally {
             pool.release(page);
           }
@@ -411,13 +424,13 @@ export async function checkSlideOverflow(
         err instanceof Error ? err.message : String(err)
       }`,
     );
-    return slides.map(() => ({ overflows: false, state: 'unknown' as const }));
+    return slides.map(() => ({ overflows: false, state: 'unknown' as const, layout: UNKNOWN_VERDICT }));
   }
   try {
-    const states = await probe.measure(slides.map((s, index) => ({ index, html: s.html })));
+    const verdicts = await probe.measure(slides.map((s, index) => ({ index, html: s.html })));
     return slides.map((_, i) => {
-      const state = states[i] ?? 'unknown';
-      return { overflows: state === 'overflows', state };
+      const v = verdicts[i] ?? UNKNOWN_VERDICT;
+      return { overflows: v.state === 'overflows', state: v.state, layout: v };
     });
   } catch (err) {
     console.warn(
@@ -425,7 +438,7 @@ export async function checkSlideOverflow(
         err instanceof Error ? err.message : String(err)
       }`,
     );
-    return slides.map(() => ({ overflows: false, state: 'unknown' as const }));
+    return slides.map(() => ({ overflows: false, state: 'unknown' as const, layout: UNKNOWN_VERDICT }));
   } finally {
     await probe.close().catch(() => {});
   }
@@ -714,7 +727,8 @@ export async function repairOverflow(
     try {
       ownProbe = await openRenderProbe(recipe, fmt, [{ html, role: input.role }]);
       const probe = ownProbe;
-      measure = async (candidate: string) => (await probe.measure([{ index: 0, html: candidate }]))[0] ?? 'unknown';
+      measure = async (candidate: string) =>
+        ((await probe.measure([{ index: 0, html: candidate }]))[0] ?? UNKNOWN_VERDICT).state;
     } catch (err) {
       console.warn(
         `[render-check] repair skipped — renderer unavailable: ${
@@ -840,9 +854,9 @@ export async function renderCheckDeck(
   }
 
   try {
-    const states = await probe.measure(slides.map((s, index) => ({ index, html: s.html })));
-    const measured = states.filter((s) => s !== 'unknown').length;
-    const overflowing = states.flatMap((s, i) => (s === 'overflows' ? [i] : []));
+    const verdicts = await probe.measure(slides.map((s, index) => ({ index, html: s.html })));
+    const measured = verdicts.filter((v) => v.state !== 'unknown').length;
+    const overflowing = verdicts.flatMap((v, i) => (v.state === 'overflows' ? [i] : []));
     if (!overflowing.length) {
       const ms = Date.now() - t0;
       console.warn(
@@ -856,7 +870,8 @@ export async function renderCheckDeck(
     const repairs = await Promise.all(
       overflowing.map((i) =>
         repairOverflow(recipe, inputs[i] ?? fallbackInput(slides[i]!, fmt, i), slides[i]!.html, fmt, {
-          measure: async (html) => (await probe.measure([{ index: i, html }]))[0] ?? 'unknown',
+          measure: async (html) =>
+            ((await probe.measure([{ index: i, html }]))[0] ?? UNKNOWN_VERDICT).state,
           recompose: opts?.recompose,
         }).catch((err) => {
           console.warn(
@@ -912,4 +927,106 @@ function fallbackInput(slide: CheckSlide, format: Format, index: number): Compos
     format,
     index,
   };
+}
+
+// ── 3. The layout ladder ────────────────────────────────────────────────────
+
+/**
+ * Repair what the layout gates found, in the direction the fault points.
+ *
+ * The overflow ladder above only ever SHRINKS, because overflow only ever means
+ * too much content. The gates added two faults that do not fit that shape:
+ *
+ *   · a COLLISION is too much content that happens not to have left the frame —
+ *     a headline whose descenders rest on the CTA chip passes the overflow
+ *     check, because nothing overflowed. Same direction, so it climbs the same
+ *     rungs.
+ *   · a HEADLINE OVER ITS CAP is emphasis that has become unedited copy. Also
+ *     shrink, and the cheapest rung usually settles it.
+ *   · EXCESS SLACK is the opposite: content that underfills its frame. Shrinking
+ *     makes it worse, so this direction GROWS — the inverse of rung one.
+ *
+ * Growing is the risky direction, so it is the conservative one: exactly one
+ * step, kept only if the result neither overflows nor collides. A slide that
+ * cannot be grown safely keeps its slack and is reported. The alternative —
+ * climbing until something breaks — trades a visible hole for an invisible
+ * collision, which is a worse deck and a harder bug.
+ */
+export interface LayoutRepair {
+  html: string;
+  steps: string[];
+  /** What is still wrong after the climb, for the caller to surface. */
+  remaining: string[];
+  aiCalls: number;
+}
+
+export interface LayoutRepairContext {
+  measure: (html: string) => Promise<LayoutVerdict>;
+  recompose?: (input: ComposeSlideInput, note: string) => Promise<string>;
+}
+
+/** Everything a verdict says is wrong, in the words a human would use. */
+export function layoutFaults(
+  v: LayoutVerdict,
+  maxHeadlineLines: number | undefined,
+): string[] {
+  const out: string[] = [];
+  if (v.state === 'overflows') out.push('overflows');
+  if (v.collide) out.push('collision');
+  if (v.slack > MAX_SLACK) out.push(`slack ${Math.round(v.slack * 100)}%`);
+  if (maxHeadlineLines && v.headlineLines > maxHeadlineLines) {
+    out.push(`headline ${v.headlineLines} lines`);
+  }
+  return out;
+}
+
+const tooMuch = (f: string[]) => f.some((x) => x === 'overflows' || x === 'collision' || x.startsWith('headline'));
+const tooLittle = (f: string[]) => f.some((x) => x.startsWith('slack'));
+
+export async function repairLayout(
+  recipe: BrandRecipe,
+  input: ComposeSlideInput,
+  html: string,
+  verdict: LayoutVerdict,
+  maxHeadlineLines: number | undefined,
+  ctx: LayoutRepairContext,
+): Promise<LayoutRepair> {
+  const steps: string[] = [];
+  let current = html;
+  let faults = layoutFaults(verdict, maxHeadlineLines);
+  if (!faults.length || verdict.state === 'unknown') {
+    return { html, steps, remaining: faults, aiCalls: 0 };
+  }
+
+  // ── Shrink ────────────────────────────────────────────────────────────────
+  if (tooMuch(faults) && hasSmallerHeadlineVariant(recipe)) {
+    const smaller = addHeadlineVariant(current);
+    if (smaller.changed) {
+      const after = await ctx.measure(smaller.html);
+      const next = layoutFaults(after, maxHeadlineLines);
+      // Kept only if it actually helped. A smaller headline that fixes a
+      // collision but opens a hole has traded one gate failure for another.
+      if (after.state !== 'unknown' && next.length < faults.length) {
+        steps.push('smaller-headline');
+        current = smaller.html;
+        faults = next;
+      }
+    }
+  }
+
+  // ── Grow ──────────────────────────────────────────────────────────────────
+  if (tooLittle(faults) && !tooMuch(faults)) {
+    const bigger = removeHeadlineVariant(current);
+    if (bigger.changed) {
+      const after = await ctx.measure(bigger.html);
+      const next = layoutFaults(after, maxHeadlineLines);
+      if (after.state !== 'unknown' && !tooMuch(next) && after.slack < verdict.slack) {
+        steps.push('larger-headline');
+        current = bigger.html;
+        faults = next;
+      }
+    }
+  }
+
+  return { html: current, steps, remaining: faults, aiCalls: 0 };
 }

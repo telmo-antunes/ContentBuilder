@@ -43,7 +43,7 @@ export function SlideRenderer({
    */
   editing?: boolean;
   /** Fires when the composition exceeds the canvas (a too-long headline). */
-  onOverflow?: (overflow: boolean, layout?: { collide: boolean; slack: number }) => void;
+  onOverflow?: (overflow: boolean, layout?: import('./AuthoredSlide').LayoutSignals) => void;
   forExport?: boolean;
   theme?: ThemePreset;
   /** 0-based position for the cohesion counter. */

@@ -26,6 +26,13 @@ import {
   type Format,
 } from '@contentbuilder/shared';
 import { ensureGoogleFonts } from './fontLoader';
+
+/** What one measurement pass learns about a slide's layout. */
+export interface LayoutSignals {
+  collide: boolean;
+  slack: number;
+  headlineLines: number;
+}
 import type { SlidePhotoSet } from './projectRender';
 
 /**
@@ -61,7 +68,7 @@ export function AuthoredSlide({
   motion?: boolean;
   /** Stretch the ambient drift across a clip of this length (video export). */
   /** Reports whether the composition exceeds the canvas (see the effect below). */
-  onOverflow?: (overflow: boolean, layout?: { collide: boolean; slack: number }) => void;
+  onOverflow?: (overflow: boolean, layout?: LayoutSignals) => void;
 }) {
   const scope = 'cbs' + useId().replace(/[^a-zA-Z0-9]/g, '');
   const slideRef = useRef<HTMLDivElement | null>(null);
@@ -140,7 +147,25 @@ export function AuthoredSlide({
       }
       const slack = el.clientHeight > 0 ? maxGap / el.clientHeight : 0;
 
-      onOverflow(over, { collide, slack });
+      /**
+       * HEADLINE LINES. A headline is emphasis until it fills the frame, at
+       * which point it is unedited copy — one deck shipped a four-line display
+       * headline and another ran three lines nearly edge to edge. Derived from
+       * the rendered box against its own line-height rather than by counting
+       * words, so it is true of the type that actually shipped.
+       */
+      const headlineEl = el.querySelector<HTMLElement>('.headline');
+      let headlineLines = 0;
+      if (headlineEl) {
+        const hcs = getComputedStyle(headlineEl);
+        const lh = parseFloat(hcs.lineHeight || '0');
+        // `normal` computes to a keyword, not a length; fall back to the ratio
+        // browsers actually use so a recipe that never set one is still counted.
+        const line = Number.isFinite(lh) && lh > 0 ? lh : parseFloat(hcs.fontSize || '0') * 1.2;
+        if (line > 0) headlineLines = Math.max(1, Math.round(headlineEl.offsetHeight / line));
+      }
+
+      onOverflow(over, { collide, slack, headlineLines });
     };
     measure();
     const fonts = (document as Document & { fonts?: FontFaceSet }).fonts;
