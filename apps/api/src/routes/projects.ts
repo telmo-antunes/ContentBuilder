@@ -1543,68 +1543,45 @@ projectsRouter.post(
      * A caller may still pass one, and should when it can add a hook the cover
      * does not have. Passing an empty string is the same as passing nothing.
      */
-    const parts: Record<string, string> = {
+    const parts = {
       eyebrow: body.eyebrow ?? 'NOVO POST',
       cta: body.cta ?? 'Vê o carrossel completo',
-      ...(body.headline?.trim() ? { headline: body.headline.trim() } : {}),
+      headline: body.headline?.trim() ?? '',
     };
 
-    let composed;
-    try {
-      composed = await composeSlide(recipe, {
-        role: 'cta',
-        parts,
-        format: STORY_FORMAT,
-        photo: true,
-        index: 1,
-      });
-    } catch (err) {
-      throw new ApiError(502, `Could not compose the story frame: ${publicErrMessage(err, 'AI error')}`);
-    }
+    /**
+     * AUTHORED HERE, DETERMINISTICALLY — no model call.
+     *
+     * This frame has no creative decision in it: an eyebrow, a button label, a
+     * picture of the cover. Handing that to the copywriter bought nothing and
+     * cost correctness — asked for a slide with only two copy parts, the model
+     * reasoned in prose about the missing ones and its reasoning rendered ON
+     * the story ("Wait, I need to re-examine. The copy parts provided are only
+     * eyebrow and cta…"), with the whole frame duplicated beneath it.
+     *
+     * The classes are the brand's own, in the brand's own order, exactly as the
+     * `cta` fragment uses them. `sanitizeAuthoredHtml` still runs on save.
+     */
+    const esc = (v: string) =>
+      v.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] as string);
 
-    // 4. Put the cover in the frame's slot when the arrangement left one, and
-    //    behind it when it did not — a `free` photo over an unfilled slot just
-    //    covers it and leaves the empty box showing at the edges.
+    const composed = {
+      html: [
+        '<div class="logo-row"><div class="monogram"></div>'
+          + '<div class="wordmark"><b>detail</b><span class="it">masters</span></div></div>',
+        '<div class="fill"></div>',
+        `<figure class="${SLOT_CLASS} ${PLATE_CLASS}" data-cb-slot="hero"></figure>`,
+        `<div class="eyebrow">${esc(parts.eyebrow)}</div>`,
+        ...(parts.headline ? [`<div class="headline">${esc(parts.headline)}</div>`] : []),
+        `<div class="cta">${esc(parts.cta)}</div>`,
+        '<div class="fill"></div>',
+      ].join('\n'),
+      source: 'authored' as const,
+    };
+
     const slotNames = authoredSlots(composed.html);
     const slot = slotNames[0];
-
-    /**
-     * Mark the slot a PLATE, so the brand's photo treatment does not apply.
-     *
-     * That treatment exists so a stranger's snapshot reads as this brand and so
-     * type stays legible over it. Neither is true here: the picture is one of
-     * our own slides, nothing sits on top of it, and on a dark brand the scrim
-     * ends at 88% black — the first real run rendered the cover as a faintly
-     * outlined black rectangle, which defeats the recognition this whole frame
-     * exists for.
-     */
-    let html = composed.html;
-
-    /**
-     * Keep the frame out of Instagram's own chrome. Authored slides don't
-     * honour STORY_UI_RESERVE — padding belongs to the recipe stylesheet — and
-     * the composed cta fragment bottom-anchors, which put the button under the
-     * reply bar on smaller phones. A trailing fill re-centres the stack; the
-     * general gap (authored stories vs the reserve) is logged as its own
-     * finding rather than patched blind here.
-     */
-    if (!/\n<div class="fill"><\/div>\s*$/.test(html)) {
-      html = `${html.trimEnd()}\n<div class="fill"></div>`;
-    }
-
-    if (slot) {
-      html = html.replace(
-        new RegExp(`(<figure[^>]*\\bdata-cb-slot="${slot.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}"[^>]*\\bclass=")([^"]*)(")`),
-        (_m, a, cls, b) => `${a}${cls.includes(PLATE_CLASS) ? cls : `${cls} ${PLATE_CLASS}`}${b}`,
-      );
-      // Slot markup usually carries `class` before `data-cb-slot`; cover that order too.
-      if (!html.includes(PLATE_CLASS)) {
-        html = html.replace(
-          new RegExp(`(<figure[^>]*\\bclass=")([^"]*\\b${SLOT_CLASS}\\b[^"]*)(")`),
-          (_m, a, cls, b) => `${a}${cls} ${PLATE_CLASS}${b}`,
-        );
-      }
-    }
+    const html = composed.html;
 
     const photo: SlidePhoto = slidePhotoSchema.parse({
       id: randomUUID(),
@@ -1633,9 +1610,7 @@ projectsRouter.post(
         photos: [photo],
         authored: {
           html,
-          ...(composed.bg ? { bg: composed.bg } : {}),
-          role: 'cta',
-          ...(composed.pv ? { pv: composed.pv } : {}),
+                    role: 'cta',
         },
       }],
       settings: { theme: carousel.get('settings')?.theme, slideCounter: false },

@@ -93,6 +93,29 @@ Rules that keep this file worth reading:
 - **Direction:** a stacked, phone-width view; the ScaledSlide component already
   renders at arbitrary width.
 
+### The copywriter's internal reasoning rendered onto a slide
+
+- **Kind:** Defect
+- **Severity:** blocked shipping
+- **First seen:** 2026-08-11 — `how-often-ceramic-coating` promo story
+- **What happened:** asked to compose a `cta` frame carrying only two copy parts
+  (eyebrow + cta), the model returned prose reasoning instead of markup, and it
+  rendered on the exported story in body type: *"Wait, I need to re-examine. The
+  copy parts provided are only eyebrow and cta — no headline, no tagline, no
+  handle. I must not fabricate missing elements. Let me also fix the double class
+  attribute on figure."* The whole frame was then duplicated below it.
+- **Why it matters:** the export looked healthy by every measure the pipeline
+  has — 931KB, no blank frame, slots filled. Only looking at the pixels caught
+  it. Anything composed from a sparse parts object is exposed.
+- **Direction:** two separate things. (1) `sanitizeAuthoredHtml` cannot tell
+  prose from copy, but a slide whose text contains first-person
+  meta-commentary ("I need to", "let me", "the copy parts provided") is never
+  legitimate output — worth a cheap detector. (2) A duplicated frame means the
+  reply contained the markup twice; the compose path should take the first
+  complete `.cb-slide` body and discard the rest.
+- **Worked around 2026-08-11** for the promo story by removing the model from
+  that path entirely — see Resolved. The general exposure remains.
+
 ### An image can still contradict its slide, and the checker only catches some of it
 
 - **Kind:** Gap
@@ -299,4 +322,12 @@ deck's text so a cross-slide conflict is visible, and returns questions for the
 review page. Advisory, never blocking — deliberate irony is legitimate and a
 check that refuses it gets switched off. Partial: see the open finding on state
 mismatches.
+
+### The promo story called a model for a frame with no creative decision in it
+
+*Resolved 2026-08-11.* The frame is an eyebrow, a button label and a picture of
+the cover — nothing to decide. It is now authored directly from the brand's own
+classes, in the order its `cta` fragment uses them, with no model call: faster,
+free, and incapable of the reasoning leak that made the previous build
+unshippable. `composedBy` reports `authored`.
 
