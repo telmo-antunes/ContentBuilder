@@ -33,6 +33,7 @@ import {
   type BrandRecipe,
   type Lesson,
   type RecipeEmphasisWrap,
+  assignArchetypes,
 } from '@contentbuilder/shared';
 import { aiJson, aiMessage, modelFor, textOf, type AiJsonResult, type AiJsonTool } from '../ai';
 import { config } from '../../config';
@@ -1709,7 +1710,7 @@ export async function composeProject(
 ): Promise<
   Array<{
     role: SlideRole;
-    authored: { html: string; bg?: string; role?: string };
+    authored: { html: string; bg?: string; role?: string; archetype?: string };
     /** The parse step's stock-search phrase for this slide's picture, if any. */
     imageQuery?: string;
     /** Which path composed this slide — telemetry only; nothing stores it. */
@@ -1762,7 +1763,7 @@ export async function composeProject(
   const authored = await mapPool(inputs, COMPOSE_CONCURRENCY, (input) => composeSlide(recipe, input, o));
   const out: Array<{
     role: SlideRole;
-    authored: { html: string; bg?: string; role?: string };
+    authored: { html: string; bg?: string; role?: string; archetype?: string };
     imageQuery?: string;
     source: ComposePath;
   }> = [];
@@ -1834,6 +1835,26 @@ export async function composeProject(
       path: slide.source,
       ...(authored[i]?.composeUser ? { composeUser: authored[i]!.composeUser } : {}),
     })),
+  });
+
+  /**
+   * ARCHETYPES, before the render check rather than after it.
+   *
+   * Composition is decided here, so the archetype belongs here — and the render
+   * check needs it: the layout ladder enforces a per-archetype headline cap, and
+   * without one it can only see collisions and holes.
+   *
+   * Keyed off `input.photo` rather than off an attached picture. That is the
+   * honest signal at this point: the parse stage already decided whether this
+   * slide gets a photo slot, having been told how many pictures the brand
+   * actually has. Waiting for the fill would mean waiting until after the check.
+   */
+  const archetypes = assignArchetypes(
+    kept.map((input) => ({ role: input.role, hasPhoto: input.photo === true })),
+  );
+  kept.forEach((_, i) => {
+    const a = out[i]?.authored;
+    if (a) a.archetype = archetypes[i];
   });
 
   if (opts?.renderCheck ?? (Boolean(opts?.renderProbe) || renderCheckEnabledByDefault())) {

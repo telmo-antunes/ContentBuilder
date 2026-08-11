@@ -14,7 +14,6 @@ import {
   defaultThemeForCategory,
   dimensionsFor,
   ensureBrandMark,
-  assignArchetypes,
   isSlotName,
   migrateRecipe,
   PLATE_CLASS,
@@ -643,28 +642,10 @@ projectsRouter.post(
     const base = composed.map((s, i) => ({ id: randomUUID(), order: i, authored: s.authored }));
     const filled = fillSlotsFromPool(base, pool);
 
-    /**
-     * ARCHETYPES, chosen across the whole deck.
-     *
-     * After the slots are filled, because an archetype that wants a photograph
-     * may only be chosen when there actually is one — and until `fillSlotsFromPool`
-     * has run, "does this slide have a picture?" has no answer.
-     *
-     * Deck-wide rather than per slide, because the rule that matters most is
-     * the one no single slide can enforce: the same composition may not run
-     * more than twice. That is what stops seven frames reading as one frame
-     * repeated.
-     */
-    const archetypes = assignArchetypes(
-      base.map((s, i) => ({
-        role: s.authored?.role ?? 'statement',
-        hasPhoto: (filled.photos[i]?.length ?? 0) > 0,
-      })),
-    );
-
+    // Archetypes are assigned inside composeProject — composition is decided
+    // there, and the render check needs them before this point.
     const slides = base.map((s, i) => ({
       ...s,
-      authored: s.authored ? { ...s.authored, archetype: archetypes[i] } : s.authored,
       imageNeed: 'none' as const,
       photos: filled.photos[i] ?? [],
       // The copywriter's own words for the picture this slide wants — what the
