@@ -35,12 +35,28 @@ export type SlackPolicy =
 
 export type PhotoAppetite = 'required' | 'optional' | 'never';
 
+/**
+ * HOW an archetype's photograph meets the frame.
+ *
+ * `slot` is the inset card the composer leaves a hole for — bounded, sitting on
+ * the brand's ground. `bleed` is the full-frame background layer, with the
+ * scrim that already exists to keep type legible over it.
+ *
+ * The distinction is the difference between a deck that looks assembled and one
+ * that looks designed. Every photo being an inset rounded rectangle floating on
+ * black is the single strongest "template" signal a deck can carry, and it is
+ * what a review named as the thing to fix after the space and the typography.
+ */
+export type PhotoPlacement = 'slot' | 'bleed';
+
 export interface Archetype {
   key: string;
   /** One line, for the review page and for anyone reading a deck plan. */
   intent: string;
   slack: SlackPolicy;
   photo: PhotoAppetite;
+  /** Only meaningful when `photo` is not 'never'. */
+  placement?: PhotoPlacement;
   /** Beyond this a headline is not emphasis, it is unedited copy. */
   maxHeadlineLines: number;
 }
@@ -54,9 +70,12 @@ export const ARCHETYPES = {
   /** A picture carrying the frame, type laid into its quiet region. */
   showcase: {
     key: 'showcase',
-    intent: 'Photograph carries the frame; type sits in its quiet region.',
+    intent: 'Photograph carries the frame, full-bleed; type sits over its quiet end.',
     slack: 'top',
     photo: 'required',
+    // The whole point of this archetype. A picture that "carries the frame"
+    // cannot do so from inside a card with margins around it.
+    placement: 'bleed',
     maxHeadlineLines: 3,
   },
   /** Picture and type each own a band of the frame. */
@@ -65,6 +84,8 @@ export const ARCHETYPES = {
     intent: 'Picture and type each own a band of the frame.',
     slack: 'between',
     photo: 'required',
+    // Genuinely wants the bounded card: the band IS the composition.
+    placement: 'slot',
     maxHeadlineLines: 3,
   },
   /** Type alone, centred. The deck's quiet beats. */
@@ -113,6 +134,7 @@ export const ARCHETYPES = {
     intent: 'The closing ask, anchored low where a thumb already is.',
     slack: 'top',
     photo: 'optional',
+    placement: 'bleed',
     maxHeadlineLines: 3,
   },
 } as const satisfies Record<string, Archetype>;
@@ -227,6 +249,32 @@ const JUSTIFY: Record<SlackPolicy, string> = {
  * spacers stop growing — except under `between`, which is the one policy that
  * genuinely wants an interior gap and so keeps them.
  */
+/**
+ * The full-bleed anchor, when a picture's own luminance overrode the
+ * archetype's default.
+ *
+ * Two things move together, and they have to: the type goes to the dark end of
+ * the photograph, and the scrim follows it. Moving the type without the scrim
+ * puts cream on a bright sky; moving the scrim without the type darkens the end
+ * nobody is reading.
+ *
+ * Higher specificity than the archetype's own `justify-content` because it is
+ * deciding the same property with better information.
+ */
+export function bleedAnchorCss(scope: string, anchor: 'top' | 'bottom'): string {
+  const justify = anchor === 'top' ? 'flex-start' : 'flex-end';
+  // The scrim is painted by the background layer; re-point its gradient so the
+  // heavy end is the end carrying type.
+  const dir = anchor === 'top' ? '0deg' : '180deg';
+  return [
+    `.${scope} .cb-slide[data-archetype]{justify-content:${justify}}`,
+    `.${scope} .cb-bg-layer::after{background:linear-gradient(${dir}, ` +
+      `color-mix(in srgb, var(--cb-ground) 25%, transparent) 0%, ` +
+      `color-mix(in srgb, var(--cb-ground) 30%, transparent) 45%, ` +
+      `color-mix(in srgb, var(--cb-ground) 88%, transparent) 100%)}`,
+  ].join('\n');
+}
+
 export function slideArchetypeCss(): string {
   const rules: string[] = [
     // Every archetype composes in a column. Brands already do this; stating it

@@ -13,7 +13,9 @@ import { resolveTextColor, rgba } from './color';
 
 export interface RenderableSlide {
   /** AI-authored markup — the only kind of slide the app renders. */
-  authored?: { html: string; bg?: string; role?: string };
+  authored?: { html: string; bg?: string; role?: string; archetype?: string };
+  /** Per-slide render decisions — today, the full-bleed anchor. */
+  overrides?: { bleedAnchor?: 'top' | 'bottom' };
 }
 
 /** Mounts one AI-composed slide at exact pixel dimensions, styled by the brand recipe. */
@@ -99,6 +101,7 @@ export function SlideRenderer({
             format={format}
             logoUrl={brandKit.logo?.url}
             photos={photos}
+            overrides={slide.overrides}
             // Empty-slot affordances belong to editing surfaces only.
             editing={editing ?? !forExport}
             motion={motion}

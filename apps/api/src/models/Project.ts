@@ -64,6 +64,7 @@ const slideSchema = new Schema(
             required: false,
           },
           imageTreatment: { type: String, enum: ['none', 'tint', 'duotone'], required: false },
+          bleedAnchor: { type: String, enum: ['top', 'bottom'], required: false },
           theme: { type: String, enum: ['editorial', 'bold', 'minimal', 'soft'], required: false },
         },
         { _id: false },

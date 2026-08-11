@@ -161,6 +161,7 @@ export interface SlideOverrides {
   focalPoint?: { x: number; y: number };
   /** Cohesion treatment applied to the slide's image (default 'none'). */
   imageTreatment?: ImageTreatment;
+  bleedAnchor?: 'top' | 'bottom';
   /** Per-slide theme; falls back to the project theme when unset. */
   theme?: ThemePreset;
 }

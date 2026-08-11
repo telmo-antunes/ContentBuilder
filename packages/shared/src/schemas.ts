@@ -98,6 +98,12 @@ export const slideSchema = z.object({
     .object({
       focalPoint: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) }).optional(),
       imageTreatment: z.enum(['none', 'tint', 'duotone']).optional(),
+      /**
+       * Which end of a full-bleed photograph the type sits on, decided from the
+       * picture's own luminance — see `bleedAnchor.ts`. Absent means the
+       * archetype's default stands.
+       */
+      bleedAnchor: z.enum(['top', 'bottom']).optional(),
       theme: themeEnum.optional(),
     })
     .optional(),
