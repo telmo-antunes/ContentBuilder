@@ -51,26 +51,6 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
-### Composed body copy is clipped mid-sentence, with no terminator
-
-- **Kind:** Defect
-- **Severity:** cost me a fix
-- **First seen:** 2026-08-11 — `raise-average-ticket-add-ons`, slide 8 (`cta`)
-- **What happened:** the final slide's body came back as
-  `Envie-nos uma mensagem com a palavra EXTRAS e recebe tudo o que precisa para
-  testar esta` — 89 chars, ending on "esta" with no noun and no full stop. The
-  cap truncated rather than asking for shorter copy. Same slide also mixed
-  registers (formal `Envie-nos` then informal `recebe`), which suggests the
-  sentence was assembled rather than written whole.
-- **Why it matters:** it is the CTA — the one slide with a job. A truncated
-  sentence there reads as a broken post, and it is the slide a reader is
-  looking at when deciding whether to DM.
-- **Direction:** if a part exceeds the cap, re-ask for that part at a stated
-  length rather than truncating; failing that, truncate to the last sentence
-  boundary so the output is always grammatical.
-- **Seen again:**
-  - *(add dated lines here)*
-
 ### The `stat` role filled its stat and its headline with the same sentence
 
 - **Kind:** Defect
@@ -85,6 +65,33 @@ Rules that keep this file worth reading:
 - **Direction:** the verbatim guard already knows which part each hole carries;
   if two holes resolve to the same string, drop the lower-priority one rather
   than emitting both.
+
+### No per-slide view of the source sentence a slide came from
+
+- **Kind:** Gap
+- **Severity:** cost me a fix
+- **First seen:** 2026-08-11 — `how-often-ceramic-coating` review
+- **What happened:** three slides drifted from the source post and nothing on
+  the review page could show it — noticing required holding the post and the
+  deck open in two tabs and comparing by hand. The copywriter is now
+  constrained (v5), but the reviewer still cannot SEE fidelity.
+- **Why it matters:** a constraint without a check degrades quietly. The next
+  drift will again be caught only by a human who happens to re-read the post.
+- **Direction:** the parse step knows which beat produced each slide; carry
+  that through and show the source sentence under each card on review.
+
+### No phone-size scroll view on the review page
+
+- **Kind:** Gap
+- **Severity:** minor
+- **First seen:** 2026-08-11 — `how-often-ceramic-coating` review
+- **What happened:** the review page shows slides as a strip of small cards —
+  the one view in which seven identical gradient panels look fine. The monotony
+  was obvious only after export, at full size.
+- **Why it matters:** the review page's whole job is to catch what will look
+  wrong on a phone, at phone size.
+- **Direction:** a stacked, phone-width view; the ScaledSlide component already
+  renders at arbitrary width.
 
 ### Descenders collide with the block below
 
@@ -172,4 +179,55 @@ another.
 printing the same sentence twice — once inside the cover it is showing, once
 underneath in the largest type on the frame. It now omits the headline unless a
 caller passes one as a hook.
+
+### The copywriter embellished a brief instead of compressing it
+
+*Resolved 2026-08-11, at both ends.* The CRM payload now sends each section's
+actual sentences in the beats (a composer given sentences compresses; one given
+titles invents — the three drifted slides all came from bare headings), and the
+copywriter prompt (v5) makes the no-invented-claims rule unconditional: it
+applied only to SOURCE docs before, and this flow passes an idea, so it never
+fired. Ordered lists now keep their order.
+
+### Composing an imageless deck required no decision
+
+*Resolved 2026-08-11.* Compose 400s on an empty brand pool unless
+`textOnly: true` acknowledges the choice, and the pool drops images under
+800px (the "2 photos from your website" were 640px site chrome). The gate runs
+before the recipe check, so its error is the one a user can act on in place.
+
+### The keyword and the caption lived in different places
+
+*Resolved 2026-08-11.* `settings.dmKeyword` is the one source; the caption
+endpoint appends the DM line deterministically when the draft lacks it.
+`settings.audience` picks the voice register, threads a hard reader instruction
+into compose, and shows on the review page. `createProject` accepts the
+payload's caption + hashtags so they arrive as editable drafts.
+
+### Composed body copy was clipped mid-sentence, with no terminator
+
+*Improved 2026-08-11, watching.* The clipped CTA came from the same root as the
+drift: a bare heading and a hard cap. With substance-bearing beats and the v5
+prompt the copy arrives shorter by construction; the cap still exists, so this
+stays here until a few more runs show clean endings.
+
+Original finding:
+
+- **Kind:** Defect
+- **Severity:** cost me a fix
+- **First seen:** 2026-08-11 — `raise-average-ticket-add-ons`, slide 8 (`cta`)
+- **What happened:** the final slide's body came back as
+  `Envie-nos uma mensagem com a palavra EXTRAS e recebe tudo o que precisa para
+  testar esta` — 89 chars, ending on "esta" with no noun and no full stop. The
+  cap truncated rather than asking for shorter copy. Same slide also mixed
+  registers (formal `Envie-nos` then informal `recebe`), which suggests the
+  sentence was assembled rather than written whole.
+- **Why it matters:** it is the CTA — the one slide with a job. A truncated
+  sentence there reads as a broken post, and it is the slide a reader is
+  looking at when deciding whether to DM.
+- **Direction:** if a part exceeds the cap, re-ask for that part at a stated
+  length rather than truncating; failing that, truncate to the last sentence
+  boundary so the output is always grammatical.
+- **Seen again:**
+  - *(add dated lines here)*
 
