@@ -348,6 +348,24 @@ export function backgroundPhotoCss(
  * not reach a PNG or an MP4 as a dashed "Add photo" box. On export the slot
  * keeps its quiet tint of brand ink, which reads as an intentional panel.
  */
+/**
+ * AN UNFILLED SLOT, OUTSIDE THE EDITOR: gone entirely.
+ *
+ * Suppressing the "Add photo" affordance is not enough, and an export proved
+ * it. A slot still paints its own BOX — the base tint from `slideMediaCss` and
+ * whatever `.cb-shot::after` treatment the brand authored — so a cover with an
+ * empty slot exported as a translucent rectangle sitting across the middle of
+ * the photograph behind it. The label was correctly hidden; the hole it labelled
+ * was not.
+ *
+ * `display:none` rather than transparency, because the slot also reserves
+ * vertical space it has no business reserving once nothing is going in it. A
+ * picture that was never supplied should cost the layout nothing.
+ */
+export function hiddenSlotCss(scope: string, slot: string): string {
+  return `.${scope} .cb-slide [${SLOT_ATTR}="${slot}"]{display:none}`;
+}
+
 export function emptySlotCss(scope: string, slot: string): string {
   const sel = `.${scope} .cb-slide [${SLOT_ATTR}="${slot}"]`;
   return [

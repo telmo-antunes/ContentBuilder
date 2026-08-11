@@ -224,6 +224,29 @@ Rules that keep this file worth reading:
 
 ## Resolved
 
+### An unfilled photo slot painted a box into the export
+
+*Resolved 2026-08-11.* The "Add photo" label was already suppressed outside the
+editor, so this looked handled. It was not: a slot paints its own BOX
+independently of its label — the base tint from `slideMediaCss` plus whatever
+`.cb-shot::after` treatment the brand authored — and both render whether or not
+a photograph filled it.
+
+A cover whose picture was placed as a `background` rather than into its `hero`
+slot therefore exported as a translucent rectangle sitting across the middle of
+the photograph behind it. Visible in the PNG zip and in the video, since both
+drive the same `/render` route.
+
+`hiddenSlotCss` removes an unfilled slot outright outside the editor.
+`display:none` rather than transparency, because the slot also reserves vertical
+space it has no business reserving once nothing is going into it — a picture
+that was never supplied should cost the layout nothing.
+
+**Made much more likely by the archetype work.** Adding photo holes to `cover`,
+`statement` and `feature` multiplied the number of slots a deck carries, and so
+the number that can end up unfilled. The guard existed; the surface it had to
+cover grew.
+
 ### A third of every slide's width went unused
 
 *Resolved 2026-08-11.* The recipe capped `.body` at `max-width: 26ch`. On a
