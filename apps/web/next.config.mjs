@@ -18,7 +18,14 @@ const nextConfig = {
   // credentials it entered for the UI, and the rewrite forwards the header.
   async rewrites() {
     const apiUrl = (process.env.API_URL || 'http://localhost:4000').replace(/\/+$/, '');
-    return [{ source: '/api/:path*', destination: `${apiUrl}/:path*` }];
+    return [
+      { source: '/api/:path*', destination: `${apiUrl}/:path*` },
+      // Stored media URLs are root-relative ("/media/<key>") so they do not
+      // hardcode the API port. Serve them from this origin so the browser and
+      // Puppeteer — both of which load pages from WEB_URL — resolve them
+      // without knowing where the API lives.
+      { source: '/media/:path*', destination: `${apiUrl}/media/:path*` },
+    ];
   },
   // The brand directory merged into the home Desk — keep old /brands links alive.
   async redirects() {

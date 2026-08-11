@@ -235,7 +235,8 @@
       "Bash(sips -Z 540 g2-export/07.png --out g2-slide7-small.png)",
       "Bash(curl -s -o /dev/null -w \"render page → %{http_code}\\\\n\" \"http://localhost:3000/render?projectId=6a52ae194d1c162db1bc46a9&slideId=bgtest-1\")",
       "Bash(curl -s \"http://localhost:3000/render?projectId=6a52ae194d1c162db1bc46a9&slideId=bgtest-1\")",
-      "Bash(kill 39541)"
+      "Bash(kill 39541)",
+      "Bash(grep -vE 'package-lock|\\\\.png$|\\\\.jpg$|\\\\.woff|\\\\.ttf|\\\\.otf')"
     ]
   }
 }
