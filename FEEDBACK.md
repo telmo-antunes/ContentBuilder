@@ -51,6 +51,43 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
+### Recipe-author v6's elevation rule did not bite
+
+- **Kind:** Gap
+- **Severity:** cost me a fix
+- **First seen:** 2026-08-11 — re-authoring detailmasters against v6
+- **What happened:** v6 asks for "one radius scale and one elevation model
+  across `.cb-shot`, `.panel` and `.cta`". The re-authored draft came back with
+  **three treatments again** — `cb-shot` a drop shadow, `panel` a hairline,
+  `cta` flat. The glow instruction from the same release DID take (the draft
+  authors `--cb-glow-*` custom properties), so the release reached the model;
+  this specific rule simply did not change its behaviour.
+- **Why it matters:** a prompt rule that does not bite is worse than no rule —
+  it reads as fixed in the version registry while the output is unchanged, so
+  the next person to look believes it is handled.
+- **Direction:** the glow rule worked because it names a mechanism (custom
+  properties with defaults) rather than a principle. The elevation rule states a
+  principle and leaves the mechanism open. Give it the same treatment: name a
+  single token (e.g. `--cb-elev`) the brand must define once and every raised
+  surface must reference, so compliance is checkable rather than aspirational.
+  `validateRecipeConsistency` could then enforce it.
+
+### A re-authored recipe silently lost a fragment
+
+- **Kind:** Defect
+- **Severity:** cost me a fix
+- **First seen:** 2026-08-11 — the same v6 draft
+- **What happened:** the current recipe carries all seven role fragments. The
+  re-authored draft came back with six — `statement` is absent. Nothing in the
+  response said so; it was found by diffing the two.
+- **Why it matters:** `statement` is one of the most-used roles, and a role with
+  no fragment falls back to a per-slide model call — slower, less predictable,
+  and the exact path that once rendered the model's own reasoning onto a slide.
+  A re-author that quietly trades free deterministic composition for a model
+  call on the commonest role is a downgrade wearing an upgrade's version number.
+- **Direction:** report fragment coverage on the authoring response, and warn
+  when a re-author returns fewer roles than the recipe it replaces.
+
 ### The review page names half the typography
 
 - **Kind:** Defect
@@ -223,6 +260,25 @@ Rules that keep this file worth reading:
 ---
 
 ## Resolved
+
+### Seven near-identical dark frames, with no beat
+
+*Resolved 2026-08-11.* `surfaces.inverse` already existed as a per-slide opt-in
+the composer almost never took — and a composer looking at one slide has no way
+to judge a deck's rhythm anyway. `planInversion` chooses it where the whole
+sequence is visible.
+
+One per deck, deliberately: two inversions in seven frames stop reading as a
+beat and start reading as an alternating pattern.
+
+Three exclusions, each concrete. Never the cover — it earns the swipe and is the
+frame most likely to carry a recognisable photograph. Never the closing slide —
+the CTA lands harder returning TO the brand's own ground than sitting on the
+exception. Never a full-bleed slide — an inverted surface under a photograph
+that covers the frame changes nothing except the type it has to fight.
+
+Never overrides a surface the composer chose itself, and no-ops entirely when
+the brand authored no inverse.
 
 ### Every photo was an inset postcard
 
