@@ -112,6 +112,8 @@ const projectSchema = new Schema(
         {
           theme: { type: String, enum: ['editorial', 'bold', 'minimal', 'soft'], required: false },
           slideCounter: { type: Boolean, required: false },
+          dmKeyword: { type: String, required: false, maxlength: 24 },
+          audience: { type: String, enum: ['car owner', 'studio owner'], required: false },
         },
         { _id: false },
       ),

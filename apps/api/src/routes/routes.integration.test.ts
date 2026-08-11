@@ -8,6 +8,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import request from 'supertest';
 import mongoose from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
+import { solidPng } from '../lib/png';
 
 // The AI-gated routes check aiDraftConfigured() BEFORE reaching our mocks, and
 // config reads the env at import time — so stub the env before any import runs
@@ -1176,5 +1177,69 @@ describe('POST /projects/:id/promo-story', () => {
   it('404s on an unknown project', async () => {
     const res = await request(app()).post(`/projects/${new mongoose.Types.ObjectId()}/promo-story`);
     expect(res.status).toBe(404);
+  });
+})
+
+// ── Review-driven guards ──────────────────────────────────────────────────────
+describe('compose guards and settings from the carousel review', () => {
+  it('refuses to compose with an empty photo pool unless textOnly is acknowledged', async () => {
+    const biz = await seedBusiness();
+    await seedApprovedKit(String(biz._id));
+    const created = await request(app())
+      .post('/projects')
+      .send({ businessId: String(biz._id), title: 'P', type: 'carousel', format: '1080x1350' });
+    const res = await request(app())
+      .post(`/projects/${created.body._id}/compose`)
+      .send({ idea: 'Some idea' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/no usable photos/i);
+    // The same call with the acknowledgement gets PAST the gate (it then fails
+    // later on the missing recipe, which is the pre-existing behaviour).
+    const acked = await request(app())
+      .post(`/projects/${created.body._id}/compose`)
+      .send({ idea: 'Some idea', textOnly: true });
+    expect(acked.body.error ?? '').not.toMatch(/no usable photos/i);
+  });
+
+  it('stores caption, dmKeyword and audience at create time', async () => {
+    const biz = await seedBusiness();
+    await seedApprovedKit(String(biz._id));
+    const created = await request(app())
+      .post('/projects')
+      .send({
+        businessId: String(biz._id), title: 'P', type: 'carousel', format: '1080x1350',
+        caption: { text: 'Ready-made caption', hashtags: ['#carcare', '#ceramiccoating'] },
+        settings: { dmKeyword: 'COATING', audience: 'car owner' },
+      });
+    expect(created.status).toBe(201);
+    expect(created.body.caption?.text).toBe('Ready-made caption');
+    expect(created.body.caption?.hashtags).toHaveLength(2);
+    expect(created.body.settings?.dmKeyword).toBe('COATING');
+    expect(created.body.settings?.audience).toBe('car owner');
+  });
+
+  /**
+   * A logo or avatar harvested from the site lists fine and ships as a blurry
+   * stamp — the pool must not offer what cannot fill a slot.
+   */
+  it('keeps small images out of the brand photo pool', async () => {
+    const biz = await seedBusiness();
+    await seedApprovedKit(String(biz._id));
+    // Through the real upload path, so the bytes exist and the pool's
+    // orphan check keeps them: a bare DB row is exactly what it filters.
+    const mk = async (w: number, h: number) =>
+      request(app())
+        .post(`/businesses/${biz._id}/media`)
+        .attach('file', solidPng(w, h, '#223344'), { filename: `p${w}.png`, contentType: 'image/png' });
+    await mk(640, 447);   // site chrome — out
+    await mk(2120, 1280); // real photo — in
+    const created = await request(app())
+      .post('/projects')
+      .send({ businessId: String(biz._id), title: 'P', type: 'carousel', format: '1080x1350' });
+    // With one usable photo the gate does not fire even without textOnly.
+    const res = await request(app())
+      .post(`/projects/${created.body._id}/compose`)
+      .send({ idea: 'Some idea' });
+    expect(res.body.error ?? '').not.toMatch(/no usable photos/i);
   });
 })
