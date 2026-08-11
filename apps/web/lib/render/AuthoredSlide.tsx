@@ -9,6 +9,7 @@ import {
   ambientPhotoCss,
   backgroundPhotoCss,
   emptySlotCss,
+  hiddenSlotCss,
   filledSlotCss,
   slotOverrideCss,
   resolveMove,
@@ -208,14 +209,18 @@ export function AuthoredSlide({
    * time (see the sanitiser) and re-checked here before entering a selector.
    *
    * One rule per slot, computed from what this render knows: a filled slot gets
-   * the photo, an empty one gets the "Add photo" affordance — and only while
-   * editing, so exports never carry a dashed box.
+   * the photo; an empty one gets the "Add photo" affordance while editing, and
+   * is removed outright otherwise.
+   *
+   * Removed, not merely unlabelled. A slot paints its own box — the base tint
+   * and the brand's `.cb-shot::after` treatment — so hiding only the label left
+   * a translucent rectangle across the middle of an exported cover.
    */
   const slotRules = authoredSlots(html)
     .filter(isSlotName)
     .map((name) => {
       const p = photos?.slots[name];
-      if (!p) return editing ? emptySlotCss(scope, name) : '';
+      if (!p) return editing ? emptySlotCss(scope, name) : hiddenSlotCss(scope, name);
       // A resize rides on the photo, so the authored markup is never rewritten.
       const resize = slotOverrideCss(scope, name, p.shape, p.size, RECIPE_FORMAT_DIMS[format]?.h ?? 1350);
       return [resize, filledSlotCss(scope, name, safeUrl(p.url), p.fit, p.focal)].filter(Boolean).join('\n');

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   APP_IMAGE_CLASSES,
+  hiddenSlotCss,
   PLATE_CLASS,
   SLOT_ATTR,
   SLOT_CLASS,
@@ -313,5 +314,38 @@ describe('plate slots', () => {
 
   it('declares the plate class as app-owned, so consistency checks ignore it', () => {
     expect(APP_IMAGE_CLASSES).toContain(PLATE_CLASS);
+  });
+})
+
+describe('an unfilled slot outside the editor', () => {
+  /**
+   * Suppressing the "Add photo" label was not enough, and an export proved it:
+   * the slot still painted its own box — the base tint from `slideMediaCss` and
+   * the brand's `.cb-shot::after` treatment — so a cover with an empty slot
+   * exported as a translucent rectangle across the middle of the photograph
+   * behind it.
+   */
+  it('is removed outright, not merely unlabelled', () => {
+    const css = hiddenSlotCss('cb1', 'hero');
+    expect(css).toContain('display:none');
+  });
+
+  it('reserves no vertical space either', () => {
+    // `display:none` rather than transparency: a picture that was never
+    // supplied should cost the layout nothing.
+    expect(hiddenSlotCss('cb1', 'hero')).not.toMatch(/opacity|visibility|transparent/);
+  });
+
+  it('targets exactly one slot in exactly one slide scope', () => {
+    const css = hiddenSlotCss('cb1', 'hero');
+    expect(css).toContain(`.cb1 .cb-slide [${SLOT_ATTR}="hero"]`);
+    expect(css).not.toContain('"art"');
+  });
+
+  it('is a different rule from the editor affordance', () => {
+    // The editor still wants the dashed box and the label — that is how someone
+    // knows a slot is there to fill.
+    expect(emptySlotCss('cb1', 'hero')).toContain('Add photo');
+    expect(hiddenSlotCss('cb1', 'hero')).not.toContain('Add photo');
   });
 })
