@@ -510,6 +510,56 @@ const ROLE_PARTS: Record<string, FragmentPart[]> = {
 };
 
 /**
+ * Roles whose slides can carry a photograph, and so should have somewhere to
+ * put one.
+ *
+ * Not every role: rows and a picture never share a slide (the composer drops
+ * the rows), a `quote` is the line and nothing else, a `stat` is the number,
+ * and a `cta` competing with a photograph is just a busier `cta`.
+ *
+ * A recipe author is asked for a photo slot and often supplies exactly one —
+ * detailmasters' recipe has it on `feature` and nowhere else, which caps every
+ * deck at a single picture no matter how much imagery the caller offers. The
+ * account's own audit says the posts that earn comments are the ones showing
+ * something real, so a one-photo ceiling is a content problem, not a cosmetic
+ * one.
+ */
+const PHOTO_HOLE_ROLES = new Set(['cover', 'statement', 'feature']);
+
+/** `<figure class="cb-shot" data-cb-slot="hero"></figure>`, per the convention. */
+const PHOTO_HOLE = '<figure class="cb-shot" data-cb-slot="hero"></figure>';
+
+/**
+ * Give a fragment somewhere to put a picture, if its role should have one and
+ * it does not already.
+ *
+ * The slot goes before the brand's sign-off line if there is one, and at the
+ * end otherwise — which is where this brand's own worked `feature` example puts
+ * it, so the arrangement is the brand's rather than ours. A slot is CONDITIONAL
+ * markup: it is kept on a slide that holds a picture and removed on one that
+ * does not, so adding it costs nothing on a text slide.
+ */
+export function ensurePhotoHole(
+  recipe: BrandRecipe,
+  role: string,
+  fragment: string,
+): { html: string; added: boolean } {
+  if (!PHOTO_HOLE_ROLES.has(role)) return { html: fragment, added: false };
+  if (authoredSlots(fragment).length > 0) return { html: fragment, added: false };
+
+  const handleAt = fragment.lastIndexOf('<div class="handle"');
+  const next =
+    handleAt === -1
+      ? `${fragment.trimEnd()}\n${PHOTO_HOLE}`
+      : `${fragment.slice(0, handleAt)}${PHOTO_HOLE}\n${fragment.slice(handleAt)}`;
+
+  // Same gate every authored fragment passes. A repair that cannot survive it
+  // is discarded whole rather than stored half-right.
+  const checked = checkFragment(recipe, role, next);
+  return 'html' in checked ? { html: checked.html, added: true } : { html: fragment, added: false };
+}
+
+/**
  * Fill the gaps in every fragment a recipe has. Deterministic and idempotent —
  * a second run adds nothing — so it is safe to apply on read.
  */
@@ -526,9 +576,13 @@ export function fillRecipeFragmentGaps(recipe: BrandRecipe): {
     const wanted = ROLE_PARTS[role];
     if (!wanted || typeof fragment !== 'string') continue;
     const out = fillFragmentGaps(recipe, role, fragment, wanted);
-    if (!out.added.length) continue;
-    next[role] = out.html;
-    repairs.push({ role, added: out.added });
+    // Copy holes first, then the photo slot: the slot is positioned relative to
+    // the sign-off line, which the copy pass may itself have added.
+    const withPhoto = ensurePhotoHole(recipe, role, out.html);
+    const added = [...out.added, ...(withPhoto.added ? ['photo slot'] : [])];
+    if (!added.length) continue;
+    next[role] = withPhoto.html;
+    repairs.push({ role, added });
   }
   if (!repairs.length) return { recipe, repairs: [] };
   return { recipe: { ...recipe, fragments: next }, repairs };

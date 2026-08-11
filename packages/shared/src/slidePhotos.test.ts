@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  APP_IMAGE_CLASSES,
+  PLATE_CLASS,
   SLOT_ATTR,
   SLOT_CLASS,
   SLOT_SHAPES,
@@ -291,3 +293,25 @@ describe('enumeration rows', () => {
     expect(css).not.toMatch(/\.cb-slide \.row\{/);
   });
 });
+
+describe('plate slots', () => {
+  const css = slideMediaCss(1920);
+
+  /**
+   * The brand's own treatment is `.cb-slide .cb-shot::after` at (0,2,1) and a
+   * brand may write something more specific, so the override is doubled to
+   * (0,4,1) rather than relying on source order alone.
+   */
+  it('kills the brand photo treatment for a plate, at higher specificity', () => {
+    expect(css).toContain(`.cb-slide .${SLOT_CLASS}.${PLATE_CLASS}.${PLATE_CLASS}::after`);
+    expect(css).toMatch(/\.cb-plate\.cb-plate::after\{display:none;content:none\}/);
+  });
+
+  it('gives the plate an edge, so it reads as a card without a scrim', () => {
+    expect(css).toMatch(/\.cb-slide \.cb-shot\.cb-plate\{[^}]*box-shadow/);
+  });
+
+  it('declares the plate class as app-owned, so consistency checks ignore it', () => {
+    expect(APP_IMAGE_CLASSES).toContain(PLATE_CLASS);
+  });
+})

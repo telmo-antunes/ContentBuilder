@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { brandRecipeSchema, type BrandRecipe } from '@contentbuilder/shared';
 import { detailMastersRecipe } from './recipes';
+import { authoredSlots } from '@contentbuilder/shared';
 import {
   FRAGMENT_CONVENTION,
   checkFragment,
+  ensurePhotoHole,
   fillFragmentGaps,
   fillRecipeFragmentGaps,
   fragmentVerbatimGaps,
@@ -394,3 +396,51 @@ describe('filling the gaps a fragment was authored without', () => {
     expect(out.recipe).toBe(detailMastersRecipe);
   });
 });
+
+describe('ensurePhotoHole', () => {
+  const R = withFragments({});
+
+  it('adds a slot before the sign-off line, where the brand puts its own', () => {
+    const out = ensurePhotoHole(R, 'statement',
+      '<div class="headline">{{headline}}</div>\n<div class="handle">{{handle}}</div>');
+    expect(out.added).toBe(true);
+    expect(authoredSlots(out.html)).toEqual(['hero']);
+    // The handle stays last — it is the brand's bottom line.
+    expect(out.html.indexOf('cb-shot')).toBeLessThan(out.html.indexOf('class="handle"'));
+  });
+
+  it('appends when the fragment has no sign-off line', () => {
+    const out = ensurePhotoHole(R, 'cover', STATEMENT);
+    expect(out.added).toBe(true);
+    expect(authoredSlots(out.html)).toEqual(['hero']);
+  });
+
+  it('leaves a fragment that already has a slot exactly as it was', () => {
+    const out = ensurePhotoHole(R, 'cover', COVER);
+    expect(out.added).toBe(false);
+    expect(out.html).toBe(COVER);
+  });
+
+  /**
+   * Rows and a picture never share a slide, a quote is the line and nothing
+   * else, and a cta competing with a photograph is just a busier cta.
+   */
+  it.each(['quote', 'stat', 'list', 'cta'])('does not give %s a photo slot', (role) => {
+    const out = ensurePhotoHole(R, role, STATEMENT);
+    expect(out.added).toBe(false);
+    expect(authoredSlots(out.html)).toEqual([]);
+  });
+
+  it('is idempotent — a second pass adds nothing', () => {
+    const once = ensurePhotoHole(R, 'cover', STATEMENT);
+    const twice = ensurePhotoHole(R, 'cover', once.html);
+    expect(twice.added).toBe(false);
+    expect(twice.html).toBe(once.html);
+  });
+
+  it('reports the photo slot as a repair through fillRecipeFragmentGaps', () => {
+    const { recipe, repairs } = fillRecipeFragmentGaps(withFragments({ statement: STATEMENT }));
+    expect(repairs.find((r) => r.role === 'statement')?.added).toContain('photo slot');
+    expect(authoredSlots(recipe.fragments?.statement ?? '')).toEqual(['hero']);
+  });
+})

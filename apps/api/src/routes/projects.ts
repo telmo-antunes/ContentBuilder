@@ -16,6 +16,8 @@ import {
   ensureBrandMark,
   isSlotName,
   migrateRecipe,
+  PLATE_CLASS,
+  SLOT_CLASS,
   slidePhotoSchema,
   type BrandRecipe,
   type SlidePhoto,
@@ -55,6 +57,9 @@ const composeSchema = z.object({
     .max(MAX_PLAN_SLIDES)
     .optional(),
 });
+
+/** Marks a rendered carousel cover in the media library, next to SITE_PHOTO_LABEL. */
+export const PROMO_COVER_LABEL = 'Carousel cover';
 
 export const projectsRouter = Router();
 
@@ -416,7 +421,20 @@ const PHOTO_POOL_LIMIT = 24;
  * step into asking for a slot it cannot fill.
  */
 async function brandPhotoPool(businessId: string) {
-  const docs = await MediaAssetModel.find({ businessId })
+  const docs = await MediaAssetModel.find({
+    businessId,
+    /**
+     * A rendered carousel cover is NOT brand imagery.
+     *
+     * `promo-story` keeps its cover as an ordinary media asset so the editor's
+     * picker can swap it — but that also dropped it into this pool, newest
+     * first, so the very next deck composed for the brand auto-filled its cover
+     * slot with a picture of a different post. Seen on the first real run: an
+     * English ceramic-coating carousel opened with a shrunken Portuguese slide
+     * about add-ons.
+     */
+    label: { $ne: PROMO_COVER_LABEL },
+  })
     .sort({ createdAt: -1 })
     .limit(PHOTO_POOL_LIMIT * 3)
     .lean<any[]>();
@@ -1278,8 +1296,6 @@ projectsRouter.post(
 /** Stories are the only vertical format; named so the intent reads at the call site. */
 const STORY_FORMAT = '1080x1920' as const;
 
-/** Marks a rendered carousel cover in the media library, next to SITE_PHOTO_LABEL. */
-export const PROMO_COVER_LABEL = 'Carousel cover';
 
 const promoStorySchema = z.object({
   /** The hook. Defaults to the carousel's own title. */
@@ -1374,10 +1390,22 @@ projectsRouter.post(
     // 3. Compose one frame. `cta` is the role whose whole job is to point
     //    somewhere else, which is exactly what this frame does.
     const carouselTitle = String(carousel.get('title') ?? '').trim();
-    const parts = {
+
+    /**
+     * NO HEADLINE BY DEFAULT.
+     *
+     * Defaulting it to the carousel's title printed the same sentence twice —
+     * once inside the cover the frame is showing, once underneath it in the
+     * largest type on the slide. The cover already says what the post is; the
+     * frame's job is to say it is new and where to go.
+     *
+     * A caller may still pass one, and should when it can add a hook the cover
+     * does not have. Passing an empty string is the same as passing nothing.
+     */
+    const parts: Record<string, string> = {
       eyebrow: body.eyebrow ?? 'NOVO POST',
-      headline: body.headline ?? (carouselTitle || 'Novo carrossel'),
       cta: body.cta ?? 'Vê o carrossel completo',
+      ...(body.headline?.trim() ? { headline: body.headline.trim() } : {}),
     };
 
     let composed;
@@ -1398,11 +1426,41 @@ projectsRouter.post(
     //    covers it and leaves the empty box showing at the edges.
     const slotNames = authoredSlots(composed.html);
     const slot = slotNames[0];
+
+    /**
+     * Mark the slot a PLATE, so the brand's photo treatment does not apply.
+     *
+     * That treatment exists so a stranger's snapshot reads as this brand and so
+     * type stays legible over it. Neither is true here: the picture is one of
+     * our own slides, nothing sits on top of it, and on a dark brand the scrim
+     * ends at 88% black — the first real run rendered the cover as a faintly
+     * outlined black rectangle, which defeats the recognition this whole frame
+     * exists for.
+     */
+    let html = composed.html;
+    if (slot) {
+      html = html.replace(
+        new RegExp(`(<figure[^>]*\\bdata-cb-slot="${slot.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}"[^>]*\\bclass=")([^"]*)(")`),
+        (_m, a, cls, b) => `${a}${cls.includes(PLATE_CLASS) ? cls : `${cls} ${PLATE_CLASS}`}${b}`,
+      );
+      // Slot markup usually carries `class` before `data-cb-slot`; cover that order too.
+      if (!html.includes(PLATE_CLASS)) {
+        html = html.replace(
+          new RegExp(`(<figure[^>]*\\bclass=")([^"]*\\b${SLOT_CLASS}\\b[^"]*)(")`),
+          (_m, a, cls, b) => `${a}${cls} ${PLATE_CLASS}${b}`,
+        );
+      }
+    }
+
     const photo: SlidePhoto = slidePhotoSchema.parse({
       id: randomUUID(),
       mediaAssetId: String(asset._id),
       ...(slot ? { placement: 'slot', slot } : { placement: 'background' }),
+      // `contain` keeps the whole cover visible; cropping a picture of a poster
+      // to fill a box loses the thing being recognised.
       fit: 'contain',
+      // The carousel is 4:5; `tall` (3:4) is the closest slot shape and the one
+      // with the height budget to show it at a readable size.
       shape: 'tall',
       alt: `Cover of the carousel “${carouselTitle}”`,
     });
@@ -1420,7 +1478,7 @@ projectsRouter.post(
         order: 0,
         photos: [photo],
         authored: {
-          html: composed.html,
+          html,
           ...(composed.bg ? { bg: composed.bg } : {}),
           role: 'cta',
           ...(composed.pv ? { pv: composed.pv } : {}),
