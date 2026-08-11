@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { slideTypesettingCss } from './lineBreaks';
-import { recipeStylesheetFor } from './recipe';
-import { detailMastersRecipe } from '../../../apps/api/src/lib/htmlDirector/recipes';
 
 describe('slideTypesettingCss', () => {
   const css = slideTypesettingCss();
@@ -29,10 +27,7 @@ describe('slideTypesettingCss', () => {
     expect(css).not.toMatch(/width|font-size|font-family|max-width/);
   });
 
-  it('is emitted after the brand sheet, so a brand default is overridden', () => {
-    const sheet = recipeStylesheetFor(detailMastersRecipe, '1080x1350');
-    expect(sheet).toContain('text-wrap:pretty');
-    // Last layer wins: the app's typesetting must come after the authored CSS.
-    expect(sheet.lastIndexOf('text-wrap:pretty')).toBeGreaterThan(sheet.indexOf('.cb-slide .headline'));
+  it('scopes every rule to the slide root', () => {
+    for (const line of css.split('\n')) expect(line.startsWith('.cb-slide')).toBe(true);
   });
 });

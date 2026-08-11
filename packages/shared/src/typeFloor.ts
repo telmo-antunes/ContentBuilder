@@ -128,3 +128,57 @@ export function typeFloorReport(css: string): Array<{ role: string; from: number
   }
   return out;
 }
+
+// ── The measure ──────────────────────────────────────────────────────────────
+
+/**
+ * THE NARROWEST A COLUMN OF READING TEXT MAY BE, in `ch`.
+ *
+ * Typographic guidance puts a comfortable measure at 45–75 characters. `ch` is
+ * the advance of "0", which in the sans faces these brands use runs ~0.6em
+ * against an average character's ~0.5em — so a cap of N`ch` fits roughly
+ * N × 1.2 real characters, and 34ch lands at about 41.
+ *
+ * WHY THIS EXISTS. A recipe capped `.body` at 26ch. On a 1080px canvas with
+ * 88px gutters that is 593px of a 904px measure: **a third of every slide's
+ * width went unused**, and the copy wrapped at ~31 characters. It reads as text
+ * that has been squeezed into a column nobody asked for, and it is invisible
+ * until you notice the right margin is nowhere near the text.
+ *
+ * Deliberately a FLOOR, not a value. A brand that authored a generous measure
+ * keeps it; only one that authored a cramped one is opened up.
+ */
+export const MEASURE_FLOOR_CH = 34;
+
+/**
+ * Classes whose max-width is a READING measure rather than a design decision.
+ *
+ * Display copy is excluded on purpose: a `.tagline` or a `.headline` held to a
+ * narrow column is a legitimate and common choice, and widening it would be
+ * overruling the brand on something it got right. Only continuous prose — the
+ * text someone actually reads left-to-right, line after line — is floored.
+ */
+const MEASURED_CLASSES = ['body', 'row'];
+
+const measuresReadingText = (selector: string): boolean =>
+  MEASURED_CLASSES.some((c) => new RegExp(`\\.${c}(?![a-zA-Z0-9_-])`).test(selector));
+
+/**
+ * Raise a cramped reading measure, at render.
+ *
+ * Sibling of `enforceTypeFloor` and for the same reason: it repairs every brand
+ * already in the database on the next paint, with no re-authoring and no AI
+ * spend, and it keeps holding if a future recipe drifts narrow again.
+ */
+export function enforceMeasureFloor(css: string): string {
+  if (!css) return css;
+  return css.replace(/([^{}]*)\{([^}]*)\}/g, (whole, selector: string, body: string) => {
+    if (!/max-width/i.test(body) || !measuresReadingText(selector)) return whole;
+    const fixed = body.replace(
+      /(max-width\s*:\s*)([\d.]+)ch/gi,
+      (decl, head: string, n: string) =>
+        Number(n) < MEASURE_FLOOR_CH ? `${head}${MEASURE_FLOOR_CH}ch` : decl,
+    );
+    return fixed === body ? whole : `${selector}{${fixed}}`;
+  });
+}
