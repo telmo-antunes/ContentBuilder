@@ -60,6 +60,22 @@ export function authoredSlots(html: string): string[] {
  * The height budget is deliberately expressed as a fraction of the canvas
  * rather than a fixed size, because the same recipe composes 4:5, 1:1 and 9:16.
  */
+/**
+ * Opt out of the brand's photo treatment for ONE slot.
+ *
+ * Rule 7 of the recipe author asks every brand for a `.cb-shot` treatment — a
+ * scrim, a cast, a grain — and it exists so a stranger's snapshot reads as this
+ * brand's imagery and so cream type stays legible over it. That is right for a
+ * photograph and wrong for a picture of one of our OWN slides: a promo story
+ * showing a carousel cover is already on-brand, has no type laid over it, and
+ * on a dark brand disappears entirely under a scrim that ends at 88% black.
+ *
+ * So this is a narrow escape hatch, not a general "no treatment" switch: the
+ * picture is a plate — a card sitting on the slide — rather than a photograph
+ * bled into it.
+ */
+export const PLATE_CLASS = 'cb-plate';
+
 export const SLOT_SHAPES = {
   '': { ratio: 4 / 3, budget: 0.34 },
   // `wide` is budgeted to span the full text column on a 4:5 canvas.
@@ -84,6 +100,7 @@ export const SLOT_SHAPES = {
  */
 export const APP_IMAGE_CLASSES: readonly string[] = [
   SLOT_CLASS,
+  PLATE_CLASS,
   // shape modifiers on a slot: wide | tall | square (the '' default has no class)
   ...Object.keys(SLOT_SHAPES).filter(Boolean),
   // free overlays (siblings of the slide) and their two z-order layers
@@ -146,6 +163,17 @@ export function slideMediaCss(canvasHeight = 1350, align?: string): string {
     shape('wide', SLOT_SHAPES.wide.ratio, SLOT_SHAPES.wide.budget),
     shape('tall', SLOT_SHAPES.tall.ratio, SLOT_SHAPES.tall.budget),
     shape('square', SLOT_SHAPES.square.ratio, SLOT_SHAPES.square.budget),
+    // ── plates: our own slide, shown on a slide ──────────────────────────
+    // Doubled class for (0,4,1): the brand's treatment is `.cb-slide .cb-shot::after`
+    // at (0,2,1), and a brand is free to write something more specific than
+    // that, so matching its order in the cascade is not enough on its own.
+    `.cb-slide .${SLOT_CLASS}.${PLATE_CLASS}.${PLATE_CLASS}::after{display:none;content:none}`,
+    // Reads as a card: a hairline in the brand's ink and a soft drop, so the
+    // plate separates from the slide behind it without a scrim doing the work.
+    `.cb-slide .${SLOT_CLASS}.${PLATE_CLASS}{` +
+      `box-shadow:0 0 0 1px color-mix(in srgb, var(--cb-ink) 24%, transparent),` +
+      `0 18px 48px rgba(0,0,0,.45);` +
+      `background-color:transparent}`,
     // ── free overlays ────────────────────────────────────────────────────
     // Two layers, so an overlay can sit above the type or be sent behind it.
     `.cb-free-layer{position:absolute;inset:0;pointer-events:none}`,

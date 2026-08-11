@@ -51,28 +51,6 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
-### The `.cb-shot` gradient makes a dark carousel cover unreadable in a promo story
-
-- **Kind:** Defect
-- **Severity:** blocked shipping
-- **First seen:** 2026-08-11 — `raise-average-ticket-add-ons` promo story
-- **What happened:** `POST /projects/:id/promo-story` placed the rendered cover
-  into the composed frame's `cb-shot` slot correctly (`placement: "slot"`,
-  687KB export, no blank frame). But detailmasters' brand is cream-on-near-black
-  (`background: #0D0D0F`), so a slide-of-a-slide sits dark-on-dark, and the
-  slot's own dark gradient overlay crushes what is left. In the exported PNG the
-  embedded cover reads as a faintly outlined black rectangle — its headline is
-  legible only if you already know what it says.
-- **Why it matters:** the promo story works entirely by **recognition** — a
-  follower is meant to see the carousel they are being sent to. An invisible
-  thumbnail removes the only reason the feature exists over a plain text frame.
-  It is not postable as-is.
-- **Direction:** the gradient is right for photography and wrong for a render of
-  our own slide. Either let a photo opt out of the `.cb-shot` treatment
-  (`imageTreatment: 'none'` already exists on slide overrides — it may just need
-  wiring to the slot), or have `promo-story` render the cover onto a light plate
-  first so it reads as a card rather than a hole.
-
 ### Composed body copy is clipped mid-sentence, with no terminator
 
 - **Kind:** Defect
@@ -93,27 +71,20 @@ Rules that keep this file worth reading:
 - **Seen again:**
   - *(add dated lines here)*
 
-### No recipe fragment carries a `cb-shot` hole, so decks are silently text-only
+### The `stat` role filled its stat and its headline with the same sentence
 
-- **Kind:** Friction
+- **Kind:** Defect
 - **Severity:** cost me a fix
-- **First seen:** 2026-08-11 — `raise-average-ticket-add-ons`
-- **What happened:** the CRM payload offered a published hero image. Every one
-  of the 8 composed slides came back with **zero** `data-cb-slot` placeholders,
-  so there was nowhere to attach it. Reading `compose.ts` explains it: a role
-  whose fragment has no `cb-shot` hole is skipped for photo substitution, and
-  none of detailmasters' seven fragments has one. The same cause is why the
-  promo story's frame composed via the model (`composedBy: "ai"`) instead of the
-  free substitution path.
-- **Why it matters:** the account's own audit says product-demo posts — ones
-  showing a real screen — are the posts that earn comments. A brand whose recipe
-  cannot hold a picture can only ever produce positioning posts. Nothing warned
-  me; I found it by diffing the payload against the composed slides.
-- **Direction:** at minimum, say so — compose could report "this brand's
-  fragments cannot take photos" when a caller supplies images and no slot
-  exists. Better: `fillFragmentGaps` already adds missing copy holes to a
-  fragment; the same idea could add a `cb-shot` hole to the roles that should
-  have one.
+- **First seen:** 2026-08-11 — `how-often-ceramic-coating`, slide 5
+- **What happened:** the slide rendered two `.headline` divs back to back, both
+  reading *"If it still beads, it still works."* — one with the brand's italic
+  emphasis span, one plain. The role's fragment has both a `{{stat}}` and a
+  `{{headline}}` hole and the copywriter supplied the same line for each.
+- **Why it matters:** it reads as a rendering bug rather than a design, and it
+  is on the slide meant to be the deck's most quotable.
+- **Direction:** the verbatim guard already knows which part each hole carries;
+  if two holes resolve to the same string, drop the lower-priority one rather
+  than emitting both.
 
 ### Descenders collide with the block below
 
@@ -167,5 +138,38 @@ Rules that keep this file worth reading:
 
 ## Resolved
 
-*(move entries here with the date and what fixed them, rather than deleting —
-a fixed-then-regressed finding is worth being able to point at)*
+### The `.cb-shot` gradient made a dark carousel cover unreadable in a promo story
+
+*Resolved 2026-08-11.* Added an app-owned `cb-plate` class: `slideMediaCss`
+emits `.cb-slide .cb-shot.cb-plate.cb-plate::after{display:none}` — doubled to
+(0,4,1) so it outranks anything a brand writes — plus a hairline and a drop
+shadow so the picture reads as a card. `promo-story` marks its slot with it.
+Verified: the cover is fully legible in the export.
+
+### Only one role in a recipe could hold a photograph
+
+*Resolved 2026-08-11.* `ensurePhotoHole` in `fragments.ts`, run from
+`fillRecipeFragmentGaps` (which already executes on read inside
+`composeProject`). It gives `cover`, `statement` and `feature` a
+`<figure class="cb-shot" data-cb-slot="hero">` when they lack one — placed
+before the brand's sign-off line, which is where this brand's own `feature`
+fragment puts it. Not `quote`, `stat`, `list` or `cta`: rows and a picture
+never share a slide, and the others are the line or the number alone. The
+repair re-validates through `checkFragment` and is discarded whole if it fails.
+Verified: the next composed cover came back with a real slot, auto-filled from
+the pool.
+
+### `promo-story`'s rendered cover entered the brand photo pool
+
+*Resolved 2026-08-11.* `brandPhotoPool` now excludes `label: PROMO_COVER_LABEL`.
+The asset is still in the library and still swappable by hand — it just is not
+offered as brand imagery, because a picture of one post is not illustration for
+another.
+
+### `promo-story` repeated the carousel's headline under the cover
+
+*Resolved 2026-08-11.* The endpoint defaulted `headline` to the carousel title,
+printing the same sentence twice — once inside the cover it is showing, once
+underneath in the largest type on the frame. It now omits the headline unless a
+caller passes one as a hook.
+
