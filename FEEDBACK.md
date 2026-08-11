@@ -247,28 +247,33 @@ missing slide someone notices than a shipped one nobody reads.
 
 ### Widows and bad line breaks
 
-*Resolved 2026-08-11.* `bindDisplayBreaks`, applied at RENDER rather than at
-compose.
+*Resolved 2026-08-11, on the second attempt. The first made it worse.*
 
-The approach is not to choose the breaks — CSS cannot be told "break here"
-without knowing the rendered width, and a hard-coded line end breaks again at
-another size. It is to make the wrong breaks *unavailable*: glue the words that
-must not separate with a non-breaking space and let the browser pick from what
-is left. Two rules, both conservative — no line may end on an article,
-preposition, conjunction or auxiliary, and the last two words are bound so the
-final line cannot be one short word alone.
+**What was tried first, and why it was wrong.** Glue the words that must not
+separate with non-breaking spaces, let the browser choose from what is left. It
+shipped, and the next review caught it immediately: gluing chains into long
+unbreakable runs means a run that does not fit jumps WHOLE to the next line and
+leaves the previous one short. *"Tight beads: healthy."* became **"Tight"
+alone on its own line**, because `beads:_healthy.` was a 15-character atom that
+would not sit beside it. Slides that had used the full measure started wrapping
+at ~75%.
 
-Placement matters more than the rule. Binding at compose would write invisible
-characters into stored markup and into anything a human later opens in the
-editor; at render it is purely presentational, storage stays clean, and every
-slide already in the database gets it on the next paint with no migration.
+The reason is structural rather than a tuning problem: the binder runs with no
+knowledge of the rendered line width, so every glue is a guess that can cost
+more width than the bad break it prevents. No threshold fixes that.
 
-Verified on the real deck: *"Have it looked at by / someone who does / this for a
-living."* became *"Have it looked / at by someone / who does this / for a
-living."*
+**What is right.** `text-wrap: pretty` — the browser does it at layout, knowing
+the measure. It fills each line to the available width and only reflows the last
+few to avoid orphans, which is exactly the trade the hand-rolled version got
+backwards. Emitted in the app-owned layer after the brand sheet, so it reaches
+every stored slide with no migration.
 
-**Known limit:** the binder works per text node, so it cannot glue across an
-inline tag. A break can still land badly at an emphasis-wrap boundary.
+Not `balance`: it equalises line lengths, which deliberately does not use the
+full measure — the wrong instrument for copy already complained about for
+wrapping short.
+
+Verified: slide 5's line 1 went from "Tight" to "Tight beads:", slide 7 from
+four lines to three, and slide 4's orphaned "paint" is gone.
 
 ### Three elevation treatments on one deck, and a glow in the same corner every time
 
