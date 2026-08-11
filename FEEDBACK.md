@@ -224,6 +224,38 @@ Rules that keep this file worth reading:
 
 ## Resolved
 
+### Every photo was an inset postcard
+
+*Resolved 2026-08-11.* Two halves, #17 and #18.
+
+**Full-bleed.** An archetype now declares how its photograph meets the frame:
+`slot` (the bounded card the composer leaves a hole for) or `bleed` (the
+full-frame background layer). `showcase` and `cta` bleed; `split` keeps the
+card, because there the band IS the composition. Barely any new rendering — the
+background layer and its scrim already existed, so this is a placement decision
+rather than a new way to draw.
+
+**The type goes on the dark end.** A full-bleed slide lays cream type over a
+picture the app did not choose. A scrim heavy enough to rescue type over a
+bright sky ruins the photograph; one gentle enough to respect the photograph
+loses the type. So `bleedAnchor` picks the quiet end instead of darkening the
+loud one — mean sRGB luminance of the top third against the bottom third, on a
+160px thumbnail, and the type and the scrim move together to whichever end is
+already dark.
+
+Luminance rather than a vision call: free, deterministic, single-digit
+milliseconds, and it answers the only question being asked. A model would cost a
+call per photo to be less predictable about "which end is darker".
+
+Two deliberate refusals. It declines when the ends are within 8% — flipping a
+composition on a 2% difference would make the layout jitter between renders of
+near-identical photographs. And it never throws: a picture that will not decode
+falls back to the archetype's default rather than failing a compose.
+
+Worth recording: writing the test taught me the weighting matters. Pure blue and
+pure green are identical to a flat channel average and 0.07 against 0.72 to the
+eye, which is exactly why a naive mean would call a blue sky the quiet end.
+
 ### An unfilled photo slot painted a box into the export
 
 *Resolved 2026-08-11.* The "Add photo" label was already suppressed outside the

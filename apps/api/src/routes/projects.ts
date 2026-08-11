@@ -14,6 +14,7 @@ import {
   defaultThemeForCategory,
   dimensionsFor,
   ensureBrandMark,
+  archetypeFor,
   isSlotName,
   migrateRecipe,
   PLATE_CLASS,
@@ -33,6 +34,7 @@ import { ApiError, asyncHandler, parseBody, publicErrMessage, requireObjectId } 
 import { createProjectSchema, slideSchema, updateProjectSchema, type SlideInput } from '../lib/validation';
 import { renderSlidesToPng, slugify } from '../lib/exporter';
 import { buildContactSheet } from '../lib/contactSheet';
+import { bleedAnchorFor } from '../lib/bleedAnchor';
 import { runVideoJob, sweepExpiredVideoJobs } from '../lib/videoJobs';
 import { findImageCopyContradictions, type SlidePairing } from '../lib/imageCopyCheck';
 import { getStorage } from '../storage';
@@ -523,12 +525,38 @@ async function brandPhotoPool(businessId: string) {
  * is swappable from the Studio's photo panel exactly like a manual attachment.
  */
 function fillSlotsFromPool(
-  slides: Array<{ id: string; authored?: { html: string } }>,
+  slides: Array<{ id: string; authored?: { html: string; archetype?: string } }>,
   pool: Array<{ _id: unknown }>,
 ): { photos: SlidePhoto[][]; used: number } {
   const photos: SlidePhoto[][] = slides.map(() => []);
   let next = 0;
   slides.forEach((slide, i) => {
+    const wants = archetypeFor(slide.authored?.archetype);
+
+    /**
+     * FULL-BLEED, when the archetype asks for it.
+     *
+     * A picture that is meant to carry the frame cannot do it from inside a
+     * card with margins around it — every photo being an inset rounded
+     * rectangle on a black field is the strongest "template" signal a deck can
+     * carry. The background layer already exists and already has the scrim that
+     * keeps type legible over it, so this is a placement decision rather than a
+     * new way to render.
+     */
+    if (wants?.placement === 'bleed' && wants.photo !== 'never') {
+      if (next >= pool.length) return;
+      photos[i]!.push({
+        id: randomUUID(),
+        mediaAssetId: String((pool[next++] as { _id: unknown })._id),
+        placement: 'background',
+        fit: 'cover',
+      });
+      // Any slot the fragment happened to leave stays empty, and an empty slot
+      // is removed from the render — so it costs nothing rather than punching a
+      // hole through the photograph now behind it.
+      return;
+    }
+
     for (const slot of authoredSlots(slide.authored?.html ?? '')) {
       if (next >= pool.length) return;
       photos[i]!.push({
@@ -644,9 +672,33 @@ projectsRouter.post(
 
     // Archetypes are assigned inside composeProject — composition is decided
     // there, and the render check needs them before this point.
+    /**
+     * WHERE THE TYPE GOES ON EACH FULL-BLEED SLIDE.
+     *
+     * Read from the picture itself: type belongs on whichever end is already
+     * dark, so the scrim only has to finish a job the image started. Cheap
+     * (a luminance read on a thumbnail) and never fatal — a photograph that
+     * will not decode falls back to the archetype's default.
+     */
+    const anchors = await Promise.all(
+      filled.photos.map(async (ps) => {
+        const bgPhoto = ps.find((ph) => ph.placement === 'background');
+        if (!bgPhoto) return undefined;
+        const asset = pool.find((m) => String((m as { _id: unknown })._id) === String(bgPhoto.mediaAssetId));
+        const key = (asset as { key?: string } | undefined)?.key;
+        if (!key) return undefined;
+        try {
+          return await bleedAnchorFor(await getStorage().read(key));
+        } catch {
+          return undefined;
+        }
+      }),
+    );
+
     const slides = base.map((s, i) => ({
       ...s,
       imageNeed: 'none' as const,
+      ...(anchors[i] ? { overrides: { bleedAnchor: anchors[i] } } : {}),
       photos: filled.photos[i] ?? [],
       // The copywriter's own words for the picture this slide wants — what the
       // Studio's stock picker opens on, instead of an empty search box.

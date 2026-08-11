@@ -3,6 +3,7 @@
 import { useEffect, useId, useMemo, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import {
+  bleedAnchorCss,
   isArchetype,
   authoredSlots,
   ambientArtCss,
@@ -51,6 +52,7 @@ export function AuthoredSlide({
   format,
   logoUrl,
   photos,
+  overrides,
   editing = false,
   motion = false,
   onOverflow,
@@ -62,6 +64,8 @@ export function AuthoredSlide({
   logoUrl?: string;
   /** The user's own photos: slot fills, a background, and free overlays. */
   photos?: SlidePhotoSet;
+  /** Per-slide decisions the renderer honours — today, the full-bleed anchor. */
+  overrides?: { bleedAnchor?: 'top' | 'bottom' };
   /** Show empty-slot affordances. Off for export — a placeholder the user never
    *  filled must never reach a PNG or an MP4 as a dashed "Add photo" box. */
   editing?: boolean;
@@ -326,7 +330,14 @@ export function AuthoredSlide({
    * on-canvas copy editor wires listeners into these children). Memoising on
    * the STRING makes the DOM stable until the markup truly changes.
    */
-  const styleStr = `${varRule}\n${scopedCss}\n${slotRules}\n${bgLayerCss}${motionCss}${freeMotionCss}\n${ambientCss}`;
+  /**
+   * The luminance verdict, when the picture had one. Emitted after the
+   * background layer so it can re-point that layer's scrim, and after the
+   * archetype layer so it can override the default anchoring — it is deciding
+   * the same things with better information.
+   */
+  const anchorCss = bg && overrides?.bleedAnchor ? bleedAnchorCss(scope, overrides.bleedAnchor) : '';
+  const styleStr = `${varRule}\n${scopedCss}\n${slotRules}\n${bgLayerCss}${motionCss}${freeMotionCss}\n${ambientCss}\n${anchorCss}`;
   const styleHtmlObj = useMemo(() => ({ __html: styleStr }), [styleStr]);
   const slideHtmlObj = useMemo(() => ({ __html: html }), [html]);
   // Setting a background photo puts the slide into the recipe's photo treatment
