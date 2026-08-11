@@ -242,6 +242,34 @@ Rules that keep this file worth reading:
 
 ## Resolved
 
+### Nothing responded to a layout gate
+
+*Resolved 2026-08-11.* `repairLayout`, a bidirectional ladder.
+
+The overflow ladder only ever SHRANK, because overflow only ever means too much
+content. Two of the gates do not fit that shape. A collision is too much content
+that happens not to have left the frame — a headline resting on the CTA chip
+passes the overflow check because nothing overflowed — so it climbs the same
+rungs. Excess slack is the opposite, and shrinking makes it worse, so that
+direction grows: `removeHeadlineVariant`, the inverse of rung one.
+
+Growing is the risky direction and is therefore the conservative one: exactly
+one step, kept only if the result neither overflows nor collides AND actually
+reduces the slack. A slide that cannot be grown safely keeps its hole and says
+so. Climbing until something breaks would trade a visible fault for an invisible
+one, which is a worse deck and a harder bug.
+
+A shrink is kept only when it reduces the fault COUNT — a smaller headline that
+closes a collision but opens a hole has traded one gate failure for another, so
+it is discarded.
+
+The renderer also reports `headlineLines` now, derived from the rendered box
+against its own line-height rather than by counting words, so the per-archetype
+cap is measured on the type that actually shipped. Costs nothing: the probe was
+already rendering the slide.
+
+Free throughout — no rung spends a model call.
+
 ### Leftover space was orphaned wherever it fell
 
 *Partly resolved 2026-08-11.* Archetypes. A slide now carries an `archetype`
@@ -269,10 +297,7 @@ Verified on the real deck: six distinct compositions across seven slides, and
 the ~430px hole between a headline and its list is gone — that slide's slack
 now sits deliberately at the bottom.
 
-**Still open:** the archetypes decide where slack goes, not how much there is.
-A slide whose content genuinely underfills its frame still underfills it; the
-response to a slack-gate failure (scale the type, promote an image, split the
-slide) is not built. Nor is the per-archetype line-count cap enforced.
+**Since resolved:** `repairLayout` responds to the gates — see below.
 
 ### Layout faults were invisible at review scale
 

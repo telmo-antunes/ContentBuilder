@@ -56,6 +56,7 @@ export default function RenderStage({
           if (typeof document !== 'undefined' && layout) {
             document.body.dataset.collide = layout.collide ? 'true' : 'false';
             document.body.dataset.slack = layout.slack.toFixed(4);
+            document.body.dataset.headlineLines = String(layout.headlineLines);
           }
         }}
       />

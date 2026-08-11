@@ -1,3 +1,4 @@
+import { asVerdict } from './renderCheck';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type Anthropic from '@anthropic-ai/sdk';
 
@@ -272,7 +273,7 @@ describe('the render check (compose looking at its own output)', () => {
       async measure(items: readonly { index: number; html: string }[]) {
         return items.map((item) => {
           seen.push({ ...item });
-          return script(item.html, item.index, nth++);
+          return asVerdict(script(item.html, item.index, nth++));
         });
       },
       async close() {},
