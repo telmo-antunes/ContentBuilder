@@ -51,6 +51,134 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
+### `POST /compose` hangs forever when the web dev server is not running
+
+- **Kind:** Defect
+- **Severity:** blocked shipping
+- **First seen:** 2026-08-12 — prepaid-packages-cash-flow (project `6a7ca0a0ce67414a73772ca4`)
+- **What happened:** three compose runs against a 6-slide carousel produced
+  **zero** slides. Run 1 died at undici's 300s header timeout; runs 2 and 3 held
+  the connection open for **45** and **16** minutes with no response body, and
+  `GET /projects/:id` reported `slides: 0, stage: idea` throughout. Restarting
+  the API changed nothing. The cause was that **only mongo and the API were
+  running — `apps/web` on :3000 was not**. `renderCheck` navigates Puppeteer to
+  `config.webUrl` (default `http://localhost:3000`) to measure each slide, and
+  with nothing listening there it never returns. Two things made it hard to see:
+  each failed run **leaked a `__render-check-*` business** (the count went 3 → 4
+  across attempts, and they are still in `GET /businesses`), and
+  `renderCheck.ts`'s own header comment claims the rig already handles "the
+  question could not be asked (no web server, no browser, a timeout)" — it does
+  not, on this path. **With `npm --prefix apps/web run dev` up, the identical
+  request completed in under 30 seconds.**
+- **Why it matters:** the skill's step 1 says `npm run dev`, which starts all
+  three; but anyone running the API alone — or whose web process died — gets an
+  indefinite hang with no error, no log and no partial output, on the tool's
+  single entry point. It cost roughly 80 minutes and three runs' worth of API
+  spend before the cause was visible.
+- **Direction:** fail fast and say so. Preflight `config.webUrl` before compose
+  starts and 503 with "the web server at <url> is not reachable" if it is not;
+  give `page.goto` a ceiling that surfaces as an error rather than a stall. And
+  clean up the `__render-check-*` businesses on both the success and failure
+  paths — right now a wedged run leaves permanent litter in the business list.
+
+### No progress signal on compose, and it outlives a default `fetch`
+
+- **Kind:** Gap
+- **Severity:** cost me a fix
+- **First seen:** 2026-08-12 — prepaid-packages-cash-flow
+- **What happened:** `POST /projects/:id/compose` is synchronous with no
+  intermediate output. Node's built-in `fetch` gives up at undici's 300s
+  `HeadersTimeoutError` — so the endpoint as documented in the skill **cannot be
+  driven from a plain Node client**; I had to switch to `curl` to hold the
+  connection at all. Even when it works there is no way to answer "is this
+  progressing or wedged?", which is exactly the question the finding above
+  turned on.
+- **Why it matters:** every caller has to discover the 300s cliff for itself,
+  and no caller can distinguish slow from stuck.
+- **Direction:** the video exporter already has the right shape —
+  `POST` returns a `jobId`, `GET .../:jobId` returns `{state, percent}`.
+  Compose is a longer job than video export and deserves the same treatment.
+
+### `createProject` stores `caption.hashtags` but drops `caption.text`
+
+- **Kind:** Defect
+- **Severity:** cost me a fix
+- **First seen:** 2026-08-12 — prepaid-packages-cash-flow
+- **What happened:** `POST /projects` with
+  `caption: {text: "<77-char draft>", hashtags: [...11]}` returned 201. Reading
+  the project straight back gave `caption.text: ""` with all **11 hashtags
+  intact**, so the field was received and the array survived while the string
+  did not. `settings.dmKeyword` and `settings.audience` both persisted
+  correctly.
+- **Why it matters:** this is a regression against *The keyword and the caption
+  lived in different places* (Resolved 2026-08-11), which states that
+  "`createProject` accepts the payload's caption + hashtags so they arrive as
+  editable drafts". Half of that is no longer true, and the half that is missing
+  is the part the CRM payload spends real effort deriving in the house voice —
+  it silently lands on the floor.
+- **Also:** a `PATCH /projects/:id` with the same `{text, hashtags}` shape
+  persisted the text correctly (689 chars), so the loss is specific to the
+  create path, not to the caption shape or the sanitiser.
+- **Direction:** re-check the create path's handling of the nested caption
+  object; a partial write that keeps the array and discards the sibling string
+  suggests the text is being read from a different key or sanitised to empty.
+
+### Compose returned 8 slides for `slideCount: 6`
+
+- **Kind:** Defect
+- **Severity:** minor
+- **First seen:** 2026-08-12 — prepaid-packages-cash-flow
+- **What happened:** `POST /compose` with `{slideCount: 6}` produced **8**
+  slides (orders 0–7). The extra two are not padding — they carry real copy and
+  the roles are well varied (showcase, statement, split, list, split, statement,
+  pull, cta) — but the number asked for was not the number returned.
+- **Why it matters:** slide count is a deliberate editorial choice; the payload
+  derives it from the source's section count. Silently exceeding it means the
+  caller cannot budget a deck, and the user's stated preference (~7) is a
+  preference the tool can quietly overrun.
+- **Direction:** treat `slideCount` as a hard bound, or return the planned count
+  in the response so the caller can see the deviation before exporting.
+
+### Compose put a light photo behind the dark CTA slide, splitting it in half
+
+- **Kind:** Defect
+- **Severity:** cost me a fix
+- **First seen:** 2026-08-12 — prepaid-packages-cash-flow
+- **What happened:** compose auto-attached asset `6a7b74b1b24e0717859faaba` as a
+  `background` on the CTA slide. It is a pale, high-key photograph and the
+  slide's own ground is near-black, so the export had a **hard horizontal seam
+  at ~53% of the frame**: flat light grey above, brand black below, with the
+  white headline "Ready to get paid before the job begins?" crossing it — the
+  first two lines white-on-light-grey, the third white-on-black. It reads as a
+  rendering bug. Removing the photo fixed it.
+- **Why it matters:** a background is chosen without reference to the slide's
+  ground colour or to the type that sits over it, so a pale asset in the pool
+  can wreck any slide it lands on. The CTA is the worst place for it.
+- **Direction:** the luminance check already written for `bleedAnchor` answers
+  most of this — reject (or scrim) a background whose mean luminance sits near
+  the type's rather than near the ground's.
+
+### `GET /businesses/:id` reports `mediaAssets: 0` for a brand with 75 assets
+
+- **Kind:** Defect
+- **Severity:** minor
+- **First seen:** 2026-08-12 — prepaid-packages-cash-flow
+- **What happened:** `GET /businesses/6a42337c717dcf4105b9f9f4` returned
+  `mediaAssets: []` (length 0), while `GET /businesses/:id/media` returned
+  **75** assets for the same brand. The same response also omits `recipe` from
+  the kit — `brandKit` there carries only `colors` and `logoUrl`, so the recipe
+  looks absent until you fetch `/businesses/:id/brandkit` and read `.approved`.
+- **Why it matters:** both fields are exactly what a caller checks before
+  composing, since compose refuses an imageless deck and requires a recipe. I
+  read both as "this brand is not ready", uploaded images that were not needed,
+  and came close to reporting to the user that the brand had no design recipe —
+  which the skill says to stop and escalate on. A summary endpoint that
+  under-reports the two preconditions for its own main action sends callers
+  down a false path.
+- **Direction:** either populate those fields on the business response or omit
+  them entirely — an empty array reads as "none", where a missing key reads as
+  "look elsewhere".
+
 ### Recipe-author v6's elevation rule did not bite
 
 - **Kind:** Gap
@@ -226,6 +354,8 @@ Rules that keep this file worth reading:
   the adjacent case — a bounding box that fits but whose ink does not. Extra
   line-height or a min-margin under `.headline` when the next sibling is
   `.cta` or `.cb-shot` would cover it.
+- **Seen again:**
+  - 2026-08-12 — prepaid-packages-cash-flow — the cover's image box clipped the descenders of "you touch the car" at both the default size and `size: md`; only moving the photo to `placement: background` cleared it.
 
 ### The composer echoed the headline in the eyebrow
 
