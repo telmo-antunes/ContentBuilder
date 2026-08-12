@@ -110,6 +110,37 @@ const PAGE_POOL = 6;
 /** Matches `exporter.ts`/`verifyRecipe.ts` — the render route mounts client-side. */
 const GOTO_TIMEOUT_MS = 45000;
 const MOUNT_TIMEOUT_MS = 25000;
+
+/**
+ * BACKSTOPS, not tuning knobs. Every await inside a measurement already carries
+ * its own timeout, so in a healthy run neither of these is ever reached.
+ *
+ * They exist because the two waits that have NO timeout of their own are the
+ * ones that can hang the whole tool: `pagePool.acquire()` returns a promise
+ * that only settles when some other slide releases a page, and `page.evaluate`
+ * runs until the page answers. Either one stalling leaves `Promise.all` pending
+ * forever — which means compose never returns, never saves a slide, and never
+ * reaches the `finally` that disposes the scaffold, so it also leaks a
+ * `__render-check-*` business/kit/project on the way out.
+ *
+ * A compose that stalled for 45 minutes and wrote nothing is how this got
+ * noticed. Exceeding a ceiling degrades exactly like an unreachable renderer:
+ * an `unknown` verdict, which the caller already handles.
+ */
+const ACQUIRE_TIMEOUT_MS = 60000;
+const MEASURE_TIMEOUT_MS = GOTO_TIMEOUT_MS + MOUNT_TIMEOUT_MS + 20000;
+
+/** Reject if `p` has not settled within `ms`. The timer never holds the loop open. */
+export function withCeiling<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: NodeJS.Timeout;
+  return Promise.race([
+    p,
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${label} exceeded ${ms}ms`)), ms);
+      timer.unref?.();
+    }),
+  ]).finally(() => clearTimeout(timer)) as Promise<T>;
+}
 /**
  * The overflow guard measures on mount, again on `fonts.ready`, on every image
  * load, and once more on a 400ms timer. We wait for the attribute to exist and
@@ -364,12 +395,18 @@ export const openRenderProbe: OpenProbe = async (recipe, format, slides) => {
           }
           let page: Page;
           try {
-            page = await pool.acquire();
+            // Ceiling: acquire waits on another slide releasing a page, so one
+            // stuck measurement would otherwise stall every slide behind it.
+            page = await withCeiling(pool.acquire(), ACQUIRE_TIMEOUT_MS, 'page acquire');
           } catch {
             return UNKNOWN_VERDICT;
           }
           try {
-            return await readOverflow(page, scaffold.urlFor(index));
+            return await withCeiling(
+              readOverflow(page, scaffold.urlFor(index)),
+              MEASURE_TIMEOUT_MS,
+              `slide ${index + 1} measure`,
+            );
           } catch (err) {
             // One line for the whole deck, not one per slide: a dead web server
             // fails every slide identically and nine copies help nobody.
