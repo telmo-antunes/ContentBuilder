@@ -51,7 +51,7 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
-### `POST /compose` hangs forever when the web dev server is not running
+### `POST /compose` hung three times and persisted nothing — cause still unknown
 
 - **Kind:** Defect
 - **Severity:** blocked shipping
@@ -60,68 +60,95 @@ Rules that keep this file worth reading:
   **zero** slides. Run 1 died at undici's 300s header timeout; runs 2 and 3 held
   the connection open for **45** and **16** minutes with no response body, and
   `GET /projects/:id` reported `slides: 0, stage: idea` throughout. Restarting
-  the API changed nothing. The cause was that **only mongo and the API were
-  running — `apps/web` on :3000 was not**. `renderCheck` navigates Puppeteer to
-  `config.webUrl` (default `http://localhost:3000`) to measure each slide, and
-  with nothing listening there it never returns. Two things made it hard to see:
-  each failed run **leaked a `__render-check-*` business** (the count went 3 → 4
-  across attempts, and they are still in `GET /businesses`), and
-  `renderCheck.ts`'s own header comment claims the rig already handles "the
-  question could not be asked (no web server, no browser, a timeout)" — it does
-  not, on this path. **With `npm --prefix apps/web run dev` up, the identical
-  request completed in under 30 seconds.**
-- **Why it matters:** the skill's step 1 says `npm run dev`, which starts all
-  three; but anyone running the API alone — or whose web process died — gets an
-  indefinite hang with no error, no log and no partial output, on the tool's
-  single entry point. It cost roughly 80 minutes and three runs' worth of API
-  spend before the cause was visible.
-- **Direction:** fail fast and say so. Preflight `config.webUrl` before compose
-  starts and 503 with "the web server at <url> is not reachable" if it is not;
-  give `page.goto` a ceiling that surfaces as an error rather than a stall. And
-  clean up the `__render-check-*` businesses on both the success and failure
-  paths — right now a wedged run leaves permanent litter in the business list.
+  the API changed nothing. A fourth run, started immediately after bringing
+  `apps/web` up on :3000, completed in **under 30 seconds**.
+- **Correction — the obvious explanation is wrong.** I first logged this as "the
+  render check hangs when the web server is down", because run 4 followed
+  starting it. Driving `openRenderProbe` directly with :3000 stopped disproves
+  that: it **degrades in 86ms**, returning `unknown` verdicts and logging
+  `[render-check] could not measure a slide — is the web server running?
+  net::ERR_CONNECTION_REFUSED`. Probe open took 773ms. So an unreachable web
+  server cannot account for a 45-minute stall, and anyone fixing `page.goto`
+  timeouts would be fixing the wrong thing. **The real cause is not yet known.**
+- **What is solid:** each wedged run leaked a `__render-check-*` business —
+  there are now four in `GET /businesses` (`72d2211c`, `b58a75e7`, `dd957152`,
+  `37a3c7ae`). `createRenderScaffold` creates business + kit + project up front
+  and only `dispose()` removes them, so a run that never reaches `close()`
+  leaves all three behind permanently. That is real litter and a reliable
+  fingerprint of a wedged compose.
+- **Why it matters:** the tool's single entry point can stall indefinitely with
+  no error, no partial save and nothing in the response. It cost roughly 80
+  minutes and three runs' worth of API spend.
+- **Direction:** make the failure legible before chasing the cause — persist
+  each slide as it is authored instead of saving once at the end, put a
+  wall-clock ceiling on the whole compose that surfaces as an error, and dispose
+  the scaffold in a `finally` so a wedged run stops leaving litter. The leaked
+  businesses then become the diagnostic: whichever stage the deck stops at is
+  where it hung.
 
-### No progress signal on compose, and it outlives a default `fetch`
+### With :3000 down, every layout gate silently returns `unknown`
 
 - **Kind:** Gap
 - **Severity:** cost me a fix
-- **First seen:** 2026-08-12 — prepaid-packages-cash-flow
-- **What happened:** `POST /projects/:id/compose` is synchronous with no
-  intermediate output. Node's built-in `fetch` gives up at undici's 300s
-  `HeadersTimeoutError` — so the endpoint as documented in the skill **cannot be
-  driven from a plain Node client**; I had to switch to `curl` to hold the
-  connection at all. Even when it works there is no way to answer "is this
-  progressing or wedged?", which is exactly the question the finding above
-  turned on.
-- **Why it matters:** every caller has to discover the 300s cliff for itself,
-  and no caller can distinguish slow from stuck.
-- **Direction:** the video exporter already has the right shape —
-  `POST` returns a `jobId`, `GET .../:jobId` returns `{state, percent}`.
-  Compose is a longer job than video export and deserves the same treatment.
+- **First seen:** 2026-08-12 — measured while investigating the hang above
+- **What happened:** with the web server stopped, `probe.measure()` returns
+  `{state: 'unknown', collide: false, slack: 0, headlineLines: 0}` for **every**
+  slide in 86ms. Compose still succeeds and still writes a deck. So the overflow
+  gate, the collision gate, the slack gate and the whole repair ladder quietly
+  do nothing, and the only trace is one `console.warn` on the API's stdout —
+  which under `npm run dev` goes to the operator's terminal and is invisible to
+  an agent driving the HTTP API.
+- **Why it matters:** the deck that comes out is indistinguishable from a
+  measured one, but nothing checked it. Every layout finding in this file was
+  found by those gates; with :3000 down they are all off, and the caller is
+  never told.
+- **Direction:** carry the unknown-verdict count into the compose response (or
+  the project's `pv`), so "this deck was never measured" is visible to the
+  caller rather than to whoever happens to be reading a terminal.
 
-### `createProject` stores `caption.hashtags` but drops `caption.text`
+### Compose reports no progress, so slow is indistinguishable from stuck
 
-- **Kind:** Defect
-- **Severity:** cost me a fix
+- **Kind:** Gap
+- **Severity:** minor
 - **First seen:** 2026-08-12 — prepaid-packages-cash-flow
-- **What happened:** `POST /projects` with
-  `caption: {text: "<77-char draft>", hashtags: [...11]}` returned 201. Reading
-  the project straight back gave `caption.text: ""` with all **11 hashtags
-  intact**, so the field was received and the array survived while the string
-  did not. `settings.dmKeyword` and `settings.audience` both persisted
-  correctly.
-- **Why it matters:** this is a regression against *The keyword and the caption
-  lived in different places* (Resolved 2026-08-11), which states that
-  "`createProject` accepts the payload's caption + hashtags so they arrive as
-  editable drafts". Half of that is no longer true, and the half that is missing
-  is the part the CRM payload spends real effort deriving in the house voice —
-  it silently lands on the floor.
-- **Also:** a `PATCH /projects/:id` with the same `{text, hashtags}` shape
-  persisted the text correctly (689 chars), so the loss is specific to the
-  create path, not to the caption shape or the sanitiser.
-- **Direction:** re-check the create path's handling of the nested caption
-  object; a partial write that keeps the array and discards the sibling string
-  suggests the text is being read from a different key or sanitised to empty.
+- **What happened:** `POST /projects/:id/compose` is synchronous and emits
+  nothing until it returns. A healthy 8-slide compose took **~25 seconds**, so
+  a default Node `fetch` is normally fine — but during the stalls above there
+  was no way to tell a slow run from a wedged one, and Node's built-in `fetch`
+  gives up at undici's 300s `HeadersTimeoutError`, which is itself
+  indistinguishable from the server dying.
+- **Correction:** I first wrote that the endpoint "cannot be driven from a plain
+  Node client". That is wrong in the normal case — it only bit because those
+  particular runs never finished.
+- **Why it matters:** the only long operation in the tool is also the one with
+  no observability, so every stall costs a full timeout to diagnose.
+- **Direction:** the video exporter already has the right shape — `POST` returns
+  a `jobId`, `GET .../:jobId` returns `{state, percent}`. Worth reusing here.
+
+### The CRM payload's `caption` is a string; the API wants `{text, hashtags}`
+
+- **Kind:** Friction
+- **Severity:** minor
+- **First seen:** 2026-08-12 — prepaid-packages-cash-flow
+- **What happened:** `builds/<slug>.instagram.json` carries `caption` as a bare
+  **string** and the hashtags separately as `hashtags: string[]`.
+  `createProjectSchema` expects `caption: {text, hashtags}`. Reading
+  `payload.caption.text` yields `undefined`, zod's `.default('')` accepts it
+  silently, and the project is created with an empty caption while the hashtags
+  — read from the sibling `payload.hashtags` — arrive intact. The result looks
+  exactly like a partial write on ContentBuilder's side.
+- **Correction:** I first logged this as `createProject` dropping
+  `caption.text`, and called it a regression against *The keyword and the
+  caption lived in different places*. **That was wrong** — a direct
+  `POST /projects` with `caption: {text: 'HELLO CAPTION TEXT', hashtags: [...]}`
+  round-trips perfectly. ContentBuilder is not at fault; the caller is, and the
+  shape mismatch is what makes the mistake easy.
+- **Why it matters:** the failure is silent on both sides, and the thing lost is
+  the caption the CRM spent real effort drafting in the house voice.
+- **Direction:** belongs on the CRM side or in the skill rather than here —
+  either emit `caption: {text, hashtags}` from `content:instagram`, or have the
+  skill map it explicitly. Making `captionSchema.text` required for create
+  would also turn the silent loss into a 400.
 
 ### Compose returned 8 slides for `slideCount: 6`
 
@@ -158,26 +185,26 @@ Rules that keep this file worth reading:
   most of this — reject (or scrim) a background whose mean luminance sits near
   the type's rather than near the ground's.
 
-### `GET /businesses/:id` reports `mediaAssets: 0` for a brand with 75 assets
+### Neither precondition for composing is visible on `GET /businesses/:id`
 
-- **Kind:** Defect
+- **Kind:** Friction
 - **Severity:** minor
 - **First seen:** 2026-08-12 — prepaid-packages-cash-flow
-- **What happened:** `GET /businesses/6a42337c717dcf4105b9f9f4` returned
-  `mediaAssets: []` (length 0), while `GET /businesses/:id/media` returned
-  **75** assets for the same brand. The same response also omits `recipe` from
-  the kit — `brandKit` there carries only `colors` and `logoUrl`, so the recipe
-  looks absent until you fetch `/businesses/:id/brandkit` and read `.approved`.
-- **Why it matters:** both fields are exactly what a caller checks before
-  composing, since compose refuses an imageless deck and requires a recipe. I
-  read both as "this brand is not ready", uploaded images that were not needed,
-  and came close to reporting to the user that the brand had no design recipe —
-  which the skill says to stop and escalate on. A summary endpoint that
-  under-reports the two preconditions for its own main action sends callers
-  down a false path.
-- **Direction:** either populate those fields on the business response or omit
-  them entirely — an empty array reads as "none", where a missing key reads as
-  "look elsewhere".
+- **What happened:** compose requires a design recipe and refuses an imageless
+  deck, but `GET /businesses/:id` carries **neither** — `mediaAssets` is absent
+  from the response and the kit it returns has no `recipe` key. The real answers
+  live at `/businesses/:id/media` (**76** assets) and `/businesses/:id/brandkit`
+  (recipe v2, under `.approved`). Reading the business response first, I
+  concluded the brand had no photos and no recipe, and came close to escalating
+  "this brand has no design recipe yet" — which the skill says to stop on.
+- **Correction:** I first logged this as the endpoint *reporting* `mediaAssets:
+  0`. It reports nothing; my own `(b.mediaAssets || []).length` turned an absent
+  field into a zero. The API is not lying — it is just not the place to look.
+- **Why it matters:** an agent checking readiness on the obvious endpoint gets a
+  false negative on both preconditions, and the mistake is silent.
+- **Direction:** cheapest fix is documentation — the skill should say to check
+  `/media` and `/brandkit` (`.approved.recipe`) rather than the business
+  response. Including counts on the business summary would also work.
 
 ### Recipe-author v6's elevation rule did not bite
 

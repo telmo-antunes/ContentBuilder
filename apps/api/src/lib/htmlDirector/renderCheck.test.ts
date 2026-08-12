@@ -1,4 +1,4 @@
-import { asVerdict, repairLayout, layoutFaults, type LayoutVerdict } from './renderCheck';
+import { asVerdict, repairLayout, layoutFaults, withCeiling, type LayoutVerdict } from './renderCheck';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type Anthropic from '@anthropic-ai/sdk';
 
@@ -635,3 +635,33 @@ describe('renderCheckDeck — the layout gates run too', () => {
     expect(out.notes).toEqual([]);
   });
 });
+
+describe('withCeiling', () => {
+  /**
+   * The backstop behind the two awaits in a measurement that have no timeout of
+   * their own — `pagePool.acquire()` and `page.evaluate`. Without it, either one
+   * stalling leaves compose pending forever: no response, no slide saved, and
+   * the scaffold's `finally` never runs, so a `__render-check-*` business leaks
+   * too. A 45-minute stall that wrote nothing is what put this here.
+   */
+  it('passes a value straight through when the promise settles in time', async () => {
+    await expect(withCeiling(Promise.resolve('ok'), 1000, 'x')).resolves.toBe('ok')
+  })
+
+  it('propagates the original rejection rather than masking it as a timeout', async () => {
+    await expect(withCeiling(Promise.reject(new Error('boom')), 1000, 'x')).rejects.toThrow('boom')
+  })
+
+  it('rejects with the label and the budget when the promise never settles', async () => {
+    await expect(withCeiling(new Promise(() => {}), 20, 'slide 3 measure'))
+      .rejects.toThrow('slide 3 measure exceeded 20ms')
+  })
+
+  it('does not hold the process open after the guarded promise wins', async () => {
+    // The timer is unref'd and cleared; a leaked one would keep the event loop
+    // alive long past the deck it was measuring.
+    const before = process.listenerCount('exit')
+    await withCeiling(Promise.resolve(1), 60_000, 'x')
+    expect(process.listenerCount('exit')).toBe(before)
+  })
+})

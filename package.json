@@ -23,7 +23,8 @@
     "migrate:media-urls": "npm --prefix apps/api run migrate:media-urls --",
     "lint": "eslint .",
     "migrate:recipes": "npm --prefix apps/api run migrate:recipes --",
-    "media:orphans": "npm --prefix apps/api run media:orphans --"
+    "media:orphans": "npm --prefix apps/api run media:orphans --",
+    "scaffolds:orphans": "npm --prefix apps/api run scaffolds:orphans --"
   },
   "devDependencies": {
     "@types/supertest": "^7.2.0",

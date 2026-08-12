@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit",
     "migrate:recipes": "tsx src/scripts/migrateRecipeGates.ts",
     "prompt:hashes": "tsx src/scripts/promptHashes.ts",
-    "media:orphans": "tsx src/scripts/sweepOrphanedMedia.ts"
+    "media:orphans": "tsx src/scripts/sweepOrphanedMedia.ts",
+    "scaffolds:orphans": "tsx src/scripts/sweepRenderScaffolds.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.106.0",
