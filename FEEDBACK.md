@@ -51,6 +51,67 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
+### A slide's headline is emitted twice, once as a stray leading node
+
+- **Kind:** Defect
+- **Severity:** cost me a fix
+- **First seen:** 2026-08-12 — prepaid-packages-cash-flow
+- **What happened:** two different decks, same shape. A bare
+  `<div class="headline">…</div>` appears BEFORE the eyebrow, then the real
+  `<h1 class="headline">` follows with the same sentence — so the slide renders
+  the line twice, stacked, in the largest type on the frame. v1 slide 6:
+  `You are buying commitment, not doing charity.` v2 slide 2:
+  `Your income is the exact shape of your calendar.` The stray copy is the plain
+  text; the real one carries the `<span class="it">` emphasis, which is how you
+  tell them apart.
+- **Why it matters:** it is not subtle — it is the biggest thing on the slide,
+  twice — and it survived compose, the layout gates and the export on both
+  decks. Two occurrences in one afternoon is a shape, not a hiccup.
+- **Direction:** near-identical siblings of the same class are what
+  `dedupeBlocks` already reasons about; a leading `.headline` whose text matches
+  the slide's `h1` looks safe to drop outright at the same chokepoint the
+  reasoning-leak guards sit on.
+
+### The 90-character body budget makes an explanatory deck impossible
+
+- **Kind:** Gap
+- **Severity:** cost me a fix
+- **First seen:** 2026-08-12 — prepaid-packages-cash-flow v2
+- **What happened:** `BASE_BUDGETS.body` is **90 chars**. Briefed explicitly to
+  teach — "someone who saves this should be able to build their first package
+  from these slides alone" — the composer still could not put a rule in a body,
+  so bodies came back as slogans and two were **clipped mid-sentence**:
+  `Start at 5%. On five sessions the client has already agreed to return` and
+  `Build your first package — before another quiet week finds`. The only place
+  substance actually fits is a `panel` of `row`s (42 chars each, plus a note per
+  row), which is why the good slides in that deck are all lists.
+- **Why it matters:** the account's own audit says concrete product-demo posts
+  outperform positioning ones, but the budgets are sized for positioning. A
+  carousel that teaches is currently only reachable by hand-authoring rows.
+- **Direction:** either raise `body` for the roles meant to explain
+  (`feature`, `statement`) rather than across the board, or teach the composer
+  that a rule belongs in a panel row and give it the row count to do that. The
+  clipping is a symptom — the budget is the cause.
+
+### A bottom-anchored photo slot runs off the frame when the copy grows
+
+- **Kind:** Defect
+- **Severity:** cost me a fix
+- **First seen:** 2026-08-12 — prepaid-packages-cash-flow v2
+- **What happened:** slides 5 and 7 place `.cb-shot` after the copy, so the
+  picture is pushed down by whatever precedes it. With a full eyebrow +
+  two-line headline + body + rule above it, the screenshot was **cut off by the
+  bottom edge** at `size: lg`, `md` and `sm` alike — shrinking it did not help,
+  because the overflow is in the stack above, not the image. I moved the shot to
+  slide 3, the slide with the least copy, and dropped it from both.
+- **Why it matters:** a half-visible screenshot is worse than none, and it is
+  the one thing on a product-demo slide the reader is meant to look at. The
+  overflow gate measures the composition, so it should be seeing this.
+- **Direction:** worth checking whether an unfilled-then-filled slot is measured
+  at its real height — an empty `.cb-shot` is `display:none`, so a slide that
+  measured clean while the slot was empty can overflow once a photo lands in it,
+  and nothing re-measures after the photo is attached.
+
 ### `POST /compose` hung three times and persisted nothing — cause still unknown
 
 - **Kind:** Defect
