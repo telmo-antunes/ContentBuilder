@@ -1143,3 +1143,55 @@ describe('a plan entry that asks for a shape', () => {
     expect(user).not.toContain('3. Just say something true   [reads as role');
   });
 });
+
+describe('an explicit slideCount is honoured', () => {
+  const deckOf = (n: number) =>
+    JSON.stringify({
+      slides: Array.from({ length: n }, (_, i) => ({
+        role: i === 0 ? 'cover' : 'statement',
+        parts: { headline: `slide ${i + 1}` },
+      })),
+    })
+
+  /**
+   * `fixed` has two sources — a plan, and an explicit `slideCount` — and the
+   * guidance used to read the PLAN's length in both cases. A caller passing
+   * `slideCount: 6` with no plan was told "SLIDES: exactly 0 — one per SLIDE
+   * PLAN entry", which is not followable; the real run returned 8.
+   */
+  it('asks for the requested number, not the (empty) plan length', async () => {
+    reply.mockReturnValue(deckOf(6))
+    await parseForCompose(detailMastersRecipe, 'idea', { model: 'm', slideCount: 6 })
+
+    const user = userOf(aiCalls[0]!)
+    expect(user).toContain('SLIDES: exactly 6')
+    expect(user).not.toContain('exactly 0')
+  })
+
+  it('still points at the plan when there is one', async () => {
+    reply.mockReturnValue(deckOf(2))
+    await parseForCompose(detailMastersRecipe, 'idea', {
+      model: 'm',
+      plan: ['open on the problem', 'close on the offer'],
+    })
+
+    expect(userOf(aiCalls[0]!)).toContain('SLIDES: exactly 2 — one per SLIDE PLAN entry')
+  })
+
+  it('trims a deck that came back longer than asked for', async () => {
+    // Asked for 3, given 5. Trimming only: inventing a slide to reach a floor
+    // would be the padding the range guidance forbids.
+    reply.mockReturnValue(deckOf(5))
+    const inputs = await parseForCompose(detailMastersRecipe, 'idea', { model: 'm', slideCount: 3 })
+
+    expect(inputs).toHaveLength(3)
+    expect(inputs[0]!.parts.headline).toBe('slide 1')
+    expect(inputs[2]!.parts.headline).toBe('slide 3')
+  })
+
+  it('leaves a shorter deck alone rather than padding it', async () => {
+    reply.mockReturnValue(deckOf(2))
+    const inputs = await parseForCompose(detailMastersRecipe, 'idea', { model: 'm', slideCount: 5 })
+    expect(inputs).toHaveLength(2)
+  })
+})

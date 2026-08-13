@@ -34,7 +34,7 @@ import { ApiError, asyncHandler, parseBody, publicErrMessage, requireObjectId } 
 import { createProjectSchema, slideSchema, updateProjectSchema, type SlideInput } from '../lib/validation';
 import { renderSlidesToPng, slugify } from '../lib/exporter';
 import { buildContactSheet } from '../lib/contactSheet';
-import { bleedAnchorFor } from '../lib/bleedAnchor';
+import { bleedAnchorFor, hexLuminance, suitsBleedOver } from '../lib/bleedAnchor';
 import { runVideoJob, sweepExpiredVideoJobs } from '../lib/videoJobs';
 import { findImageCopyContradictions, type SlidePairing } from '../lib/imageCopyCheck';
 import { getStorage } from '../storage';
@@ -680,15 +680,32 @@ projectsRouter.post(
      * (a luminance read on a thumbnail) and never fatal — a photograph that
      * will not decode falls back to the archetype's default.
      */
+    /**
+     * A bleed photo REPLACES the slide's own ground, and the type was coloured
+     * for that ground — so one whose tone is nowhere near it splits the frame.
+     * Measured against the recipe's `ground` here, and dropped rather than
+     * scrimmed harder: a slide with no background still renders correctly on
+     * the brand surface, which is the better of the two failures.
+     */
+    const groundLuminance = hexLuminance(String(parsedRecipe.data.tokens?.ground ?? '')) ?? 0;
+
     const anchors = await Promise.all(
-      filled.photos.map(async (ps) => {
+      filled.photos.map(async (ps, i) => {
         const bgPhoto = ps.find((ph) => ph.placement === 'background');
         if (!bgPhoto) return undefined;
         const asset = pool.find((m) => String((m as { _id: unknown })._id) === String(bgPhoto.mediaAssetId));
         const key = (asset as { key?: string } | undefined)?.key;
         if (!key) return undefined;
         try {
-          return await bleedAnchorFor(await getStorage().read(key));
+          const buffer = await getStorage().read(key);
+          if (!(await suitsBleedOver(buffer, groundLuminance))) {
+            filled.photos[i] = ps.filter((ph) => ph !== bgPhoto);
+            console.warn(
+              `[compose] slide ${i + 1}: dropped a full-bleed photo whose tone fights the brand ground`,
+            );
+            return undefined;
+          }
+          return await bleedAnchorFor(buffer);
         } catch {
           return undefined;
         }
