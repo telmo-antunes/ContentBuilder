@@ -853,8 +853,16 @@ function formatGuidance(format: string): string {
  * before they had read the source themselves.
  */
 function countGuidance(range: { min: number; max: number; target: number; fixed: boolean }, planned: number): string {
+  // `fixed` has TWO sources — a plan, and an explicit `slideCount` — and only
+  // the first has entries to hang the count on. Reading `planned` in both cases
+  // told a caller who passed `slideCount: 6` and no plan "SLIDES: exactly 0 —
+  // one per SLIDE PLAN entry", which is not an instruction anything can follow;
+  // the model ignored it and returned 8.
   if (range.fixed) {
-    return `SLIDES: exactly ${planned} — one per SLIDE PLAN entry, in that order. Do not add a slide the plan did not ask for, and do not merge two.`;
+    if (planned > 0) {
+      return `SLIDES: exactly ${planned} — one per SLIDE PLAN entry, in that order. Do not add a slide the plan did not ask for, and do not merge two.`;
+    }
+    return `SLIDES: exactly ${range.target}. Not one more, not one fewer — split or merge your points to land on that number.`;
   }
   return `SLIDES: ${range.min}–${range.max} (about ${range.target} looks right for this much material). Use what the content earns; do not pad.`;
 }
@@ -1129,6 +1137,22 @@ export async function parseForCompose(
     }
   }
   slides = clampSlidesToBudgets(slides, budgets, locks);
+
+  /**
+   * A hard count is a promise to the caller, so it is enforced rather than
+   * merely asked for. Only trimming: the tail is where a copywriter puts the
+   * slides it added of its own accord, and inventing a slide to reach a floor
+   * would be padding — exactly what the range guidance tells it not to do.
+   */
+  if (range.fixed && slides.length > range.max) {
+    console.warn(
+      `[compose] parse: asked for ${range.max} slide(s), got ${slides.length} — dropping the last ${
+        slides.length - range.max
+      }`,
+    );
+    slides = slides.slice(0, range.max);
+  }
+
   slides = normalizeParsedDeck(slides, recipe, opts?.photoBudget, opts?.handle);
 
   const stillLost = missingLocks(JSON.stringify(slides), locks);

@@ -43,8 +43,9 @@ async function bandLuminance(
   width: number,
   height: number,
   top: number,
+  bandOverride?: number,
 ): Promise<number> {
-  const band = Math.max(1, Math.round(height * BAND));
+  const band = bandOverride ?? Math.max(1, Math.round(height * BAND));
   const { data } = await image
     .clone()
     .extract({ left: 0, top, width, height: Math.min(band, height - top) })
@@ -84,4 +85,60 @@ export async function bleedAnchorFor(buffer: Buffer): Promise<BleedAnchor | unde
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Mean relative luminance of a whole picture, 0–1, or `undefined` if it will
+ * not decode.
+ *
+ * Answers a different question from {@link bleedAnchorFor}: not "which end is
+ * darker" but "is this photograph the right WEIGHT to sit behind this brand's
+ * type at all".
+ */
+export async function meanLuminanceOf(buffer: Buffer): Promise<number | undefined> {
+  try {
+    const small = sharp(buffer).resize(160, 160, { fit: 'fill' });
+    return await bandLuminance(small, 160, 160, 0, 160);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * How far a full-bleed photograph's tone may sit from the surface it replaces.
+ *
+ * A bleed photo stands in for the slide's own ground, and the type was coloured
+ * for that ground. Put a pale photograph behind cream type on a near-black
+ * slide and the frame splits: the headline crosses from legible to invisible
+ * mid-sentence, which reads as a rendering fault rather than a choice. That
+ * shipped — a high-key photo behind a CTA slide cut it in half at 53% with the
+ * headline spanning the seam.
+ *
+ * Generous on purpose. The background layer carries a scrim that can rescue a
+ * moderate mismatch; this only rejects photographs the scrim cannot save.
+ */
+const MAX_GROUND_DRIFT = 0.42;
+
+/**
+ * Can this photograph carry the frame on a surface of `groundLuminance`?
+ *
+ * Unreadable images pass: a decode failure is a reason to fall back to the
+ * archetype's default, never to fail a compose.
+ */
+export async function suitsBleedOver(
+  buffer: Buffer,
+  groundLuminance: number,
+): Promise<boolean> {
+  const mean = await meanLuminanceOf(buffer);
+  if (mean === undefined) return true;
+  return Math.abs(mean - groundLuminance) <= MAX_GROUND_DRIFT;
+}
+
+/** Relative luminance of a `#rgb`/`#rrggbb` token, 0–1. `undefined` if unparseable. */
+export function hexLuminance(hex: string): number | undefined {
+  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return undefined;
+  const h = m[1]!.length === 3 ? m[1]!.split('').map((c) => c + c).join('') : m[1]!;
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
+  return (0.2126 * r! + 0.7152 * g! + 0.0722 * b!) / 255;
 }
