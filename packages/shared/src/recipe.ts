@@ -1091,3 +1091,48 @@ export function recipeMotionCss(recipe?: BrandRecipe, role?: string, countTo?: n
   }
   return lines.join('\n');
 }
+
+/** The three surfaces a brand can raise. They must agree about what raised means. */
+const RAISED_SURFACES = ['cb-shot', 'panel', 'cta'] as const;
+
+export interface ElevationReport {
+  /** True when the brand declares a single elevation token. */
+  declaresToken: boolean;
+  /** Raised surfaces that set their own literal shadow/border instead of the token. */
+  literal: string[];
+  /** Raised surfaces that reference the token, as asked. */
+  usesToken: string[];
+}
+
+/**
+ * Does this recipe state its elevation model ONCE, or three times?
+ *
+ * Recipe-author v6 asked for "one radius scale and one elevation model across
+ * `.cb-shot`, `.panel` and `.cta`" and the very next re-author came back with
+ * three treatments again — a drop shadow, a hairline and a flat button. The
+ * glow instruction from the same release DID take, because it names a MECHANISM
+ * (custom properties with defaults) rather than a principle; this rule named
+ * only a principle, so nothing could tell whether it had been followed.
+ *
+ * The rule now asks for a `--cb-elev` token every raised surface references,
+ * which is exactly what this reads. A prompt rule that cannot be checked reads
+ * as fixed in the version registry while the output is unchanged, and that is
+ * worse than having no rule at all.
+ */
+export function elevationReport(css: string): ElevationReport {
+  const declaresToken = /--cb-elev(-line)?\s*:/.test(css);
+  const literal: string[] = [];
+  const usesToken: string[] = [];
+  for (const cls of RAISED_SURFACES) {
+    // Every rule block whose selector ends in this class, ignoring pseudo-parts.
+    const blocks = [...css.matchAll(new RegExp(`\\.${cls}(?![\\w-])[^{}]*\\{([^}]*)\\}`, 'g'))]
+      .map((m) => m[1] ?? '')
+      .join(';');
+    if (!blocks) continue;
+    const raises = /(box-shadow|border)\s*:/.test(blocks);
+    if (!raises) continue;
+    if (/var\(\s*--cb-elev/.test(blocks)) usesToken.push(cls);
+    else literal.push(cls);
+  }
+  return { declaresToken, literal, usesToken };
+}

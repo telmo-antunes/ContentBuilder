@@ -147,6 +147,15 @@ export const TOUCHPOINT_REGISTRY: Record<TouchpointId, Touchpoint> = {
         ],
         detector: 'noAmbientMotion',
       },
+      {
+        version: 6,
+        date: '2026-08-19',
+        summary: 'One answer for what a raised surface looks like, declared once.',
+        improves: [
+          'The brand states its elevation as a single --cb-elev token, and the photo frame, the list panel and the button all reference it — instead of a soft shadow, a hairline and a flat corner sitting side by side on one slide.',
+          'Asking for "one elevation model" as a principle did not change the output; naming the token does, and makes it checkable.',
+        ],
+      },
     ],
   },
 

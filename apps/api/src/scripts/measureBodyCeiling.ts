@@ -60,8 +60,20 @@ function slideWithBody(recipe: BrandRecipe, body: string, shape: Shape): string 
 (async () => {
   await connectDb();
   const { BrandKitModel } = await import('../models');
+  const { BusinessModel } = await import('../models');
+  /**
+   * A render-check scaffold COPIES the recipe it is measuring, so a leaked one
+   * reads as an extra brand with identical geometry — and every run of this
+   * script creates more. Sampling them double-counts whatever they cloned and
+   * makes the ordering unstable between runs.
+   */
+  const scaffoldBusinessIds = new Set(
+    (await BusinessModel.find({ name: /^__/ }).select('_id').lean()).map((b) => String(b._id)),
+  );
 
-  const kits = await BrandKitModel.find({ recipe: { $exists: true } }).sort({ _id: -1 }).limit(6).lean();
+  const kits = (await BrandKitModel.find({ recipe: { $exists: true } }).sort({ _id: -1 }).limit(24).lean())
+    .filter((k) => !scaffoldBusinessIds.has(String(k.businessId)))
+    .slice(0, 6);
   const usable = kits
     .map((k) => k.recipe as BrandRecipe | undefined)
     .filter((r): r is BrandRecipe => Boolean(r?.components?.some((c) => c.className.split(/\s+/)[0] === 'body')));
@@ -71,6 +83,8 @@ function slideWithBody(recipe: BrandRecipe, body: string, shape: Shape): string 
     await disconnectDb();
     return;
   }
+
+  usable.forEach((r, i) => console.log(`  recipe ${i + 1}: ${(r.components ?? []).length} components, ${Object.keys(r.fragments ?? {}).length} fragments`));
 
   // recipe × format × shape → the length at which it first stops fitting.
   for (const format of FORMATS) {
