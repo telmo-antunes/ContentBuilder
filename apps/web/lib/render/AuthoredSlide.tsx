@@ -46,6 +46,13 @@ import type { SlidePhotoSet } from './projectRender';
  * Fills its parent [data-slide-root]; the recipe's `.cb-slide` (absolute, inset 0)
  * fills this wrapper, so the composition is pixel-exact for the export screenshot.
  */
+/**
+ * Elements that occupy space without painting anything. They are the mechanism
+ * that PRODUCES slack, so counting them as content hides exactly what the slack
+ * measurement is looking for.
+ */
+const SPACER_CLASSES = new Set(['fill']);
+
 export function AuthoredSlide({
   recipe,
   authored,
@@ -109,11 +116,21 @@ export function AuthoredSlide({
       const contentBottom = el.clientHeight - padBottom;
       const TOL = 2; // absorbs sub-pixel rounding
 
-      // Painted boxes only, in document order. `.fill` spacers are excluded by
-      // the zero-height test — they ARE the mechanism that produces slack, so
-      // counting them as content would hide exactly what we are looking for.
+      // Painted boxes only, in document order.
+      //
+      // A spacer is excluded BY CLASS, not by height. It used to be excluded by
+      // the zero-height test, on the reasoning that a spacer has no box — but
+      // `.fill` is `flex: 1 1 auto`, so a spacer doing its job is precisely the
+      // one with a large height. The void was therefore counted as content and
+      // the gate went blind to it: a slide holding two lines of type over 897px
+      // of nothing measured 4.6% slack, because the only gaps left to find were
+      // the 62px between the eyebrow and the headline. Across 96 renders — every
+      // recipe, both formats, bodies from 58 to 278 characters — slack never
+      // once crossed its threshold. The zero-height test excluded a spacer only
+      // when it had grown to nothing, which is the one case with no slack in it.
       const boxes = Array.from(el.children)
         .filter((c): c is HTMLElement => c instanceof HTMLElement && c.offsetHeight > 0)
+        .filter((c) => !SPACER_CLASSES.has(c.classList[0] ?? ''))
         .map((c) => ({ top: c.offsetTop, bottom: c.offsetTop + c.offsetHeight }))
         .sort((a, b) => a.top - b.top);
 

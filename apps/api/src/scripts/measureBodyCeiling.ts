@@ -14,7 +14,7 @@
  * Needs the web server up: the probe renders through `${WEB_URL}/render`.
  */
 import { connectDb, disconnectDb } from '../db';
-import { MAX_SLACK, openRenderProbe } from '../lib/htmlDirector/renderCheck';
+import { maxSlackFor, openRenderProbe } from '../lib/htmlDirector/renderCheck';
 import type { BrandRecipe } from '@contentbuilder/shared';
 
 const LENGTHS = [60, 90, 120, 150, 180, 210, 240, 280];
@@ -86,7 +86,8 @@ function slideWithBody(recipe: BrandRecipe, body: string, shape: Shape): string 
           const verdicts = await probe.measure(variants.map((v, i) => ({ index: i, html: v.html })));
           const cells = verdicts.map((v, i) => {
             const len = filler(LENGTHS[i]!).length;
-            const mark = v.state === 'fits' ? (v.slack > MAX_SLACK ? 'H' : '·') : v.state === 'overflows' ? 'X' : '?';
+            const over = v.slack > maxSlackFor('statement');
+            const mark = v.state === 'fits' ? (over ? 'H' : '·') : v.state === 'overflows' ? 'X' : '?';
             return `${len}${mark}`;
           });
           const collide = verdicts.some((v) => v.collide) ? '  (recipe collides at every length)' : '';
