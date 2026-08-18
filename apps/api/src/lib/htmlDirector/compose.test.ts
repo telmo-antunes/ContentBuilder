@@ -545,7 +545,9 @@ describe('format-aware parse', () => {
     const user = userOf(aiCalls[0]!);
     expect(user).toContain('eyebrow <= 21');
     expect(user).toContain('headline <= 48');
-    expect(user).toContain('body <= 72');
+    // The body does NOT take the story's 20% cut — measured, a story holds more
+    // prose than a post, and Instagram's UI is a band the padding now reserves.
+    expect(user).toContain('body <= 90');
     expect(user).toContain('cta <= 19');
     expect(user).toContain('rows text <= 34');
     expect(user).toContain('safe area');
@@ -656,7 +658,7 @@ describe('the body budget is per-role, not one number for the whole deck', () =>
     expect(sysOf(aiCalls[0]!)).toContain('the body may run to 150 characters');
     expect(composeBudgetsFor('1080x1350').explainBody).toBe(150);
     await parseForCompose(detailMastersRecipe, 'idea', { model: 'm', format: '1080x1920' });
-    expect(userOf(aiCalls[1]!)).toContain('body <= 72 (<= 120 on a statement or feature slide that has no tagline)');
+    expect(userOf(aiCalls[1]!)).toContain('body <= 90 (<= 150 on a statement or feature slide that has no tagline)');
   });
 });
 

@@ -198,9 +198,13 @@ describe('per-format tuning', () => {
   it('appends the format override after the base stylesheet', () => {
     const story = recipeStylesheetFor(withFormats, '1080x1920');
     expect(story).toContain('font-size:112px'); // base preserved
-    expect(story).toContain('padding:210px 88px 240px'); // override appended
+    // The override is appended, with its 210/240 padding raised to the story UI
+    // reserve on the way through — see enforceStoryReserve. Its horizontal 88px
+    // is the brand's own and survives.
+    expect(story).toContain('padding:250px 88px 250px'); // override appended
     // the override comes AFTER the base so it wins by cascade order
-    expect(story.indexOf('padding:210px')).toBeGreaterThan(story.indexOf('padding:96px'));
+    const overrideAt = story.lastIndexOf('padding:250px 88px 250px');
+    expect(overrideAt).toBeGreaterThan(story.indexOf('padding:250px 96px 250px'));
   });
 
   it('adds no format override for the base format', () => {

@@ -20,6 +20,7 @@ export default function RenderStage({
   slideTotal,
   showCounter,
   motion = false,
+  reserveSlots = false,
 }: {
   authored?: { html: string; bg?: string; role?: string };
   /** The user's own photos: slot fills, a background, and free overlays. */
@@ -32,6 +33,8 @@ export default function RenderStage({
   showCounter: boolean;
   /** Play the reveal choreography (animated/video export). */
   motion?: boolean;
+  /** Measure empty photo slots at their real size — set only by the layout probe. */
+  reserveSlots?: boolean;
   /** Clip length; the ambient drift is stretched across it. */
 }) {
   return (
@@ -47,6 +50,7 @@ export default function RenderStage({
         slideTotal={slideTotal}
         showCounter={showCounter}
         motion={motion}
+        reserveSlots={reserveSlots}
         // Publish the ground-truth overflow result on the DOM so the export /
         // any headless pass driving this route can read it off the page.
         onOverflow={(o, layout) => {
