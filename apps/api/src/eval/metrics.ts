@@ -29,7 +29,7 @@
  * the markdown summary like every other metric.
  */
 import { authoredSlots } from '@contentbuilder/shared';
-import { composeBudgetsFor } from '../lib/htmlDirector/compose';
+import { bodyBudgetFor, composeBudgetsFor } from '../lib/htmlDirector/compose';
 import { pruneSlideMarkup } from '../lib/htmlDirector/dedupeBlocks';
 import { sanitizeAuthoredHtml } from '../lib/htmlSanitize';
 import type { ComposeParts, ComposeSlideInput, SlideRole } from '../lib/htmlDirector/prompt';
@@ -59,7 +59,10 @@ export function parseBudgetViolations(slides: ComposeSlideInput[]): BudgetViolat
     const budgets = composeBudgetsFor(s.format);
     for (const part of ['eyebrow', 'headline', 'body', 'cta'] as const) {
       const v = s.parts[part];
-      const limit = budgets[part];
+      // The body limit is per-role as well as per-format, so it is read the same
+      // way production reads it — otherwise an explaining slide using the room
+      // it is allowed would be counted here as a leak.
+      const limit = part === 'body' ? bodyBudgetFor(budgets, s) : budgets[part];
       if (typeof v === 'string' && v.length > limit) {
         out.push({ slide: i, role: s.role, part, length: v.length, limit });
       }

@@ -51,28 +51,60 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
-### The 90-character body budget makes an explanatory deck impossible
+### The slack gate never fires, so nothing catches a slide that reads empty
 
 - **Kind:** Gap
 - **Severity:** cost me a fix
-- **First seen:** 2026-08-12 — prepaid-packages-cash-flow v2
-- **What happened:** `BASE_BUDGETS.body` is **90 chars**. Briefed explicitly to
-  teach — "someone who saves this should be able to build their first package
-  from these slides alone" — the composer still could not put a rule in a body,
-  so bodies came back as slogans and two were **clipped mid-sentence**:
-  `Start at 5%. On five sessions the client has already agreed to return` and
-  `Build your first package — before another quiet week finds`. The only place
-  substance actually fits is a `panel` of `row`s (42 chars each, plus a note per
-  row), which is why the good slides in that deck are all lists.
-- **Why it matters:** the account's own audit says concrete product-demo posts
-  outperform positioning ones, but the budgets are sized for positioning. A
-  carousel that teaches is currently only reachable by hand-authoring rows.
-- **Direction:** either raise `body` for the roles meant to explain
-  (`feature`, `statement`) rather than across the board, or teach the composer
-  that a rule belongs in a panel row and give it the row count to do that. The
-  clipping is a symptom — the budget is the cause.
-- **Seen again:**
-  - 2026-08-18 — smoke-odour-removal — clipped slide 4's headline mid-sentence (`...on foam that still`), and five of eight slides had to be hand-authored into panels to carry their point. Same ratio as the previous deck.
+- **First seen:** 2026-08-18 — measured while sizing the body budget above
+- **What happened:** `measureBodyCeiling` rendered the same slide with bodies from
+  58 to 278 characters across six recipes and two formats — 96 renders. `slack`
+  exceeded `MAX_SLACK` (0.15) **not once**, at any length, in any recipe. A slide
+  whose entire body is 58 characters measures as having no hole in it.
+- **Why it matters:** "some of the slides are still looking a bit empty" is the
+  single most repeated piece of feedback on this tool, and the gate that exists
+  to catch exactly that is silent. Raising the body budget gives the composer
+  room to say more; it does not make it notice when it hasn't.
+- **Direction:** find out what `slack` actually measures before changing the
+  threshold — a largest-contiguous-empty-band that never exceeds 15% on a slide
+  with three elements on it suggests the band is being computed over the wrong
+  box (a full-bleed ground, or a flex container that stretched to fit), not that
+  0.15 is too high. Worth measuring an obviously-empty slide by hand first.
+
+### The story budget shrinks ~20% across the board, but a story fits MORE copy
+
+- **Kind:** Defect
+- **Severity:** minor
+- **First seen:** 2026-08-18 — measured while sizing the body budget above
+- **What happened:** `composeBudgetsFor` scales every budget by 0.8 for
+  1080×1920, on the stated reasoning that Instagram overlays its UI so "the safe
+  area is tighter than a post". Measured, the opposite holds for body copy: with
+  the full furniture, the tightest recipe overflows at 146 on a **post** and only
+  at 175 on a **story**, and three recipes that overflow at 278 on a post fit it
+  on a story.
+- **Why it matters:** stories are getting ~20% less copy than a post on a canvas
+  that holds more of it, which is the same thinness complaint in a second place.
+- **Direction:** the UI reserve is a band at the top and bottom, not a global
+  squeeze — the story's own `STORY_UI_RESERVE` already models it that way. A
+  vertical reserve costs a fixed number of pixels, so it should shorten the
+  headline (which competes for the same vertical band) far more than the body.
+  Measure per part before touching the scale; only `body` has numbers so far.
+
+### Two stored recipes overflow and collide at every copy length
+
+- **Kind:** Defect
+- **Severity:** minor
+- **First seen:** 2026-08-18 — measured while sizing the body budget above
+- **What happened:** of six stored recipes, two report `collide` at **every** body
+  length from 58 to 278 characters in both formats, and overflow at 58 characters
+  on a post with the full furniture — i.e. they fail on copy far shorter than any
+  budget allows. The other four behave sensibly.
+- **Why it matters:** any deck built on those two brands starts from a failing
+  layout, so the repair ladder runs on every slide and the gate's verdict carries
+  no information about the copy.
+- **Direction:** identify which two (the script prints them in order; give it a
+  `--names` flag) and check whether `verifyRecipe` ever passed them. If a
+  re-authored recipe can ship in a state that fails its own layout gate at any
+  copy length, the gate belongs in the authoring path, not only at compose time.
 
 ### A bottom-anchored photo slot runs off the frame when the copy grows
 
@@ -355,6 +387,14 @@ Rules that keep this file worth reading:
   - 2026-08-12 — prepaid-packages-cash-flow — the cover's image box clipped the descenders of "you touch the car" at both the default size and `size: md`; only moving the photo to `placement: background` cleared it.
 
 ## Resolved
+
+### The 90-character body budget makes an explanatory deck impossible
+
+*Resolved 2026-08-18 (PR #56, Copywriter v7).* `body` is now per-role as well as per-format: a `statement` or `feature` slide — the roles where a deck makes its argument — gets **150** characters (120 on a story), every other role keeps 90, and the allowance is withdrawn when a tagline shares the slide.
+
+The number is measured, not chosen. `src/scripts/measureBodyCeiling.ts` renders one slide per body length through the production probe across every stored recipe: on a post, eyebrow + headline + body fits **278** characters on every sound recipe, while the shape that breaks is the one also carrying a tagline, CTA and handle, where the tightest recipe fits 118 and overflows at 146. A `shorter body` lesson pulls the allowance down proportionally.
+
+Raising the budget also exposed a second bug in `clampSentences`: its "don't leave a stub" floor was `max * 0.35`, which scales the wrong way. At a 90-char budget a 35-character first sentence cleared the floor and was kept; at 150 the same sentence failed it, so the clamp threw a finished sentence away and cut mid-clause instead. The floor is now the LOWER of 32 characters and `max * 0.35`.
 
 ### A slide's headline is emitted twice, once as a stray leading node
 

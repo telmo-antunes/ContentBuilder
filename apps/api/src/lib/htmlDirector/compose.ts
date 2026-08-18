@@ -348,6 +348,11 @@ export interface ComposeBudgets {
   eyebrow: number;
   headline: number;
   body: number;
+  /**
+   * What a body may run to on a slide whose job is to EXPLAIN — see
+   * {@link EXPLAIN_ROLES}. Always >= `body`.
+   */
+  explainBody: number;
   cta: number;
   /** One enumeration row's `text`. */
   rowText: number;
@@ -362,7 +367,55 @@ export interface ComposeBudgets {
  * a kicker (uppercase, letter-spaced, it fills about two thirds of the canvas
  * width at the reference type scale) and stops eating whole words.
  */
-const BASE_BUDGETS: ComposeBudgets = { eyebrow: 26, headline: 60, body: 90, cta: 24, rowText: 42 };
+const BASE_BUDGETS: ComposeBudgets = {
+  eyebrow: 26,
+  headline: 60,
+  body: 90,
+  explainBody: 150,
+  cta: 24,
+  rowText: 42,
+};
+
+/**
+ * The roles whose job is to EXPLAIN. A cover hooks, a stat lands a number and a
+ * quote carries a voice — each wants one short line under it. A `statement` or a
+ * `feature` is where a deck makes its actual argument, and 90 characters is
+ * under two rendered lines: every explanatory deck so far had its point
+ * hand-authored back into panel rows afterwards, on five of eight slides in the
+ * worst case.
+ */
+const EXPLAIN_ROLES = new Set<SlideRole>(['statement', 'feature']);
+
+/**
+ * A slide's body budget. Every other part is per-format; the body is also
+ * per-role, because the roles differ in what a body is FOR.
+ *
+ * `explainBody` is MEASURED, not guessed — `src/scripts/measureBodyCeiling.ts`
+ * renders one slide per body length through the production probe, across every
+ * stored recipe, and reports where each first stops fitting. On a post, a slide
+ * carrying eyebrow + headline + body fits 278 characters on every sound recipe.
+ * The shape that breaks is the one that ALSO carries a tagline, a CTA and a
+ * handle: there the tightest recipe fits 118 and overflows at 146.
+ *
+ * So the allowance is generous for a slide that only explains, and the base
+ * budget applies again the moment a tagline shares the canvas with the body —
+ * which the prompt's own "one supporting element per slide" rule asks for
+ * anyway. A canvas the copy has to share is a canvas with less room on it.
+ */
+export function bodyBudgetFor(
+  budgets: ComposeBudgets,
+  slide: { role: string; parts: Pick<ComposeParts, 'tagline'> },
+): number {
+  if (!EXPLAIN_ROLES.has(slide.role as SlideRole)) return budgets.body;
+  const tagline = slide.parts.tagline;
+  if (typeof tagline === 'string' && tagline.trim().length > 0) return budgets.body;
+  // A `shorter body` lesson lowers `body` for a brand whose copy kept
+  // overflowing. That verdict is about this brand's type, not about one role, so
+  // the explain allowance follows it down by the same proportion — otherwise the
+  // brand that was told to write shorter keeps its 150 wherever it explains.
+  const ratio = BASE_BUDGETS.explainBody / BASE_BUDGETS.body;
+  return Math.min(budgets.explainBody, Math.round(budgets.body * ratio));
+}
 
 /**
  * The budgets for a format. A story's safe area is tighter (Instagram overlays
@@ -377,6 +430,7 @@ export function composeBudgetsFor(format: string): ComposeBudgets {
     eyebrow: Math.round(BASE_BUDGETS.eyebrow * scale),
     headline: Math.round(BASE_BUDGETS.headline * scale),
     body: Math.round(BASE_BUDGETS.body * scale),
+    explainBody: Math.round(BASE_BUDGETS.explainBody * scale),
     cta: Math.round(BASE_BUDGETS.cta * scale),
     rowText: Math.round(BASE_BUDGETS.rowText * scale),
   };
@@ -481,7 +535,7 @@ function budgetViolationsOf(slides: ParsedSlide[], budgets: ComposeBudgets): Bud
     };
     check('eyebrow', s.parts.eyebrow, budgets.eyebrow);
     check('headline', s.parts.headline, budgets.headline);
-    check('body', s.parts.body, budgets.body);
+    check('body', s.parts.body, bodyBudgetFor(budgets, s));
     check('cta', s.parts.cta, budgets.cta);
     (s.parts.rows ?? []).forEach((r, j) => check(`rows[${j}].text`, r.text, budgets.rowText));
   });
@@ -624,6 +678,20 @@ function clampNoEllipsis(raw: string, max: number): string {
  * way. Falls back to the word-boundary clamp only when not even the first
  * sentence fits.
  */
+/**
+ * The shortest completed sentence worth keeping on its own.
+ *
+ * The floor used to be `max * 0.35` alone, which reads as "don't leave a stub"
+ * but scales the wrong way: raise the budget and a perfectly good short sentence
+ * stops clearing the bar, so the clamp throws it away and cuts mid-clause
+ * instead. "Those numbers describe a best case." is 35 characters — a line, not
+ * a stub — and it cleared a 90-char budget's floor while failing a 150-char
+ * one's. Whichever floor is LOWER applies, so a tight budget still refuses a
+ * two-word fragment and a generous one stops preferring a severed clause to a
+ * finished sentence.
+ */
+const MIN_KEPT_SENTENCE = 32;
+
 function clampSentences(raw: string, max: number): string {
   const s = String(raw ?? '').replace(/\s+/g, ' ').trim();
   if (s.length <= max) return s;
@@ -634,7 +702,7 @@ function clampSentences(raw: string, max: number): string {
     if (next.length > max) break;
     kept = next;
   }
-  return kept.length >= max * 0.35 ? kept : clampNoEllipsis(s, max);
+  return kept.length >= Math.min(MIN_KEPT_SENTENCE, max * 0.35) ? kept : clampNoEllipsis(s, max);
 }
 
 /**
@@ -679,7 +747,7 @@ function clampSlidesToBudgets(
     clamp('eyebrow', budgets.eyebrow);
     clamp('headline', budgets.headline);
     clamp('cta', budgets.cta);
-    clamp('body', budgets.body);
+    clamp('body', bodyBudgetFor(budgets, s));
     parts.rows?.forEach((r, j) => {
       if (r.text.length <= budgets.rowText || isLocked(r.text)) return;
       const clamped = clampNoEllipsis(r.text, budgets.rowText);
@@ -723,11 +791,12 @@ RULES
 - USE "list" WHEN THE CONTENT ENUMERATES. If a slide is "four things", "three ways", "what you get" — anything that is a set of parallel items — give it role "list" and put the items in "rows" (2–5 of them), NOT in "body". Never write a paragraph that is secretly a list: "Cash in the bank. Repeat visits secured. Slow weeks funded." is three rows, not one body. If your headline announces a number, the slide almost certainly wants rows.
 - A "list" slide MUST carry rows. A list with no rows is an empty card — if you cannot fill it, the slide is not a list.
 - rows entries are {"text": "the item", "note": "optional half-line of detail"}. Keep text under 42 characters — these are scanned, not read.
-- parts keys (include only what a slide needs): eyebrow (2–4 word kicker), headline (the line — punchy), emphasis (the sub-phrase inside headline to accent), tagline (a short payoff line), body (1 short sentence), rows (a list — see above), quote, attribution, stat (e.g. "40%"), cta (button text), handle.
+- parts keys (include only what a slide needs): eyebrow (2–4 word kicker), headline (the line — punchy), emphasis (the sub-phrase inside headline to accent), tagline (a short payoff line), body (1 short sentence — 2 on a statement or feature slide that is doing the explaining), rows (a list — see above), quote, attribution, stat (e.g. "40%"), cta (button text), handle.
 - ONE IDEA PER SLIDE, and one supporting element at most: a body sentence, OR rows, OR a stat. Never a paragraph and a list on the same poster, and never a big number beside the list that already makes its point.
 - "handle" is the brand's @name or web address and nothing else. It is set in the smallest, faintest type on the poster, so a sentence put there ships as an afterthought nobody can read. If you have something to say, it is a body, a tagline or a row.
 - Every slide must tell the reader something the slide before it did not. If two slides make the same point, cut one.
 - This is a POSTER read on a phone at arm's length, not an article. Hard budgets: eyebrow <= 26 characters, headline <= 60, body <= 90, cta <= 24. Going over does not get truncated — it pushes the design off the canvas.
+- ONE EXCEPTION, and it is the important one: on a "statement" or a "feature" slide the body may run to 150 characters — two sentences — PROVIDED that slide carries no tagline. Those are the slides where the deck explains itself, and a deck of nine hooks with nothing under them is the most common way this comes out thin. Use the room when you have something to say; a slide that only needs six words still only gets six.
 - The eyebrow is a LABEL, not a summary: 2–4 words naming what this slide is about. If you find yourself compressing the headline into it, drop it.
 - HOW MANY SLIDES: you are told the range the material looks like it needs. Give the deck the number of slides the content actually earns inside that range — never pad a thin idea out to hit a quota, never cram two ideas onto one slide to come in under it.
 - Write in the brand voice provided. No hashtags, no emoji.
@@ -836,7 +905,10 @@ function photoGuidance(recipe: BrandRecipe): string {
  */
 function formatGuidance(format: string): string {
   const b = composeBudgetsFor(format);
-  const numbers = `eyebrow <= ${b.eyebrow}, headline <= ${b.headline}, body <= ${b.body}, cta <= ${b.cta}, rows text <= ${b.rowText}`;
+  const numbers =
+    `eyebrow <= ${b.eyebrow}, headline <= ${b.headline}, body <= ${b.body} ` +
+    `(<= ${b.explainBody} on a statement or feature slide that has no tagline), ` +
+    `cta <= ${b.cta}, rows text <= ${b.rowText}`;
   if (format === '1080x1920') {
     return `FORMAT: 1080×1920 story (9:16). Instagram overlays its UI over the top and bottom of a story, so the safe area is tighter than a post and the copy budgets shrink ~20%: ${numbers}.`;
   }

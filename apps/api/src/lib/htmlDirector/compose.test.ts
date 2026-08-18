@@ -61,7 +61,7 @@ vi.mock('../ai', () => {
   };
 });
 
-const { composeSlide, composeProject, parseForCompose } = await import('./compose');
+const { composeSlide, composeProject, parseForCompose, composeBudgetsFor } = await import('./compose');
 const { detailMastersRecipe } = await import('./recipes');
 const { sanitizeAuthoredHtml } = await import('../htmlSanitize');
 const { SLIDE_AUTHOR_INSTRUCTIONS } = await import('./prompt');
@@ -577,6 +577,89 @@ describe('format-aware parse', () => {
   });
 });
 
+describe('the body budget is per-role, not one number for the whole deck', () => {
+  // Two sentences. Well over the 90-char base budget, inside the 150 an
+  // explaining slide is allowed.
+  const twoSentences =
+    'A booking that never reaches the calendar is one you have already lost. ' +
+    'The shop finds out when the bay is empty on a Friday.';
+
+  it('leaves an explaining slide its two sentences, with no re-parse and no clamp', async () => {
+    expect(twoSentences.length).toBeGreaterThan(90);
+    expect(twoSentences.length).toBeLessThanOrEqual(150);
+    reply.mockReturnValueOnce(
+      JSON.stringify({ slides: [{ role: 'statement', parts: { headline: 'The quiet week', body: twoSentences } }] }),
+    );
+    const inputs = await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' });
+    expect(aiCalls).toHaveLength(1);
+    expect(inputs[0]!.parts.body).toBe(twoSentences);
+    expect(warnings()).toEqual([]);
+  });
+
+  it('gives a feature slide the same room', async () => {
+    reply.mockReturnValueOnce(
+      JSON.stringify({ slides: [{ role: 'feature', parts: { headline: 'Deposits', body: twoSentences } }] }),
+    );
+    const inputs = await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' });
+    expect(inputs[0]!.parts.body).toBe(twoSentences);
+  });
+
+  it('withdraws the room when a tagline shares the canvas — the shape that overflows', async () => {
+    const json = JSON.stringify({
+      slides: [
+        { role: 'statement', parts: { headline: 'The quiet week', tagline: 'Ask for the deposit.', body: twoSentences } },
+      ],
+    });
+    reply.mockReturnValueOnce(json).mockReturnValueOnce(json);
+    const inputs = await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' });
+    expect(inputs[0]!.parts.body!.length).toBeLessThanOrEqual(90);
+  });
+
+  it('holds every other role to the base budget', async () => {
+    const json = JSON.stringify({
+      slides: [{ role: 'cover', parts: { headline: 'The quiet week', body: twoSentences } }],
+    });
+    reply.mockReturnValueOnce(json).mockReturnValueOnce(json);
+    const inputs = await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' });
+    expect(inputs[0]!.parts.body!.length).toBeLessThanOrEqual(90);
+  });
+
+  it('follows a “shorter body” lesson down instead of keeping its 150', async () => {
+    // The brand has been taught its bodies are always cut by ~20 characters, so
+    // the base budget drops to 70 — and the explain allowance drops with it.
+    const lesson = {
+      id: 'shorter:body',
+      kind: 'shorter' as const,
+      subject: 'body' as const,
+      observations: 4,
+      amount: 20,
+      instruction: 'aim shorter',
+      summary: 'you shorten the body',
+      evidence: [],
+    };
+    const json = JSON.stringify({
+      slides: [{ role: 'statement', parts: { headline: 'The quiet week', body: twoSentences } }],
+    });
+    reply.mockReturnValue(json);
+    const inputs = await parseForCompose(detailMastersRecipe, 'idea', { model: 'm', lessons: [lesson] });
+    // 70 * (150/90) = 117, so the two sentences no longer fit whole.
+    expect(inputs[0]!.parts.body!.length).toBeLessThanOrEqual(117);
+    expect(inputs[0]!.parts.body!.length).toBeGreaterThan(70);
+  });
+
+  it('names the allowance — in the system prompt at base, scaled in the user message', async () => {
+    const tiny = JSON.stringify({ slides: [{ role: 'cover', parts: { headline: 'Hi there.' } }] });
+    reply.mockReturnValueOnce(tiny).mockReturnValueOnce(tiny);
+    await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' });
+    // The base numbers live in the static system prompt; the user message adds
+    // nothing for the base format, so the cache stays warm across posts.
+    expect(sysOf(aiCalls[0]!)).toContain('the body may run to 150 characters');
+    expect(composeBudgetsFor('1080x1350').explainBody).toBe(150);
+    await parseForCompose(detailMastersRecipe, 'idea', { model: 'm', format: '1080x1920' });
+    expect(userOf(aiCalls[1]!)).toContain('body <= 72 (<= 120 on a statement or feature slide that has no tagline)');
+  });
+});
+
 describe('mechanical emphasis wrap', () => {
   it('wraps a forgotten emphasis phrase in the brand’s emphasis span', async () => {
     reply.mockReturnValueOnce('<div class="headline">Get paid before you lift a finger.</div>');
@@ -898,8 +981,10 @@ describe('the brief reaches the copywriter', () => {
   });
 
   it('clamps over-long prose to a finished clause instead of an ellipsis', async () => {
-    const body = 'Proper reapplication means removing what remains, correcting the paint, and starting again.';
-    reply.mockReturnValue(oneSlide({ body: body + ' It is a real job.' }));
+    const body =
+      'Proper reapplication means removing what remains, correcting the paint, and starting again from bare ' +
+      'lacquer on every panel.';
+    reply.mockReturnValue(oneSlide({ body: `${body} It is a real job, not a top-up between washes.` }));
     const out = await parseForCompose(detailMastersRecipe, 'brief', { model: 'm' });
     expect(out[0]!.parts.body!.endsWith('…')).toBe(false);
     expect(body.startsWith(out[0]!.parts.body!.replace(/[.,]$/, ''))).toBe(true);
@@ -1039,19 +1124,23 @@ describe('markdown is not copy', () => {
 describe('prose is shortened by the sentence, not mid-thought', () => {
   it('drops the trailing sentence rather than amputating it', async () => {
     const body =
-      'Those numbers describe a best case. A coating wears down unevenly, starting where the car takes the most abuse.';
-    expect(body.length).toBeGreaterThan(90);
+      'Those numbers describe a best case. A coating wears down unevenly, starting where the car takes the ' +
+      'most abuse and never quite recovering from the neglect afterwards.';
+    expect(body.length).toBeGreaterThan(150);
     reply.mockReturnValue(JSON.stringify({ slides: [{ role: 'statement', parts: { body } }] }));
     const out = await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' });
     expect(out[0]!.parts.body).toBe('Those numbers describe a best case.');
   });
 
   it('falls back to a clause when not even the first sentence fits', async () => {
-    const body = 'A coating does not stop working on a particular date, it wears down unevenly across the whole car.';
+    const body =
+      'A coating does not stop working on a particular date, it wears down unevenly across the whole car, ' +
+      'fastest on the panels that take the weather and the washing.';
+    expect(body.split('. ')).toHaveLength(1); // one sentence — nothing to drop
     reply.mockReturnValue(JSON.stringify({ slides: [{ role: 'statement', parts: { body } }] }));
     const out = await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' });
     const got = out[0]!.parts.body!;
-    expect(got.length).toBeLessThanOrEqual(90);
+    expect(got.length).toBeLessThanOrEqual(150);
     expect(got.endsWith('…')).toBe(false);
     expect(body.startsWith(got.replace(/[.,]$/, ''))).toBe(true);
   });
