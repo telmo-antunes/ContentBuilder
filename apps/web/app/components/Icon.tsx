@@ -38,6 +38,12 @@ const GLYPHS = {
       <circle cx="18.5" cy="12" r="1.4" />
     </g>
   ),
+  phone: (
+    <>
+      <rect x="7" y="2.5" width="10" height="19" rx="2.2" />
+      <path d="M10.6 5.2h2.8" />
+    </>
+  ),
   image: (
     <>
       <rect x="3.5" y="5" width="17" height="14" rx="2" />

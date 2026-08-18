@@ -197,33 +197,6 @@ Rules that keep this file worth reading:
   type was already correct.
 - **Fixed 2026-08-11** — both places now show the display and body faces.
 
-### No per-slide view of the source sentence a slide came from
-
-- **Kind:** Gap
-- **Severity:** cost me a fix
-- **First seen:** 2026-08-11 — `how-often-ceramic-coating` review
-- **What happened:** three slides drifted from the source post and nothing on
-  the review page could show it — noticing required holding the post and the
-  deck open in two tabs and comparing by hand. The copywriter is now
-  constrained (v5), but the reviewer still cannot SEE fidelity.
-- **Why it matters:** a constraint without a check degrades quietly. The next
-  drift will again be caught only by a human who happens to re-read the post.
-- **Direction:** the parse step knows which beat produced each slide; carry
-  that through and show the source sentence under each card on review.
-
-### No phone-size scroll view on the review page
-
-- **Kind:** Gap
-- **Severity:** minor
-- **First seen:** 2026-08-11 — `how-often-ceramic-coating` review
-- **What happened:** the review page shows slides as a strip of small cards —
-  the one view in which seven identical gradient panels look fine. The monotony
-  was obvious only after export, at full size.
-- **Why it matters:** the review page's whole job is to catch what will look
-  wrong on a phone, at phone size.
-- **Direction:** a stacked, phone-width view; the ScaledSlide component already
-  renders at arbitrary width.
-
 ### An image can still contradict its slide, and the checker only catches some of it
 
 - **Kind:** Gap
@@ -264,6 +237,18 @@ Rules that keep this file worth reading:
   - 2026-08-12 — prepaid-packages-cash-flow — the cover's image box clipped the descenders of "you touch the car" at both the default size and `size: md`; only moving the photo to `placement: background` cleared it.
 
 ## Resolved
+
+### No per-slide view of the source sentence a slide came from
+
+*Resolved 2026-08-19 (PR #61).* No threading was needed in the end — the project already stores `plan`, one direction per slide, and a plan FIXES the deck at one slide per entry in order, so `plan[i]` IS this slide's brief. The review page shows it under each card. Shown only when the post was composed against a plan: a free-form idea has no beat to quote, and inventing one would be worse than saying nothing.
+
+### No phone-size scroll view on the review page
+
+*Resolved 2026-08-19 (PR #61).* A "Phone view" toggle stacks the deck as a vertical column at 393px — the CSS width of a typical handset — using the `ScaledSlide` component that already renders at arbitrary width. The strip's arrows and edge fades go with the strip; a stacked deck scrolls with the page, the way a reader moves through a post. Verified in the browser by measurement rather than by eye: column direction, slides at exactly 393×491, all eight beats present.
+
+### The review page names half the typography
+
+*Resolved — filed late, 2026-08-19.* Already fixed, in both places: the recipe panel renders `displayFamily · bodyFamily` and the token strip lists Display and Body as separate rows, with a comment quoting this finding. The entry stayed open only because nobody closed it — the fourth stale entry found in this sweep.
 
 ### Two stored recipes overflow and collide at every copy length
 

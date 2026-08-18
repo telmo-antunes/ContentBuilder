@@ -709,6 +709,17 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
     }
   }, [projectId, videoJob]);
 
+  /**
+   * PHONE SIZE, because that is the only size that matters.
+   *
+   * The strip shows slides as small cards, which is the one view in which seven
+   * near-identical gradient panels look fine — a deck's monotony was obvious
+   * only after export, at full size. 393px is the CSS width of a typical
+   * handset, so this is the post at the size it will actually be read.
+   */
+  const [phoneView, setPhoneView] = useState(false);
+  const PHONE_W = 393;
+
   const share = useCallback(async () => {
     try {
       const info = await getShareInfo(projectId);
@@ -1125,7 +1136,23 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                 so the offer is to go and recompose deliberately. */}
             <PromptUpdates status={project.promptUpdates} className="studio-pu" />
 
-            <DeckScroller className="studio-deck">
+            <div className="row" style={{ gap: 8, marginBottom: 10, alignItems: 'center' }}>
+              <button
+                className={`btn sm${phoneView ? ' on' : ''}`}
+                onClick={() => setPhoneView((v) => !v)}
+                title="Stack the deck at the width of a phone — the size it will actually be read at"
+                aria-pressed={phoneView}
+              >
+                <Icon name="phone" size={12} /> {phoneView ? 'Strip view' : 'Phone view'}
+              </button>
+              {phoneView && (
+                <span className="hint" style={{ opacity: 0.6 }}>
+                  {PHONE_W}px wide — scroll the deck as a reader would
+                </span>
+              )}
+            </div>
+
+            <DeckScroller className="studio-deck" stacked={phoneView}>
               {workingSlides.map((slide, i) => (
                 <div
                   key={slide.id}
@@ -1180,7 +1207,7 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                       <Icon name="sparkle" size={11} /> Improvable
                     </span>
                   )}
-                  <ScaledSlide format={project.format} displayWidth={cardW}>
+                  <ScaledSlide format={project.format} displayWidth={phoneView ? PHONE_W : cardW}>
                     <SlideRenderer
                       onOverflow={(o) =>
                         setOverflow((m) => (m[slide.id] === o ? m : { ...m, [slide.id]: o }))
@@ -1194,6 +1221,20 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                       forExport
                     />
                   </ScaledSlide>
+                  {/* WHAT THIS SLIDE WAS ASKED TO DO.
+                      Three slides once drifted from their source post and
+                      nothing here could show it — noticing meant holding the
+                      post and the deck open in two tabs and comparing by hand.
+                      A plan FIXES the deck at one slide per entry, in order, so
+                      `plan[i]` is this slide's brief. Shown only when the post
+                      was composed against one; a free-form idea has no beat to
+                      quote, and inventing one would be worse than saying
+                      nothing. */}
+                  {project.plan?.[i] && (
+                    <p className="studio-beat" title="The plan entry this slide was composed against">
+                      {project.plan[i]}
+                    </p>
+                  )}
                 </div>
               ))}
             </DeckScroller>
