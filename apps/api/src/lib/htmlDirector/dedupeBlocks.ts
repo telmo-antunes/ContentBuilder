@@ -246,6 +246,30 @@ function isProse(b: SlideBlock): boolean {
   return b.classes.length === 0 && PROSE_TAGS.has(b.tag);
 }
 
+/**
+ * The same voice line, emitted twice.
+ *
+ * The prose-only rule above exists so a headline can never be dropped in favour
+ * of a body — the slide's primary voice is untouchable and no copy is ever
+ * lost. That correctly refuses to touch a headline, which also let a slide ship
+ * with its headline printed twice, in the two largest styles on the poster:
+ * once as a bare `<div class="headline">` before the eyebrow and again as the
+ * real `<h1>`. It survived compose, the layout gates and the export on three
+ * separate decks.
+ *
+ * This is the one safe exception, and it is deliberately the narrowest one:
+ * BOTH blocks carry the SAME voice class and their text is character-identical,
+ * so whichever is dropped the line still appears on the slide exactly once.
+ * Different text is never touched — that is an editorial decision, not a
+ * duplicate.
+ */
+function isExactVoiceRepeat(a: SlideBlock, b: SlideBlock): boolean {
+  if (a.key !== b.key) return false;
+  const voiceOf = (x: SlideBlock) => x.classes.find((c) => VOICE_CLASSES.has(c));
+  const va = voiceOf(a);
+  return va !== undefined && va === voiceOf(b);
+}
+
 function isSpacer(b: SlideBlock): boolean {
   return !b.text && b.classes.some((c) => SPACER_CLASSES.has(c));
 }
@@ -290,7 +314,8 @@ export function dedupeBlocks(html: string): { html: string; dropped: DroppedBloc
       const b = candidates[j]!;
       if (dropped.has(a.order) || dropped.has(b.order)) continue;
       const rel = redundantOf(a, b);
-      if (!rel || !isProse(rel.loser)) continue;
+      if (!rel) continue;
+      if (!isProse(rel.loser) && !isExactVoiceRepeat(a, b)) continue;
       dropped.set(rel.loser.order, {
         label: rel.loser.label,
         text: rel.loser.text,
