@@ -71,6 +71,8 @@ Rules that keep this file worth reading:
   `dedupeBlocks` already reasons about; a leading `.headline` whose text matches
   the slide's `h1` looks safe to drop outright at the same chokepoint the
   reasoning-leak guards sit on.
+- **Seen again:**
+  - 2026-08-18 — smoke-odour-removal — twice in one 8-slide deck (slides 2 and 8). Third deck running. On slide 8 the duplicate was the CTA line itself, so the call to action appeared twice.
 
 ### The 90-character body budget makes an explanatory deck impossible
 
@@ -92,6 +94,8 @@ Rules that keep this file worth reading:
   (`feature`, `statement`) rather than across the board, or teach the composer
   that a rule belongs in a panel row and give it the row count to do that. The
   clipping is a symptom — the budget is the cause.
+- **Seen again:**
+  - 2026-08-18 — smoke-odour-removal — clipped slide 4's headline mid-sentence (`...on foam that still`), and five of eight slides had to be hand-authored into panels to carry their point. Same ratio as the previous deck.
 
 ### A bottom-anchored photo slot runs off the frame when the copy grows
 
@@ -111,6 +115,8 @@ Rules that keep this file worth reading:
   at its real height — an empty `.cb-shot` is `display:none`, so a slide that
   measured clean while the slot was empty can overflow once a photo lands in it,
   and nothing re-measures after the photo is attached.
+- **Seen again:**
+  - 2026-08-18 — smoke-odour-removal — slide 4 overflowed with headline + panel + body + photo; dropping the trailing body line was what made the picture fit.
 
 ### `POST /compose` hung three times and persisted nothing — cause still unknown
 
@@ -210,41 +216,6 @@ Rules that keep this file worth reading:
   either emit `caption: {text, hashtags}` from `content:instagram`, or have the
   skill map it explicitly. Making `captionSchema.text` required for create
   would also turn the silent loss into a 400.
-
-### Compose returned 8 slides for `slideCount: 6`
-
-- **Kind:** Defect
-- **Severity:** minor
-- **First seen:** 2026-08-12 — prepaid-packages-cash-flow
-- **What happened:** `POST /compose` with `{slideCount: 6}` produced **8**
-  slides (orders 0–7). The extra two are not padding — they carry real copy and
-  the roles are well varied (showcase, statement, split, list, split, statement,
-  pull, cta) — but the number asked for was not the number returned.
-- **Why it matters:** slide count is a deliberate editorial choice; the payload
-  derives it from the source's section count. Silently exceeding it means the
-  caller cannot budget a deck, and the user's stated preference (~7) is a
-  preference the tool can quietly overrun.
-- **Direction:** treat `slideCount` as a hard bound, or return the planned count
-  in the response so the caller can see the deviation before exporting.
-
-### Compose put a light photo behind the dark CTA slide, splitting it in half
-
-- **Kind:** Defect
-- **Severity:** cost me a fix
-- **First seen:** 2026-08-12 — prepaid-packages-cash-flow
-- **What happened:** compose auto-attached asset `6a7b74b1b24e0717859faaba` as a
-  `background` on the CTA slide. It is a pale, high-key photograph and the
-  slide's own ground is near-black, so the export had a **hard horizontal seam
-  at ~53% of the frame**: flat light grey above, brand black below, with the
-  white headline "Ready to get paid before the job begins?" crossing it — the
-  first two lines white-on-light-grey, the third white-on-black. It reads as a
-  rendering bug. Removing the photo fixed it.
-- **Why it matters:** a background is chosen without reference to the slide's
-  ground colour or to the type that sits over it, so a pale asset in the pool
-  can wreck any slide it lands on. The CTA is the worst place for it.
-- **Direction:** the luminance check already written for `bleedAnchor` answers
-  most of this — reject (or scrim) a background whose mean luminance sits near
-  the type's rather than near the ground's.
 
 ### Neither precondition for composing is visible on `GET /businesses/:id`
 
@@ -478,6 +449,15 @@ Rules that keep this file worth reading:
 ---
 
 ## Resolved
+
+### Compose returned 8 slides for `slideCount: 6`
+
+*Resolved 2026-08-18 (PR #52).* `countGuidance` read the PLAN length even when `fixed` came from an explicit `slideCount`, so a caller with no plan was told "SLIDES: exactly 0". The guidance now names the requested count, and a hard count is trimmed to after parsing.
+
+### Compose put a light photo behind the dark CTA slide, splitting it in half
+
+*Resolved 2026-08-18 (PR #52).* A bleed photo is now measured against the recipe's own `ground` token and dropped when its tone cannot be rescued by the scrim — judged per brand, so a light brand rejects the dark photo.
+
 
 ### Seven near-identical dark frames, with no beat
 
