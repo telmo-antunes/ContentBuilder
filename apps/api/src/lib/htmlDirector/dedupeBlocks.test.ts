@@ -230,3 +230,48 @@ describe('pruneSlideMarkup — both guards', () => {
     expect(pruneSlideMarkup('')).toEqual({ html: '', dropped: [], strippedInline: 0 });
   });
 });
+
+describe('a voice line emitted twice', () => {
+  /**
+   * Verbatim from the smoke-odour deck: a bare `.headline` before the eyebrow
+   * and the real one after it, same sentence, the two largest styles on the
+   * poster. Three decks shipped like this because the prose-only rule refuses
+   * to drop a headline.
+   */
+  const TWICE = [
+    '<div class="fill"></div>',
+    '<div class="headline">The smell was never in the air.</div>',
+    '<div class="eyebrow">Where it lives</div>',
+    '<div class="headline">The smell was <span class="it">never in the air</span>.</div>',
+    '<div class="body">It settles into fabric, foam, carpet and the headliner.</div>',
+  ].join('\n')
+
+  it('drops one of them and keeps the line on the slide exactly once', () => {
+    const out = dedupeBlocks(TWICE)
+    expect(out.dropped).toHaveLength(1)
+    const headlines = out.html.match(/class="headline"/g) ?? []
+    expect(headlines).toHaveLength(1)
+    expect(out.html).toContain('never in the air')
+  })
+
+  it('keeps the richer expression, so the emphasis survives', () => {
+    expect(dedupeBlocks(TWICE).html).toContain('<span class="it">never in the air</span>')
+  })
+
+  it('leaves two headlines alone when they say different things', () => {
+    const different = [
+      '<div class="headline">Holds the most.</div>',
+      '<div class="headline">Ruins the fastest.</div>',
+    ].join('\n')
+    expect(dedupeBlocks(different)).toEqual({ html: different, dropped: [] })
+  })
+
+  it('still refuses to drop a headline in favour of a body that merely contains it', () => {
+    const html = [
+      '<div class="headline">Extraction decides the result.</div>',
+      '<div class="body">Extraction decides the result. Pull back out what you put in.</div>',
+    ].join('\n')
+    const out = dedupeBlocks(html)
+    expect(out.html).toContain('class="headline"')
+  })
+})

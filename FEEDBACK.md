@@ -51,29 +51,6 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
-### A slide's headline is emitted twice, once as a stray leading node
-
-- **Kind:** Defect
-- **Severity:** cost me a fix
-- **First seen:** 2026-08-12 — prepaid-packages-cash-flow
-- **What happened:** two different decks, same shape. A bare
-  `<div class="headline">…</div>` appears BEFORE the eyebrow, then the real
-  `<h1 class="headline">` follows with the same sentence — so the slide renders
-  the line twice, stacked, in the largest type on the frame. v1 slide 6:
-  `You are buying commitment, not doing charity.` v2 slide 2:
-  `Your income is the exact shape of your calendar.` The stray copy is the plain
-  text; the real one carries the `<span class="it">` emphasis, which is how you
-  tell them apart.
-- **Why it matters:** it is not subtle — it is the biggest thing on the slide,
-  twice — and it survived compose, the layout gates and the export on both
-  decks. Two occurrences in one afternoon is a shape, not a hiccup.
-- **Direction:** near-identical siblings of the same class are what
-  `dedupeBlocks` already reasons about; a leading `.headline` whose text matches
-  the slide's `h1` looks safe to drop outright at the same chokepoint the
-  reasoning-leak guards sit on.
-- **Seen again:**
-  - 2026-08-18 — smoke-odour-removal — twice in one 8-slide deck (slides 2 and 8). Third deck running. On slide 8 the duplicate was the CTA line itself, so the call to action appeared twice.
-
 ### The 90-character body budget makes an explanatory deck impossible
 
 - **Kind:** Gap
@@ -294,45 +271,6 @@ Rules that keep this file worth reading:
   type was already correct.
 - **Fixed 2026-08-11** — both places now show the display and body faces.
 
-### The layout engine stacks; it does not compose
-
-- **Kind:** Gap
-- **Severity:** cost me a fix
-- **First seen:** 2026-08-11 — `how-often-ceramic-coating`, whole deck
-- **What happened:** blocks are placed in order from a top anchor with fixed
-  gaps, and leftover vertical space is abandoned wherever it falls. One slide
-  carried ~430px of empty ground between its headline and its list; two others
-  ended with 230–280px of dead black. When content runs long instead of short
-  the same mechanism collides it — a headline's descenders sat on the CTA chip
-  with zero gap, and the overflow guard passed the slide because nothing left
-  the frame.
-- **Why it matters:** it is the single behaviour behind most of a 20-point
-  design review. It also produces one composition for every slide, so a deck
-  reads at feed scale as one slide repeated — the opposite of what a carousel
-  is for.
-- **Direction:** compute total content height first, then place slack
-  deliberately as a property of the chosen layout. Needs a set of layout
-  archetypes to choose between (full-bleed, split, list, statement, CTA) rather
-  than one column for everything.
-- **Partly addressed 2026-08-11:** the measurement exists now — see Resolved for
-  the collision and slack gates and the contact sheet. The engine change itself
-  is untouched.
-
-### The `stat` role filled its stat and its headline with the same sentence
-
-- **Kind:** Defect
-- **Severity:** cost me a fix
-- **First seen:** 2026-08-11 — `how-often-ceramic-coating`, slide 5
-- **What happened:** the slide rendered two `.headline` divs back to back, both
-  reading *"If it still beads, it still works."* — one with the brand's italic
-  emphasis span, one plain. The role's fragment has both a `{{stat}}` and a
-  `{{headline}}` hole and the copywriter supplied the same line for each.
-- **Why it matters:** it reads as a rendering bug rather than a design, and it
-  is on the slide meant to be the deck's most quotable.
-- **Direction:** the verbatim guard already knows which part each hole carries;
-  if two holes resolve to the same string, drop the lower-priority one rather
-  than emitting both.
-
 ### No per-slide view of the source sentence a slide came from
 
 - **Kind:** Gap
@@ -416,39 +354,28 @@ Rules that keep this file worth reading:
 - **Seen again:**
   - 2026-08-12 — prepaid-packages-cash-flow — the cover's image box clipped the descenders of "you touch the car" at both the default size and `size: md`; only moving the photo to `placement: background` cleared it.
 
+## Resolved
+
+### A slide's headline is emitted twice, once as a stray leading node
+
+*Resolved 2026-08-18 (PR #55).* `dedupeBlocks` refused to drop any headline — correctly, since a headline must never lose to a body and no copy may be lost. It now makes one narrow exception: two blocks carrying the SAME voice class with character-identical text, where whichever goes the line still appears exactly once. Different text is still never touched.
+
+### The `stat` role filled its stat and its headline with the same sentence
+
+*Resolved 2026-08-18 (PR #55).* Parse ranks the holes (headline > stat > body > tagline > quote) and drops the lower one when two resolve to the same string.
+
 ### The composer echoed the headline in the eyebrow
 
-- **Kind:** Defect
-- **Severity:** minor
-- **First seen:** 2026-08-11 — `raise-average-ticket-add-ons`, slide 1 (`cover`)
-- **What happened:** eyebrow rendered `O momento certo`; the headline directly
-  beneath it read `O momento certo para oferecer um serviço extra`. The first
-  three words appear twice, stacked, in the two largest type styles on the
-  cover.
-- **Why it matters:** the eyebrow is the one place to add context the headline
-  does not have (I replaced it with `Ticket médio`). Repeating wastes the slot
-  and makes the cover look like a template that was not filled in.
-- **Direction:** a cheap check at compose time — reject an eyebrow that is a
-  prefix or substring of its own headline and re-ask.
+*Resolved 2026-08-18 (PR #55).* An eyebrow that is a substring of its own headline, either direction, is dropped at parse.
 
 ### Slide roles are assigned without checking the copy can fill them
 
-- **Kind:** Friction
-- **Severity:** minor
-- **First seen:** 2026-08-11 — `raise-average-ticket-add-ons`, slide 6
-- **What happened:** slide 6 was composed as `role: "stat"` but contains no
-  number, figure or measurement — its body is the question *"Quais os extras que
-  os seus clientes aceitam sem hesitar?"*. It renders as an ordinary statement
-  slide, indistinguishable from slides 2 and 4.
-- **Why it matters:** not wrong on the page, but the deck loses a beat of visual
-  variety, and per-role motion in animated exports will be applied to a slide
-  that has nothing to count up.
-- **Direction:** if the chosen role is `stat` and no part parses as a figure,
-  fall back to `statement` rather than composing a stat slide with no stat.
+*Resolved 2026-08-18 (PR #55).* A `stat` slide whose stat hole never filled composes as `feature` or `statement`. The matching `list`-with-no-rows fallback already existed.
 
----
+### The layout engine stacks; it does not compose
 
-## Resolved
+*Resolved — filed late, 2026-08-18.* The archetype work shipped in #40 and is wired into compose (`assignArchetypes`), so slack is placed by the chosen composition rather than wherever a spacer landed. The entry stayed open only because nobody closed it.
+
 
 ### Compose returned 8 slides for `slideCount: 6`
 

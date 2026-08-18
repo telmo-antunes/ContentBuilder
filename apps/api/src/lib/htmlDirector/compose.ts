@@ -993,6 +993,57 @@ function normalizeParsedDeck(
     }
 
     /**
+     * THE EYEBROW IS FOR WHAT THE HEADLINE DOES NOT SAY. It is the one slot on
+     * the slide that can add context, and a copywriter under pressure fills it
+     * with the headline again — so the two largest lines on the poster say the
+     * same thing and the slot is spent. Substring either way, because the echo
+     * shows up as both a truncation ("Raise the average" over "Raise the
+     * average ticket") and an expansion.
+     */
+    if (typeof parts.eyebrow === 'string' && typeof parts.headline === 'string') {
+      const eb = parts.eyebrow.trim().toLowerCase().replace(/[.:—-]\s*$/, '');
+      const hl = parts.headline.trim().toLowerCase();
+      if (eb.length > 2 && (hl.startsWith(eb) || eb.startsWith(hl) || hl.includes(eb))) {
+        console.warn(`[compose] parse: slide ${i + 1} echoed its headline in the eyebrow — dropped`);
+        delete parts.eyebrow;
+      }
+    }
+
+    /**
+     * NO PART SAYS THE SAME THING TWICE. Two holes resolving to one string
+     * renders as a repeat in two different type styles, which reads as a
+     * rendering fault rather than a design. The bigger hole keeps the line:
+     * a headline outranks the stat, the stat outranks the body.
+     */
+    const RANK = ['headline', 'stat', 'body', 'tagline', 'quote'] as const;
+    const seenText = new Map<string, string>();
+    for (const key of RANK) {
+      const value = parts[key];
+      if (typeof value !== 'string') continue;
+      const norm = value.trim().toLowerCase().replace(/[.!?]\s*$/, '');
+      if (!norm) continue;
+      const owner = seenText.get(norm);
+      if (owner) {
+        console.warn(`[compose] parse: slide ${i + 1} put the same line in ${owner} and ${key} — dropped the ${key}`);
+        delete parts[key];
+      } else {
+        seenText.set(norm, key);
+      }
+    }
+
+    /**
+     * A STAT SLIDE NEEDS A STAT. The role is chosen before the copy is read, so
+     * a deck can end up with a `stat` poster whose stat hole never filled — it
+     * then renders as an ordinary statement while the deck loses the beat of
+     * variety the role was picked for, and per-role motion in a video export is
+     * applied to a slide with nothing to animate.
+     */
+    if (role === 'stat' && typeof parts.stat !== 'string') {
+      role = parts.body ? 'feature' : 'statement';
+      console.warn(`[compose] parse: slide ${i + 1} is a stat with no stat — composing it as "${role}"`);
+    }
+
+    /**
      * ONE SUPPORTING ELEMENT. A giant number and a list of rows are two
      * different ways of making the same point, and a poster carrying both reads
      * as a slide that could not decide. The enumeration wins: it says more.
