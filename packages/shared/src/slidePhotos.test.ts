@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   APP_IMAGE_CLASSES,
   hiddenSlotCss,
+  reservedSlotCss,
   PLATE_CLASS,
   SLOT_ATTR,
   SLOT_CLASS,
@@ -328,6 +329,17 @@ describe('an unfilled slot outside the editor', () => {
   it('is removed outright, not merely unlabelled', () => {
     const css = hiddenSlotCss('cb1', 'hero');
     expect(css).toContain('display:none');
+  });
+
+  it('reserves the box, without painting it, for a measurement pass', () => {
+    // A layout measurement has no photos attached. With the slot removed the
+    // deck was gated as if its pictures did not exist: the same feature slide
+    // measured `overflow: false` with the slot hidden and `overflow: true` with
+    // it reserved, its 459px shot landing 51px past the content bottom.
+    const css = reservedSlotCss('cb1', 'hero');
+    expect(css).toContain('visibility:hidden');
+    expect(css).not.toContain('display:none');
+    expect(css).toContain(`[${SLOT_ATTR}="hero"]`);
   });
 
   it('reserves no vertical space either', () => {

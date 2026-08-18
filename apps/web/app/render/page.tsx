@@ -15,9 +15,15 @@ export default async function RenderPage({
     motion?: string;
     /** Render this export job's FROZEN snapshot instead of the live project. */
     srcJob?: string;
+    /**
+     * Measure empty photo slots at the size their picture will occupy, rather
+     * than removing them. Set by the layout probe so a deck is gated as it will
+     * ship, not as it looks before any photo is attached.
+     */
+    reserveSlots?: string;
   };
 }) {
-  const { projectId, slideId, motion, srcJob } = searchParams;
+  const { projectId, slideId, motion, srcJob, reserveSlots } = searchParams;
 
   // Server-side fetch straight to the API. When the opt-in APP_PASSWORD gate is
   // on, attach the shared credentials (this runs on the server; never shipped
@@ -62,6 +68,7 @@ export default async function RenderPage({
       slideTotal={ordered.length}
       showCounter={Boolean(project.settings?.slideCounter) && project.type === 'carousel'}
       motion={motion === '1'}
+      reserveSlots={reserveSlots === '1'}
     />
   );
 }

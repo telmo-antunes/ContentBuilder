@@ -366,6 +366,24 @@ export function hiddenSlotCss(scope: string, slot: string): string {
   return `.${scope} .cb-slide [${SLOT_ATTR}="${slot}"]{display:none}`;
 }
 
+/**
+ * An empty slot that still OCCUPIES the space its photograph will occupy.
+ *
+ * A layout measurement has no photos attached, so every slot took
+ * `hiddenSlotCss` and left the flow entirely: the deck was measured as if its
+ * pictures did not exist, passed, and then overflowed the moment a photo landed
+ * in a bottom-anchored slot. Two decks shipped a screenshot cut off by the frame
+ * edge that way, and shrinking the photo could not help — the overflow was in
+ * the stack above it.
+ *
+ * `visibility:hidden` rather than `display:none`: the box keeps its geometry (the
+ * base `.cb-shot` shape rule still applies) and paints nothing, so the gate
+ * measures the slide as it will actually ship.
+ */
+export function reservedSlotCss(scope: string, slot: string): string {
+  return `.${scope} .cb-slide [${SLOT_ATTR}="${slot}"]{visibility:hidden}`;
+}
+
 export function emptySlotCss(scope: string, slot: string): string {
   const sel = `.${scope} .cb-slide [${SLOT_ATTR}="${slot}"]`;
   return [

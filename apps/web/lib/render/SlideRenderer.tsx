@@ -27,6 +27,7 @@ export function SlideRenderer({
   editing,
   onOverflow,
   forExport = false,
+  reserveSlots = false,
   theme = 'editorial',
   slideIndex,
   slideTotal,
@@ -47,6 +48,8 @@ export function SlideRenderer({
   /** Fires when the composition exceeds the canvas (a too-long headline). */
   onOverflow?: (overflow: boolean, layout?: import('./AuthoredSlide').LayoutSignals) => void;
   forExport?: boolean;
+  /** Measure empty photo slots at their real size — set only by the layout probe. */
+  reserveSlots?: boolean;
   theme?: ThemePreset;
   /** 0-based position for the cohesion counter. */
   slideIndex?: number;
@@ -104,6 +107,7 @@ export function SlideRenderer({
             overrides={slide.overrides}
             // Empty-slot affordances belong to editing surfaces only.
             editing={editing ?? !forExport}
+            reserveSlots={reserveSlots}
             motion={motion}
             onOverflow={onOverflow}
           />

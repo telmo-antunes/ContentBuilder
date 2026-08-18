@@ -248,7 +248,11 @@ export async function createRenderScaffold(
     projectId,
     slideIds,
     urlFor: (index) =>
-      `${base}/render?projectId=${projectId}&slideId=${encodeURIComponent(slideIds[index] ?? '')}`,
+      // `reserveSlots=1`: a measurement has no photos attached, so without it
+      // every empty slot leaves the flow and the deck is gated as if its
+      // pictures did not exist — see `reservedSlotCss`.
+      `${base}/render?projectId=${projectId}&slideId=${encodeURIComponent(slideIds[index] ?? '')}` +
+      `&reserveSlots=1`,
     async setSlideHtml(index, html) {
       // A positional `$set` rather than `doc.save()`: repairs land one slide at a
       // time while other slides are still being measured, and rewriting the whole

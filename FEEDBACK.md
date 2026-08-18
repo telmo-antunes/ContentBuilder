@@ -51,24 +51,22 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
-### The story budget shrinks ~20% across the board, but a story fits MORE copy
+### One integration test fails only inside a full-suite run
 
 - **Kind:** Defect
 - **Severity:** minor
-- **First seen:** 2026-08-18 — measured while sizing the body budget above
-- **What happened:** `composeBudgetsFor` scales every budget by 0.8 for
-  1080×1920, on the stated reasoning that Instagram overlays its UI so "the safe
-  area is tighter than a post". Measured, the opposite holds for body copy: with
-  the full furniture, the tightest recipe overflows at 146 on a **post** and only
-  at 175 on a **story**, and three recipes that overflow at 278 on a post fit it
-  on a story.
-- **Why it matters:** stories are getting ~20% less copy than a post on a canvas
-  that holds more of it, which is the same thinness complaint in a second place.
-- **Direction:** the UI reserve is a band at the top and bottom, not a global
-  squeeze — the story's own `STORY_UI_RESERVE` already models it that way. A
-  vertical reserve costs a fixed number of pixels, so it should shorten the
-  headline (which competes for the same vertical band) far more than the body.
-  Measure per part before touching the scale; only `body` has numbers so far.
+- **First seen:** 2026-08-19 — while verifying the story reserve
+- **What happened:** `routes.integration.test.ts > tweak signals → kit suggestion
+  > three smaller-headline presses …` failed with `expected 400 to be 200` in one
+  full `vitest run`, then passed in that same file run alone and in two
+  consecutive full runs afterwards. Nothing in the change under test touched
+  that route.
+- **Why it matters:** a suite that fails once in a while trains you to re-run
+  instead of read, which is exactly how a real regression gets waved through.
+- **Direction:** a 400 suggests the request was rejected on validation, so the
+  likeliest cause is shared state between test files — a business, kit or
+  counter left behind by whichever file ran before it. Worth checking whether
+  the integration tests share one database without isolating per file.
 
 ### Two stored recipes overflow and collide at every copy length
 
@@ -86,27 +84,6 @@ Rules that keep this file worth reading:
   `--names` flag) and check whether `verifyRecipe` ever passed them. If a
   re-authored recipe can ship in a state that fails its own layout gate at any
   copy length, the gate belongs in the authoring path, not only at compose time.
-
-### A bottom-anchored photo slot runs off the frame when the copy grows
-
-- **Kind:** Defect
-- **Severity:** cost me a fix
-- **First seen:** 2026-08-12 — prepaid-packages-cash-flow v2
-- **What happened:** slides 5 and 7 place `.cb-shot` after the copy, so the
-  picture is pushed down by whatever precedes it. With a full eyebrow +
-  two-line headline + body + rule above it, the screenshot was **cut off by the
-  bottom edge** at `size: lg`, `md` and `sm` alike — shrinking it did not help,
-  because the overflow is in the stack above, not the image. I moved the shot to
-  slide 3, the slide with the least copy, and dropped it from both.
-- **Why it matters:** a half-visible screenshot is worse than none, and it is
-  the one thing on a product-demo slide the reader is meant to look at. The
-  overflow gate measures the composition, so it should be seeing this.
-- **Direction:** worth checking whether an unfilled-then-filled slot is measured
-  at its real height — an empty `.cb-shot` is `display:none`, so a slide that
-  measured clean while the slot was empty can overflow once a photo lands in it,
-  and nothing re-measures after the photo is attached.
-- **Seen again:**
-  - 2026-08-18 — smoke-odour-removal — slide 4 overflowed with headline + panel + body + photo; dropping the trailing body line was what made the picture fit.
 
 ### `POST /compose` hung three times and persisted nothing — cause still unknown
 
@@ -330,23 +307,6 @@ Rules that keep this file worth reading:
   the narrower question ("does this photo show tight beads or flat ones?") is
   likely more reliable than asking for contradictions in general.
 
-### Authored story slides ignore STORY_UI_RESERVE
-
-- **Kind:** Gap
-- **Severity:** minor
-- **First seen:** 2026-08-11 — `how-often-ceramic-coating` promo story
-- **What happened:** `safeAreaFor('story')` reserves 250px top and bottom, and
-  `safeInsets` applies it — but an authored slide's padding comes from the
-  recipe stylesheet, which knows nothing about the reserve. The promo story's
-  CTA button sat low enough that Instagram's reply bar could overlap it. Patched
-  for the promo story specifically (a trailing `fill` re-centres the stack);
-  every other authored story has the same exposure.
-- **Why it matters:** it is invisible in the export and only shows up on a phone,
-  after posting.
-- **Direction:** the per-format variant block in a recipe (`formats['1080x1920']`)
-  is the right place — the reserve could be appended there when the recipe is
-  authored, so it applies to every story rather than per-caller.
-
 ### Descenders collide with the block below
 
 - **Kind:** Defect
@@ -368,6 +328,20 @@ Rules that keep this file worth reading:
   - 2026-08-12 — prepaid-packages-cash-flow — the cover's image box clipped the descenders of "you touch the car" at both the default size and `size: md`; only moving the photo to `placement: background` cleared it.
 
 ## Resolved
+
+### A bottom-anchored photo slot runs off the frame when the copy grows
+
+*Resolved 2026-08-19 (PR #58).* An empty slot took `hiddenSlotCss` (`display:none`), and a layout measurement has no photos attached — so every deck was gated as if its pictures did not exist. Proved on the shape that shipped broken: the same feature slide measures `overflow: false` with the slot removed and `overflow: true` with it reserved, its 459px shot landing at 1305px against a 1254px content bottom. The probe now renders with `reserveSlots=1`, and `reservedSlotCss` uses `visibility:hidden` so the box keeps its geometry and paints nothing.
+
+### Authored story slides ignore STORY_UI_RESERVE
+
+*Resolved 2026-08-19 (PR #58).* `safeAreaFor('story')` reserved 250px top and bottom, but only for render chrome — an authored slide's safe area was whatever `.cb-slide` padding the recipe's own story stylesheet set, and nothing stopped a brand from setting 88px and putting its headline under Instagram's header. `enforceStoryReserve` now raises a story's top/bottom padding to the reserve at RENDER, beside the type and measure floors, so every brand already in the database is corrected on the next paint with no re-authoring. A recipe that reserves more is left alone, its horizontal padding is never touched, and a value it cannot parse is left exactly as authored rather than guessed at. The exemplar's own 210/240 was under-reserved and is now 250/250.
+
+### The story budget shrinks ~20% across the board, but a story fits MORE copy
+
+*Resolved 2026-08-19 (PR #58).* Re-measured after the reserve above (which tightens the story canvas, so the earlier reading was stale): a story still holds more prose than a post — the tightest sound recipe carrying the full furniture overflows at 175 characters on a story against 146 on a post. The `body` and `explainBody` budgets are now held at post parity on a story instead of taking the 0.8 cut; they are not raised past it, because the post's numbers are the measured ones. The eyebrow, headline, CTA and row text keep the 0.8 — they compete for the same vertical band the reserve takes and none of them has been measured yet.
+
+Side effect worth recording: raising the story padding also fixed the story-format collisions on the two broken recipes, which now measure clean on 9:16 at every copy length. They still fail on a post — see the open finding.
 
 ### The slack gate never fires, so nothing catches a slide that reads empty
 

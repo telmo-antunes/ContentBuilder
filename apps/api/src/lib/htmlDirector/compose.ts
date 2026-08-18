@@ -426,11 +426,28 @@ export function bodyBudgetFor(
  */
 export function composeBudgetsFor(format: string): ComposeBudgets {
   const scale = format === '1080x1920' ? 0.8 : format === '1080x1080' ? 0.9 : 1;
+  /**
+   * The body does NOT follow the story's global squeeze.
+   *
+   * The ~20% cut is there for Instagram's UI, but that UI is a BAND at the top
+   * and the bottom, not a proportional shrink of the whole canvas — and the band
+   * is now reserved in the padding itself (`enforceStoryReserve`), where it
+   * belongs. Measured after that reserve, a story still holds MORE body than a
+   * post: the tightest sound recipe carrying the full furniture overflows at 175
+   * characters on a story and at 146 on a post. A story is a taller canvas, so
+   * prose has more room to run, not less.
+   *
+   * Held at parity with the post rather than raised past it: the post's numbers
+   * are the measured ones, and there is no evidence for going further. The other
+   * parts keep the 0.8 — the eyebrow, headline and CTA compete for the same
+   * vertical band the reserve takes, and none of them has been measured yet.
+   */
+  const bodyScale = format === '1080x1920' ? 1 : scale;
   return {
     eyebrow: Math.round(BASE_BUDGETS.eyebrow * scale),
     headline: Math.round(BASE_BUDGETS.headline * scale),
-    body: Math.round(BASE_BUDGETS.body * scale),
-    explainBody: Math.round(BASE_BUDGETS.explainBody * scale),
+    body: Math.round(BASE_BUDGETS.body * bodyScale),
+    explainBody: Math.round(BASE_BUDGETS.explainBody * bodyScale),
     cta: Math.round(BASE_BUDGETS.cta * scale),
     rowText: Math.round(BASE_BUDGETS.rowText * scale),
   };

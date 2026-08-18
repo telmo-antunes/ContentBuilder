@@ -4,7 +4,7 @@ import {
   TYPE_FLOOR_PX,
   enforceTypeFloor,
   pxForPt,
-  typeFloorReport, enforceMeasureFloor, MEASURE_FLOOR_CH } from './typeFloor';
+  typeFloorReport, enforceMeasureFloor, MEASURE_FLOOR_CH, enforceStoryReserve } from './typeFloor';
 
 const sizeOf = (css: string, cls: string) =>
   Number(css.match(new RegExp(`\\.${cls}\\{[^}]*font-size:\\s*([\\d.]+)px`))![1]);
@@ -129,5 +129,49 @@ describe('enforceMeasureFloor', () => {
   it('is a no-op on css that declares no measure', () => {
     const css = '.cb-slide .body{ font-size:38px }';
     expect(enforceMeasureFloor(css)).toBe(css);
+  });
+});
+
+describe('enforceStoryReserve', () => {
+  const sheet = (padding: string) => `.cb-slide{ padding:${padding}; display:flex; }`;
+
+  it('raises a story padding that would sit under Instagram’s own UI', () => {
+    const out = enforceStoryReserve(sheet('96px 88px 100px'), '1080x1920');
+    expect(out).toContain('padding:250px 88px 250px');
+    // the brand's own horizontal choice survives
+    expect(out).toContain('88px');
+    expect(out).toContain('display:flex');
+  });
+
+  it('leaves a recipe that already reserves more alone', () => {
+    // The exemplar's story sheet — 210 top, 240 bottom. Only the bottom is short.
+    const out = enforceStoryReserve(sheet('210px 88px 240px'), '1080x1920');
+    expect(out).toContain('padding:250px 88px 250px');
+    const generous = enforceStoryReserve(sheet('300px 88px 320px'), '1080x1920');
+    expect(generous).toBe(sheet('300px 88px 320px'));
+  });
+
+  it('does nothing on a post or a square — the reserve is a story problem', () => {
+    expect(enforceStoryReserve(sheet('96px 88px 100px'), '1080x1350')).toBe(sheet('96px 88px 100px'));
+    expect(enforceStoryReserve(sheet('72px 84px 76px'), '1080x1080')).toBe(sheet('72px 84px 76px'));
+  });
+
+  it('handles the one- and two-value shorthands', () => {
+    expect(enforceStoryReserve('.cb-slide{padding:80px}', '1080x1920')).toContain('padding:250px 80px 250px');
+    expect(enforceStoryReserve('.cb-slide{padding:90px 60px}', '1080x1920')).toContain('padding:250px 60px 250px');
+  });
+
+  it('leaves a padding it cannot parse exactly as authored', () => {
+    // Never guess at a value: a unit this does not understand is left alone
+    // rather than rewritten into something the brand did not ask for.
+    const vars = '.cb-slide{padding:var(--pad) 88px}';
+    expect(enforceStoryReserve(vars, '1080x1920')).toBe(vars);
+    const rem = '.cb-slide{padding:6rem 88px 7rem}';
+    expect(enforceStoryReserve(rem, '1080x1920')).toBe(rem);
+  });
+
+  it('only touches the slide box, not other selectors', () => {
+    const other = '.cb-slide .panel{padding:20px 30px 20px}';
+    expect(enforceStoryReserve(other, '1080x1920')).toBe(other);
   });
 });

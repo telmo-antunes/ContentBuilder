@@ -18,7 +18,7 @@ import { maxSlackFor, openRenderProbe } from '../lib/htmlDirector/renderCheck';
 import type { BrandRecipe } from '@contentbuilder/shared';
 
 const LENGTHS = [60, 90, 120, 150, 180, 210, 240, 280];
-const FORMATS = ['1080x1350', '1080x1920'] as const;
+const FORMATS = ['1080x1920', '1080x1350'] as const;
 
 /** Filler that wraps like real copy: whole words, real sentences, about N characters. */
 function filler(n: number): string {

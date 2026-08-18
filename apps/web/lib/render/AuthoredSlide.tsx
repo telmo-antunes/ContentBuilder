@@ -11,6 +11,7 @@ import {
   backgroundPhotoCss,
   emptySlotCss,
   hiddenSlotCss,
+  reservedSlotCss,
   filledSlotCss,
   slotOverrideCss,
   resolveMove,
@@ -61,6 +62,7 @@ export function AuthoredSlide({
   photos,
   overrides,
   editing = false,
+  reserveSlots = false,
   motion = false,
   onOverflow,
 }: {
@@ -76,6 +78,11 @@ export function AuthoredSlide({
   /** Show empty-slot affordances. Off for export — a placeholder the user never
    *  filled must never reach a PNG or an MP4 as a dashed "Add photo" box. */
   editing?: boolean;
+  /**
+   * Measure empty photo slots at the size their picture will occupy, instead of
+   * removing them. Set only by the layout probe.
+   */
+  reserveSlots?: boolean;
   /** Play the reveal choreography (for animated/video export). Off = still PNG. */
   motion?: boolean;
   /** Stretch the ambient drift across a clip of this length (video export). */
@@ -241,7 +248,11 @@ export function AuthoredSlide({
     .filter(isSlotName)
     .map((name) => {
       const p = photos?.slots[name];
-      if (!p) return editing ? emptySlotCss(scope, name) : hiddenSlotCss(scope, name);
+      if (!p) {
+        if (editing) return emptySlotCss(scope, name);
+        // A measurement pass keeps the empty box in the flow — see reservedSlotCss.
+        return reserveSlots ? reservedSlotCss(scope, name) : hiddenSlotCss(scope, name);
+      }
       // A resize rides on the photo, so the authored markup is never rewritten.
       const resize = slotOverrideCss(scope, name, p.shape, p.size, RECIPE_FORMAT_DIMS[format]?.h ?? 1350);
       return [resize, filledSlotCss(scope, name, safeUrl(p.url), p.fit, p.focal)].filter(Boolean).join('\n');

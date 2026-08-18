@@ -21,6 +21,7 @@
  * already authored, or authored by some future model that drifts — can put
  * unreadable type on a slide.
  */
+import { STORY_UI_RESERVE } from './formats';
 
 /** Feed scale: 1080px canvas shown ~393pt wide on a typical phone. */
 export const PHONE_SCALE = 1080 / 393;
@@ -179,6 +180,64 @@ export function enforceMeasureFloor(css: string): string {
       (decl, head: string, n: string) =>
         Number(n) < MEASURE_FLOOR_CH ? `${head}${MEASURE_FLOOR_CH}ch` : decl,
     );
+    return fixed === body ? whole : `${selector}{${fixed}}`;
+  });
+}
+
+
+/**
+ * Instagram paints its own UI over the top and bottom of a story, so a 9:16
+ * canvas has to hold its type clear of both bands.
+ *
+ * The render chrome has always known this — `safeAreaFor('story')` reserves
+ * `STORY_UI_RESERVE` — but an AUTHORED slide never used those insets: its safe
+ * area is whatever `.cb-slide` padding the recipe's own `formats['1080x1920']`
+ * stylesheet happens to set. The exemplar reserves 210/240 and is fine; a brand
+ * the model authors later has nothing stopping it from setting 88px and putting
+ * the headline under Instagram's own header.
+ */
+
+/** `padding: a b c d` → the top and bottom components, in px. */
+function paddingEdges(value: string): { top: number; bottom: number } | null {
+  const parts = value.trim().split(/\s+/);
+  if (!parts.length || parts.length > 4) return null;
+  const px = (p: string | undefined): number | null => {
+    if (p === undefined) return null;
+    const m = /^([\d.]+)px$/.exec(p.trim());
+    return m ? Number(m[1]) : null;
+  };
+  const top = px(parts[0]);
+  // 1 value → all sides; 2 or 3 → the third (or the first) is the bottom.
+  const bottom = parts.length >= 3 ? px(parts[2]) : top;
+  if (top === null || bottom === null) return null;
+  return { top, bottom };
+}
+
+/**
+ * Raise a story slide's top and bottom padding to at least
+ * {@link STORY_UI_RESERVE}, leaving a recipe that already reserves more alone.
+ *
+ * Applied at RENDER, like the type and measure floors beside it: every brand
+ * already in the database is corrected on the next paint, with no re-authoring
+ * and no AI spend, and it keeps holding if a future model drifts back to a
+ * tight story padding.
+ */
+export function enforceStoryReserve(css: string, format: string): string {
+  if (!css || format !== '1080x1920') return css;
+  return css.replace(/([^{}]*)\{([^}]*)\}/g, (whole, selector: string, body: string) => {
+    if (!/\.cb-slide\s*$/.test(selector.trim())) return whole;
+    const fixed = body.replace(/(^|;)(\s*padding\s*:\s*)([^;}]+)/gi, (decl, lead: string, head: string, value: string) => {
+      const edges = paddingEdges(value);
+      if (!edges) return decl;
+      if (edges.top >= STORY_UI_RESERVE && edges.bottom >= STORY_UI_RESERVE) return decl;
+      const parts = value.trim().split(/\s+/);
+      const top = Math.max(edges.top, STORY_UI_RESERVE);
+      const bottom = Math.max(edges.bottom, STORY_UI_RESERVE);
+      // Keep the horizontal values the brand chose; only the UI bands are ours.
+      const sides = parts.length >= 2 ? parts[1]! : `${edges.top}px`;
+      const left = parts.length === 4 ? ` ${parts[3]}` : '';
+      return `${lead}${head}${top}px ${sides} ${bottom}px${left}`;
+    });
     return fixed === body ? whole : `${selector}{${fixed}}`;
   });
 }
