@@ -51,6 +51,24 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
+### Leaked `__render-check-*` scaffolds accumulate in the database
+
+- **Kind:** Defect
+- **Severity:** minor
+- **First seen:** 2026-08-19 — while identifying the two broken recipes
+- **What happened:** two of the six most recent brand kits were
+  `__render-check-*` scaffolds. A scaffold COPIES the recipe it measures, so a
+  leaked one reads as an extra brand with identical geometry — it contaminated
+  the recipe sample and made the ordering unstable between runs, because every
+  run of the measuring script created more.
+- **Why it matters:** beyond the measurement noise, these are orphaned business,
+  kit and project rows accruing in a real database. The hang finding already
+  noted each wedged compose leaks one; this shows they are not being swept.
+- **Direction:** `sweepRenderScaffolds.ts` exists — find out whether anything
+  actually runs it. A scaffold is disposable by construction, so the sweep could
+  run on API start, or the scaffold could carry a TTL index and expire itself,
+  which needs no scheduler at all.
+
 ### One integration test fails only inside a full-suite run
 
 - **Kind:** Defect
@@ -67,23 +85,6 @@ Rules that keep this file worth reading:
   likeliest cause is shared state between test files — a business, kit or
   counter left behind by whichever file ran before it. Worth checking whether
   the integration tests share one database without isolating per file.
-
-### Two stored recipes overflow and collide at every copy length
-
-- **Kind:** Defect
-- **Severity:** minor
-- **First seen:** 2026-08-18 — measured while sizing the body budget above
-- **What happened:** of six stored recipes, two report `collide` at **every** body
-  length from 58 to 278 characters in both formats, and overflow at 58 characters
-  on a post with the full furniture — i.e. they fail on copy far shorter than any
-  budget allows. The other four behave sensibly.
-- **Why it matters:** any deck built on those two brands starts from a failing
-  layout, so the repair ladder runs on every slide and the gate's verdict carries
-  no information about the copy.
-- **Direction:** identify which two (the script prints them in order; give it a
-  `--names` flag) and check whether `verifyRecipe` ever passed them. If a
-  re-authored recipe can ship in a state that fails its own layout gate at any
-  copy length, the gate belongs in the authoring path, not only at compose time.
 
 ### `POST /compose` hung three times and persisted nothing — cause still unknown
 
@@ -177,43 +178,6 @@ Rules that keep this file worth reading:
   `/media` and `/brandkit` (`.approved.recipe`) rather than the business
   response. Including counts on the business summary would also work.
 
-### Recipe-author v6's elevation rule did not bite
-
-- **Kind:** Gap
-- **Severity:** cost me a fix
-- **First seen:** 2026-08-11 — re-authoring detailmasters against v6
-- **What happened:** v6 asks for "one radius scale and one elevation model
-  across `.cb-shot`, `.panel` and `.cta`". The re-authored draft came back with
-  **three treatments again** — `cb-shot` a drop shadow, `panel` a hairline,
-  `cta` flat. The glow instruction from the same release DID take (the draft
-  authors `--cb-glow-*` custom properties), so the release reached the model;
-  this specific rule simply did not change its behaviour.
-- **Why it matters:** a prompt rule that does not bite is worse than no rule —
-  it reads as fixed in the version registry while the output is unchanged, so
-  the next person to look believes it is handled.
-- **Direction:** the glow rule worked because it names a mechanism (custom
-  properties with defaults) rather than a principle. The elevation rule states a
-  principle and leaves the mechanism open. Give it the same treatment: name a
-  single token (e.g. `--cb-elev`) the brand must define once and every raised
-  surface must reference, so compliance is checkable rather than aspirational.
-  `validateRecipeConsistency` could then enforce it.
-
-### A re-authored recipe silently lost a fragment
-
-- **Kind:** Defect
-- **Severity:** cost me a fix
-- **First seen:** 2026-08-11 — the same v6 draft
-- **What happened:** the current recipe carries all seven role fragments. The
-  re-authored draft came back with six — `statement` is absent. Nothing in the
-  response said so; it was found by diffing the two.
-- **Why it matters:** `statement` is one of the most-used roles, and a role with
-  no fragment falls back to a per-slide model call — slower, less predictable,
-  and the exact path that once rendered the model's own reasoning onto a slide.
-  A re-author that quietly trades free deterministic composition for a model
-  call on the commonest role is a downgrade wearing an upgrade's version number.
-- **Direction:** report fragment coverage on the authoring response, and warn
-  when a re-author returns fewer roles than the recipe it replaces.
-
 ### The review page names half the typography
 
 - **Kind:** Defect
@@ -300,6 +264,22 @@ Rules that keep this file worth reading:
   - 2026-08-12 — prepaid-packages-cash-flow — the cover's image box clipped the descenders of "you touch the car" at both the default size and `size: md`; only moving the photo to `placement: background` cleared it.
 
 ## Resolved
+
+### Two stored recipes overflow and collide at every copy length
+
+*Resolved 2026-08-19 (PR #60).* Two corrections to the finding first. The sample was **contaminated**: two of the six "recipes" were leaked `__render-check-*` scaffolds, which COPY the recipe they measure — so they read as extra brands with identical geometry, and every run of the measuring script created more. Both scripts now exclude them. And the collision half was already fixed by the story reserve in #58; only the post overflow remained.
+
+Re-measured clean, the two failures are both **Dynatós Program** (two versions of one brand), whose 112px headline is the largest of the six and cannot carry the full element stack on a 4:5 canvas. Worth stating plainly: the fixture is a deliberate worst case — every element the brand advertises at once — and a real slide following the "one supporting element per slide" rule would not reach it.
+
+The durable fix is the direction's own: the gate now runs in the AUTHORING path. `checkRecipeLayout` measures a stress slide through the same deterministic gate compose uses — no vision call, no cost — and a recipe that fails its own layout is reported at the moment it is authored rather than on the first deck built from it. It is gated on the same switch compose uses and carries a ceiling, because the failure it guards against is a probe that never answers, and a `try/catch` does nothing about a hang.
+
+### Recipe-author v6's elevation rule did not bite
+
+*Resolved 2026-08-19 (PR #60, recipe-author v6).* Rewritten to name a mechanism instead of a principle, exactly as the glow rule does: the brand declares `--cb-elev` once and `.cb-shot`, `.panel` and `.cta` each reference it. `elevationReport` reads the result, so the authoring path now says "elevation stated 3 times, not once" and names the surfaces that raise themselves their own way. A rule that cannot be checked reads as fixed in the version registry while the output is unchanged.
+
+### A re-authored recipe silently lost a fragment
+
+*Resolved 2026-08-19 (PR #60).* Authoring reports coverage role by role — `5/7 reference fragment(s): cover, feature, … — no fragment for statement, cta, those roles cost a model call per slide` — and `authorRecipe` takes the recipe it is replacing, so a re-author that drops a role it used to have logs a REGRESSION line naming it.
 
 ### With :3000 down, every layout gate silently returns `unknown`
 

@@ -40,6 +40,8 @@ import {
   relativeLuminance,
   PHONE_SCALE,
   SLIDE_ROLES,
+  elevationReport,
+  recipeStylesheetFor,
   type BrandRecipe,
 } from '@contentbuilder/shared';
 import { aiJson, cachedSystem, modelFor, withOpusReasoning, type AiJsonResult, type AiJsonTool } from '../ai';
@@ -48,6 +50,8 @@ import { PROMPT_VERSION } from '../promptVersion';
 import { getStorage } from '../../storage';
 import { FRAGMENT_CONVENTION, fillRecipeFragmentGaps, validateRecipeFragments } from './fragments';
 import { dynatosRecipe, detailMastersRecipe, halftonePressRecipe } from './recipes';
+import { checkRecipeLayout } from './verifyRecipe';
+import { renderCheckEnabledByDefault } from './renderCheck';
 import { LAYER_REMIT, RECIPE_LAYERS } from './refineLayer';
 import { verifyRecipeByRender } from './verifyRecipe';
 
@@ -130,7 +134,7 @@ WHAT REFERENCE-GRADE MEANS (both examples do ALL of this):
 2. A CINEMATIC, AUTHORED BACKGROUND — NEVER a flat gradient. Layer it: a directional light/glow, a deep vignette, subtle film grain (an inline SVG feTurbulence data: URI), and ONE restrained brand SIGNATURE graphic (a god-ray, a ghosted monogram via var(--cb-logo), a hairline motif). Position with % so it adapts to any canvas.\n   THE GLOW MUST NOT SIT IN THE SAME PLACE ON EVERY SLIDE. A single fixed position (e.g. "at 72% 0%") repeats identically down a seven-slide deck and reads as a rendering artifact rather than as art — worse when it clips at a frame edge. Author its position through custom properties with defaults, e.g. "radial-gradient(70% 48% at var(--cb-glow-x, 68%) var(--cb-glow-y, 4%), ...)", so the app can vary it per slide. Keep the glow fully inside the frame at its default, or let it bleed deliberately on more than one edge — never clipped hard at exactly one corner.
 3. A SIGNATURE MOVE that recurs on every slide (e.g. a gold italic-serif payoff line; a two-tone headline with the emphasis phrase in accent italic). Name it + give a one-line composer instruction in "signature".
 4. A RICH component vocabulary — 8–12 classes (eyebrow, headline + a .sm variant, body, a tagline or quote, a rule, a cta button, a handle, a stat, a LIST vocabulary — a .panel plus a .row for one enumerated item, since decks constantly need "three things" laid out as scannable lines rather than a paragraph — a logo/wordmark, a .fill spacer), each listed in "components" with a one-line use.
-5. ONE rationed accent. Generous negative space. Bottom-anchor with a .fill flex-grow spacer.\n   ONE RADIUS SCALE AND ONE ELEVATION MODEL, applied to every surface you author. A real deck shipped three treatments side by side: a photo frame with a soft drop shadow, a list panel with a 1px stroke, and a cta button flat and hard-cornered. Pick how a raised surface reads on this brand — shadow, or hairline, or neither — and give .cb-shot, .panel and .cta the same answer, all deriving their corners from var(--cb-radius). Two surfaces on one slide must never disagree about what "raised" looks like.
+5. ONE rationed accent. Generous negative space. Bottom-anchor with a .fill flex-grow spacer.\n   ONE RADIUS SCALE AND ONE ELEVATION MODEL, applied to every surface you author. A real deck shipped three treatments side by side: a photo frame with a soft drop shadow, a list panel with a 1px stroke, and a cta button flat and hard-cornered. Two surfaces on one slide must never disagree about what "raised" looks like.\n   DECLARE IT AS A TOKEN, ONCE. Define "--cb-elev" in your ":root"/token block as this brand's single answer for a raised surface — e.g. "--cb-elev: 0 18px 40px rgba(0,0,0,.28)" for a shadow brand, "--cb-elev: none" for a flat one — and then have EVERY raised surface reference it: ".cb-shot", ".panel" and ".cta" each set "box-shadow: var(--cb-elev)" and take their corners from "var(--cb-radius)". A brand that reads as hairline-raised sets "--cb-elev: none" and declares "--cb-elev-line" for the stroke, used the same way. Writing a literal shadow or border directly onto one of those three classes is the failure this replaces: state the model once, reference it three times.
 6. PER-FORMAT tuning in "formats" — keys "1080x1920" (story) and "1080x1080" (square). Every IG format is 1080 WIDE, so only VERTICAL metrics change: append a small override stylesheet (safe-area padding for stories ~210px top / ~240px bottom + a size bump; tighter padding + smaller sizes for square). Copy the examples' "formats" approach.
 7. A PHOTO TREATMENT — this brand's posts carry the user's own photographs, dropped into ".cb-shot" boxes the composer leaves in the layout. The app already sizes and crops those boxes; YOU decide what a photograph LOOKS LIKE on this brand. Add rules for ".cb-slide .cb-shot" (and "::after" for an overlay — never "::before", which carries the photograph itself) that make a plain snapshot read as this brand's imagery — e.g. the same film grain as the background, a duotone or warm/cool cast via a blend mode, a bottom scrim so type stays legible over it, a hairline edge or an inset shadow, a corner treatment consistent with --cb-radius. Keep it to 2–4 rules, and make it recognisably yours: two brands must not treat a photo the same way. Describe the intent in "imagery.treatment", and set "imagery.photoRole" honestly — "hero" if photography carries this brand, "accent" if it supports the type, "none" if this brand is purely typographic.
 8. A MOTION signature in "motion" — how the brand MOVES when a post is exported as video. Pick the brand-default style + pace that match its character (e.g. a disciplined, forceful brand punches in punchy; a premium, unhurried one rises calm; an editorial one fades balanced), and describe it in one evocative line — as deliberate as its visual signature.
@@ -581,7 +585,7 @@ function applyCritique(raw: Json, draft: BrandRecipe): BrandRecipe {
  * recipe is held to its own promises (a component class the CSS never defines
  * would render as an unstyled element on a real slide).
  */
-function gate(recipe: BrandRecipe, label: string): BrandRecipe {
+function gate(recipe: BrandRecipe, label: string, previous?: BrandRecipe): BrandRecipe {
   const contrast = ensureRecipeContrast(recipe);
   for (const r of contrast.repairs) console.warn(`[recipe:${label}] contrast repair — ${r}`);
   // A list row's SKELETON belongs to the app (see ensureListSkeleton). Strip the
@@ -599,6 +603,21 @@ function gate(recipe: BrandRecipe, label: string): BrandRecipe {
   }
   if (consistency.unlisted.length) {
     console.warn(`[recipe:${label}] styled but unadvertised: ${consistency.unlisted.join(', ')}`);
+  }
+  /**
+   * Did the elevation rule actually bite? v6 asked for one elevation model and
+   * the next re-author shipped three treatments again. The rule now names a
+   * token, which makes compliance readable rather than aspirational — so read
+   * it, and say so when a brand still writes a literal shadow onto a surface.
+   */
+  const elevation = elevationReport(recipeStylesheetFor(consistency.recipe, '1080x1350'));
+  if (elevation.literal.length) {
+    console.warn(
+      `[recipe:${label}] elevation stated ${elevation.literal.length + elevation.usesToken.length} times, not once — ` +
+        `${elevation.literal.join(', ')} raise themselves with a literal shadow/border instead of var(--cb-elev)`,
+    );
+  } else if (elevation.declaresToken && elevation.usesToken.length) {
+    console.warn(`[recipe:${label}] one elevation model, referenced by ${elevation.usesToken.join(', ')}`);
   }
   // The same treatment for the reference fragments: a fragment that is not
   // sanitiser-clean, names a class the recipe never defined, or breaks the
@@ -624,8 +643,32 @@ function gate(recipe: BrandRecipe, label: string): BrandRecipe {
   for (const r of filled.repairs) {
     console.warn(`[recipe:${label}] "${r.role}" fragment gained a hole for: ${r.added.join(', ')}`);
   }
-  const usable = Object.keys(filled.recipe.fragments ?? {}).length;
-  if (usable) console.warn(`[recipe:${label}] ${usable} usable reference fragment(s)`);
+  /**
+   * FRAGMENT COVERAGE, named role by role — and compared against whatever this
+   * recipe is REPLACING.
+   *
+   * A re-author once came back with six of seven fragments; `statement` was
+   * simply absent, nothing in the response said so, and it was found by diffing
+   * the two by hand. A role with no fragment falls back to a per-slide model
+   * call: slower, less predictable, and the exact path that once rendered the
+   * model's own reasoning onto a slide. That is a downgrade wearing an
+   * upgrade's version number, so it is worth saying out loud.
+   */
+  const roles = Object.keys(filled.recipe.fragments ?? {});
+  const missing = SLIDE_ROLES.filter((r) => !roles.includes(r));
+  if (roles.length) {
+    console.warn(
+      `[recipe:${label}] ${roles.length}/${SLIDE_ROLES.length} reference fragment(s): ${roles.join(', ')}` +
+        (missing.length ? ` — no fragment for ${missing.join(', ')}, those roles cost a model call per slide` : ''),
+    );
+  }
+  const had = Object.keys(previous?.fragments ?? {});
+  const lost = had.filter((r) => !roles.includes(r));
+  if (lost.length) {
+    console.warn(
+      `[recipe:${label}] REGRESSION: the recipe being replaced had a "${lost.join('", "')}" fragment and this one does not`,
+    );
+  }
   return filled.recipe;
 }
 
@@ -768,10 +811,22 @@ export async function authorRecipe(
      * single-shot author.
      */
     direction?: string;
+    /**
+     * The recipe this one is REPLACING, when there is one. Used only to notice a
+     * regression: a re-author that silently returns fewer role fragments than
+     * the recipe it replaces trades free deterministic composition for a model
+     * call on whichever role it dropped.
+     */
+    previous?: BrandRecipe;
+    /**
+     * Measure what the recipe produces before storing it. Defaults to the same
+     * switch compose uses, so it is on in production and off under test.
+     */
+    checkLayout?: boolean;
   },
 ): Promise<BrandRecipe> {
   const model = opts?.model ?? (await modelFor('recipe'));
-  let recipe = gate(await authorOnce(model, evidence, opts?.reasoning, opts?.direction), 'draft');
+  let recipe = gate(await authorOnce(model, evidence, opts?.reasoning, opts?.direction), 'draft', opts?.previous);
   let critiqued = false;
 
   if (opts?.critique !== false) {
@@ -780,7 +835,7 @@ export async function authorRecipe(
       critiqued = true;
       // A "pass" returns the very object it was given, so there is nothing to
       // re-gate — the draft already cleared these gates on the way in.
-      if (reviewed !== recipe) recipe = gate(reviewed, 'revised');
+      if (reviewed !== recipe) recipe = gate(reviewed, 'revised', opts?.previous);
     } catch (err) {
       console.warn(
         '[recipe] critique pass failed — keeping the draft:',
@@ -795,7 +850,28 @@ export async function authorRecipe(
   if (opts?.verify) {
     const seen = await verifyRecipeByRender(recipe, { format: '1080x1350' });
     console.warn(`[recipe] render-verify: ${seen.verdict} — ${seen.notes}`);
-    if (seen.verdict === 'revised') recipe = gate(seen.recipe, 'verified');
+    if (seen.verdict === 'revised') recipe = gate(seen.recipe, 'verified', opts?.previous);
+  }
+
+  /**
+   * MEASURE WHAT IT PRODUCES, before it is stored. Free and deterministic — the
+   * same gate compose runs — and it never blocks: a recipe that cannot be
+   * measured is authored exactly as it was before this existed.
+   */
+  // Gated on the same switch compose uses, so a unit test never reaches for a
+  // browser: `try/catch` protects against a THROW, and this one would HANG.
+  if (opts?.checkLayout ?? renderCheckEnabledByDefault()) try {
+    const layout = await checkRecipeLayout(recipe);
+    if (layout.faults.length) {
+      console.warn(
+        `[recipe] LAYOUT: this recipe fails its own gate on a full slide — ${layout.faults.join(', ')}. ` +
+          'Every deck built on it starts from a failing layout.',
+      );
+    } else if (layout.measured) {
+      console.warn('[recipe] layout: a full slide fits');
+    }
+  } catch {
+    // Never let a check stop a recipe being authored.
   }
 
   // STAMP WHICH PROMPTS WROTE THIS. Purely additive, and last so it survives

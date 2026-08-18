@@ -24,6 +24,16 @@ interface Sample {
 (async () => {
   await connectDb();
   const { ProjectModel, BrandKitModel } = await import('../models');
+  const { BusinessModel } = await import('../models');
+  /**
+   * A render-check scaffold COPIES the recipe it is measuring, so a leaked one
+   * reads as an extra brand with identical geometry — and every run of this
+   * script creates more. Sampling them double-counts whatever they cloned and
+   * makes the ordering unstable between runs.
+   */
+  const scaffoldBusinessIds = new Set(
+    (await BusinessModel.find({ name: /^__/ }).select('_id').lean()).map((b) => String(b._id)),
+  );
   const { default: mongoose } = await import('mongoose');
 
   // Source slides from every local database, not just the one the web app reads
@@ -35,6 +45,7 @@ interface Sample {
 
   const recipeByBusiness = new Map<string, BrandRecipe>();
   for (const k of await BrandKitModel.find({ recipe: { $exists: true } }).lean()) {
+    if (scaffoldBusinessIds.has(String(k.businessId))) continue;
     if (k.recipe) recipeByBusiness.set(String(k.businessId), k.recipe as BrandRecipe);
   }
   const fallback = [...recipeByBusiness.values()][0];

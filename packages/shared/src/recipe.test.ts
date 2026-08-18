@@ -22,6 +22,7 @@ import {
   migrateRecipe,
   RECIPE_VERSION,
   RECIPE_VAR_PREFIX,
+  elevationReport,
 } from './recipe';
 import { contrastRatio } from './colorContrast';
 import { APP_IMAGE_CLASSES, slideMediaCss } from './slidePhotos';
@@ -715,3 +716,48 @@ describe('ensureListSkeleton', () => {
     expect(slideMediaCss(1350)).toContain('content:var(--cb-marker,"—")');
   });
 });
+
+describe('elevationReport — is the elevation model stated once or three times?', () => {
+  it('reads a brand that declares the token and references it everywhere', () => {
+    const css = `
+      :root{ --cb-elev: 0 18px 40px rgba(0,0,0,.28); --cb-radius: 6px; }
+      .cb-slide .cb-shot{ box-shadow: var(--cb-elev); border-radius: var(--cb-radius); }
+      .cb-slide .panel{ box-shadow: var(--cb-elev); }
+      .cb-slide .cta{ box-shadow: var(--cb-elev); }
+    `;
+    const r = elevationReport(css);
+    expect(r.declaresToken).toBe(true);
+    expect(r.literal).toEqual([]);
+    expect(r.usesToken.sort()).toEqual(['cb-shot', 'cta', 'panel']);
+  });
+
+  it('names the surfaces that raise themselves their own way', () => {
+    // The shape that actually shipped: a photo frame with a soft drop shadow, a
+    // list panel with a 1px stroke, and a CTA flat and hard-cornered.
+    const css = `
+      .cb-slide .cb-shot{ box-shadow: 0 12px 30px rgba(0,0,0,.3); }
+      .cb-slide .panel{ border: 1px solid #ccc; }
+      .cb-slide .cta{ background: gold; }
+    `;
+    const r = elevationReport(css);
+    expect(r.declaresToken).toBe(false);
+    expect(r.literal.sort()).toEqual(['cb-shot', 'panel']);
+    expect(r.usesToken).toEqual([]); // the flat CTA raises nothing, so it is not counted
+  });
+
+  it('accepts a flat brand that says so with the token', () => {
+    const css = `
+      :root{ --cb-elev: none; }
+      .cb-slide .cb-shot{ box-shadow: var(--cb-elev); }
+      .cb-slide .panel{ box-shadow: var(--cb-elev); }
+    `;
+    expect(elevationReport(css).literal).toEqual([]);
+  });
+
+  it('ignores a surface that is styled but never raised', () => {
+    const css = '.cb-slide .panel{ padding: 20px; background: #111; }';
+    const r = elevationReport(css);
+    expect(r.literal).toEqual([]);
+    expect(r.usesToken).toEqual([]);
+  });
+})

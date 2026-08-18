@@ -22,7 +22,13 @@ import { getBrowser } from '../browser';
 import { aiMessage, modelFor, textOf } from '../ai';
 import { recordUsage } from '../usage';
 import { sanitizeRecipeCss } from '../cssSanitize';
-import { createRenderScaffold } from './renderCheck';
+import {
+  createRenderScaffold,
+  layoutFaults,
+  openRenderProbe,
+  withCeiling,
+  type OpenProbe,
+} from './renderCheck';
 
 /** Sample copy per component class — plausible, and long enough to stress fit. */
 const SAMPLE: Record<string, string> = {
@@ -235,5 +241,80 @@ export async function verifyRecipeByRender(
       verdict: 'skipped',
       notes: `verification unavailable: ${err instanceof Error ? err.message : String(err)}`,
     };
+  }
+}
+
+/**
+ * THE LAYOUT GATE, IN THE AUTHORING PATH.
+ *
+ * Two stored recipes overflowed a post at 58 characters of body copy — shorter
+ * than any budget allows — and nothing noticed until a deck was composed on
+ * them, at which point the repair ladder ran on every slide and the gate's
+ * verdict carried no information about the copy. A recipe that fails its own
+ * layout gate at ANY copy length is broken as a recipe, not as a deck, and that
+ * is knowable the moment it is authored.
+ *
+ * Deliberately DETERMINISTIC and free: this is the same measurement compose
+ * runs, not the vision pass `verifyRecipeByRender` spends a model call on. It
+ * never blocks — a recipe that cannot be measured is authored exactly as before.
+ */
+/** One recipe, one slide — generous, but never unbounded. */
+const LAYOUT_CHECK_TIMEOUT_MS = 90_000;
+
+export async function checkRecipeLayout(
+  recipe: BrandRecipe,
+  opts?: { format?: Format; openProbe?: OpenProbe },
+): Promise<{ faults: string[]; measured: number }> {
+  const format = opts?.format ?? '1080x1350';
+  const has = (c: string) => recipe.components.some((k) => k.className.split(/\s+/)[0] === c);
+  const el = (cls: string, text: string, tag = 'p') =>
+    has(cls) ? `<${tag} class="${cls}">${text}</${tag}>` : '';
+
+  /**
+   * The WORST case a real slide can reach, not a typical one: every element the
+   * brand advertises, over a body at the base budget. The failure this exists to
+   * catch is a type scale too large for the vocabulary the brand claims to have,
+   * and a lean fixture never reaches it — the two broken recipes both measured
+   * clean on eyebrow + headline + body and failed the moment a tagline, a CTA
+   * and a handle joined them.
+   */
+  const stress = [
+    has('logo') ? '<div class="logo"></div>' : '',
+    el('eyebrow', 'The long game'),
+    el('headline', 'Small habits, unshakable results', 'h1'),
+    has('rule') ? '<div class="rule"></div>' : '',
+    el('tagline', 'One year. One decision, repeated.'),
+    el('body', 'The work compounds quietly, long before anyone notices that it has.'),
+    has('fill') ? '<div class="fill"></div>' : '',
+    el('cta', 'Start today', 'a'),
+    el('handle', '@yourbrand'),
+  ]
+    .filter(Boolean)
+    .join('');
+  if (!stress) return { faults: [], measured: 0 };
+
+  const slides = [{ html: stress, role: 'statement' }];
+  let probe;
+  try {
+    // A CEILING, not just a catch: the failure mode this guards against is a
+    // probe that never answers, and a try/catch does nothing about a hang.
+    probe = await withCeiling(
+      (opts?.openProbe ?? openRenderProbe)(recipe, format, slides),
+      LAYOUT_CHECK_TIMEOUT_MS,
+      'recipe layout probe',
+    );
+  } catch {
+    return { faults: [], measured: 0 }; // no renderer — authored exactly as before
+  }
+  try {
+    const verdict = (
+      await withCeiling(probe.measure([{ index: 0, html: stress }]), LAYOUT_CHECK_TIMEOUT_MS, 'recipe layout measure')
+    )[0];
+    if (!verdict || verdict.state === 'unknown') return { faults: [], measured: 0 };
+    return { faults: layoutFaults(verdict, undefined, 'statement'), measured: 1 };
+  } catch {
+    return { faults: [], measured: 0 };
+  } finally {
+    await probe.close().catch(() => {});
   }
 }
