@@ -885,6 +885,17 @@ export interface DeckCheckResult {
   /** The deck, with overflowing slides repaired. Byte-identical when all fit. */
   slides: CheckSlide[];
   measured: number;
+  /**
+   * Slides the renderer could not measure at all.
+   *
+   * The number that matters most when it is non-zero: with the web server down,
+   * `measure()` returns `unknown` for every slide in ~86ms, compose still
+   * succeeds, and the deck it writes is indistinguishable from a gated one —
+   * except that the overflow gate, the collision gate, the slack gate and the
+   * whole repair ladder all quietly did nothing. Reported so the CALLER learns
+   * that, rather than whoever happens to be reading the server's terminal.
+   */
+  unmeasured: number;
   overflowed: number;
   repaired: number;
   /** Indices that still overflow after the whole ladder — the caller may warn. */
@@ -921,6 +932,7 @@ export async function renderCheckDeck(
   const nothing: DeckCheckResult = {
     slides: out,
     measured: 0,
+    unmeasured: slides.length,
     overflowed: 0,
     repaired: 0,
     unresolved: [],
@@ -947,6 +959,10 @@ export async function renderCheckDeck(
   try {
     const verdicts = await probe.measure(slides.map((s, index) => ({ index, html: s.html })));
     const measured = verdicts.filter((v) => v.state !== 'unknown').length;
+    const unmeasured = slides.length - measured;
+    if (unmeasured) {
+      console.warn(`[render-check] ${unmeasured}/${slides.length} slide(s) could not be measured — those ship unchecked`);
+    }
     const overflowing = verdicts.flatMap((v, i) => (v.state === 'overflows' ? [i] : []));
 
     /**
@@ -966,7 +982,7 @@ export async function renderCheckDeck(
       console.warn(
         `[render-check] ${measured}/${slides.length} slide(s) measured in ${ms}ms — nothing to repair`,
       );
-      return { ...nothing, measured, ms };
+      return { ...nothing, measured, unmeasured, ms };
     }
 
     // Repairs are independent per slide, so they climb their ladders at the same
@@ -1052,7 +1068,7 @@ export async function renderCheckDeck(
         `${overflowing.length} overflowed · ${repaired} repaired · ${unresolved.length} unresolved · ` +
         `${aiCalls} extra AI call(s) — ${notes.join('; ')}`,
     );
-    return { slides: out, measured, overflowed: overflowing.length, repaired, unresolved, aiCalls, ms, notes };
+    return { slides: out, measured, unmeasured, overflowed: overflowing.length, repaired, unresolved, aiCalls, ms, notes };
   } catch (err) {
     console.warn(
       `[render-check] check failed — deck ships unchecked: ${

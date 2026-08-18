@@ -119,45 +119,17 @@ Rules that keep this file worth reading:
   the scaffold in a `finally` so a wedged run stops leaving litter. The leaked
   businesses then become the diagnostic: whichever stage the deck stops at is
   where it hung.
-
-### With :3000 down, every layout gate silently returns `unknown`
-
-- **Kind:** Gap
-- **Severity:** cost me a fix
-- **First seen:** 2026-08-12 — measured while investigating the hang above
-- **What happened:** with the web server stopped, `probe.measure()` returns
-  `{state: 'unknown', collide: false, slack: 0, headlineLines: 0}` for **every**
-  slide in 86ms. Compose still succeeds and still writes a deck. So the overflow
-  gate, the collision gate, the slack gate and the whole repair ladder quietly
-  do nothing, and the only trace is one `console.warn` on the API's stdout —
-  which under `npm run dev` goes to the operator's terminal and is invisible to
-  an agent driving the HTTP API.
-- **Why it matters:** the deck that comes out is indistinguishable from a
-  measured one, but nothing checked it. Every layout finding in this file was
-  found by those gates; with :3000 down they are all off, and the caller is
-  never told.
-- **Direction:** carry the unknown-verdict count into the compose response (or
-  the project's `pv`), so "this deck was never measured" is visible to the
-  caller rather than to whoever happens to be reading a terminal.
-
-### Compose reports no progress, so slow is indistinguishable from stuck
-
-- **Kind:** Gap
-- **Severity:** minor
-- **First seen:** 2026-08-12 — prepaid-packages-cash-flow
-- **What happened:** `POST /projects/:id/compose` is synchronous and emits
-  nothing until it returns. A healthy 8-slide compose took **~25 seconds**, so
-  a default Node `fetch` is normally fine — but during the stalls above there
-  was no way to tell a slow run from a wedged one, and Node's built-in `fetch`
-  gives up at undici's 300s `HeadersTimeoutError`, which is itself
-  indistinguishable from the server dying.
-- **Correction:** I first wrote that the endpoint "cannot be driven from a plain
-  Node client". That is wrong in the normal case — it only bit because those
-  particular runs never finished.
-- **Why it matters:** the only long operation in the tool is also the one with
-  no observability, so every stall costs a full timeout to diagnose.
-- **Direction:** the video exporter already has the right shape — `POST` returns
-  a `jobId`, `GET .../:jobId` returns `{state, percent}`. Worth reusing here.
+- **2026-08-19 — the failure is now legible, the cause still is not.** Compose
+  writes `composeProgress` to the project as it enters each phase (`parsing`,
+  `composing` with a per-slide count, `checking-layout`, `done`) and the trail is
+  deliberately LEFT BEHIND when a compose throws, so a wedge names the phase it
+  wedged in. That is the "make the failure legible" half of the direction.
+- **A near-miss worth recording, and NOT evidence about this finding.** A
+  measurement script hung for 10 minutes twice while running in the foreground
+  under the agent's own shell, and the identical script ran in 7 seconds twice
+  when detached — 2-for-2 against 0-for-2. That points at the sandbox the script
+  was launched from, not at the compose endpoint, and it is recorded here only
+  so the next person does not mistake it for a reproduction.
 
 ### The CRM payload's `caption` is a string; the API wants `{text, hashtags}`
 
@@ -328,6 +300,14 @@ Rules that keep this file worth reading:
   - 2026-08-12 — prepaid-packages-cash-flow — the cover's image box clipped the descenders of "you touch the car" at both the default size and `size: md`; only moving the photo to `placement: background` cleared it.
 
 ## Resolved
+
+### With :3000 down, every layout gate silently returns `unknown`
+
+*Resolved 2026-08-19 (PR #59).* `renderCheckDeck` now reports `unmeasured`, compose hands the whole summary to its caller through `onLayoutCheck`, and `POST /compose` returns it as `layout` on the response. A deck that shipped with every gate silent is now visibly different from one that passed them, to the caller rather than to whoever is reading the server's terminal.
+
+### Compose reports no progress, so slow is indistinguishable from stuck
+
+*Resolved 2026-08-19 (PR #59).* Compose emits a phase as it enters each one — `parsing`, `composing` (with a per-slide `done`/`total`), `checking-layout`, `done` — and the route persists it to `project.composeProgress`, so any caller polling `GET /projects/:id` can tell 1-of-9 from 8-of-9. Written with `updateOne` rather than `save()`, because it writes while the document is being built around it. Deliberately NOT converted to a job-and-poll endpoint like the video exporter: that would change every existing caller, and the crumb trail solves the stated problem without touching the Studio. The trail is left behind on a throw — the phase a compose died in is the most useful thing about a compose that did not finish.
 
 ### A bottom-anchored photo slot runs off the frame when the copy grows
 

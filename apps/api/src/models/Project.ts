@@ -100,6 +100,28 @@ const projectSchema = new Schema(
     type: { type: String, enum: ['carousel', 'story'], required: true },
     format: { type: String, required: true },
     slides: { type: [slideSchema], default: [] },
+    /**
+     * Where a compose has got to, written as it enters each phase and cleared
+     * when it finishes.
+     *
+     * `POST /compose` is synchronous and emitted nothing between request and
+     * response, so a deck that took 300 seconds and one that had wedged looked
+     * identical — and three runs did wedge, persisting nothing at all. This is
+     * the crumb trail: a caller can poll `GET /projects/:id` to tell slow from
+     * stuck, and a wedge leaves behind the phase it stuck in.
+     */
+    composeProgress: {
+      type: new Schema(
+        {
+          phase: { type: String, required: true },
+          done: { type: Number },
+          total: { type: Number },
+          at: { type: Date, required: true },
+        },
+        { _id: false },
+      ),
+      default: undefined,
+    },
     /** URLs of the last export's PNGs (drives the send-to-phone share page). */
     renders: { type: [String], default: undefined },
     /** The social caption + hashtags for this post, generated in the brand voice. */

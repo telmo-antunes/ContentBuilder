@@ -62,6 +62,8 @@ vi.mock('../ai', () => {
 });
 
 const { composeSlide, composeProject, parseForCompose, composeBudgetsFor } = await import('./compose');
+type LayoutCheckSummary = import('./compose').LayoutCheckSummary;
+type ComposeProgress = import('./compose').ComposeProgress;
 const { detailMastersRecipe } = await import('./recipes');
 const { sanitizeAuthoredHtml } = await import('../htmlSanitize');
 const { SLIDE_AUTHOR_INSTRUCTIONS } = await import('./prompt');
@@ -319,6 +321,47 @@ describe('the render check (compose looking at its own output)', () => {
     expect(checked.map((s) => s.role)).toEqual(plain.map((s) => s.role));
     expect(seen).toHaveLength(3); // one render per slide, no repairs
     expect(aiCalls).toHaveLength(4); // …and the unchecked run costs exactly the same
+  });
+
+  it('reports that a deck was never measured, instead of only warning the terminal', async () => {
+    reply.mockImplementation(composeReply);
+    const seen: LayoutCheckSummary[] = [];
+    await composeProject(detailMastersRecipe, 'an idea', {
+      // The renderer is down — every slide comes back `unknown` and the deck
+      // ships exactly as composed, which is right. The caller has to be told.
+      renderProbe: async () => {
+        throw new Error('connect ECONNREFUSED 127.0.0.1:3100');
+      },
+      onLayoutCheck: (r) => seen.push(r),
+    });
+    expect(seen).toHaveLength(1);
+    expect(seen[0]!.unmeasured).toBe(3);
+    expect(seen[0]!.measured).toBe(0);
+  });
+
+  it('reports nothing unmeasured when every slide was gated', async () => {
+    reply.mockImplementation(composeReply);
+    const { openProbe } = fakeProbe(() => 'fits');
+    const seen: LayoutCheckSummary[] = [];
+    await composeProject(detailMastersRecipe, 'an idea', { renderProbe: openProbe, onLayoutCheck: (r) => seen.push(r) });
+    expect(seen[0]).toMatchObject({ measured: 3, unmeasured: 0, overflowed: 0 });
+  });
+
+  it('names each phase it enters, so slow is distinguishable from stuck', async () => {
+    reply.mockImplementation(composeReply);
+    const { openProbe } = fakeProbe(() => 'fits');
+    const phases: ComposeProgress[] = [];
+    await composeProject(detailMastersRecipe, 'an idea', {
+      renderProbe: openProbe,
+      onProgress: (p) => phases.push(p),
+    });
+    expect(phases[0]).toEqual({ phase: 'parsing' });
+    expect(phases.at(-1)).toEqual({ phase: 'done' });
+    // The per-slide count climbs, so a caller can tell 1-of-9 from 8-of-9.
+    const composing = phases.filter((p) => p.phase === 'composing');
+    expect(composing[0]).toEqual({ phase: 'composing', done: 0, total: 3 });
+    expect(composing.at(-1)).toEqual({ phase: 'composing', done: 3, total: 3 });
+    expect(phases.some((p) => p.phase === 'checking-layout')).toBe(true);
   });
 
   it('ships the deck unchanged, with one warning and no throw, when the renderer is unreachable', async () => {

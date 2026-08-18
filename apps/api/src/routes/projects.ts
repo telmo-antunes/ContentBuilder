@@ -41,7 +41,7 @@ import { getStorage } from '../storage';
 import { generateCaption, type GeneratedCaption } from '../lib/caption';
 import { SITE_PHOTO_LABEL } from '../lib/harvest';
 import { lessonsFor, noteSlideSignal, observeOutcome, recordGeneration } from '../lib/learningLoop';
-import type { ComposeRecord } from '../lib/htmlDirector/compose';
+import type { ComposeRecord, LayoutCheckSummary } from '../lib/htmlDirector/compose';
 import { postUpdateStatus } from '../lib/promptStatus';
 import { aiDraftConfigured, config } from '../config';
 
@@ -639,6 +639,7 @@ projectsRouter.post(
 
     let composed;
     let captured: ComposeRecord | undefined;
+    let layout: LayoutCheckSummary | undefined;
     try {
       composed = await composeProject(parsedRecipe.data, briefIdea, {
         format: project.get('format'),
@@ -653,10 +654,32 @@ projectsRouter.post(
         record: (r) => {
           captured = r;
         },
+        onLayoutCheck: (r) => {
+          layout = r;
+        },
+        /**
+         * A crumb trail on the document itself, so a caller polling
+         * `GET /projects/:id` can tell a slow compose from a stuck one — and so
+         * a compose that wedges leaves behind the phase it wedged in.
+         *
+         * `updateOne` rather than `project.save()`: this writes WHILE the
+         * in-memory document is being built up around it, and saving the whole
+         * document mid-compose would race with the write at the end.
+         * Best-effort by construction — a failed crumb must never fail a deck.
+         */
+        onProgress: (p) => {
+          void ProjectModel.updateOne(
+            { _id: project._id },
+            { $set: { composeProgress: { ...p, at: new Date() } } },
+          ).catch(() => {});
+        },
       });
     } catch (err) {
+      // The trail is deliberately LEFT BEHIND on a failure: the phase it died in
+      // is the most useful thing about a compose that did not finish.
       throw new ApiError(502, `Compose failed: ${publicErrMessage(err, 'AI error')}. You can build manually instead.`);
     }
+    await ProjectModel.updateOne({ _id: project._id }, { $unset: { composeProgress: '' } }).catch(() => {});
     if (!composed.length) {
       throw new ApiError(502, 'The compose came back empty — try rephrasing the idea.');
     }
@@ -776,6 +799,13 @@ projectsRouter.post(
         locks: brief.locks,
         photosAttached: filled.used,
       },
+      /**
+       * What the layout gates did — absent only when the check was switched off
+       * entirely. A deck with `unmeasured > 0` shipped with the overflow,
+       * collision and slack gates all silent, and the caller can now see that
+       * instead of reading it off the server's terminal.
+       */
+      ...(layout ? { layout } : {}),
     });
   }),
 );
