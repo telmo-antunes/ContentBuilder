@@ -86,7 +86,8 @@ function slideWithBody(recipe: BrandRecipe, body: string, shape: Shape): string 
           const verdicts = await probe.measure(variants.map((v, i) => ({ index: i, html: v.html })));
           const cells = verdicts.map((v, i) => {
             const len = filler(LENGTHS[i]!).length;
-            const mark = v.state === 'fits' ? (v.slack > MAX_SLACK ? 'H' : '·') : v.state === 'overflows' ? 'X' : '?';
+            const over = v.slack > maxSlackFor('statement');
+            const mark = v.state === 'fits' ? (over ? 'H' : '·') : v.state === 'overflows' ? 'X' : '?';
             return `${len}${mark}`;
           });
           const collide = verdicts.some((v) => v.collide) ? '  (recipe collides at every length)' : '';
