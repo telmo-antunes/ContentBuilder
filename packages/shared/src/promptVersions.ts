@@ -232,6 +232,16 @@ export const TOUCHPOINT_REGISTRY: Record<TouchpointId, Touchpoint> = {
           'Ranking words ("fastest", "number one") the brief does not use are never asserted.',
         ],
       },
+      {
+        version: 7,
+        date: '2026-08-18',
+        summary: 'The slides that explain are allowed room to explain.',
+        improves: [
+          'A statement or feature slide may run to two sentences instead of one, so the deck can make its point instead of stacking nine hooks with nothing under them.',
+          'The extra room is withdrawn when a tagline shares the same slide — measured across every stored brand, that is the shape that overflows.',
+          'Every other role is still held to one short line.',
+        ],
+      },
     ],
   },
 
