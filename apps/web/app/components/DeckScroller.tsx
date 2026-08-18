@@ -11,10 +11,17 @@ import { Icon } from './Icon';
 export default function DeckScroller({
   className,
   children,
+  stacked = false,
 }: {
   /** Class of the scrolling strip itself (e.g. "studio-deck"). */
   className: string;
   children: ReactNode;
+  /**
+   * Lay the deck out as a vertical column instead of a horizontal strip. The
+   * arrows and edge fades are a strip's affordance and go with it — a stacked
+   * deck scrolls with the page, the way a reader scrolls a feed.
+   */
+  stacked?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [canPrev, setCanPrev] = useState(false);
@@ -48,6 +55,14 @@ export default function DeckScroller({
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     el.scrollBy({ left: dir * step, behavior: reduced ? 'auto' : 'smooth' });
   }, []);
+
+  if (stacked) {
+    return (
+      <div className="deck-wrap stacked">
+        <div className={`${className} stacked`}>{children}</div>
+      </div>
+    );
+  }
 
   return (
     <div className="deck-wrap">

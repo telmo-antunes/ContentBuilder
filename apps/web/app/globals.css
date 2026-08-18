@@ -956,6 +956,17 @@ input[type='color'] {
 .studio-sec .live { margin-left: auto; font-size: 11px; color: var(--accent); display: flex; align-items: center; gap: 7px; }
 .studio-sec .live::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px rgba(106, 166, 155, 0.2); }
 .studio-deck { display: flex; gap: 16px; overflow-x: auto; padding: 8px 2px 18px; scroll-snap-type: x proximity; }
+/* PHONE VIEW — the deck stacked at handset width, which is the only size that
+   tells you whether seven slides look the same as each other. Scrolls with the
+   page rather than sideways, the way a reader actually moves through a post. */
+.studio-deck.stacked { flex-direction: column; align-items: center; overflow-x: visible; gap: 28px; scroll-snap-type: none; }
+.studio-deck.stacked .studio-pcard { width: auto; }
+/* The plan entry a slide was composed against — quiet, and only ever present
+   when the post was composed against a plan. */
+.studio-beat {
+  margin: 8px 2px 0; max-width: 100%; font-size: 12px; line-height: 1.45;
+  color: var(--muted); border-left: 2px solid var(--line); padding-left: 8px;
+}
 /* Edge fades: the strip itself signals hidden cards. Classes are toggled by
    DeckScroller as it scrolls; mask keeps whatever is behind it intact. Shared
    by the Studio deck and the home brand rail. */
