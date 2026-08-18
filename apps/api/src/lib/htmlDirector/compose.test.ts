@@ -1197,39 +1197,40 @@ describe('an explicit slideCount is honoured', () => {
 })
 
 describe('parse guards on what each hole may carry', () => {
-  const deck = (parts, role = 'statement') => JSON.stringify({ slides: [{ role, parts }] })
+  const deck = (parts: Record<string, unknown>, role = 'statement') =>
+    JSON.stringify({ slides: [{ role, parts }] })
 
   it('drops an eyebrow that only repeats its own headline', async () => {
     reply.mockReturnValue(deck({ eyebrow: 'Raise the average', headline: 'Raise the average ticket' }))
-    const [slide] = await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' })
+    const slide = (await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' }))[0]!
     expect(slide.parts.eyebrow).toBeUndefined()
     expect(slide.parts.headline).toBe('Raise the average ticket')
   })
 
   it('keeps an eyebrow that adds what the headline does not say', async () => {
     reply.mockReturnValue(deck({ eyebrow: 'Ticket médio', headline: 'Raise the average ticket' }))
-    const [slide] = await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' })
+    const slide = (await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' }))[0]!
     expect(slide.parts.eyebrow).toBe('Ticket médio')
   })
 
   it('drops the lower-ranked hole when two carry the same line', async () => {
     // The stat slide that shipped with its figure and its headline identical.
     reply.mockReturnValue(deck({ headline: 'Two in five never come back', stat: 'Two in five never come back' }, 'stat'))
-    const [slide] = await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' })
+    const slide = (await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' }))[0]!
     expect(slide.parts.headline).toBe('Two in five never come back')
     expect(slide.parts.stat).toBeUndefined()
   })
 
   it('composes a stat slide with no stat as something else', async () => {
     reply.mockReturnValue(deck({ headline: 'Most cars come back', body: 'Because the smell was never in the air.' }, 'stat'))
-    const [slide] = await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' })
+    const slide = (await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' }))[0]!
     expect(slide.role).not.toBe('stat')
     expect(slide.role).toBe('feature')
   })
 
   it('leaves a stat slide that actually has a figure', async () => {
     reply.mockReturnValue(deck({ headline: 'Repeat work', stat: '3 in 5' }, 'stat'))
-    const [slide] = await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' })
+    const slide = (await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' }))[0]!
     expect(slide.role).toBe('stat')
     expect(slide.parts.stat).toBe('3 in 5')
   })
