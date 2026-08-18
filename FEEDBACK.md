@@ -51,25 +51,6 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
-### The slack gate never fires, so nothing catches a slide that reads empty
-
-- **Kind:** Gap
-- **Severity:** cost me a fix
-- **First seen:** 2026-08-18 — measured while sizing the body budget above
-- **What happened:** `measureBodyCeiling` rendered the same slide with bodies from
-  58 to 278 characters across six recipes and two formats — 96 renders. `slack`
-  exceeded `MAX_SLACK` (0.15) **not once**, at any length, in any recipe. A slide
-  whose entire body is 58 characters measures as having no hole in it.
-- **Why it matters:** "some of the slides are still looking a bit empty" is the
-  single most repeated piece of feedback on this tool, and the gate that exists
-  to catch exactly that is silent. Raising the body budget gives the composer
-  room to say more; it does not make it notice when it hasn't.
-- **Direction:** find out what `slack` actually measures before changing the
-  threshold — a largest-contiguous-empty-band that never exceeds 15% on a slide
-  with three elements on it suggests the band is being computed over the wrong
-  box (a full-bleed ground, or a flex container that stretched to fit), not that
-  0.15 is too high. Worth measuring an obviously-empty slide by hand first.
-
 ### The story budget shrinks ~20% across the board, but a story fits MORE copy
 
 - **Kind:** Defect
@@ -387,6 +368,25 @@ Rules that keep this file worth reading:
   - 2026-08-12 — prepaid-packages-cash-flow — the cover's image box clipped the descenders of "you touch the car" at both the default size and `size: md`; only moving the photo to `placement: background` cleared it.
 
 ## Resolved
+
+### The slack gate never fires, so nothing catches a slide that reads empty
+
+*Resolved 2026-08-18 (PR #57).* Two bugs, one in the measurement and one in the threshold.
+
+**The measurement.** `AuthoredSlide` excluded spacers from the painted-box list with an `offsetHeight > 0` test, on the reasoning that a spacer has no box. But `.fill` is `flex: 1 1 auto` — a spacer doing its job is exactly the one with a *large* height. The void was counted as content. Probed directly: a slide holding two lines of type over **897px of nothing** (66% of the frame) published `slack: 0.0459`, because the only gaps left to find were the 62px between its eyebrow and its headline. The zero-height test excluded a spacer only when it had grown to nothing — the one case with no slack in it. Spacers are now excluded by CLASS.
+
+**The threshold.** `MAX_SLACK` was 0.15, calibrated against the broken reading. With the measurement fixed, 68 of 79 shipped slides exceeded it. `src/scripts/slackDistribution.ts` renders every stored slide and reports the spread, which separates cleanly by role:
+
+| role | n | min | median | max |
+|---|---|---|---|---|
+| cover | 7 | 51.3% | 52.7% | 59.6% |
+| cta | 7 | 13.8% | 30.2% | 50.4% |
+| feature | 12 | 8.7% | 39.2% | **65.5%** |
+| statement | 15 | 9.0% | 23.3% | 44.9% |
+| list | 5 | 13.3% | 20.5% | 35.5% |
+| stat | 3 | 13.5% | 36.9% | 44.0% |
+
+A cover is a headline over space — that IS the form, and not one cover sits below 51%. So display roles (cover, cta, quote) are allowed 0.65 and content roles (feature, statement, list, stat) 0.50; an unknown role gets the permissive limit, because a gate that cries wolf gets ignored. On the shipped sample the gate now fires on **exactly 2 of 79** slides — the two `feature` slides that had to be hand-authored into panels because they carried nothing.
 
 ### The 90-character body budget makes an explanatory deck impossible
 

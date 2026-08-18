@@ -348,8 +348,45 @@ export interface LayoutVerdict {
   headlineLines: number;
 }
 
-/** The share of a frame a single empty band may occupy before it reads as a hole. */
-export const MAX_SLACK = 0.15;
+/**
+ * The share of a frame a single empty band may occupy before it reads as a hole
+ * — per ROLE, because the roles disagree about what an empty band means.
+ *
+ * MEASURED across all 79 stored slides that actually shipped
+ * (`src/scripts/slackDistribution.ts`). Once the spacer stopped being counted as
+ * content, the spread separated cleanly by role:
+ *
+ *   cover      n=7   min 51.3%  median 52.7%  max 59.6%
+ *   cta        n=7   min 13.8%  median 30.2%  max 50.4%
+ *   feature    n=12  min  8.7%  median 39.2%  max 65.5%
+ *   statement  n=15  min  9.0%  median 23.3%  max 44.9%
+ *   list       n=5   min 13.3%  median 20.5%  max 35.5%
+ *   stat       n=3   min 13.5%  median 36.9%  max 44.0%
+ *
+ * A cover is a headline over space — that IS the form, and not one cover in the
+ * sample sits below 51%. A slide whose job is to carry content is a different
+ * question, and the two worst `feature` slides in the sample, both at 65.5%, are
+ * the ones that had to be hand-authored into panels because they said nothing.
+ *
+ * So DISPLAY roles are allowed to be mostly air and CONTENT roles are not. On
+ * this sample the gate fires on exactly those two slides. An unknown role gets
+ * the permissive limit: a gate that cries wolf is a gate that gets ignored.
+ */
+const SLACK_LIMIT = { display: 0.65, content: 0.5 } as const;
+
+/** Roles that exist to carry information rather than to make an impression. */
+const CONTENT_ROLES = new Set(['feature', 'statement', 'list', 'stat']);
+
+/** The largest empty band this role may carry before it reads as a hole. */
+export function maxSlackFor(role: string | undefined): number {
+  return role && CONTENT_ROLES.has(role) ? SLACK_LIMIT.content : SLACK_LIMIT.display;
+}
+
+/**
+ * The old single threshold, kept only so a caller with no role in hand still has
+ * a number. Prefer {@link maxSlackFor}.
+ */
+export const MAX_SLACK = SLACK_LIMIT.display;
 
 /** Lift a bare overflow state into a full verdict — for callers and doubles
  *  that only care about the one signal. */
@@ -914,7 +951,8 @@ export async function renderCheckDeck(
      * conflation is exactly what let a collision and a 430px hole ship.
      */
     const faulty = verdicts.flatMap((v, i) =>
-      v.state === 'fits' && layoutFaults(v, archetypeFor(slides[i]?.archetype)?.maxHeadlineLines).length
+      v.state === 'fits' &&
+      layoutFaults(v, archetypeFor(slides[i]?.archetype)?.maxHeadlineLines, slides[i]?.role).length
         ? [i]
         : [],
     );
@@ -1073,11 +1111,12 @@ export interface LayoutRepairContext {
 export function layoutFaults(
   v: LayoutVerdict,
   maxHeadlineLines: number | undefined,
+  role?: string,
 ): string[] {
   const out: string[] = [];
   if (v.state === 'overflows') out.push('overflows');
   if (v.collide) out.push('collision');
-  if (v.slack > MAX_SLACK) out.push(`slack ${Math.round(v.slack * 100)}%`);
+  if (v.slack > maxSlackFor(role)) out.push(`slack ${Math.round(v.slack * 100)}%`);
   if (maxHeadlineLines && v.headlineLines > maxHeadlineLines) {
     out.push(`headline ${v.headlineLines} lines`);
   }
@@ -1097,7 +1136,7 @@ export async function repairLayout(
 ): Promise<LayoutRepair> {
   const steps: string[] = [];
   let current = html;
-  let faults = layoutFaults(verdict, maxHeadlineLines);
+  let faults = layoutFaults(verdict, maxHeadlineLines, input.role);
   if (!faults.length || verdict.state === 'unknown') {
     return { html, steps, remaining: faults, aiCalls: 0 };
   }
@@ -1107,7 +1146,7 @@ export async function repairLayout(
     const smaller = addHeadlineVariant(current);
     if (smaller.changed) {
       const after = await ctx.measure(smaller.html);
-      const next = layoutFaults(after, maxHeadlineLines);
+      const next = layoutFaults(after, maxHeadlineLines, input.role);
       // Kept only if it actually helped. A smaller headline that fixes a
       // collision but opens a hole has traded one gate failure for another.
       if (after.state !== 'unknown' && next.length < faults.length) {
@@ -1123,7 +1162,7 @@ export async function repairLayout(
     const bigger = removeHeadlineVariant(current);
     if (bigger.changed) {
       const after = await ctx.measure(bigger.html);
-      const next = layoutFaults(after, maxHeadlineLines);
+      const next = layoutFaults(after, maxHeadlineLines, input.role);
       if (after.state !== 'unknown' && !tooMuch(next) && after.slack < verdict.slack) {
         steps.push('larger-headline');
         current = bigger.html;

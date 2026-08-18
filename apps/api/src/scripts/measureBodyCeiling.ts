@@ -14,7 +14,7 @@
  * Needs the web server up: the probe renders through `${WEB_URL}/render`.
  */
 import { connectDb, disconnectDb } from '../db';
-import { MAX_SLACK, openRenderProbe } from '../lib/htmlDirector/renderCheck';
+import { maxSlackFor, openRenderProbe } from '../lib/htmlDirector/renderCheck';
 import type { BrandRecipe } from '@contentbuilder/shared';
 
 const LENGTHS = [60, 90, 120, 150, 180, 210, 240, 280];

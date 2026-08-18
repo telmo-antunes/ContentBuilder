@@ -494,7 +494,7 @@ describe('repairLayout — the bidirectional ladder', () => {
 
   it('grows into excess slack — the direction the overflow ladder never had', async () => {
     const small = '<div class="headline sm">A headline</div>';
-    const out = await repairLayout(detailMastersRecipe, input, small, v({ slack: 0.4 }), 3, {
+    const out = await repairLayout(detailMastersRecipe, input, small, v({ slack: 0.6 }), 3, {
       measure: async () => v({ slack: 0.1 }),
     });
     expect(out.steps).toEqual(['larger-headline']);
@@ -507,17 +507,17 @@ describe('repairLayout — the bidirectional ladder', () => {
    */
   it('refuses a grow that would overflow, and keeps the slack', async () => {
     const small = '<div class="headline sm">A headline</div>';
-    const out = await repairLayout(detailMastersRecipe, input, small, v({ slack: 0.4 }), 3, {
+    const out = await repairLayout(detailMastersRecipe, input, small, v({ slack: 0.6 }), 3, {
       measure: async () => v({ slack: 0.05, state: 'overflows' }),
     });
     expect(out.steps).toEqual([]);
     expect(out.html).toBe(small);
-    expect(out.remaining).toContain('slack 40%');
+    expect(out.remaining).toContain('slack 60%');
   });
 
   it('refuses a grow that would collide', async () => {
     const small = '<div class="headline sm">A headline</div>';
-    const out = await repairLayout(detailMastersRecipe, input, small, v({ slack: 0.4 }), 3, {
+    const out = await repairLayout(detailMastersRecipe, input, small, v({ slack: 0.6 }), 3, {
       measure: async () => v({ slack: 0.05, collide: true }),
     });
     expect(out.steps).toEqual([]);
@@ -527,7 +527,7 @@ describe('repairLayout — the bidirectional ladder', () => {
   it('keeps a shrink only when it reduces the fault count', async () => {
     const out = await repairLayout(detailMastersRecipe, input, HTML, v({ collide: true }), 3, {
       // Fixes the collision but opens a hole — no net gain, so it is discarded.
-      measure: async () => v({ collide: false, slack: 0.5 }),
+      measure: async () => v({ collide: false, slack: 0.6 }),
     });
     expect(out.steps).toEqual([]);
     expect(out.html).toBe(HTML);
@@ -553,8 +553,27 @@ describe('layoutFaults', () => {
   it('names every gate that fired, and nothing else', () => {
     expect(layoutFaults({ state: 'fits', collide: false, slack: 0.05, headlineLines: 2 }, 3)).toEqual([]);
     expect(
-      layoutFaults({ state: 'overflows', collide: true, slack: 0.4, headlineLines: 6 }, 3),
-    ).toEqual(['overflows', 'collision', 'slack 40%', 'headline 6 lines']);
+      layoutFaults({ state: 'overflows', collide: true, slack: 0.7, headlineLines: 6 }, 3),
+    ).toEqual(['overflows', 'collision', 'slack 70%', 'headline 6 lines']);
+  });
+
+  it('holds a content role to a tighter hole than a display role', () => {
+    // Measured across every shipped slide: a cover never sits below 51% slack,
+    // because a cover IS a headline over space. The two worst `feature` slides
+    // in that same sample, at 65.5%, are the ones that had to be hand-authored
+    // into panels because they carried nothing.
+    const hole = { state: 'fits' as const, collide: false, slack: 0.55, headlineLines: 2 };
+    expect(layoutFaults(hole, undefined, 'cover')).toEqual([]);
+    expect(layoutFaults(hole, undefined, 'cta')).toEqual([]);
+    expect(layoutFaults(hole, undefined, 'feature')).toEqual(['slack 55%']);
+    expect(layoutFaults(hole, undefined, 'statement')).toEqual(['slack 55%']);
+    expect(layoutFaults(hole, undefined, 'list')).toEqual(['slack 55%']);
+    // An unknown role gets the permissive limit — a gate that cries wolf is a
+    // gate that gets ignored.
+    expect(layoutFaults(hole, undefined, undefined)).toEqual([]);
+    // Past the display limit, everything reports.
+    const void_ = { ...hole, slack: 0.7 };
+    expect(layoutFaults(void_, undefined, 'cover')).toEqual(['slack 70%']);
   });
 
   it('ignores the headline cap when the archetype does not set one', () => {
@@ -598,7 +617,7 @@ describe('renderCheckDeck — the layout gates run too', () => {
     const openProbe = async () => ({
       // Never improves: the hole survives every attempt.
       async measure() {
-        return [{ state: 'fits' as const, collide: false, slack: 0.42, headlineLines: 2 }];
+        return [{ state: 'fits' as const, collide: false, slack: 0.62, headlineLines: 2 }];
       },
       async close() {},
     });
@@ -612,7 +631,7 @@ describe('renderCheckDeck — the layout gates run too', () => {
     );
 
     expect(out.notes.join(' ')).toContain('UNFIXED');
-    expect(out.notes.join(' ')).toContain('slack 42%');
+    expect(out.notes.join(' ')).toContain('slack 62%');
   });
 
   it('leaves a clean slide untouched and spends no measurement on it', async () => {
