@@ -201,6 +201,43 @@ export interface ComposeOptions {
    * to remember anything pays nothing, and the eval passes no sink at all.
    */
   record?: (r: ComposeRecord) => void;
+  /**
+   * What the layout gates actually did. Absent by default, like `record`.
+   * See the call site for why `unmeasured` is the number that matters.
+   */
+  onLayoutCheck?: (r: LayoutCheckSummary) => void;
+  /**
+   * Which phase compose is in, as it enters each one.
+   *
+   * `POST /compose` is synchronous and, until now, silent: it emitted nothing
+   * between the request and the response, so a deck that took 300 seconds and
+   * one that had wedged looked identical to the caller — and three runs did
+   * wedge, persisting nothing. Reported per phase so a slow compose is
+   * distinguishable from a stuck one, and so a wedge names the phase it stuck
+   * in instead of leaving nothing behind at all.
+   */
+  onProgress?: (p: ComposeProgress) => void;
+}
+
+/** Where a compose has got to. `done`/`total` are set only where there is a count. */
+export interface ComposeProgress {
+  phase: 'parsing' | 'composing' | 'checking-layout' | 'done';
+  done?: number;
+  total?: number;
+}
+
+/** What the render check learned about a deck, for the caller to report on. */
+export interface LayoutCheckSummary {
+  /** Slides the renderer measured. */
+  measured: number;
+  /** Slides it could not — these shipped with every gate off. */
+  unmeasured: number;
+  overflowed: number;
+  repaired: number;
+  /** Indices still faulty after the whole ladder. */
+  unresolved: number[];
+  notes: string[];
+  ms: number;
 }
 
 /**
@@ -1933,6 +1970,7 @@ export async function composeProject(
     variantBias: opts?.variantBias ?? variantBiasFromLessons(opts?.lessons ?? []),
   };
   let lastParseUser = '';
+  opts?.onProgress?.({ phase: 'parsing' });
   const inputs = await parseForCompose(recipe, brief?.idea ?? idea, {
     ...o,
     onParsePrompt: (u) => {
@@ -1944,7 +1982,14 @@ export async function composeProject(
   // pool rather than serially — deck latency drops from Σ(slides) to roughly
   // ⌈n / pool⌉ × slide. Output order and the fail-the-batch error semantics of
   // the old serial loop are preserved (see mapPool).
-  const authored = await mapPool(inputs, COMPOSE_CONCURRENCY, (input) => composeSlide(recipe, input, o));
+  let composedCount = 0;
+  opts?.onProgress?.({ phase: 'composing', done: 0, total: inputs.length });
+  const authored = await mapPool(inputs, COMPOSE_CONCURRENCY, async (input) => {
+    const slide = await composeSlide(recipe, input, o);
+    composedCount += 1;
+    opts?.onProgress?.({ phase: 'composing', done: composedCount, total: inputs.length });
+    return slide;
+  });
   const out: Array<{
     role: SlideRole;
     authored: { html: string; bg?: string; role?: string; archetype?: string };
@@ -2054,6 +2099,7 @@ export async function composeProject(
   }
 
   if (opts?.renderCheck ?? (Boolean(opts?.renderProbe) || renderCheckEnabledByDefault())) {
+    opts?.onProgress?.({ phase: 'checking-layout', done: 0, total: out.length });
     const checked = await renderCheckDeck(recipe, kept, out.map((s) => s.authored), o.format ?? '1080x1350', {
       openProbe: opts?.renderProbe,
       // Step 3 re-composes through the SAME model and options this deck used —
@@ -2064,6 +2110,26 @@ export async function composeProject(
     checked.slides.forEach((s, i) => {
       out[i]!.authored = { ...out[i]!.authored, html: s.html };
     });
+    /**
+     * Hand the verdict to the caller, not just to the console.
+     *
+     * `unmeasured` is the one that matters: with no web server every slide
+     * reports "unknown" and the deck ships exactly as composed, which is the
+     * right behaviour — a compose must never fail because a check could not
+     * run — but until now it was indistinguishable from a deck that passed
+     * every gate. The only trace was a `console.warn` on the API's stdout.
+     */
+    opts?.onLayoutCheck?.({
+      measured: checked.measured,
+      unmeasured: checked.unmeasured,
+      overflowed: checked.overflowed,
+      repaired: checked.repaired,
+      unresolved: checked.unresolved,
+      notes: checked.notes,
+      ms: checked.ms,
+    });
+    opts?.onProgress?.({ phase: 'checking-layout', done: out.length, total: out.length });
   }
+  opts?.onProgress?.({ phase: 'done' });
   return out;
 }
