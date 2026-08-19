@@ -53,3 +53,37 @@ describe('resolveSlidePhotos', () => {
     expect(resolveSlidePhotos({ photos: [] } as unknown as Slide, media).background).toBeUndefined();
   });
 });
+
+describe('a slot whose photo has no image behind it', () => {
+  const slide = (photos: unknown[]) => ({ id: 's', order: 0, photos } as never);
+
+  it('keeps the geometry so a measurement can reserve the right space', () => {
+    // A layout measurement runs against a project with no media. Every slot came
+    // back unresolved and was reserved at DEFAULT size, which over-reported the
+    // slides someone had already hand-tuned: one shipped slide renders clean at
+    // `wide`/`sm` and was flagged as overflowing for exactly that reason.
+    const out = resolveSlidePhotos(
+      slide([{ id: 'a', mediaAssetId: 'missing', placement: 'slot', slot: 'hero', shape: 'wide', size: 'sm' }]),
+      [],
+    );
+    expect(out.slots.hero).toBeUndefined(); // no image — nothing to paint
+    expect(out.reserve?.hero).toEqual({ shape: 'wide', size: 'sm' });
+  });
+
+  it('records nothing for a resolvable photo — that one is simply filled', () => {
+    const out = resolveSlidePhotos(
+      slide([{ id: 'a', mediaAssetId: 'm1', placement: 'slot', slot: 'hero', shape: 'wide', size: 'sm' }]),
+      [{ _id: 'm1', url: 'http://x/y.png' }] as never,
+    );
+    expect(out.slots.hero?.url).toBe('http://x/y.png');
+    expect(out.reserve).toBeUndefined();
+  });
+
+  it('ignores a missing background or free overlay — only a slot reserves space', () => {
+    const out = resolveSlidePhotos(
+      slide([{ id: 'a', mediaAssetId: 'missing', placement: 'background', shape: 'wide' }]),
+      [],
+    );
+    expect(out.reserve).toBeUndefined();
+  });
+})

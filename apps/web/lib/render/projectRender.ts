@@ -51,6 +51,18 @@ export interface SlidePhotoSet {
   slots: Record<string, ResolvedPhoto>;
   /** Absolutely-positioned overlays, in paint order. */
   free: ResolvedPhoto[];
+  /**
+   * Slot name → the SHAPE a photo would occupy there, for slots whose photo
+   * could not be resolved to an image.
+   *
+   * A layout measurement runs against a throwaway project that carries no media,
+   * so every slot came back unresolved and was reserved at the DEFAULT geometry
+   * — which over-reports any slide whose photo was deliberately shrunk. One
+   * shipped slide rendered clean in production at `wide`/`sm` and was flagged as
+   * overflowing by the check for exactly that reason. Keeping the geometry when
+   * the image is missing lets the reserve match what actually ships.
+   */
+  reserve?: Record<string, { shape?: ResolvedPhoto['shape']; size?: ResolvedPhoto['size'] }>;
 }
 
 const EMPTY_PHOTOS: SlidePhotoSet = { slots: {}, free: [] };
@@ -66,7 +78,15 @@ export function resolveSlidePhotos(slide: Slide, media: MediaAsset[]): SlidePhot
   const out: SlidePhotoSet = { slots: {}, free: [] };
   for (const p of photos) {
     const asset = media.find((m) => m._id === p.mediaAssetId);
-    if (!asset?.url) continue;
+    if (!asset?.url) {
+      // No image, but the slide still says how big one would be. Worth keeping:
+      // a measurement pass reserves that space, and a slot whose asset was
+      // deleted from the library holds its place instead of collapsing.
+      if (p.placement === 'slot' && p.slot) {
+        out.reserve = { ...(out.reserve ?? {}), [p.slot]: { shape: p.shape, size: p.size } };
+      }
+      continue;
+    }
     const resolved: ResolvedPhoto = {
       id: p.id,
       url: asset.url,

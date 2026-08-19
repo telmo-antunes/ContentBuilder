@@ -33,6 +33,7 @@
  *   per slide.
  */
 import { randomUUID } from 'node:crypto';
+import { Types } from 'mongoose';
 import type { Browser, Page } from 'puppeteer';
 import {
   SLOT_ATTR,
@@ -72,6 +73,15 @@ export interface CheckSlide {
   role?: string;
   /** How the slide is composed. Carries the headline cap the layout ladder enforces. */
   archetype?: string;
+  /**
+   * What size a photograph occupies in each slot, when that is already known.
+   *
+   * A scaffold carries no media, so a slot is reserved at the DEFAULT geometry —
+   * correct at compose time, where no photo has been chosen, and wrong when
+   * re-measuring a slide whose photo was deliberately shrunk. Supplying the
+   * stored shape/size makes the reserve match what actually ships.
+   */
+  slotSizes?: Record<string, { shape?: string; size?: string }>;
 }
 
 /**
@@ -239,6 +249,28 @@ export async function createRenderScaffold(
       order: i,
       imageNeed: 'none',
       authored: { html: s.html, ...(s.bg ? { bg: s.bg } : {}), ...(s.role ? { role: s.role } : {}) },
+      /**
+       * Photo records pointing at an asset that does not exist.
+       *
+       * `resolveSlidePhotos` keeps the GEOMETRY of a photo whose asset it cannot
+       * resolve and skips the image — which is exactly what a reserve needs: the
+       * space a picture will take, without a picture. The dangling id is honest
+       * rather than a trick: a scaffold really does have no media, and the
+       * schema requires the field, so this is the same state as an asset deleted
+       * from the library while a slide still points at it.
+       */
+      ...(s.slotSizes && Object.keys(s.slotSizes).length
+        ? {
+            photos: Object.entries(s.slotSizes).map(([slot, g], j) => ({
+              id: `reserve-${j}`,
+              mediaAssetId: new Types.ObjectId(),
+              placement: 'slot',
+              slot,
+              ...(g.shape ? { shape: g.shape } : {}),
+              ...(g.size ? { size: g.size } : {}),
+            })),
+          }
+        : {}),
     })),
   });
   const projectId = String(project._id);

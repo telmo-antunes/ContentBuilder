@@ -312,8 +312,21 @@ export function AuthoredSlide({
       const p = photos?.slots[name];
       if (!p) {
         if (editing) return emptySlotCss(scope, name);
-        // A measurement pass keeps the empty box in the flow — see reservedSlotCss.
-        return reserveSlots ? reservedSlotCss(scope, name) : hiddenSlotCss(scope, name);
+        if (!reserveSlots) return hiddenSlotCss(scope, name);
+        /**
+         * A measurement pass keeps the empty box in the flow — at the size the
+         * photograph will actually occupy where the slide says what that is.
+         * Without the resize every reserve used the DEFAULT geometry, so a slide
+         * whose photo had been deliberately shrunk read as overflowing when it
+         * renders clean. Falls back to the default when nothing is recorded,
+         * which is the honest assumption at compose time: no photo has been
+         * chosen yet.
+         */
+        const want = photos?.reserve?.[name];
+        const resized = want
+          ? slotOverrideCss(scope, name, want.shape, want.size, RECIPE_FORMAT_DIMS[format]?.h ?? 1350)
+          : '';
+        return [resized, reservedSlotCss(scope, name)].filter(Boolean).join('\n');
       }
       // A resize rides on the photo, so the authored markup is never rewritten.
       const resize = slotOverrideCss(scope, name, p.shape, p.size, RECIPE_FORMAT_DIMS[format]?.h ?? 1350);
