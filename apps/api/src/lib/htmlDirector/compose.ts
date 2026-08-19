@@ -694,7 +694,75 @@ const DANGLING_WORDS = new Set([
   'a', 'an', 'the', 'and', 'or', 'but', 'of', 'to', 'in', 'on', 'at', 'by', 'for', 'from',
   'with', 'without', 'into', 'onto', 'over', 'under', 'as', 'is', 'are', 'was', 'were',
   'that', 'this', 'your', 'their', 'its', 'it', 'you', 'we', 'they', 'not', 'no', 'so',
+  // Added when the same question — "can this word end a line?" — was asked of
+  // copy the model WROTE rather than copy the clamp cut. See `unfinishedProse`.
+  'nor', 'be', 'been', 'being', 'has', 'have', 'had', 'will', 'would', 'can', 'could',
+  'should', 'may', 'might', 'must', 'which', 'who', 'whose', 'than', 'then', 'our',
+  'his', 'her', 'my', 'these', 'those', 'every', 'each',
 ]);
+
+// ── Copy that stops mid-thought ─────────────────────────────────────────────
+
+/**
+ * Punctuation that finishes a line. A closing bracket or quote counts: the
+ * sentence ended inside it.
+ */
+const TERMINAL_PUNCTUATION = /[.!?…:)"'’”]$/;
+
+/**
+ * Parts that are meant to READ as language. An eyebrow is a 2-4 word label, a
+ * CTA is button text and a handle is a name — none of them is a sentence, and
+ * checking them produced nothing but false alarms ("Reframe this").
+ */
+const PROSE_PARTS = ['body', 'tagline', 'quote'] as const;
+
+/** A part that stops mid-thought, with the reason. */
+export interface UnfinishedProse {
+  slide: number;
+  label: string;
+  text: string;
+  reason: 'no terminal punctuation' | 'ends on a dangling word';
+}
+
+/**
+ * Copy that stops mid-sentence.
+ *
+ * A deck shipped `"Enzymes break the source. Fragrance covers"` — 41 characters
+ * against a 150-character budget, so nothing clamped it and nothing noticed. The
+ * copywriter simply stopped, and the only gate that could have caught it was a
+ * person reading the slide.
+ *
+ * Two rules, both measured against every string in the stored decks:
+ *
+ *   · A BODY or a row NOTE is prose and ends like prose. 50 of 51 stored bodies
+ *     and 13 of 13 notes end with terminal punctuation.
+ *   · A HEADLINE may be a fragment — 34 of 93 carry no full stop, by design —
+ *     but no line may end on a word that leaves a phrase open.
+ */
+export function unfinishedProse(slides: ParsedSlide[]): UnfinishedProse[] {
+  const out: UnfinishedProse[] = [];
+  const dangles = (v: string) => {
+    const last = v.replace(/[,;]+$/, '').split(/\s+/).pop()?.toLowerCase() ?? '';
+    return DANGLING_WORDS.has(last);
+  };
+  const check = (slide: number, label: string, value: string | undefined, needsFullStop: boolean) => {
+    const v = (value ?? '').trim();
+    // One word is a label however it is punctuated; two words can still dangle.
+    if (!v || v.split(/\s+/).length < 2) return;
+    if (TERMINAL_PUNCTUATION.test(v)) return;
+    if (needsFullStop) out.push({ slide, label, text: v, reason: 'no terminal punctuation' });
+    else if (dangles(v)) out.push({ slide, label, text: v, reason: 'ends on a dangling word' });
+  };
+  slides.forEach((s, i) => {
+    for (const part of PROSE_PARTS) check(i, part, s.parts[part], part === 'body');
+    check(i, 'headline', s.parts.headline, false);
+    (s.parts.rows ?? []).forEach((r, j) => {
+      check(i, `rows[${j}].text`, r.text, false);
+      check(i, `rows[${j}].note`, r.note, true);
+    });
+  });
+  return out;
+}
 
 /** Drop trailing words that cannot end a line, down to a floor of one word. */
 function dropDanglers(s: string): string {
@@ -1273,11 +1341,17 @@ export async function parseForCompose(
   const flagrant = budgetViolationsOf(slides, budgets).filter((v) => v.length > v.budget * 1.1);
   const lost = missingLocks(JSON.stringify(slides), locks);
   const repeats = repeatedSlides(slides);
-  if (flagrant.length || lost.length || repeats.length) {
+  // Nothing here can be repaired deterministically: the missing words are the
+  // point, and appending a full stop to "Fragrance covers" only hides it.
+  const unfinished = unfinishedProse(slides);
+  if (flagrant.length || lost.length || repeats.length || unfinished.length) {
     if (flagrant.length) {
       console.warn(`[compose] parse: ${flagrant.length} part(s) burst their budgets — one corrective re-parse`);
     }
     if (lost.length) console.warn(`[compose] parse: ${lost.length} verbatim string(s) were not used — correcting`);
+    for (const u of unfinished) {
+      console.warn(`[compose] parse: slide ${u.slide + 1} ${u.label} stops mid-thought (${u.reason}) — correcting`);
+    }
     for (const r of repeats) {
       console.warn(
         `[compose] parse: slides ${r.a + 1} and ${r.b + 1} make the same point (${Math.round(r.score * 100)}% of their words agree) — correcting`,
@@ -1288,6 +1362,8 @@ export async function parseForCompose(
       ...flagrant.map((v) => `- slide ${v.slide + 1} ${v.label} is ${v.length} chars, budget ${v.budget}`),
       lost.length ? `These strings had to appear EXACTLY as written and do not:` : '',
       ...lost.map((l) => `- ${JSON.stringify(l)}`),
+      unfinished.length ? `These lines stop mid-thought. Finish the sentence — do not simply add a full stop to what is there:` : '',
+      ...unfinished.map((u) => `- slide ${u.slide + 1} ${u.label}: ${JSON.stringify(u.text)} (${u.reason})`),
       repeats.length ? `These pairs of slides make the same point twice — a reader learns nothing from the second:` : '',
       ...repeats.map(
         (r) =>
