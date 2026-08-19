@@ -297,3 +297,57 @@ export function enforceDescenderClearance(css: string): string {
   // point: the clearance a descender needs scales with the type that draws it.
   return `${css}\n${selector}{padding-bottom:${em}em}`;
 }
+
+/**
+ * The air a brand lockup needs under it, in px on the 1080 canvas.
+ *
+ * Measured across all 79 stored slides. The tightest ink-to-ink gap on a slide
+ * sits at a median of 32px and never below 14px — EXCEPT on eight slides that
+ * all read 5px, all on the same pair (`logo-row → eyebrow`) and the same brands.
+ * That is a sixfold outlier against the next tightest pair, not a design choice:
+ * neither `.logo-row` nor `.eyebrow` declares any vertical margin, so they sit
+ * flush and the only thing separating them is the eyebrow's own leading. Every
+ * other block in those recipes carries a margin; the eyebrow was simply missed.
+ *
+ * 24px sits inside the brand's own rhythm without reaching the ~32px it uses
+ * between body blocks — a lockup and its kicker belong closer together than two
+ * paragraphs do.
+ */
+export const LOCKUP_GAP_PX = 24;
+
+/** Does the CSS declare a vertical margin-top for this class anywhere? */
+function declaresMarginTop(css: string, cls: string): boolean {
+  const rules = css.matchAll(new RegExp(`\\.${cls}(?![\\w-])[^{}]*\\{([^}]*)\\}`, 'g'));
+  for (const m of rules) {
+    if (/(?:^|;)\s*margin(-top)?\s*:/i.test(m[1] ?? '')) return true;
+  }
+  return false;
+}
+
+/**
+ * Put air under the brand lockup when the recipe forgot to.
+ *
+ * Applied at RENDER beside the type, measure, story-reserve and descender
+ * floors, so every brand already in the database is corrected on the next paint.
+ *
+ * Deliberately narrow in two ways. It only touches what directly FOLLOWS a
+ * `.logo-row` — the one adjacency the corpus showed failing — and only classes
+ * the recipe gives no margin of their own, so a brand that chose its spacing
+ * keeps it. A brand with no lockup is untouched entirely.
+ */
+export function enforceLockupGap(css: string): string {
+  if (!css || !/\.logo-row(?![\w-])/.test(css)) return css;
+  // Which classes could follow the lockup, and which of those the brand has
+  // already spaced deliberately.
+  const candidates = new Set<string>();
+  for (const m of css.matchAll(/\.cb-slide\s+\.([\w-]+)\s*\{/g)) {
+    const cls = m[1];
+    if (cls && cls !== 'logo-row' && !declaresMarginTop(css, cls)) candidates.add(cls);
+  }
+  if (!candidates.size) return css;
+  const selector = [...candidates]
+    .sort()
+    .map((c) => `.cb-slide .logo-row + .${c}`)
+    .join(',');
+  return `${css}\n${selector}{margin-top:${LOCKUP_GAP_PX}px}`;
+}
