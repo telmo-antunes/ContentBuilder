@@ -549,6 +549,108 @@ describe('repairLayout — the bidirectional ladder', () => {
   });
 });
 
+describe('the rung that asks for more copy', () => {
+  const input = {
+    role: 'feature' as const,
+    parts: { headline: 'Holds the most' },
+    format: '1080x1350' as const,
+    index: 0,
+  };
+  const v = (over: Partial<LayoutVerdict>): LayoutVerdict => ({
+    state: 'fits', collide: false, slack: 0, headlineLines: 2, ...over,
+  });
+  const THIN = '<div class="headline">Holds the most</div><div class="fill"></div>';
+  const FULLER = '<div class="headline">Holds the most</div><div class="body">And ruins the fastest.</div>';
+
+  it('takes the richer copy when it measures better', async () => {
+    const out = await repairLayout(detailMastersRecipe, input, THIN, v({ slack: 0.7 }), 3, {
+      measure: async () => v({ slack: 0.2 }),
+      rewriteForFault: async () => FULLER,
+    });
+    expect(out.steps).toContain('said-more');
+    expect(out.html).toBe(FULLER);
+    expect(out.aiCalls).toBe(1);
+  });
+
+  it('keeps the original when the rewrite does not help', async () => {
+    const out = await repairLayout(detailMastersRecipe, input, THIN, v({ slack: 0.7 }), 3, {
+      measure: async () => v({ slack: 0.7 }),
+      rewriteForFault: async () => FULLER,
+    });
+    expect(out.steps).not.toContain('said-more');
+    expect(out.html).toBe(THIN);
+  });
+
+  /**
+   * The case that would make things worse. A slide that OVERFLOWS has too much
+   * on it, and asking the copywriter for another line is the opposite of the
+   * fix — so the rung reads the fault before it acts.
+   */
+  it('never asks for more copy on a slide that overflows', async () => {
+    let asked = false;
+    await repairLayout(detailMastersRecipe, input, THIN, v({ state: 'overflows', slack: 0.7 }), 3, {
+      measure: async () => v({ state: 'overflows' }),
+      rewriteForFault: async () => { asked = true; return FULLER; },
+    });
+    expect(asked).toBe(false);
+  });
+
+  it('never asks on a collision either — that is an arrangement fault', async () => {
+    let asked = false;
+    await repairLayout(detailMastersRecipe, input, THIN, v({ collide: true }), 3, {
+      measure: async () => v({ collide: true }),
+      rewriteForFault: async () => { asked = true; return FULLER; },
+    });
+    expect(asked).toBe(false);
+  });
+
+  it('runs before the rearrangement rung, because it addresses the cause', async () => {
+    const order: string[] = [];
+    await repairLayout(detailMastersRecipe, input, THIN, v({ slack: 0.7 }), 3, {
+      measure: async () => v({ slack: 0.7 }),
+      rewriteForFault: async () => { order.push('wrote'); return null; },
+      shoot: async () => { order.push('shot'); return 'png'; },
+      repairByLooking: async () => { order.push('looked'); return null; },
+    });
+    expect(order).toEqual(['wrote', 'shot', 'looked']);
+  });
+
+  it('skips a slide the deterministic ladder already fixed', async () => {
+    let asked = false;
+    const out = await repairLayout(detailMastersRecipe, input, THIN, v({ slack: 0 }), 3, {
+      measure: async () => v({}),
+      rewriteForFault: async () => { asked = true; return FULLER; },
+    });
+    expect(out.remaining).toEqual([]);
+    expect(asked).toBe(false);
+  });
+
+  /**
+   * The failure this actually produced. Asked to fill an empty slide without
+   * being told what it said, the copywriter returned the deck's COVER — lockup,
+   * cover headline and all. It measured beautifully and was the wrong slide.
+   */
+  it('refuses a rewrite that lost the slide\'s headline, however well it measures', async () => {
+    const COVER = '<div class="logo-row">detailmasters</div><div class="headline">The car came out spotless</div>';
+    const out = await repairLayout(detailMastersRecipe, input, THIN, v({ slack: 0.7 }), 3, {
+      measure: async () => v({ slack: 0 }), // a perfect measurement
+      rewriteForFault: async () => COVER,
+    });
+    expect(out.steps).not.toContain('said-more');
+    expect(out.html).toBe(THIN);
+  });
+
+  it('does not run at all on a slide with no headline to anchor to', async () => {
+    let asked = false;
+    const noHeadline = { ...input, parts: {} };
+    await repairLayout(detailMastersRecipe, noHeadline, THIN, v({ slack: 0.7 }), 3, {
+      measure: async () => v({ slack: 0.7 }),
+      rewriteForFault: async () => { asked = true; return FULLER; },
+    });
+    expect(asked).toBe(false);
+  });
+});
+
 describe('the rung after the ladder — looking at the slide', () => {
   const input = { role: 'feature' as const, parts: {}, format: '1080x1350' as const, index: 0 };
   const v = (over: Partial<LayoutVerdict>): LayoutVerdict => ({

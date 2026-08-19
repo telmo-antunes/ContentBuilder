@@ -164,3 +164,31 @@ export function saysTheSameThing(before: string, after: string): boolean {
       .join(' ');
   return words(before) === words(after);
 }
+
+/**
+ * Is this still the SAME SLIDE, after being asked to say more?
+ *
+ * The rewrite rung deliberately allows new words — that is the whole point, and
+ * `saysTheSameThing` would forbid it. But "add a line" and "become a different
+ * slide" are not the same instruction, and the model will happily do the second
+ * when it does not know what the first one said: asked to fill an empty
+ * headliner slide, it returned the deck's COVER, headline and lockup and all.
+ * Measured better. Completely wrong.
+ *
+ * So the headline is the anchor. A slide keeps its point if the words of its
+ * headline survive the rewrite; everything else may grow. When the original had
+ * no headline there is nothing to anchor to and the rung is not allowed to run
+ * — which is the honest answer, not a permissive one.
+ */
+export function keepsThePoint(headline: string | undefined, html: string): boolean {
+  const norm = (x: string) =>
+    x
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/g, ' ')
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}]+/gu, ' ')
+      .trim();
+  const want = norm(headline ?? '');
+  if (!want) return false;
+  return norm(html).includes(want);
+}
