@@ -51,9 +51,36 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
-*Nothing open.* Every finding in this file has been resolved — see below, newest first.
+### A vision repair can rearrange a slide but never fill one
 
-Add the next one here, following the shape in [How to add an entry](#how-to-add-an-entry).
+- **Kind:** Gap
+- **Severity:** minor
+- **First seen:** 2026-08-19 — building the rung itself (PR #85)
+- **What happened:** the new rung fires, photographs the slide, reasons about it
+  correctly — and on the first real fault it was given, it declined:
+
+  > *"No available change fixes this: the words and class vocabulary give no
+  > body/stat/cta content to add, and removing structural elements (spacer,
+  > rule, panel) can't fill 69% empty space without altering [the words]"*
+
+  That is the right answer. Two lines of type cannot fill a frame by
+  rearrangement, and the rung is forbidden — correctly — from touching the copy.
+- **Why it matters:** the faults this rung can actually fix are
+  REARRANGEMENT-shaped (a collision, a spacer in the wrong place, a block that
+  wants a smaller variant). The most common fault, and the one that has cost the
+  most hand-authoring, is a slide with too little ON it — which is a COPY
+  problem wearing a layout problem's clothes.
+- **Direction:** the loop is closed at the wrong end. Sight was added to the
+  step that arranges; the step that WRITES is still blind. A slide that measures
+  69% empty does not need rearranging, it needs another sentence — and the parse
+  step is the only thing allowed to write one. Feeding the render verdict back
+  into a re-parse ("this slide came out 69% empty; it needs a body line, from
+  the material you were given") is the version of this that would raise the
+  share of the work the model does, rather than adding a call that mostly
+  declines.
+- **Worth keeping anyway:** it costs one call only on slides the deterministic
+  ladder has already failed on, it declines cheaply and says why, and the
+  guard that it may not change the words is tested.
 
 ## Resolved
 

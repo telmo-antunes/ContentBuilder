@@ -48,6 +48,7 @@ import { SLACK_LIMIT, maxSlackFor as maxSlackForRole } from '@contentbuilder/sha
 import { config } from '../../config';
 import { topLevelBlocks, type SlideBlock } from './dedupeBlocks';
 import { variantIndexOf, type ComposeSlideInput } from './prompt';
+import { saysTheSameThing } from './visionRepair';
 
 // ── Public shape ────────────────────────────────────────────────────────────
 
@@ -93,6 +94,19 @@ export interface CheckSlide {
 export interface RenderProbe {
   /** Write each fragment into its slide and measure it. Results are input-ordered. */
   measure(items: readonly { index: number; html: string }[]): Promise<LayoutVerdict[]>;
+  /**
+   * The same slide as a PICTURE, downscaled for a vision call.
+   *
+   * `measure` answers "does it fit"; this answers "what does it look like". The
+   * composer has never seen its own work — every deterministic guard in this
+   * file exists because the thing that wrote the slide was blind — and a
+   * repair ladder that has run out of moves can hand the model the render
+   * instead of another sentence about it.
+   *
+   * Optional: doubles in tests implement `measure` alone, and a probe without
+   * it simply means the vision rung never runs.
+   */
+  shoot?(index: number, html: string): Promise<string | null>;
   close(): Promise<void>;
 }
 
@@ -511,12 +525,62 @@ export const openRenderProbe: OpenProbe = async (recipe, format, slides) => {
         }),
       );
     },
+    async shoot(index, html) {
+      try {
+        await scaffold.setSlideHtml(index, html);
+      } catch {
+        return null;
+      }
+      let page: Page;
+      try {
+        page = await withCeiling(pool.acquire(), ACQUIRE_TIMEOUT_MS, 'page acquire');
+      } catch {
+        return null;
+      }
+      try {
+        return await withCeiling(
+          captureSlide(page, scaffold.urlFor(index)),
+          MEASURE_TIMEOUT_MS,
+          `slide ${index + 1} shoot`,
+        );
+      } catch (err) {
+        console.warn(
+          `[render-check] could not photograph slide ${index + 1}: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+        return null;
+      } finally {
+        pool.release(page);
+      }
+    },
     async close() {
       await pool.closeAll();
       await scaffold.dispose();
     },
   };
 };
+
+/**
+ * One slide as a base64 PNG, downscaled the way `verifyRecipe` downscales its
+ * samples: a vision model is being asked what the composition LOOKS like, which
+ * survives 640px, and a full 1080px frame is an expensive way to ask.
+ */
+async function captureSlide(page: Page, url: string): Promise<string | null> {
+  await page.goto(url, { waitUntil: 'load', timeout: GOTO_TIMEOUT_MS });
+  await page.waitForSelector('[data-slide-root]', { timeout: MOUNT_TIMEOUT_MS });
+  await page.evaluate(async () => {
+    const doc = (globalThis as { document?: { fonts?: { ready?: Promise<unknown> } } }).document;
+    if (doc?.fonts?.ready) await doc.fonts.ready;
+  });
+  await new Promise((r) => setTimeout(r, SETTLE_MS));
+  const el = await page.$('[data-slide-root]');
+  if (!el) return null;
+  const png = Buffer.from(await el.screenshot({ type: 'png' }));
+  const { default: sharp } = await import('sharp');
+  const small = await sharp(png).resize(640, 640, { fit: 'inside' }).png().toBuffer();
+  return small.toString('base64');
+}
 
 // ── 1. Measure ──────────────────────────────────────────────────────────────
 
@@ -924,6 +988,12 @@ export async function repairOverflow(
 export interface DeckCheckOptions extends CheckOptions {
   /** Supplied by compose so step 3 reuses its model + options. */
   recompose?: (input: ComposeSlideInput, note: string) => Promise<string>;
+  /**
+   * Ask the model to rearrange a slide it can SEE, after the deterministic
+   * ladder has run out of moves. Injected rather than imported so the eval and
+   * the tests can run the whole pass without a vision model.
+   */
+  repairByLooking?: LayoutRepairContext['repairByLooking'];
 }
 
 export interface DeckCheckResult {
@@ -1065,6 +1135,10 @@ export async function renderCheckDeck(
         return (
           repairLayout(recipe, inputs[i] ?? fallbackInput(slides[i]!, fmt, i), slides[i]!.html, v, cap, {
             measure: async (html) => (await probe.measure([{ index: i, html }]))[0] ?? UNKNOWN_VERDICT,
+            // The last rung only exists when the probe can photograph — a
+            // double in a test implements `measure` alone and never reaches it.
+            ...(probe.shoot ? { shoot: (html: string) => probe.shoot!(i, html) } : {}),
+            ...(opts?.repairByLooking ? { repairByLooking: opts.repairByLooking } : {}),
           })
             .then((r) => ({ index: i, ...r }))
             .catch((err) => {
@@ -1086,6 +1160,10 @@ export async function renderCheckDeck(
 
     for (const r of layoutRepairs) {
       out[r.index] = { ...out[r.index]!, html: r.html };
+      // Counted here too. This loop used to ignore it, which was harmless while
+      // the layout ladder was purely deterministic and always returned zero —
+      // and silently wrong the moment its last rung could spend a vision call.
+      aiCalls += r.aiCalls;
       if (r.steps.length) {
         notes.push(`slide ${r.index + 1}: ${r.steps.join(' → ')}`);
         repaired += 1;
@@ -1170,6 +1248,15 @@ export interface LayoutRepair {
 export interface LayoutRepairContext {
   measure: (html: string) => Promise<LayoutVerdict>;
   recompose?: (input: ComposeSlideInput, note: string) => Promise<string>;
+  /** This slide as a picture. Absent when the probe cannot photograph. */
+  shoot?: (html: string) => Promise<string | null>;
+  /** Ask the model to rearrange what it can see. Absent disables the rung. */
+  repairByLooking?: (args: {
+    html: string;
+    image: string;
+    faults: readonly string[];
+    role?: string;
+  }) => Promise<{ html: string; change: string } | null>;
 }
 
 /** Everything a verdict says is wrong, in the words a human would use. */
@@ -1236,5 +1323,46 @@ export async function repairLayout(
     }
   }
 
-  return { html: current, steps, remaining: faults, aiCalls: 0 };
+  /**
+   * ── Look at it ────────────────────────────────────────────────────────────
+   *
+   * The deterministic moves are exhausted and the slide is still wrong. Until
+   * now it shipped with a note naming the fault, which is honest and useless —
+   * five of eight slides on the worst deck had to be hand-authored afterwards.
+   *
+   * So the model is shown the RENDER and asked to rearrange. Kept under the
+   * same rule as every rung above: only if the measured faults actually reduce.
+   * Two extra guards, because this is the one rung that can rewrite anything:
+   * the copy must come back identical (rearranged, never edited), and a slide
+   * the renderer cannot re-measure is left exactly as it was.
+   */
+  let aiCalls = 0;
+  if (faults.length && ctx.shoot && ctx.repairByLooking) {
+    const image = await ctx.shoot(current).catch(() => null);
+    if (image) {
+      const seen = await ctx.repairByLooking({ html: current, image, faults, role: input.role });
+      aiCalls += 1;
+      if (!seen) {
+        console.warn('[render-check] vision repair returned nothing usable');
+      } else if (!saysTheSameThing(current, seen.html)) {
+        console.warn('[render-check] vision repair changed the COPY, not the arrangement — discarded');
+      } else if (seen) {
+        const after = await ctx.measure(seen.html);
+        const next = layoutFaults(after, maxHeadlineLines, input.role);
+        if (after.state !== 'unknown' && next.length < faults.length) {
+          steps.push('looked-at-it');
+          console.warn(`[render-check] vision repair: ${seen.change}`);
+          current = seen.html;
+          faults = next;
+        } else {
+          // Say so. A rung that runs, spends a call and changes nothing is
+          // indistinguishable from a rung that never ran — which is exactly
+          // how this one hid for three runs while being debugged.
+          console.warn(`[render-check] vision repair did not help (${seen.change}) — kept the original`);
+        }
+      }
+    }
+  }
+
+  return { html: current, steps, remaining: faults, aiCalls };
 }

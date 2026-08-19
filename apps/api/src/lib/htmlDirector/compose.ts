@@ -52,6 +52,7 @@ import {
   firstSlideBody,
 } from './fragments';
 import { renderCheckDeck, renderCheckEnabledByDefault, type OpenProbe } from './renderCheck';
+import { repairByLooking } from './visionRepair';
 import { balanceVertical } from './balance';
 import { sourceBlock, type SourceDoc } from '../sourceIngest';
 import {
@@ -2244,6 +2245,12 @@ export async function composeProject(
       // with the render check itself off, so a repair can never recurse.
       recompose: async (input, note) =>
         (await composeSlide(recipe, input, { ...o, note, renderCheck: false })).html,
+      /**
+       * The rung after the ladder: show the model the render. Wired here rather
+       * than imported inside renderCheck so a caller that does not want to
+       * spend a vision call — the eval, the tests — simply does not pass it.
+       */
+      repairByLooking: (args) => repairByLooking(recipe, args),
     });
     checked.slides.forEach((s, i) => {
       out[i]!.authored = { ...out[i]!.authored, html: s.html };
