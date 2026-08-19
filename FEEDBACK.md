@@ -51,9 +51,35 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
-*Nothing open.* Every finding in this file has been resolved — see below, newest first.
+### Moving the whole check into the composition pool costs more than it buys
 
-Add the next one here, following the shape in [How to add an entry](#how-to-add-an-entry).
+- **Kind:** Gap
+- **Severity:** minor
+- **First seen:** 2026-08-19 — attempted, measured, reverted (PR #87)
+- **What was tried:** opening one probe before the composition pool and having
+  each slide measure and repair itself as it was written, replacing the pass at
+  the end. The intent was right — fix a fault while the copy that caused it is
+  still the subject — and the enabling half of it shipped (see below).
+- **What it cost, found by the tests rather than by argument:**
+  - Every slide rendered **twice**, once in the pool and once in the deck pass,
+    until the deck pass was made conditional — the suite caught it immediately
+    as a doubled render count.
+  - Overflow had to be carved out. `repairLayout` handles holes, collisions and
+    over-tall headlines; a slide that does not FIT climbs `repairOverflow`,
+    whose ladder can drop a block and re-compose. Handling a slide half-way in
+    the pool and then skipping the deck pass loses exactly the rungs that fix
+    it.
+  - The bookkeeping — measured, unmeasured, overflowed, repaired, unresolved,
+    notes — had to be duplicated inline, because `renderCheckDeck` owns it.
+  - `checking-layout` stopped appearing as a phase, which a caller polling
+    `composeProgress` can see.
+- **What it bought:** no correctness gain. The same rungs run under the same
+  keep-only-if-better rule; only the moment changes. Some latency, unmeasured.
+- **Direction, if it is picked up again:** the honest version is not "run the
+  check earlier" but "give the composer the arrangement up front so the fault
+  is never written". The archetype is now decided before composition and is
+  still not in the composer's prompt — telling it which composition it is
+  writing into is the cheap half of this idea, and prevention beats a rung.
 
 ## Resolved
 
