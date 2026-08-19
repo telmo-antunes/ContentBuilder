@@ -24,7 +24,8 @@
     "lint": "eslint .",
     "migrate:recipes": "npm --prefix apps/api run migrate:recipes --",
     "media:orphans": "npm --prefix apps/api run media:orphans --",
-    "scaffolds:orphans": "npm --prefix apps/api run scaffolds:orphans --"
+    "scaffolds:orphans": "npm --prefix apps/api run scaffolds:orphans --",
+    "layout:corpus": "npm --prefix apps/api run layout:corpus --"
   },
   "devDependencies": {
     "@types/supertest": "^7.2.0",
