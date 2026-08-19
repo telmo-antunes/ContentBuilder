@@ -44,6 +44,7 @@ import {
   type Format,
   archetypeFor,
 } from '@contentbuilder/shared';
+import { SLACK_LIMIT, maxSlackFor as maxSlackForRole } from '@contentbuilder/shared';
 import { config } from '../../config';
 import { topLevelBlocks, type SlideBlock } from './dedupeBlocks';
 import { variantIndexOf, type ComposeSlideInput } from './prompt';
@@ -416,15 +417,12 @@ export interface LayoutVerdict {
  * like. The limits are upper bounds and none of this loosens them — but "not
  * one cover sits below 51%" was true of seven covers and is not true of eight.
  */
-const SLACK_LIMIT = { display: 0.65, content: 0.5 } as const;
-
-/** Roles that exist to carry information rather than to make an impression. */
-const CONTENT_ROLES = new Set(['feature', 'statement', 'list', 'stat']);
-
-/** The largest empty band this role may carry before it reads as a hole. */
-export function maxSlackFor(role: string | undefined): number {
-  return role && CONTENT_ROLES.has(role) ? SLACK_LIMIT.content : SLACK_LIMIT.display;
-}
+/**
+ * The limits themselves live in `shared`, because the review page's badge has to
+ * agree with this gate — see `packages/shared/src/slackLimits.ts`. Re-exported
+ * here so every existing caller keeps its import.
+ */
+export { maxSlackFor } from '@contentbuilder/shared';
 
 /**
  * The old single threshold, kept only so a caller with no role in hand still has
@@ -1176,7 +1174,7 @@ export function layoutFaults(
   const out: string[] = [];
   if (v.state === 'overflows') out.push('overflows');
   if (v.collide) out.push('collision');
-  if (v.slack > maxSlackFor(role)) out.push(`slack ${Math.round(v.slack * 100)}%`);
+  if (v.slack > maxSlackForRole(role)) out.push(`slack ${Math.round(v.slack * 100)}%`);
   if (maxHeadlineLines && v.headlineLines > maxHeadlineLines) {
     out.push(`headline ${v.headlineLines} lines`);
   }

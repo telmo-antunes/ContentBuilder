@@ -51,25 +51,22 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
-### Removing a photo leaves a hole nothing re-checks
+### The review page renders a different slide from the one that exports
 
 - **Kind:** Gap
-- **Severity:** cost me a fix
-- **First seen:** 2026-08-19 — the same deck
-- **What happened:** deleting the two wrong photographs took both slides from a
-  clean verdict to **65% slack** — a `feature` role, whose limit is 50%. The
-  layout gates run during COMPOSE; a person editing photos afterwards passes
-  through none of them. Composing had reserved those slots, so slack read fine
-  at the time and only jumped once they were emptied.
-- **Why it matters:** a photo slide with no photo is the emptiest slide the tool
-  can produce, and removing a bad picture is a completely ordinary edit.
-- **Direction:** the review page already renders every slide live and already
-  reads `overflow` off the DOM for its badge. `slack` and `collide` are
-  published on the same element by the same measurement — surfacing them costs
-  one more attribute read, and would catch this at the moment it is caused.
-- **What was done here:** both slides were re-composed through the product's own
-  per-slide variants endpoint with a direction saying to carry the point in type
-  instead, which took them to 44%.
+- **Severity:** minor
+- **First seen:** 2026-08-19 — proving the slack badge
+- **What happened:** the same slide measures **9.7%** slack on the review page
+  and **65%** through the export path. Neither is wrong: the review render passes
+  `editing`, so an unfilled photo slot draws the "Add photo" placeholder and
+  occupies the space, while the export hides the slot and leaves the hole.
+- **Why it matters:** the page whose job is to show what will ship is showing
+  something else, in the one respect that decides whether a slide reads empty.
+  A reviewer looking at a placeholder cannot see the gap their reader will.
+- **Direction:** the "Needs photo" badge already says *"it exports as a blank
+  panel"*, which is the honest warning — so this is not urgent. If it is worth
+  closing, the phone view (which exists to show the deck as a reader meets it)
+  is the natural place to render with `editing` off.
 
 ### One integration test fails only inside a full-suite run
 
@@ -183,6 +180,16 @@ Rules that keep this file worth reading:
   so the next person does not mistake it for a reproduction.
 
 ## Resolved
+
+### Removing a photo leaves a hole nothing re-checks
+
+*Resolved 2026-08-19 (PR #79) — and the investigation corrected the finding.* The review page now shows two more badges from the measurement it was already taking: **Touching** when two elements collide, and **Looks empty** when a slide's largest empty band passes the limit for its role. Verified in the browser on a `feature` slide stripped to one line: *"A 76% band of this slide is empty — past the 50% a feature slide is allowed."* Silent on all six other slides.
+
+The limits moved to `packages/shared/src/slackLimits.ts` so the badge and the API's gate read one definition. Two copies of a threshold is two thresholds, and the one nobody updates is the one that starts lying.
+
+**The finding's own premise was wrong, though, and the badge does NOT catch the case that prompted it.** Removing a photo does not leave a hole on this page: the review render passes `editing`, so an unfilled slot draws the dashed "Add photo" placeholder and fills the space — measured at 9.7% slack on exactly the slide that reads 65% through the export path, where the slot is hidden. The 65% came from `verifyDeck`, which renders `/render` without `editing`.
+
+So the two render paths genuinely differ, and the unfilled-slot case was already covered by the existing **Needs photo** badge, whose warning is the accurate one: *"it exports as a blank panel"*. The new badges cover the general case — a slide thin on content, slot or no slot — which nothing was reporting.
 
 ### The image checker cannot see an irrelevant picture, only a contradictory one
 

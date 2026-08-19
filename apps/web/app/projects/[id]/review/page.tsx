@@ -12,6 +12,7 @@ import {
   VIDEO_SECONDS_MIN,
   clampVideoSeconds,
   dimensionsFor,
+  maxSlackFor,
   recipeAmbient,
   type BlockFrame,
   type BrandRecipe,
@@ -98,6 +99,17 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
   // Slides whose composition exceeds the canvas — surfaced so a broken export
   // can't ship silently (authored slides had no text-fit guard at all).
   const [overflow, setOverflow] = useState<Record<string, boolean>>({});
+  /**
+   * The rest of what the same measurement already publishes.
+   *
+   * Every slide on this page renders live and the guard writes `collide` and
+   * `slack` onto the DOM beside `overflow` — the page simply threw them away.
+   * That cost a real deck: removing two wrong photographs took both slides to
+   * 65% slack, past the 50% a content role is allowed, and nothing said so
+   * because the layout gates run during COMPOSE and a person editing photos
+   * afterwards passes through none of them.
+   */
+  const [layout, setLayout] = useState<Record<string, { collide: boolean; slack: number }>>({});
   // Alternative arrangements for the selected slide — shown side by side, applied
   // only on click, so a single weak slide no longer means re-composing the deck.
   const [variants, setVariants] = useState<Array<{ html: string; bg?: string; role?: string }> | null>(null);
@@ -1214,6 +1226,25 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                       <Icon name="warning" size={11} /> Overflows
                     </span>
                   )}
+                  {/* Two more readings from the same measurement. Shown only
+                      when they fire, and never alongside an overflow: a slide
+                      that does not fit has one problem worth naming first. */}
+                  {!overflow[slide.id] && layout[slide.id]?.collide && (
+                    <span className="ovf" title="Two elements on this slide are touching — the type has nowhere to breathe.">
+                      <Icon name="warning" size={11} /> Touching
+                    </span>
+                  )}
+                  {!overflow[slide.id] &&
+                    !layout[slide.id]?.collide &&
+                    layout[slide.id] !== undefined &&
+                    layout[slide.id]!.slack > maxSlackFor(slide.authored?.role) && (
+                      <span
+                        className="ovf soft"
+                        title={`A ${Math.round(layout[slide.id]!.slack * 100)}% band of this slide is empty — past the ${Math.round(maxSlackFor(slide.authored?.role) * 100)}% a ${slide.authored?.role ?? 'display'} slide is allowed. Give it something to say, or a photograph.`}
+                      >
+                        <Icon name="warning" size={11} /> Looks empty
+                      </span>
+                    )}
                   {/* Made by an older copywriter or composer, and the app can
                       say what a newer one would do differently HERE. Advisory
                       only — recomposing rewrites copy you may have edited. */}
@@ -1224,9 +1255,15 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                   )}
                   <ScaledSlide format={project.format} displayWidth={phoneView ? PHONE_W : cardW}>
                     <SlideRenderer
-                      onOverflow={(o) =>
-                        setOverflow((m) => (m[slide.id] === o ? m : { ...m, [slide.id]: o }))
-                      }
+                      onOverflow={(o, signals) => {
+                        setOverflow((m) => (m[slide.id] === o ? m : { ...m, [slide.id]: o }));
+                        if (!signals) return;
+                        setLayout((m) => {
+                          const was = m[slide.id];
+                          if (was && was.collide === signals.collide && was.slack === signals.slack) return m;
+                          return { ...m, [slide.id]: { collide: signals.collide, slack: signals.slack } };
+                        });
+                      }}
                       slide={slide}
                       brandKit={kit}
                       format={project.format}
