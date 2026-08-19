@@ -16,7 +16,31 @@ import { createHash } from 'node:crypto';
 import type { TouchpointId } from '@contentbuilder/shared';
 import { RECIPE_AUTHOR_SYSTEM, RECIPE_CRITIQUE_SYSTEM } from './htmlDirector/authorRecipe';
 import { SLIDE_AUTHOR_INSTRUCTIONS } from './htmlDirector/prompt';
-import { PARSE_SYSTEM } from './htmlDirector/compose';
+import { PARSE_SYSTEM, countGuidance, formatGuidance } from './htmlDirector/compose';
+
+/**
+ * THE RULES THAT LIVE IN THE USER MESSAGE.
+ *
+ * `PARSE_SYSTEM` is only half of what the copywriter is told. The per-format
+ * budget line and the slide-count line are assembled per call, so they cannot be
+ * hashed as one string — but their TEMPLATES can, by rendering them for a fixed
+ * set of inputs. Rewriting the story budgets changed every number a story deck
+ * is held to and moved no hash at all, because that line lives here rather than
+ * in the system prompt: half the prompt was outside the guard, and it was the
+ * half that varies per post.
+ *
+ * The inputs are deliberately fixed and boring. This pins the WORDING and the
+ * NUMBERS the builders produce, never the brief text that legitimately differs
+ * on every call.
+ */
+const PARSE_USER_RULES = [
+  formatGuidance('1080x1350'),
+  formatGuidance('1080x1920'),
+  formatGuidance('1080x1080'),
+  countGuidance({ min: 4, max: 9, target: 6, fixed: false }, 0),
+  countGuidance({ min: 6, max: 6, target: 6, fixed: true }, 6),
+  countGuidance({ min: 5, max: 5, target: 5, fixed: true }, 0),
+].join('\n');
 
 /** Stable, whitespace-insensitive digest — reflowing a paragraph is not a change. */
 export const promptHash = (text: string): string =>
@@ -26,7 +50,10 @@ export const promptHash = (text: string): string =>
 export const PROMPT_TEXT: Partial<Record<TouchpointId, string>> = {
   recipeAuthor: RECIPE_AUTHOR_SYSTEM,
   recipeCritique: RECIPE_CRITIQUE_SYSTEM,
-  parse: PARSE_SYSTEM,
+  // The system prompt AND the rule-bearing parts of the user message — see
+  // PARSE_USER_RULES. One hash covers both, so either one moving is a version
+  // bump, which is the whole point of the guard.
+  parse: `${PARSE_SYSTEM}\n${PARSE_USER_RULES}`,
   compose: SLIDE_AUTHOR_INSTRUCTIONS,
 };
 
@@ -37,6 +64,6 @@ export const PROMPT_TEXT: Partial<Record<TouchpointId, string>> = {
 export const EXPECTED_HASHES: Partial<Record<TouchpointId, string>> = {
   recipeAuthor: '7eb8707411fd',
   recipeCritique: '9d8a71521c74',
-  parse: '325db5a18599',
+  parse: '93090448d7fb',
   compose: '876b18550cee',
 };
