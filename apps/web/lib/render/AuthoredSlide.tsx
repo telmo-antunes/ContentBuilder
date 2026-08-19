@@ -135,10 +135,57 @@ export function AuthoredSlide({
       // recipe, both formats, bodies from 58 to 278 characters — slack never
       // once crossed its threshold. The zero-height test excluded a spacer only
       // when it had grown to nothing, which is the one case with no slack in it.
+      /**
+       * INK, not the box, for the bottom edge.
+       *
+       * The box gap is invariant under padding: give a headline
+       * `padding-bottom`, and its box grows downward by exactly as much as the
+       * next element is pushed down, so `next.top - box.bottom` never changes.
+       * Measured on a real slide: 16px with the descender floor and 16px
+       * without it — while the distance from the GLYPHS to the CTA went from
+       * **0px to 19px**. The gate was reading the one number the problem cannot
+       * move, which is why a headline sitting exactly on a CTA chip passed it.
+       *
+       * `Range.getBoundingClientRect()` over a block's text contents gives where
+       * the type actually renders. Padding below it is empty by definition, so
+       * excluding it is what makes the clearance real rather than nominal.
+       */
+      const inkBottomOf = (c: HTMLElement): number => {
+        if (!c.textContent?.trim()) return c.offsetTop + c.offsetHeight;
+        try {
+          const range = document.createRange();
+          range.selectNodeContents(c);
+          const rect = range.getBoundingClientRect();
+          if (!rect.height) return c.offsetTop + c.offsetHeight;
+          // Range rects are viewport-relative; the rest of this pass works in
+          // the slide's own layout space, so convert through the slide's origin.
+          return Math.round(rect.bottom - el.getBoundingClientRect().top);
+        } catch {
+          return c.offsetTop + c.offsetHeight;
+        }
+      };
+
       const boxes = Array.from(el.children)
         .filter((c): c is HTMLElement => c instanceof HTMLElement && c.offsetHeight > 0)
         .filter((c) => !SPACER_CLASSES.has(c.classList[0] ?? ''))
-        .map((c) => ({ top: c.offsetTop, bottom: c.offsetTop + c.offsetHeight }))
+        .map((c) => ({
+          top: c.offsetTop,
+          bottom: c.offsetTop + c.offsetHeight,
+          // Where the type stops. Never below the box — a Range that misreports
+          // must not turn into a phantom collision.
+          inkBottom: Math.min(inkBottomOf(c), c.offsetTop + c.offsetHeight),
+          /**
+           * A RESERVED photo slot holds its geometry and paints nothing (see
+           * `reservedSlotCss`). It has to keep counting for OVERFLOW — reserving
+           * it is the whole point, so the deck is gated at the size it will ship
+           * — and for slack, since a picture will fill it. But it cannot collide
+           * with anything: there is no ink in it to collide. Counting it as
+           * painted put a zero-gap box between the logo row and the eyebrow on
+           * every slide with an unfilled slot, and reported a collision on a
+           * slide where nothing overlaps.
+           */
+          paints: getComputedStyle(c).visibility !== 'hidden',
+        }))
         .sort((a, b) => a.top - b.top);
 
       const over = boxes.some((b) => b.bottom > contentBottom + TOL || b.top < padTop - TOL);
@@ -146,18 +193,22 @@ export function AuthoredSlide({
       /**
        * COLLISION. Two painted boxes that touch or overlap.
        *
-       * Measured as the gap between consecutive boxes rather than as ink: a
+       * Measured from the previous block's INK to the next block's box. A
        * descender paints outside its line box, so a headline whose box merely
-       * abuts the next element still renders its `g` on top of that element.
-       * A real deck shipped exactly that — "for a living" sitting on the gold
-       * CTA chip — with zero gap and no overflow, so the existing check passed
-       * it. Anything under MIN_CLEARANCE is treated as a collision.
+       * abuts the next element still renders its `g` on top of that element. A
+       * real deck shipped exactly that — "for a living" on the gold CTA chip —
+       * and a box-to-box reading could never catch it, because padding moves
+       * both edges together and leaves that number unchanged. Anything under
+       * MIN_CLEARANCE is treated as a collision.
        */
       const MIN_CLEARANCE = 6;
+      const painted = boxes.filter((b) => b.paints);
       let collide = false;
-      for (let i = 1; i < boxes.length; i += 1) {
-        const prev = boxes[i - 1]!;
-        if (boxes[i]!.top - prev.bottom < MIN_CLEARANCE) { collide = true; break; }
+      for (let i = 1; i < painted.length; i += 1) {
+        const prev = painted[i - 1]!;
+        // Ink to box: what the reader sees is the previous block's last glyph
+        // against the next block's painted edge.
+        if (painted[i]!.top - prev.inkBottom < MIN_CLEARANCE) { collide = true; break; }
       }
 
       /**

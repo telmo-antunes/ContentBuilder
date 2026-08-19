@@ -51,6 +51,27 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
+### The collision gate reads the one number the problem cannot move
+
+- **Kind:** Defect
+- **Severity:** cost me a fix
+- **First seen:** 2026-08-19 — verifying PR #62 against the corpus
+- **Correction to PR #62's own description.** That PR said the descender floor
+  took the gap from ~7px to 24px. **Wrong.** Measured on a real slide, the
+  box-to-box gap is **16px with the floor and 16px without it** — padding grows
+  the headline's box downward by exactly as much as it pushes the next element
+  down, so `next.top - box.bottom` is invariant under the very thing the floor
+  changes. The fix is still correct, for a different reason: the GLYPHS do not
+  move while the CTA does, so ink-to-CTA went from **0px to 19px**.
+- **What happened:** the collision gate compared box bottom to box top, which
+  meant it could never see this class of failure — before or after the floor. A
+  headline rendering its cedilla exactly on a CTA chip measured a clean 16px.
+- **Why it matters:** every descender collision that shipped was invisible to
+  the gate built to catch descender collisions, and nothing would have caught a
+  recurrence.
+- **Fixed 2026-08-19 (PR #64):** the gate measures from the previous block's INK
+  (`Range.getBoundingClientRect()` over its text) to the next block's box.
+
 ### One integration test fails only inside a full-suite run
 
 - **Kind:** Defect
@@ -126,6 +147,14 @@ Rules that keep this file worth reading:
   so the next person does not mistake it for a reproduction.
 
 ## Resolved
+
+### The collision gate reads the one number the problem cannot move
+
+*Resolved 2026-08-19 (PR #64).* See the correction above: box-to-box is invariant under padding, so the gate was blind to descender collisions by construction. It now measures ink-to-box.
+
+### Reserving a photo slot reported a collision on slides where nothing overlaps
+
+*Resolved 2026-08-19 (PR #64) — a regression from #58, caught by the corpus check.* Reserving an empty slot (`visibility:hidden`) put a zero-gap box between the logo row and the eyebrow on every slide with an unfilled slot: **9 of 79 shipped slides** reported a collision with nothing overlapping, because an invisible box was being counted as painted. A reserved slot still counts for overflow — reserving it is the whole point — and for slack, since a picture will fill it. It cannot collide: there is no ink in it.
 
 ### Leaked `__render-check-*` scaffolds accumulate in the database
 
