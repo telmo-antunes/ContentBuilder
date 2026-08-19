@@ -399,14 +399,22 @@ export interface LayoutVerdict {
  *   list       n=5   min 13.3%  median 20.5%  max 35.5%
  *   stat       n=3   min 13.5%  median 36.9%  max 44.0%
  *
- * A cover is a headline over space — that IS the form, and not one cover in the
- * sample sits below 51%. A slide whose job is to carry content is a different
- * question, and the two worst `feature` slides in the sample, both at 65.5%, are
- * the ones that had to be hand-authored into panels because they said nothing.
+ * A cover is a headline over space, so it reads high — every cover in that
+ * sample sat between 51% and 60%. A slide whose job is to carry content is a
+ * different question, and the two worst `feature` slides, both at 65.5%, are the
+ * ones that had to be hand-authored into panels because they said nothing.
  *
  * So DISPLAY roles are allowed to be mostly air and CONTENT roles are not. On
- * this sample the gate fires on exactly those two slides. An unknown role gets
+ * that sample the gate fires on exactly those two slides. An unknown role gets
  * the permissive limit: a gate that cries wolf is a gate that gets ignored.
+ *
+ * RE-MEASURED 2026-08-19, at 86 slides. Nothing is over its limit, and one
+ * number moved enough to correct the reasoning above rather than leave it
+ * reading as a rule: `cover` now spans 15.6%–53.7% with a median of 23.8%,
+ * because a cover carrying a PHOTOGRAPH is dense rather than airy. So a high
+ * reading is what a type-only cover looks like, not what every cover looks
+ * like. The limits are upper bounds and none of this loosens them — but "not
+ * one cover sits below 51%" was true of seven covers and is not true of eight.
  */
 const SLACK_LIMIT = { display: 0.65, content: 0.5 } as const;
 
