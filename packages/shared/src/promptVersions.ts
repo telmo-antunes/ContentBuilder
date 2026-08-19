@@ -338,6 +338,15 @@ export const TOUCHPOINT_REGISTRY: Record<TouchpointId, Touchpoint> = {
           'The glow is kept inside the frame, or bled deliberately on more than one edge, rather than clipped hard at a single corner.',
         ],
       },
+      {
+        version: 7,
+        date: '2026-08-19',
+        summary: 'Each slide is told the arrangement it is being composed into.',
+        improves: [
+          'The composer is given the composition its slide will be laid out as — where the leftover space belongs, and how many lines the headline may run to — instead of finding out afterwards when the layout gates measured it against a policy it had never been told.',
+          'A spacer now goes where the arrangement says rather than by feel, which is what decides whether a slide reads anchored or adrift.',
+        ],
+      },
     ],
   },
 

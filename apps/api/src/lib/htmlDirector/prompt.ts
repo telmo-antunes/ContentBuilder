@@ -13,7 +13,13 @@
  * inside `.cb-slide`; the renderer injects the recipe stylesheet + `--cb-*`
  * tokens around it. The fragment is sanitised (allowlist) before it is stored.
  */
-import { RECIPE_FORMAT_DIMS, recipePatternsFor, recipePatternVariant, type BrandRecipe } from '@contentbuilder/shared';
+import {
+  RECIPE_FORMAT_DIMS,
+  archetypeFor,
+  recipePatternsFor,
+  recipePatternVariant,
+  type BrandRecipe,
+} from '@contentbuilder/shared';
 
 /** A slide's role — selects which composition pattern the composer follows. */
 export type SlideRole = 'cover' | 'statement' | 'quote' | 'feature' | 'stat' | 'list' | 'cta';
@@ -57,9 +63,35 @@ export interface ComposeSlideInput {
    * deck — only which of the role's authored arrangements it follows.
    */
   variantBias?: number;
+  /**
+   * The COMPOSITION this slide will be laid out as — an archetype key.
+   *
+   * Decided from the parse (role + whether it has a photograph), before any
+   * slide is written. The composer used to work without it and find out
+   * afterwards, when the layout gates measured the result against a policy it
+   * had never been told: an archetype owns where a slide's leftover space
+   * lands and how many lines its headline may run to, so the same markup reads
+   * 34% empty under one and 66% under none.
+   */
+  archetype?: string;
 }
 
 /** The rotation position for this slide's composition variant. */
+/**
+ * Where an archetype's leftover space goes, in words a writer can act on.
+ *
+ * The policy is a single token in the type — `top`, `between`, `center` — which
+ * is precise and says nothing to someone deciding how much to write. This is the
+ * same fact in the form the composer needs it: not "the slack policy is bottom"
+ * but "pack from the top and let the space fall below".
+ */
+const SLACK_IN_WORDS: Record<string, string> = {
+  top: 'above the content — anchor the slide low',
+  bottom: 'below the content — pack it from the top',
+  between: 'between the picture and the type, each owning its own band',
+  center: 'around the content — let it sit optically centred, with room either side',
+};
+
 export const variantIndexOf = (input: ComposeSlideInput): number =>
   (input.index ?? 0) + (input.variantBias ?? 0);
 
@@ -91,6 +123,7 @@ HARD RULES
 - Use ONLY the component classes listed for this brand. Never invent class names. Never add a style="" attribute. Never add ids.
 - Copy is VERBATIM. Emit each provided text part exactly as given — no rewording, no added words, no new sentences, no punctuation changes. Do not add copy that wasn't provided.
 - Apply the brand SIGNATURE MOVE exactly as its description says (e.g. wrap the emphasis phrase in the specified span; or place the tagline element).
+- HONOUR THE ARRANGEMENT when this slide names one. It is not a suggestion and it is not yours to choose: it was decided for the DECK, so that seven slides have a rhythm instead of seven independent opinions, and the layout the app applies afterwards enforces it. Two things follow from it. Where it says the leftover space belongs tells you where the spacer goes — a ".fill" above the content anchors the slide low, one below packs it from the top — so put it there and not by feel. And the line limit on the headline is a limit on THIS composition, not on the brand: a headline that runs past it is not emphasis any more, it is unedited copy sitting where a picture or a list should be.
 - Follow the COMPOSITION PATTERN that matches this slide's ROLE. Use a <div class="fill"></div> spacer where the pattern bottom-anchors content.
 - A SPACER IS ONLY WORTH WRITING WHEN SOMETHING FOLLOWS IT. A <div class="fill"></div> at the END of the fragment grows into empty canvas and leaves the bottom half of the poster blank — the classic unfinished-looking slide. Put the spacer where you want the gap: after the top-edge marks (the logo, the eyebrow) and before the statement they introduce, so the label sits on the top edge and the copy settles on the baseline.
 - The canvas (dimensions given below) is large and the stylesheet already sets big, legible type for it — do not fight it. Keep the fragment to the few elements the pattern calls for; embrace negative space. On a taller (story) canvas lean on the fill spacer to spread content; on a square canvas keep it to the essentials.
@@ -141,6 +174,7 @@ export function buildComposeMessages(
 
   const dims = RECIPE_FORMAT_DIMS[input.format];
   const canvas = dims ? `${dims.w}×${dims.h} (${dims.label})` : input.format;
+  const arrangement = archetypeFor(input.archetype);
   const user = [
     `BRAND SPEC`,
     recipeSpecBlock(recipe, input.format, input.role, variantIndexOf(input)),
@@ -148,6 +182,11 @@ export function buildComposeMessages(
     `THIS SLIDE`,
     `  role: ${input.role}`,
     `  canvas: ${canvas}`,
+    arrangement
+      ? `  arrangement: ${arrangement.key} — ${arrangement.intent} ` +
+        `Leftover space belongs ${SLACK_IN_WORDS[arrangement.slack] ?? 'where the brand puts it'}, ` +
+        `and the headline may run to ${arrangement.maxHeadlineLines} line${arrangement.maxHeadlineLines === 1 ? '' : 's'}.`
+      : ``,
     input.photo
       ? `  image: true — this slide holds a photograph. Leave an EMPTY <figure class="cb-shot" data-cb-slot="…"> where it belongs (see IMAGE SLOTS). Treatment for reference: ${recipe.imagery.treatment || 'photographic'}`
       : ``,

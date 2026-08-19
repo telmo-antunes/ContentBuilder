@@ -2135,6 +2135,15 @@ export async function composeProject(
     inputs.map((input) => ({ role: input.role, hasPhoto: input.photo === true })),
   );
   const invertAt = planInversion(archetypes, Boolean(recipe.surfaces?.inverse));
+  /**
+   * Written onto the INPUT, not passed at one call site. Every path that
+   * composes this slide — the first pass, the overflow ladder's re-compose, the
+   * rewrite rung, the Studio's variants — reads the same object, so a repaired
+   * slide cannot come back violating the arrangement it will be laid out under.
+   */
+  inputs.forEach((input, i) => {
+    input.archetype = archetypes[i];
+  });
 
   // Slides are independent of one another, so compose them through a small
   // pool rather than serially — deck latency drops from Σ(slides) to roughly
