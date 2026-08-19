@@ -51,32 +51,26 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
-### Two headlines a deck out still stop mid-sentence
+*Nothing open.* Every finding in this file has been resolved — see below, newest first.
 
-- **Kind:** Defect
-- **Severity:** minor
-- **First seen:** 2026-08-19 — two composes in a row, after compose v7
-- **What happened:** the copy check reported `"Spotless car. Same smell"` and
-  `"Holds the most. Fails"`, both as starting a sentence they never finish, both
-  surviving the corrective re-parse, both shipped and reported to the caller.
-- **The second is a real truncation.** The same slide read `"Holds the most.
-  Ruins the fastest."` on an earlier compose; `"Fails"` opens a clause and stops.
-- **The first may be a false positive.** `"Spotless car. Same smell"` is a
-  two-fragment headline in the deck's own punchy style, missing only a final full
-  stop — and that same cover shipped as `"Spotless car. Smell back in a week."`
-  with one. The rule cannot tell a style from a truncation when both look like a
-  sentence break with a short tail.
-- **Why it matters:** the check earns its place by being precise — 2 hits across
-  282 stored strings when it was calibrated. Two hits in ONE deck is either the
-  copywriter's style shifting or the rule over-firing, and those want opposite
-  responses.
-- **Direction:** re-run `validateProseCheck.ts` over the corpus now that several
-  decks have been composed since, and compare against the calibration. If
-  two-fragment headlines are common and deliberate, the rule should accept a
-  final fragment that is a complete clause; if they are truncations, one
-  corrective re-parse is not firm enough.
+Add the next one here, following the shape in [How to add an entry](#how-to-add-an-entry).
 
 ## Resolved
+
+### Two headlines a deck out still stop mid-sentence — the rule was right
+
+*Resolved 2026-08-19 (PR #89).* The question was whether `"Spotless car. Same smell"` is the deck's punchy style or a truncation, because the two want opposite fixes. Measured across every stored headline rather than argued:
+
+| | |
+|---|---|
+| headlines | 95 |
+| written as two or more sentences | 20 |
+| **that close with punctuation** | **18** |
+| that do not | 2 — the two flagged |
+
+The two-fragment headline IS the house style, and its convention is to punctuate: *"Tiny habits. Unshakable discipline."*, *"Left spotless. Smelled the same by Friday."*, *"Holds the most. Ruins the fastest."* The two the check flags break a convention the corpus follows 18 times out of 20, and one of them is the same slide that read *"Holds the most. Ruins the fastest."* on an earlier compose. The rule is not over-firing; one corrective re-parse is simply not always enough, and the check reports what survives — which is the design.
+
+**The comparison also found a false NEGATIVE the rule had been shipping.** `TERMINAL_PUNCTUATION` accepted a colon, so `"Tight beads: healthy. Flat, clinging beads:"` counted as finished — a comparison cut off before its second half. A colon promises something after it, so treating it as an ending is precisely backwards. Exactly one string in 284 ends with a colon and it is that truncation, so there was no legitimate use to protect. Removed, and the corpus now reports 5 rather than 4.
 
 ### Moving the whole check into the composition pool costs more than it buys
 

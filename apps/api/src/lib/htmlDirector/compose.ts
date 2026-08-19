@@ -718,8 +718,15 @@ const DANGLING_WORDS = new Set([
 /**
  * Punctuation that finishes a line. A closing bracket or quote counts: the
  * sentence ended inside it.
+ *
+ * A COLON DOES NOT, and used to. A line ending in one promises something after
+ * it, so treating it as an ending is precisely backwards — it let
+ * `"Tight beads: healthy. Flat, clinging beads:"` through as finished, which is
+ * a comparison cut off before its second half. Measured across every stored
+ * string: exactly one ends with a colon, and it is that truncation. There is no
+ * legitimate use of a trailing colon on a slide to protect.
  */
-const TERMINAL_PUNCTUATION = /[.!?…:)"'’”]$/;
+const TERMINAL_PUNCTUATION = /[.!?…)"'’”]$/;
 
 /**
  * Parts that are meant to READ as language. An eyebrow is a 2-4 word label, a
