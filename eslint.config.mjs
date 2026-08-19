@@ -11,6 +11,7 @@ export default tseslint.config(
     ignores: [
       '**/node_modules/**',
       '**/.next/**',
+      '**/.claude/worktrees/**', // separate checkouts; each lints itself
       '**/dist/**',
       '**/storage/**',
       '**/*.d.ts',
@@ -18,6 +19,13 @@ export default tseslint.config(
     ],
   },
   ...tseslint.configs.recommended,
+  {
+    // Pin the root explicitly: sibling worktrees each carry a tsconfig, and the
+    // parser refuses to guess between them.
+    languageOptions: {
+      parserOptions: { tsconfigRootDir: import.meta.dirname },
+    },
+  },
   {
     plugins: { 'unused-imports': unusedImports },
     rules: {
