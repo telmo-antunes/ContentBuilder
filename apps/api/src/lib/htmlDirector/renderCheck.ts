@@ -452,14 +452,21 @@ export const UNKNOWN_VERDICT: LayoutVerdict = {
  */
 export const openRenderProbe: OpenProbe = async (recipe, format, slides) => {
   const { getBrowser } = await import('../browser');
+  /**
+   * THE BROWSER FIRST, THEN THE SCAFFOLD.
+   *
+   * This used to write the throwaway business, kit and project and only then
+   * ask for a browser, disposing them again if that THREW. It does not always
+   * throw: a wedged launch simply never returns, so the dispose never runs and
+   * the scaffold outlives the request. Every compose that hung left exactly one
+   * `__render-check-*` business behind, which is how that was traced.
+   *
+   * Acquiring the browser first means there is nothing to leak while the risky
+   * wait happens. `getBrowser` now has a ceiling of its own, so this fails
+   * rather than hangs — but the ordering is what makes a failure clean.
+   */
+  const browser: Browser = await getBrowser();
   const scaffold = await createRenderScaffold(recipe, format, slides);
-  let browser: Browser;
-  try {
-    browser = await getBrowser();
-  } catch (err) {
-    await scaffold.dispose();
-    throw err;
-  }
   const pool = pagePool(browser, Math.min(PAGE_POOL, Math.max(1, slides.length)), dimensionsFor(format));
   let failures = 0;
 

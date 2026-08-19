@@ -122,8 +122,36 @@ export async function modelFor(feature: AiFeature): Promise<string> {
   return ENV_DEFAULT[feature]();
 }
 
+/**
+ * How long one request may take, and how often it may be retried.
+ *
+ * The client used to be constructed with neither, which means the SDK's own
+ * defaults: a TEN MINUTE request timeout and two retries. One stuck call
+ * therefore costs up to thirty minutes before anything is reported, and
+ * `POST /compose` makes a parse call plus one per slide through a concurrency
+ * pool — so a single wedged request stalls a deck for as long as it takes,
+ * silently. Compose hung for 16 minutes once and 45 another time, which is the
+ * shape of a ten-minute timeout being retried rather than of a deadlock.
+ *
+ * A parse or a slide compose is a seconds-long call, so two minutes is already
+ * generous and three attempts bound the worst case at about six.
+ */
+const REQUEST_TIMEOUT_MS = 120_000;
+const MAX_RETRIES = 2;
+
+/**
+ * The streamed path is for authored payloads at 20-30K max_tokens, which
+ * legitimately run for minutes — it keeps the SDK's own allowance rather than
+ * the short one above.
+ */
+export const LARGE_REQUEST_TIMEOUT_MS = 600_000;
+
 export function aiClient(): Anthropic {
-  return new Anthropic({ apiKey: config.ai.apiKey });
+  return new Anthropic({
+    apiKey: config.ai.apiKey,
+    timeout: REQUEST_TIMEOUT_MS,
+    maxRetries: MAX_RETRIES,
+  });
 }
 
 /**
@@ -191,10 +219,11 @@ export async function aiMessageLarge(
   params: Anthropic.MessageCreateParamsNonStreaming,
 ): Promise<Anthropic.Message> {
   const client = aiClient();
-  const resp = await client.messages.stream(params).finalMessage();
+  const opts = { timeout: LARGE_REQUEST_TIMEOUT_MS };
+  const resp = await client.messages.stream(params, opts).finalMessage();
   if (resp.stop_reason === 'refusal' && isFableFamily(params.model)) {
     console.warn(`[ai] ${params.model} declined a request — retrying on ${FALLBACK_MODEL}`);
-    return client.messages.stream({ ...params, model: FALLBACK_MODEL }).finalMessage();
+    return client.messages.stream({ ...params, model: FALLBACK_MODEL }, opts).finalMessage();
   }
   return resp;
 }

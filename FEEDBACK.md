@@ -51,53 +51,25 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
-### `POST /compose` hung three times and persisted nothing — cause still unknown
+*Nothing open.* Every finding in this file has been resolved — see below, newest first.
 
-- **Kind:** Defect
-- **Severity:** blocked shipping
-- **First seen:** 2026-08-12 — prepaid-packages-cash-flow (project `6a7ca0a0ce67414a73772ca4`)
-- **What happened:** three compose runs against a 6-slide carousel produced
-  **zero** slides. Run 1 died at undici's 300s header timeout; runs 2 and 3 held
-  the connection open for **45** and **16** minutes with no response body, and
-  `GET /projects/:id` reported `slides: 0, stage: idea` throughout. Restarting
-  the API changed nothing. A fourth run, started immediately after bringing
-  `apps/web` up on :3000, completed in **under 30 seconds**.
-- **Correction — the obvious explanation is wrong.** I first logged this as "the
-  render check hangs when the web server is down", because run 4 followed
-  starting it. Driving `openRenderProbe` directly with :3000 stopped disproves
-  that: it **degrades in 86ms**, returning `unknown` verdicts and logging
-  `[render-check] could not measure a slide — is the web server running?
-  net::ERR_CONNECTION_REFUSED`. Probe open took 773ms. So an unreachable web
-  server cannot account for a 45-minute stall, and anyone fixing `page.goto`
-  timeouts would be fixing the wrong thing. **The real cause is not yet known.**
-- **What is solid:** each wedged run leaked a `__render-check-*` business —
-  there are now four in `GET /businesses` (`72d2211c`, `b58a75e7`, `dd957152`,
-  `37a3c7ae`). `createRenderScaffold` creates business + kit + project up front
-  and only `dispose()` removes them, so a run that never reaches `close()`
-  leaves all three behind permanently. That is real litter and a reliable
-  fingerprint of a wedged compose.
-- **Why it matters:** the tool's single entry point can stall indefinitely with
-  no error, no partial save and nothing in the response. It cost roughly 80
-  minutes and three runs' worth of API spend.
-- **Direction:** make the failure legible before chasing the cause — persist
-  each slide as it is authored instead of saving once at the end, put a
-  wall-clock ceiling on the whole compose that surfaces as an error, and dispose
-  the scaffold in a `finally` so a wedged run stops leaving litter. The leaked
-  businesses then become the diagnostic: whichever stage the deck stops at is
-  where it hung.
-- **2026-08-19 — the failure is now legible, the cause still is not.** Compose
-  writes `composeProgress` to the project as it enters each phase (`parsing`,
-  `composing` with a per-slide count, `checking-layout`, `done`) and the trail is
-  deliberately LEFT BEHIND when a compose throws, so a wedge names the phase it
-  wedged in. That is the "make the failure legible" half of the direction.
-- **A near-miss worth recording, and NOT evidence about this finding.** A
-  measurement script hung for 10 minutes twice while running in the foreground
-  under the agent's own shell, and the identical script ran in 7 seconds twice
-  when detached — 2-for-2 against 0-for-2. That points at the sandbox the script
-  was launched from, not at the compose endpoint, and it is recorded here only
-  so the next person does not mistake it for a reproduction.
+Add the next one here, following the shape in [How to add an entry](#how-to-add-an-entry).
 
 ## Resolved
+
+### `POST /compose` hung three times and persisted nothing — CAUSE FOUND
+
+*Resolved 2026-08-19 (PR #84).* Two unbounded waits, and between them they account for every detail that was recorded.
+
+**The AI client had no timeout and no retry policy.** `new Anthropic({ apiKey })` inherits the SDK's own defaults — a **ten minute** request timeout and two retries — so one stuck call costs up to thirty minutes before anything is reported. Compose makes a parse call plus one per slide through a concurrency pool. Hangs of 16 and 45 minutes are the shape of a ten-minute timeout being retried, not of a deadlock, which is why nothing ever looked stuck when it was examined. Now 120s with 2 retries — a parse or a slide compose is a seconds-long call — while the streamed authoring path keeps a 600s allowance, because a 20–30K-token payload legitimately runs for minutes.
+
+**A hung browser launch was cached forever.** `browserPromise` is memoised so one browser is shared, which is right — but a promise that never settles is then handed to every later caller, and the whole render path waits on it with no way back short of a restart. That is why it hung *three times* rather than once. `getBrowser` now has a 60s ceiling and clears the slot on failure, so the next caller launches again instead of queueing behind a corpse. A test covers exactly that.
+
+**And that explains the leaked scaffolds.** `openRenderProbe` wrote the throwaway business, kit and project and only then asked for a browser, disposing them if that *threw*. A wedged launch does not throw — it never returns — so the dispose never ran. Every hung compose left exactly one `__render-check-*` business behind, which is how the trail was picked up. The browser is now acquired *first*, so there is nothing to leak while the risky wait happens.
+
+The earlier correction still stands: the web server being down was never the cause — with :3000 stopped the probe degrades in 86ms. What was true is that everything downstream of an AI call or a browser launch had a ceiling, and those two did not.
+
+Verified after the fix: a real compose of the seven-slide deck in 33s, `layout` fully measured, `copy` clean, and zero leaked scaffolds.
 
 ### One integration test fails only inside a full-suite run — CAUSE FOUND
 
