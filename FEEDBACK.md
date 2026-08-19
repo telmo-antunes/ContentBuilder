@@ -99,6 +99,22 @@ Rules that keep this file worth reading:
   failure was a `400`, i.e. the request was rejected on validation, and I have no
   reproduction. Left open with the wrong explanation removed rather than a new
   guess put in its place.
+- **2026-08-19 — hunted, not caught. Two hypotheses ruled OUT.**
+  - *Shared state between test files* — no. The suite isolates properly: its own
+    `MongoMemoryServer` in `beforeAll`, every collection cleared in `beforeEach`.
+  - *Machine load* — no. The three observed failures all happened while Puppeteer
+    was rendering the 79-slide corpus against the same machine, which looked
+    like a clean explanation. Reproducing it deliberately — the full suite three
+    times WHILE the render corpus ran — passed 3/3.
+  - Twelve clean runs in total: 3 serial (`--no-file-parallelism`), 6 parallel,
+    3 under heavy concurrent load. Three failures earlier the same day, each a
+    DIFFERENT test in this one file.
+- **What was done instead:** every status assertion in the file now reports what
+  the server actually replied. `expected 400 to be 200` is precisely the
+  information needed to diagnose this, minus the part that would help; the next
+  occurrence will carry the response body with it.
+- **Next person: do not re-run the two experiments above.** Wait for the
+  diagnostic to fire.
 
 ### `POST /compose` hung three times and persisted nothing — cause still unknown
 
