@@ -251,6 +251,15 @@ export const TOUCHPOINT_REGISTRY: Record<TouchpointId, Touchpoint> = {
           'Every other role is still held to one short line.',
         ],
       },
+      {
+        version: 8,
+        date: '2026-08-19',
+        summary: 'A story gets the same room as a post, instead of 20% less.',
+        improves: [
+          'Story copy is no longer cut by a fifth. Instagram overlays a band at the top and bottom, the layout already reserves it, and what is left is a canvas taller than a post — measured part by part, every one had room to spare.',
+          'The extra height now goes into air and scale, which is what a 9:16 canvas is for.',
+        ],
+      },
     ],
   },
 
