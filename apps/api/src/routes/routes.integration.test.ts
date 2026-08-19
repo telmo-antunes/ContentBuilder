@@ -65,7 +65,27 @@ import { failInterruptedVideoJobs } from '../lib/videoJobs';
 import { BusinessModel, BrandKitModel, MediaAssetModel, ProjectModel, ProjectVersionModel, SettingModel, VideoJobModel } from '../models';
 
 let mongod: MongoMemoryServer;
-const app = () => createApp();
+/**
+ * ONE app for the file, not one per request.
+ *
+ * This used to be `() => createApp()`, which built a whole Express app for
+ * every one of the file's sixty-odd requests and had supertest bind a fresh
+ * ephemeral port to each. Seven different tests in this file have failed a
+ * full-suite run with a 404 whose content-type was `text/html` — Express's own
+ * finalhandler, which runs only when NO route matched — on routes that
+ * demonstrably exist. "The request reached an app without the route on it" is
+ * the shape of that failure, and sixty short-lived apps is the only structure
+ * here that could produce it.
+ *
+ * The app holds no per-test state: `beforeEach` clears every collection, and
+ * nothing else in `createApp` accumulates — EXCEPT the rate limiter, whose
+ * `hits` map lives inside it. The rate-limiting test therefore builds its own
+ * app, so its 31 deliberate requests cannot spend a budget the rest of the file
+ * shares. Everything else here makes 9 rate-limited POSTs in total, well inside
+ * the window of 30.
+ */
+const sharedApp = createApp();
+const app = () => sharedApp;
 
 beforeAll(async () => {
   mongod = await MongoMemoryServer.create();
@@ -984,12 +1004,18 @@ describe('modelFor', () => {
 // ── Rate limiting ─────────────────────────────────────────────────────────────
 describe('rate limiting', () => {
   it('429s expensive POSTs after the window budget', async () => {
-    const shared = app(); // limiter state is per-app-instance
+    // Its OWN app: the limiter's map lives inside `createApp`, and these 31
+    // requests would otherwise spend the budget every other test shares.
+    const shared = createApp();
     const biz = await seedBusiness();
     await seedApprovedKit(String(biz._id));
     const created = await request(shared)
       .post('/projects')
       .send({ businessId: String(biz._id), title: 'P', type: 'carousel', format: '1080x1080' });
+    // State the precondition. Without it a create that comes back without an
+    // `_id` surfaces thirty requests later as "expected 400 to be 429", which
+    // describes the symptom and hides the cause — exactly how this test failed.
+    expectStatus(created, 201);
 
     let lastStatus = 0;
     for (let i = 0; i < 31; i++) {

@@ -145,6 +145,29 @@ Rules that keep this file worth reading:
     rate-limit test its own app rather than sharing one everywhere.
 - **Seven firings now, on seven different tests in this one file.** Every one
   passed on its own and on the next full run.
+- **2026-08-19 — the one-app-per-file experiment, MEASURED.** Six consecutive
+  runs of this file alone, each way:
+
+  | | runs that failed |
+  |---|---|
+  | an Express app per request (as it was) | **5 of 6** |
+  | one app for the file | **1 of 6** |
+
+  Sixty short-lived Express apps per file, each bound to its own ephemeral port
+  by supertest, is doing most of the damage. Shipped (PR #82): the app holds no
+  per-test state — `beforeEach` clears every collection — except the rate
+  limiter, whose `hits` map lives inside `createApp`, so the rate-limiting test
+  builds its own. The rest of the file makes 9 rate-limited POSTs against a
+  window of 30.
+- **NOT fixed, and the remaining failure has the same signature.** The one
+  failing run of six was the rate-limiting test reporting `expected 400 to be
+  429` — because its `POST /projects` came back without an `_id`, so thirty
+  requests later it was posting to `/projects/undefined/caption`. That is the
+  same symptom as every other firing: **a request whose response is not the one
+  its route should have produced.** Fewer apps makes it rarer; it does not
+  explain it.
+- The rate-limiting test now asserts its own setup, so the next occurrence says
+  "the create failed" instead of "expected 400 to be 429" thirty requests later.
 - **Next person: do not re-run the two experiments above.** Read the failure
   BEFORE re-running — re-running destroys the evidence.
 
