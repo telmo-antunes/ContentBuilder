@@ -1,10 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
   ABSOLUTE_FLOOR_PX,
+  DESCENDER_CLEARANCE_EM,
+  MEASURE_FLOOR_CH,
   TYPE_FLOOR_PX,
+  enforceDescenderClearance,
+  enforceMeasureFloor,
+  enforceStoryReserve,
   enforceTypeFloor,
   pxForPt,
-  typeFloorReport, enforceMeasureFloor, MEASURE_FLOOR_CH, enforceStoryReserve } from './typeFloor';
+  typeFloorReport,
+} from './typeFloor';
 
 const sizeOf = (css: string, cls: string) =>
   Number(css.match(new RegExp(`\\.${cls}\\{[^}]*font-size:\\s*([\\d.]+)px`))![1]);
@@ -175,3 +181,40 @@ describe('enforceStoryReserve', () => {
     expect(enforceStoryReserve(other, '1080x1920')).toBe(other);
   });
 });
+
+describe('enforceDescenderClearance', () => {
+  it('clears a headline that sits directly on a CTA, a photo slot or a panel', () => {
+    const out = enforceDescenderClearance('.cb-slide .headline{font-size:104px;line-height:.94}');
+    expect(out).toContain('.cb-slide .headline:has(+ .cta)');
+    expect(out).toContain('.cb-slide .headline:has(+ .cb-shot)');
+    expect(out).toContain('.cb-slide .headline:has(+ .panel)');
+    expect(out).toContain(`padding-bottom:${DESCENDER_CLEARANCE_EM}em`);
+    expect(out).toContain('font-size:104px'); // the brand's own CSS is untouched
+  });
+
+  it('measures the clearance in em, so it scales with the type that draws it', () => {
+    // The failures were the display serif AT ITS LARGEST. A px floor would be
+    // too much on an eyebrow-sized headline and too little on a 124px one.
+    expect(enforceDescenderClearance('.headline{}')).toMatch(/padding-bottom:[\d.]+em/);
+  });
+
+  it('never shrinks a brand that already reserves more', () => {
+    const generous = '.cb-slide .headline{padding-bottom:0.4em}';
+    expect(enforceDescenderClearance(generous)).toContain('padding-bottom:0.4em}');
+    // …and the appended rule carries the larger value, not the floor
+    const appended = enforceDescenderClearance(generous).split('\n').pop() ?? '';
+    expect(appended).toContain('0.4em');
+  });
+
+  it('leaves a headline followed by prose alone', () => {
+    // Normal leading already clears it, and widening every headline's bottom
+    // would change the vertical rhythm of every brand.
+    const out = enforceDescenderClearance('.headline{}');
+    expect(out).not.toContain('+ .body');
+    expect(out).not.toContain('+ .tagline');
+  });
+
+  it('does nothing to empty CSS', () => {
+    expect(enforceDescenderClearance('')).toBe('');
+  });
+})

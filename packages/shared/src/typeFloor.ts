@@ -241,3 +241,59 @@ export function enforceStoryReserve(css: string, format: string): string {
     return fixed === body ? whole : `${selector}{${fixed}}`;
   });
 }
+
+/**
+ * How far a descender reaches below the baseline, as a share of the font size.
+ *
+ * A `ç`, a `g` or a `?` paints outside its line box, and a display serif set
+ * with a line-height under 1 has a line box SHORTER than its own ink. So a
+ * headline whose box merely abuts the next element still renders its cedilla on
+ * top of that element: `Quer um guia para começar?` sat directly on the gold CTA
+ * chip, and `oferecer um extra` overlapped a cover thumbnail's top border the
+ * same way. Both were the display serif at its largest size with a descender on
+ * the last line.
+ *
+ * 0.16em is comfortably past a typical serif's descender depth (~0.21em of the
+ * em box, most of which the line box already covers) without opening a visible
+ * gap where none is needed.
+ */
+export const DESCENDER_CLEARANCE_EM = 0.16;
+
+/** The surfaces a headline lands ON when it lands on something. */
+const CLEARANCE_NEIGHBOURS = ['cta', 'cb-shot', 'panel'] as const;
+
+/** The largest `.headline` padding-bottom the brand set, in em, if any. */
+function headlinePadBottomEm(css: string): number {
+  let max = 0;
+  for (const m of css.matchAll(/\.headline[^{}]*\{([^}]*)\}/g)) {
+    const body = m[1] ?? '';
+    const pb = /(?:^|;)\s*padding-bottom\s*:\s*([\d.]+)em/i.exec(body);
+    if (pb) max = Math.max(max, Number(pb[1]));
+  }
+  return max;
+}
+
+/**
+ * Guarantee ink clearance under a headline that sits directly above a raised
+ * surface.
+ *
+ * The collision GATE already catches this — `MIN_CLEARANCE` measures the gap
+ * between painted boxes precisely because a descender paints outside its own —
+ * but catching it only ever produced a hand-fix. This is the floor that stops
+ * it happening, applied at RENDER beside the type, measure and story-reserve
+ * floors, so every brand already in the database is corrected on the next paint.
+ *
+ * Scoped to the adjacency the failures actually had: a headline immediately
+ * followed by a CTA, a photo slot or a panel. A headline followed by prose is
+ * left alone, because normal leading already clears it and widening every
+ * headline's bottom would change the vertical rhythm of every brand.
+ */
+export function enforceDescenderClearance(css: string): string {
+  if (!css) return css;
+  // Never SHRINK a brand that already reserves more than the floor.
+  const em = Math.max(DESCENDER_CLEARANCE_EM, headlinePadBottomEm(css));
+  const selector = CLEARANCE_NEIGHBOURS.map((n) => `.cb-slide .headline:has(+ .${n})`).join(',');
+  // `em` resolves against the HEADLINE's own font size, which is the whole
+  // point: the clearance a descender needs scales with the type that draws it.
+  return `${css}\n${selector}{padding-bottom:${em}em}`;
+}

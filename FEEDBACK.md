@@ -216,27 +216,19 @@ Rules that keep this file worth reading:
   the narrower question ("does this photo show tight beads or flat ones?") is
   likely more reliable than asking for contradictions in general.
 
+## Resolved
+
 ### Descenders collide with the block below
 
-- **Kind:** Defect
-- **Severity:** minor
-- **First seen:** 2026-08-11 — `raise-average-ticket-add-ons`, slide 8 and the promo story
-- **What happened:** on slide 8 the headline `Quer um guia para começar?` sits
-  directly on the gold `.cta` chip — the cedilla of "começar" and the question
-  mark overlap the chip's top edge. In the promo story the headline
-  `oferecer um extra` overlaps the cover thumbnail's top border the same way.
-  Both are the display serif at its largest size with a descender on the last
-  line.
-- **Why it matters:** small, but it is the kind of thing that reads as "made by
-  a machine" at phone size, and it lands on the two slides that carry the CTA.
-- **Direction:** the render check already detects overflow objectively; this is
-  the adjacent case — a bounding box that fits but whose ink does not. Extra
-  line-height or a min-margin under `.headline` when the next sibling is
-  `.cta` or `.cb-shot` would cover it.
-- **Seen again:**
-  - 2026-08-12 — prepaid-packages-cash-flow — the cover's image box clipped the descenders of "you touch the car" at both the default size and `size: md`; only moving the photo to `placement: background` cleared it.
+*Resolved 2026-08-19 (PR #62).* Detection already existed — `MIN_CLEARANCE` measures the gap between painted boxes precisely because a descender paints outside its own — but catching it only ever produced a hand-fix. `enforceDescenderClearance` is the floor that stops it happening, applied at RENDER beside the type, measure and story-reserve floors, so every brand already in the database is corrected on the next paint.
 
-## Resolved
+Measured in **em**, not px, so the clearance scales with the type that draws it: the failures were all the display serif at its largest. Scoped to the adjacency the failures had — a headline immediately followed by a CTA, a photo slot or a panel — because a headline followed by prose is already cleared by normal leading, and widening every headline's bottom would change the vertical rhythm of every brand. A brand that already reserves more is never shrunk.
+
+Verified by render on the exact shape that shipped broken (`Quer um guia para começar?` over the gold chip): `padding-bottom: 16.64px` on a 104px headline, gap 24px. Without it the gap is ~7px — above `MIN_CLEARANCE` of 6, so the gate passed the slide while the ink overlapped, which is the finding exactly.
+
+My first verification fixture was wrong and said so loudly: I put the `.fill` spacer BETWEEN the headline and the CTA, so they were never adjacent, the rule correctly did not match, and the measured gap was 668px. The arrangement that collides is bottom-anchored — spacer above, headline and chip adjacent.
+
+Still open in a different form: the second sighting (a cover's image box clipping descenders) is a bleed/scrim case, not a sibling one, and this floor does not address it.
 
 ### No per-slide view of the source sentence a slide came from
 
