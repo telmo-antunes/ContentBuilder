@@ -1,12 +1,28 @@
 /**
- * What does slack read on slides that ACTUALLY SHIPPED?
+ * THE CORPUS CHECK — every slide that ever shipped, re-measured.
  *
- * The threshold is only meaningful against the real distribution: a gate that
- * fires on every well-composed slide is as useless as one that never fires.
- * Renders every stored authored slide and reports its slack, so MAX_SLACK can
- * be set from the spread rather than chosen.
+ * Two jobs, and the second is why this is a command rather than a one-off.
  *
- *   npx tsx src/scripts/slackDistribution.ts
+ * 1. CALIBRATION. A threshold is only meaningful against the real distribution:
+ *    a gate that fires on every well-composed slide is as useless as one that
+ *    never fires. This is where MAX_SLACK's per-role limits came from.
+ *
+ * 2. REGRESSION. Four render-time floors rewrite CSS for EVERY brand — type,
+ *    measure, story reserve, descender clearance — and the reserved photo slot
+ *    changes what the gate even sees. A change to any of them can break a brand
+ *    that has been fine for months, and nothing else would notice. These slides
+ *    shipped, so they rendered acceptably at the time; anything overflowing or
+ *    colliding now is something a later change did to them.
+ *
+ *    That is not hypothetical. Reserving empty photo slots (#58) put a zero-gap
+ *    box between the logo row and the eyebrow on every slide with an unfilled
+ *    slot — 9 of 79 shipped slides reported a collision with nothing overlapping
+ *    — and this check is what caught it.
+ *
+ *   npm run layout:corpus --workspace=apps/api            # report
+ *   npm run layout:corpus --workspace=apps/api -- --gate  # exit 1 on a fault
+ *
+ * Needs the web server up: the probe renders through `${WEB_URL}/render`.
  */
 import { connectDb, disconnectDb } from '../db';
 import { maxSlackFor, openRenderProbe } from '../lib/htmlDirector/renderCheck';
@@ -19,6 +35,26 @@ interface Sample {
   role: string;
   html: string;
   recipe: BrandRecipe;
+}
+
+/**
+ * The faults that were already there. Checked in beside the script so the gate
+ * has something to compare against on a fresh clone.
+ */
+const BASELINE_PATH = new URL('./layout-corpus-baseline.json', import.meta.url);
+
+async function readBaseline(): Promise<string[]> {
+  try {
+    const { readFile } = await import('node:fs/promises');
+    return JSON.parse(await readFile(BASELINE_PATH, 'utf8')) as string[];
+  } catch {
+    return [];
+  }
+}
+
+async function writeBaseline(labels: string[]): Promise<void> {
+  const { writeFile } = await import('node:fs/promises');
+  await writeFile(BASELINE_PATH, `${JSON.stringify(labels, null, 2)}\n`);
 }
 
 (async () => {
@@ -147,6 +183,39 @@ interface Sample {
   }
 
   await disconnectDb();
+
+  /**
+   * `--gate` makes this usable BEFORE a change lands rather than after — but
+   * only against a BASELINE.
+   *
+   * Nine shipped slides already fail, from before this check existed. A gate
+   * that is permanently red is a gate everyone learns to ignore, which is the
+   * same way `MAX_SLACK` at 0.15 became decorative. So the baseline records what
+   * was already broken and the gate fails only on what is NEW — and on anything
+   * that has quietly been fixed, because a shrinking baseline nobody trims stops
+   * describing the code.
+   */
+  if (process.argv.includes('--gate')) {
+    const current = broken.map((r) => r.label).sort();
+    const baseline = await readBaseline();
+    const added = current.filter((x) => !baseline.includes(x));
+    const gone = baseline.filter((x) => !current.includes(x));
+
+    if (process.argv.includes('--update-baseline')) {
+      await writeBaseline(current);
+      console.log(`baseline updated: ${current.length} known fault(s)`);
+    } else if (added.length) {
+      console.error(`\nFAILED: ${added.length} slide(s) that rendered cleanly before now do not:`);
+      added.forEach((x) => console.error(`    NEW  ${x}`));
+      console.error('\nThese shipped, so they rendered acceptably at the time — this is a regression.');
+      process.exit(1);
+    } else if (gone.length) {
+      console.log(`${gone.length} baseline fault(s) no longer fire — re-run with --update-baseline:`);
+      gone.forEach((x) => console.log(`    FIXED  ${x}`));
+    } else {
+      console.log(`gate: clean against ${baseline.length} known fault(s)`);
+    }
+  }
 })().catch(async (e) => {
   console.error('FAILED', e);
   await disconnectDb().catch(() => {});

@@ -92,8 +92,16 @@ Rules that keep this file worth reading:
   the server actually replied. `expected 400 to be 200` is precisely the
   information needed to diagnose this, minus the part that would help; the next
   occurrence will carry the response body with it.
+- **Fourth distinct test, 2026-08-19:** `tweak signals → kit suggestion >
+  resizes a headline whose class attribute does not start with \`headline\``
+  failed one full run, then passed the file alone and three more full runs.
+  Four different tests in this one file now. I did NOT capture the message, so
+  I cannot say whether it hit one of the two `expectStatus` assertions (which
+  would have printed the response body) or the content assertion after them —
+  worth capturing next time before re-running, because re-running destroys the
+  evidence.
 - **Next person: do not re-run the two experiments above.** Wait for the
-  diagnostic to fire.
+  diagnostic to fire, and READ IT BEFORE re-running.
 
 ### `POST /compose` hung three times and persisted nothing — cause still unknown
 
@@ -142,6 +150,24 @@ Rules that keep this file worth reading:
   so the next person does not mistake it for a reproduction.
 
 ## Resolved
+
+### The corpus check only ran because someone thought to run it
+
+- **Kind:** Gap
+- **Severity:** cost me a fix
+- **First seen:** 2026-08-19 — after #58 shipped a regression nothing caught
+- **What happened:** four render-time floors rewrite CSS for EVERY brand, and
+  reserving a photo slot changed what the gate even sees. #58 broke 9 of 79
+  shipped slides — a zero-gap invisible box reported as a collision — and it
+  reached `main`. It was found days later only because a corpus measurement
+  happened to be run for an unrelated reason.
+- **Why it matters:** the tests cover the units; nothing covered "does this
+  still render the brands we already have". That is the one question a
+  render-time CSS floor is most likely to get wrong.
+- **Fixed 2026-08-19 (PR #67):** `npm run layout:corpus -- --gate`, with a
+  checked-in baseline of the 9 already-failing slides so it fails only on NEW
+  faults. Proved by reintroducing the #58 bug: the gate named the 4 new faults
+  and exited 1; with the fix restored it reports clean against the baseline.
 
 ### The prompt-hash guard covers the system prompt only
 
