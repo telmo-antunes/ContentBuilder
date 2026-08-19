@@ -100,8 +100,21 @@ Rules that keep this file worth reading:
   would have printed the response body) or the content assertion after them —
   worth capturing next time before re-running, because re-running destroys the
   evidence.
-- **Next person: do not re-run the two experiments above.** Wait for the
-  diagnostic to fire, and READ IT BEFORE re-running.
+- **2026-08-19 — the diagnostic fired, and it is not what either hypothesis
+  predicted.** `version history: snapshot, restore` failed at
+  `POST /projects/:id/versions` with **404 and a completely empty body**.
+  - The app's own 404 sends `{error:'not found'}`. Express's default sends
+    `Cannot POST /path`. **This sent neither.**
+  - The file has no `.concurrent`, and `createApp()` is synchronous with no
+    deferred route mounting, so "the routes were not mounted yet" does not
+    explain it either.
+  - A 404 with no body at all points at the response never being written by any
+    handler — which is a different kind of failure from a route rejecting a
+    request, and worth chasing from that end.
+- The assertion now also records the request line and the content-type, which is
+  what separates "no route matched" from "a route matched and answered 404".
+- **Next person: do not re-run the two experiments above.** Read the failure
+  BEFORE re-running — re-running destroys the evidence.
 
 ### `POST /compose` hung three times and persisted nothing — cause still unknown
 
@@ -163,11 +176,16 @@ Two rules, both measured against every string in every stored deck before being 
 |---|---|---|
 | body, row note | must end with terminal punctuation | 50 of 51 bodies, 13 of 13 notes already do |
 | headline, tagline, quote, row text | may be a fragment, but must not end on a dangling word | 34 of 93 headlines carry no full stop by design |
+| any of them | if it contains a sentence break, it must close the last sentence | added 2026-08-19; fires once in 282 stored strings |
 | eyebrow, cta, handle | never checked | they are labels — checking them produced only false alarms |
 
 The terminal-punctuation guard on the dangling-word rule is what makes it usable: English ends sentences on particles constantly ("paid for.", "what you put in.", "it does not have to be."), and without the guard the rule fired on 12 good lines out of 13. With it, `validateProseCheck.ts` finds **2 hits in 174 shipped strings** — one real truncation and one borderline noun-phrase list.
 
 The dangling-word list is now shared with `dropDanglers`, which asks the same question of copy the CLAMP cut. One list, one meaning.
+
+*Extended the same day, after a recompose shipped `"Miss the ducts. The smell finds"` straight past it.* A headline may be a fragment and `finds` is a verb, so neither of the first two rules applied — but the line contains a sentence break, which makes it prose whatever part it is written into, and prose that opens a second sentence has to close it. Measured across 282 stored strings the new rule fires exactly once: on that line. It also gives the original failure a better name — `"Enzymes break the source. Fragrance covers"` does not merely lack a full stop, it abandons a sentence.
+
+And the check was reporting nothing when it should have been shouting: it triggered a corrective re-parse and then never looked again, so a deck shipped with a body the check had already flagged. `unfinishedProse` now runs a second time after the correction, warns per line, and reaches the caller as `copy` on the compose response — the same treatment `layout` gets, and for the same reason.
 
 ### The descender floor was sized against a neighbour that had its own margin
 

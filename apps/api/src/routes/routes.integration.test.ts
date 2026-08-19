@@ -95,13 +95,32 @@ beforeEach(async () => {
  * load) failed to reproduce it, so the next occurrence has to carry its own
  * evidence.
  */
-function expectStatus(res: { status: number; body?: unknown; text?: string }, want: number): void {
-  if (res.status !== want) {
-    const detail = res.body && Object.keys(res.body as object).length
-      ? JSON.stringify(res.body)
-      : (res.text ?? '').slice(0, 400);
-    throw new Error(`expected status ${want}, got ${res.status} — server said: ${detail}`);
-  }
+function expectStatus(
+  res: {
+    status: number;
+    body?: unknown;
+    text?: string;
+    headers?: Record<string, string>;
+    request?: { method?: string; url?: string };
+  },
+  want: number,
+): void {
+  if (res.status === want) return;
+  const detail = res.body && Object.keys(res.body as object).length
+    ? JSON.stringify(res.body)
+    : (res.text ?? '').slice(0, 400);
+  /**
+   * The first time this fired it returned a 404 with a COMPLETELY empty body —
+   * which the app's own 404 never does (it sends `{error:'not found'}`) and
+   * Express's default never does either (it sends "Cannot POST /path"). So the
+   * request and the content-type are recorded too: they are what separates
+   * "no route matched" from "a route matched and answered 404".
+   */
+  const where = `${res.request?.method ?? '?'} ${res.request?.url ?? '?'}`;
+  const type = res.headers?.['content-type'] ?? 'no content-type';
+  throw new Error(
+    `expected status ${want}, got ${res.status} on ${where} [${type}] — server said: ${detail || '(empty body)'}`,
+  );
 }
 
 // Seed helpers ---------------------------------------------------------------

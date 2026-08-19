@@ -641,13 +641,29 @@ describe('copy that stops mid-thought', () => {
   it('catches the line that actually shipped', () => {
     // 41 characters against a 150 budget, so nothing clamped it and nothing
     // noticed. The copywriter simply stopped.
+    // Diagnosed by the sharpest rule that applies: this line does not merely
+    // lack a full stop, it opens a second sentence and abandons it.
     expect(flag({ body: 'Enzymes break the source. Fragrance covers' })).toEqual([
-      'body: no terminal punctuation',
+      'body: starts a sentence it never finishes',
     ]);
   });
 
   it('catches a headline left open on a dangling word', () => {
     expect(flag({ headline: 'Cut no-shows by' })).toEqual(['headline: ends on a dangling word']);
+  });
+
+  it('catches a headline that opens a second sentence and never closes it', () => {
+    // Shipped past both other rules: a headline may be a fragment, and "finds"
+    // is a verb rather than a dangling function word. Across 282 stored strings
+    // this rule fires exactly once — on this line.
+    expect(flag({ headline: 'Miss the ducts. The smell finds' })).toEqual([
+      'headline: starts a sentence it never finishes',
+    ]);
+  });
+
+  it('leaves a multi-sentence line that does close', () => {
+    expect(flag({ headline: 'Fragrance covers. Enzymes work.' })).toEqual([]);
+    expect(flag({ headline: 'Holds the most. Ruins the fastest.' })).toEqual([]);
   });
 
   it('leaves a sentence that legitimately ends on a particle', () => {
@@ -675,6 +691,30 @@ describe('copy that stops mid-thought', () => {
     ]);
     // The row's own text is scanned, not read — a fragment is correct there.
     expect(flag({ rows: [{ text: 'Saturated foam holds odour deep' }] })).toEqual([]);
+  });
+
+  it('reports what survived the correction, instead of shipping it quietly', async () => {
+    // The model is asked once to finish the line and returns it unfinished
+    // anyway. Nothing can repair that — the missing words are the point — so it
+    // has to reach the caller.
+    const json = JSON.stringify({
+      slides: [{ role: 'statement', parts: { headline: 'The returning job', body: 'The smell tells a different story' } }],
+    });
+    reply.mockReturnValue(json);
+    const seen: Array<{ unfinished: Array<{ label: string }> }> = [];
+    await parseForCompose(detailMastersRecipe, 'idea', { model: 'm', onCopyCheck: (r) => seen.push(r) });
+    expect(aiCalls.length).toBeGreaterThan(1); // it did ask for a correction
+    expect(seen[0]!.unfinished.map((u) => u.label)).toEqual(['body']);
+    expect(warnings().some((w) => w.includes('still stops mid-thought'))).toBe(true);
+  });
+
+  it('reports nothing when the copy is finished', async () => {
+    reply.mockReturnValueOnce(
+      JSON.stringify({ slides: [{ role: 'statement', parts: { headline: 'The returning job', body: 'The smell tells a different story.' } }] }),
+    );
+    const seen: Array<{ unfinished: unknown[] }> = [];
+    await parseForCompose(detailMastersRecipe, 'idea', { model: 'm', onCopyCheck: (r) => seen.push(r) });
+    expect(seen[0]!.unfinished).toEqual([]);
   });
 
   it('ignores a single word, however it is punctuated', () => {
