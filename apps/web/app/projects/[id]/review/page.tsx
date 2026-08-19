@@ -1268,7 +1268,21 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                       brandKit={kit}
                       format={project.format}
                       photos={resolveSlidePhotos(slide, project.media)}
-                      editing
+                      /**
+                       * Phone view renders the way the EXPORT does.
+                       *
+                       * `editing` draws the "Add photo" affordance in an
+                       * unfilled slot, which fills space the export leaves
+                       * empty: the same slide measured 9.7% slack here and 65%
+                       * through the export path. So the one view whose job is to
+                       * show the deck as a reader meets it was showing a slide
+                       * the reader never sees, in exactly the respect that
+                       * decides whether it looks empty.
+                       *
+                       * The strip keeps the affordance — that is where photos
+                       * are attached — and the toggle is one click away.
+                       */
+                      editing={!phoneView}
                       theme={slide.overrides?.theme ?? project.settings?.theme ?? 'editorial'}
                       forExport
                     />
