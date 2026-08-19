@@ -58,3 +58,55 @@ describe('findImageCopyContradictions', () => {
     expect(out.checked).toBe(2);
   });
 })
+
+describe('a picture that is not ABOUT its slide', () => {
+  beforeEach(() => aiMessage.mockReset());
+
+  it('reports it, separately from a contradiction', async () => {
+    // The real failure: a CRM screenshot of a customer list under a slide about
+    // ozone machines. It contradicts nothing, so the contradiction check passed
+    // it — correctly, by its own rules.
+    aiMessage.mockResolvedValueOnce(reply({
+      contradictions: [],
+      unrelated: [{ slide: 2, about: 'ozone machines', shows: 'a software customer list', question: 'Related?' }],
+    }));
+    const out = await findImageCopyContradictions([pairing(1, 'Cover'), pairing(2, 'Ozone. Read the manual.')]);
+    expect(out.contradictions).toEqual([]);
+    expect(out.unrelated).toHaveLength(1);
+    expect(out.unrelated[0]).toMatchObject({ slide: 2, about: 'ozone machines' });
+  });
+
+  it('never reports the same slide twice — the sharper complaint wins', async () => {
+    // A reviewer gets one question per picture. Being told a photo both
+    // contradicts its slide AND is unrelated to it is two ways of saying the
+    // model was unsure.
+    aiMessage.mockResolvedValueOnce(reply({
+      contradictions: [{ slide: 2, says: 'a', shows: 'b', question: 'Intended?' }],
+      unrelated: [{ slide: 2, about: 'c', shows: 'b', question: 'Related?' }],
+    }));
+    const out = await findImageCopyContradictions([pairing(1, 'Cover'), pairing(2, 'Copy')]);
+    expect(out.contradictions).toHaveLength(1);
+    expect(out.unrelated).toEqual([]);
+  });
+
+  it('drops an unrelated verdict about a slide that was not sent', async () => {
+    aiMessage.mockResolvedValueOnce(reply({
+      contradictions: [],
+      unrelated: [{ slide: 9, about: 'x', shows: 'y', question: 'Related?' }],
+    }));
+    const out = await findImageCopyContradictions([pairing(1, 'Cover')]);
+    expect(out.unrelated).toEqual([]);
+  });
+
+  it('tolerates an older reply with no `unrelated` key at all', async () => {
+    aiMessage.mockResolvedValueOnce(reply({ contradictions: [] }));
+    const out = await findImageCopyContradictions([pairing(1, 'Cover')]);
+    expect(out.unrelated).toEqual([]);
+  });
+
+  it('returns both lists empty when the check cannot run', async () => {
+    aiMessage.mockRejectedValueOnce(new Error('vision down'));
+    const out = await findImageCopyContradictions([pairing(1, 'Cover')]);
+    expect(out).toMatchObject({ contradictions: [], unrelated: [], checked: 0 });
+  });
+});

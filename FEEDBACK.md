@@ -51,39 +51,6 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
-### The image checker cannot see an irrelevant picture, only a contradictory one
-
-- **Kind:** Gap
-- **Severity:** cost me a fix
-- **First seen:** 2026-08-19 — the rebuilt smoke-odour deck
-- **What happened:** two of three photographs on a finished deck were wrong, and
-  `image-copy-check` returned `{"contradictions":[],"checked":3}`.
-  - Slide 6, **"Ozone — read the manual"**, carried a CRM screenshot of the
-    prepaid-packages list: customer names, session counts, expiry dates.
-  - Slide 3, **"The headliner — holds the most, ruins the fastest"**, carried a
-    photo of a tool extracting a SEAT — the one surface the post says never to
-    extract like a seat.
-- **Why the checker passed them:** by design. Its prompt says *"NOT a
-  contradiction, and never report it: a photo that is merely generic,
-  decorative, or loosely related"*. A CRM screenshot beside "Ozone" is not a
-  contradiction, it is a non-sequitur — and irrelevance is exactly what
-  `fillSlotsFromPool` produces when it auto-fills from an 80-photo brand library
-  that contains no picture of the thing this slide is about.
-- **I made this worse by trusting it.** I reported "both photos checked, no
-  contradictions" as though the checker had validated the pairing. It had
-  answered a narrower question than the one I needed, and I only found out by
-  opening the files.
-- **Why it matters:** the auto-fill is the point where a deck acquires pictures
-  nobody chose, and the only check that looks at pictures is the one that cannot
-  judge them. A product screenshot with customer names on a public post is worse
-  than a bad crop.
-- **Direction:** the checker already receives every slide's copy. A second, much
-  easier question would cover this: *does this photograph show what this slide is
-  about — yes, no, or unrelated?* Irrelevance is a far simpler judgement than
-  contradiction, and it is the one the auto-fill needs. Failing that,
-  `fillSlotsFromPool` should not fill a slot it has no relevant candidate for —
-  an empty slot is hidden at render, which is honest.
-
 ### Removing a photo leaves a hole nothing re-checks
 
 - **Kind:** Gap
@@ -216,6 +183,26 @@ Rules that keep this file worth reading:
   so the next person does not mistake it for a reproduction.
 
 ## Resolved
+
+### The image checker cannot see an irrelevant picture, only a contradictory one
+
+*Resolved 2026-08-19 (PR #77).* The checker now asks a second and much easier question after the first: is this photograph ABOUT its slide at all? Reported as its own `unrelated` list rather than folded into `contradictions`, because the two say different things — a contradiction says the deck is WRONG, an unrelated picture says nobody chose it. A slide already named as a contradiction is never also reported as unrelated: one question per picture, and the sharper one wins.
+
+Verified end to end on the photo that slipped through, by putting it back:
+
+*with the CRM screenshot on the cover*
+```
+"unrelated": [{ "slide": 1,
+  "about": "Detailing service marketing about odour removal and spotless cars",
+  "shows": "A software dashboard listing client session packages",
+  "question": "Does a screenshot of a client package tracker relate to a spotless car and lingering smell?" }]
+```
+
+*with the correct interior photo restored* — `{"contradictions":[],"unrelated":[],"checked":1}`
+
+Catches the real failure, silent on the right picture, and `contradictions` stayed empty in both runs — the precise signal is undiluted.
+
+The bar is deliberately low, and the prompt says so: report it only when you cannot say what the picture has to do with the slide. An atmospheric or wide shot of the right subject, or one whose connection needs a sentence to explain, is explicitly not reported — the same reasoning that keeps the contradiction check narrow.
 
 ### Nothing catches copy that stops mid-sentence
 

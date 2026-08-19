@@ -938,6 +938,12 @@ input[type='color'] {
 .studio-rgrid .k { font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); margin-bottom: 8px; }
 .studio-rgrid .v { font-size: 12px; color: var(--muted); line-height: 1.5; }
 .studio-sw { display: inline-block; width: 16px; height: 16px; border-radius: 4px; border: 1px solid var(--border-strong); vertical-align: middle; margin-right: 3px; }
+/* An UNRELATED picture is a softer complaint than a contradiction: the deck is
+   not wrong, nobody chose the photograph. Same shape, quieter edge, so the two
+   read as different kinds of question rather than the same alarm twice. */
+.studio-warn.soft { border-left-color: var(--line); }
+.studio-warn.soft strong { opacity: .85; }
+
 /* Image/copy contradiction panel — questions for the reviewer, not errors.
    Styled as a card rather than an alert: most decks come back clean, and a
    panel that looks like a failure when it says "nothing flagged" trains people
