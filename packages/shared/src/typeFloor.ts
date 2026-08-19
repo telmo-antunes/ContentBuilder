@@ -253,11 +253,19 @@ export function enforceStoryReserve(css: string, format: string): string {
  * same way. Both were the display serif at its largest size with a descender on
  * the last line.
  *
- * 0.16em is comfortably past a typical serif's descender depth (~0.21em of the
- * em box, most of which the line box already covers) without opening a visible
- * gap where none is needed.
+ * 0.22em, and the extra over a bare descender is deliberate. The floor has to
+ * cover the ink that hangs BELOW the content box — measured at ~0.135em on the
+ * display serif at 104px — and then leave the collision gate's own MIN_CLEARANCE
+ * of 6px on top of it. 0.16em covered the overhang and almost nothing else: a
+ * two-line headline sitting on a photo slot cleared it by 3px and the gate
+ * rightly called that a collision.
+ *
+ * The first version was verified against a `.cta`, which carries its own
+ * `margin-top` in every recipe, so the floor only had to make up the difference.
+ * A `.cb-shot` has no margin at all, so the floor is the whole clearance. Sized
+ * for that case, because it is the one with nothing else to fall back on.
  */
-export const DESCENDER_CLEARANCE_EM = 0.16;
+export const DESCENDER_CLEARANCE_EM = 0.22;
 
 /** The surfaces a headline lands ON when it lands on something. */
 const CLEARANCE_NEIGHBOURS = ['cta', 'cb-shot', 'panel'] as const;
