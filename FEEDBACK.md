@@ -113,6 +113,38 @@ Rules that keep this file worth reading:
     request, and worth chasing from that end.
 - The assertion now also records the request line and the content-type, which is
   what separates "no route matched" from "a route matched and answered 404".
+- **2026-08-19, second and third firings — the sharpest evidence yet.** With the
+  request line and content-type recorded:
+
+  ```
+  expected status 200, got 404 on PATCH /brandkits/<id> [text/html] — (empty body)
+  expected status 201, got 404 on POST  /projects/<id>/versions      — (empty body)
+  ```
+
+  **`text/html` is the finding.** The app's own 404 sends JSON
+  (`{error:'not found'}`) and every ApiError goes through the JSON error
+  handler. `text/html` is Express's own finalhandler, which runs only when NO
+  ROUTE MATCHED — yet `brandKitRouter.patch('/:kitId')` demonstrably exists and
+  is mounted at `/brandkits`. So the request reached an app that did not have
+  the route on it.
+- **Ruled out, with reasons:**
+  - *Shared state between files* — the suite has its own `MongoMemoryServer` and
+    clears every collection per test.
+  - *Machine load* — reproduced deliberately under a full Puppeteer corpus
+    render, 3/3 clean.
+  - *The rate limiter* — its `hits` map is created INSIDE `createApp()`, so it
+    cannot accumulate across app instances.
+- **The one structural oddity left:** `const app = () => createApp()` builds a
+  whole new Express app for EVERY request in the file — 60-odd of them — and
+  supertest binds a fresh ephemeral port to each. "The request reached an app
+  without the route" fits that shape better than anything else tried.
+  - Consolidating to one app per file is the obvious experiment, and it is NOT
+    obviously safe: the rate-limiting test needs a limiter that accumulates, and
+    the limiter lives inside the app. A shared app would let those hits leak
+    into every other test in the file. Whoever tries it should give the
+    rate-limit test its own app rather than sharing one everywhere.
+- **Seven firings now, on seven different tests in this one file.** Every one
+  passed on its own and on the next full run.
 - **Next person: do not re-run the two experiments above.** Read the failure
   BEFORE re-running — re-running destroys the evidence.
 
