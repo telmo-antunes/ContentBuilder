@@ -151,6 +151,26 @@ Rules that keep this file worth reading:
 
 ## Resolved
 
+### The descender floor was sized against a neighbour that had its own margin
+
+- **Kind:** Defect
+- **Severity:** cost me a fix
+- **First seen:** 2026-08-19 — rebuilding the smoke-odour deck
+- **What happened:** the cover collided at **3px**, headline to photo slot, with
+  the floor applied and matching. 0.16em covered the ink hanging below the
+  content box (~0.135em on the display serif at 104px) and left almost nothing
+  over — under the gate's own 6px.
+- **Why #62 missed it:** it was verified against a `.cta`, which carries
+  `margin-top` in every recipe, so the floor only had to make up a difference. A
+  `.cb-shot` has no margin at all, so the floor IS the whole clearance. The
+  measurement was right and the case was too easy.
+- **Fixed 2026-08-19 (PR #72):** 0.22em, sized for the neighbour with nothing to
+  fall back on. Corpus clean at 86 slides.
+- **Worth remembering:** the compose-time check passed this deck (7 measured, 0
+  overflowed, no notes) because the slot was still EMPTY and reserved at default.
+  The collision only appeared once a real photograph was attached — which is the
+  same shape as the finding #58 closed, one level further on.
+
 ### The corpus check reserves photo slots at DEFAULT size
 
 *Resolved 2026-08-19 (PR #71).* `resolveSlidePhotos` used to drop a photo whose asset it could not resolve, taking the slot's geometry with it — so a scaffold, which carries no media, reserved every slot at the default size and over-reported any slide whose photograph had been deliberately shrunk. It now keeps the geometry and skips only the image, which is exactly what a reserve needs: the space a picture will take, without a picture.
