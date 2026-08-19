@@ -51,27 +51,28 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
-### One shipped slide has 33px more content than its canvas
+### The corpus check reserves photo slots at DEFAULT size
 
-- **Kind:** Defect
+- **Kind:** Gap
 - **Severity:** minor
-- **First seen:** 2026-08-18 — smoke-odour-removal, slide 4
-- **What happened:** eyebrow + a two-line headline + a two-row panel + a
-  photograph comes to **1195px** of content in **1162px** of space. The slide is
-  bottom-anchored (`justify-content: flex-end`), so the excess goes off the TOP:
-  the eyebrow renders at 59px against a 92px padding, sitting in the safe margin
-  rather than below it.
-- **Not the photograph.** It is already `shape: wide, size: sm`, the smallest the
-  slot offers, and shrinking it further is not available. The 369px picture is
-  not the problem — the 507px panel above it is.
-- **Why it stays open:** the remedy is to cut roughly one line of copy, and the
-  copy is not mine to cut. Everything mechanical has been tried.
-- **Why it will not recur:** #58 reserves an empty photo slot at compose time, so
-  a deck composed today is gated with its picture's space accounted for and the
-  repair ladder runs. This slide predates that — its slot was empty when the
-  deck was gated and the photograph was attached afterwards, which is exactly the
-  hole #58 closed.
-- **Direction:** trimming one of the two panel notes by about a line clears it.
+- **First seen:** 2026-08-19 — after fixing smoke-odour-removal slide 4
+- **What happened:** the slide renders clean in production (`overflow: false`,
+  measured with its real photograph) and the corpus check still reports it as
+  overflowing. The check is right about what it measures and wrong about what
+  ships: a scaffold carries no media, so `resolveSlidePhotos` discards the slide's
+  photo entry, the slot is reserved at the DEFAULT geometry, and this photo is
+  `shape: wide, size: sm` — deliberately smaller than default.
+- **Why it matters:** it is a false positive on exactly the slides someone has
+  already hand-tuned, which is the population most likely to be re-checked. One
+  of 79 today, but it will grow with every photo anyone shrinks.
+- **Why the default is still right at COMPOSE time:** no photo has been chosen
+  then, so assuming the full-size slot is the honest conservative call. The two
+  cases genuinely differ.
+- **Direction:** the corpus check reads each slide's stored `photos` already —
+  it needs to carry `shape`/`size` through to the reserve. `resolveSlidePhotos`
+  drops a photo with no resolvable asset (`if (!asset?.url) continue`), so the
+  geometry has to reach `reservedSlotCss` some other way than through a
+  photo record: probably a slot-geometry hint on the scaffold's slide.
 
 ### One integration test fails only inside a full-suite run
 
@@ -172,6 +173,12 @@ Rules that keep this file worth reading:
   so the next person does not mistake it for a reproduction.
 
 ## Resolved
+
+### One shipped slide has 33px more content than its canvas
+
+*Resolved 2026-08-19 — smoke-odour-removal slide 4.* Both panel notes rendered at exactly two lines (123px each), so dropping either to one freed 62px against the 33px needed. Trimmed the second note from *"Pulls back out what you put in. That decides it."* to *"Pulls back out what you put in."* — the first sentence carries the claim, the second was a flourish. The first row's note was left alone: it holds the actual insight, that a surface clean hands back clean fabric on foam that still smells.
+
+Verified on the real render, with the real photograph: `overflow: false`, and the eyebrow now sits at **119px** against a 92px padding — inside the safe area instead of 33px above it. It was 59px before.
 
 ### Eight shipped slides sat 5px from a collision, on one missing margin
 
