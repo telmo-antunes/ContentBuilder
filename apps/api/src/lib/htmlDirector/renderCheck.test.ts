@@ -549,6 +549,75 @@ describe('repairLayout — the bidirectional ladder', () => {
   });
 });
 
+describe('the rung after the ladder — looking at the slide', () => {
+  const input = { role: 'feature' as const, parts: {}, format: '1080x1350' as const, index: 0 };
+  const v = (over: Partial<LayoutVerdict>): LayoutVerdict => ({
+    state: 'fits', collide: false, slack: 0, headlineLines: 2, ...over,
+  });
+  const HTML = '<div class="headline">A headline</div><div class="fill"></div>';
+  const REARRANGED = '<div class="fill"></div><div class="headline">A headline</div>';
+
+  it('takes the model\'s arrangement when it reduces the faults', async () => {
+    const out = await repairLayout(detailMastersRecipe, input, HTML, v({ slack: 0.7 }), 3, {
+      // Nothing deterministic helps, so the ladder falls through to this.
+      measure: async () => v({ slack: 0.1 }),
+      shoot: async () => 'base64-png',
+      repairByLooking: async () => ({ html: REARRANGED, change: 'moved the spacer above the headline' }),
+    });
+    expect(out.steps).toContain('looked-at-it');
+    expect(out.html).toBe(REARRANGED);
+    expect(out.remaining).toEqual([]);
+    expect(out.aiCalls).toBe(1);
+  });
+
+  it('discards an arrangement that does not help', async () => {
+    const out = await repairLayout(detailMastersRecipe, input, HTML, v({ slack: 0.7 }), 3, {
+      measure: async () => v({ slack: 0.7 }), // no better
+      shoot: async () => 'base64-png',
+      repairByLooking: async () => ({ html: REARRANGED, change: 'shuffled things' }),
+    });
+    expect(out.steps).not.toContain('looked-at-it');
+    expect(out.html).toBe(HTML);
+  });
+
+  /**
+   * The one failure that must never ship. Every string was written, budgeted
+   * and checked long before this rung; a slide saying something nobody approved
+   * is worse than the hole it was sent to fix.
+   */
+  it('refuses an arrangement that changed the words, however well it measures', async () => {
+    const out = await repairLayout(detailMastersRecipe, input, HTML, v({ slack: 0.7 }), 3, {
+      measure: async () => v({ slack: 0 }), // it would have "fixed" it perfectly
+      shoot: async () => 'base64-png',
+      repairByLooking: async () => ({ html: '<div class="headline">A better headline</div>', change: 'improved it' }),
+    });
+    expect(out.steps).not.toContain('looked-at-it');
+    expect(out.html).toBe(HTML);
+  });
+
+  it('never runs when the probe cannot photograph', async () => {
+    let asked = false;
+    const out = await repairLayout(detailMastersRecipe, input, HTML, v({ slack: 0.7 }), 3, {
+      measure: async () => v({ slack: 0.7 }),
+      repairByLooking: async () => { asked = true; return null; },
+    });
+    expect(asked).toBe(false);
+    expect(out.aiCalls).toBe(0);
+  });
+
+  it('spends nothing on a slide the ladder already fixed', async () => {
+    let asked = false;
+    const out = await repairLayout(detailMastersRecipe, input, HTML, v({ collide: true }), 3, {
+      measure: async () => v({ collide: false }),
+      shoot: async () => 'base64-png',
+      repairByLooking: async () => { asked = true; return null; },
+    });
+    expect(out.remaining).toEqual([]);
+    expect(asked).toBe(false);
+    expect(out.aiCalls).toBe(0);
+  });
+});
+
 describe('layoutFaults', () => {
   it('names every gate that fired, and nothing else', () => {
     expect(layoutFaults({ state: 'fits', collide: false, slack: 0.05, headlineLines: 2 }, 3)).toEqual([]);
