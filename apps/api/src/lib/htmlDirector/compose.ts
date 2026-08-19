@@ -969,7 +969,7 @@ function photoGuidance(recipe: BrandRecipe): string {
  * with the reduced numbers stated explicitly so the model isn't left to do the
  * ~20% arithmetic itself.
  */
-function formatGuidance(format: string): string {
+export function formatGuidance(format: string): string {
   const b = composeBudgetsFor(format);
   const numbers =
     `eyebrow <= ${b.eyebrow}, headline <= ${b.headline}, body <= ${b.body} ` +
@@ -990,7 +990,7 @@ function formatGuidance(format: string): string {
  * is what replaced the manual "5 slides" stepper the user used to set by hand
  * before they had read the source themselves.
  */
-function countGuidance(range: { min: number; max: number; target: number; fixed: boolean }, planned: number): string {
+export function countGuidance(range: { min: number; max: number; target: number; fixed: boolean }, planned: number): string {
   // `fixed` has TWO sources — a plan, and an explicit `slideCount` — and only
   // the first has entries to hang the count on. Reading `planned` in both cases
   // told a caller who passed `slideCount: 6` and no plan "SLIDES: exactly 0 —

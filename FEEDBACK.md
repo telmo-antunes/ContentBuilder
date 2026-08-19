@@ -51,46 +51,6 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
-### The prompt-hash guard covers the system prompt only
-
-- **Kind:** Gap
-- **Severity:** minor
-- **First seen:** 2026-08-19 — changing the story budgets
-- **What happened:** `PROMPT_TEXT.parse` is `PARSE_SYSTEM`, so the hash guard
-  watches the static system prompt and nothing else. The per-format budget line
-  lives in the USER message (`formatGuidance`), and rewriting it — changing every
-  number a story deck is held to — moved no hash at all. The guard passed a
-  change to what the model is told, silently.
-- **Why it matters:** the guard exists so a prompt edit cannot ship without a
-  deliberate version bump. Half the prompt is outside it, and it is the half
-  that varies per post, which is where a regression would be hardest to spot.
-- **Direction:** the user message is assembled per call, so it cannot be hashed
-  as one string — but its TEMPLATE can. Hashing the format-guidance and
-  count-guidance builders' output for a fixed set of inputs would cover the
-  parts that actually carry rules, without pinning the brief text that
-  legitimately differs every time.
-
-### The collision gate reads the one number the problem cannot move
-
-- **Kind:** Defect
-- **Severity:** cost me a fix
-- **First seen:** 2026-08-19 — verifying PR #62 against the corpus
-- **Correction to PR #62's own description.** That PR said the descender floor
-  took the gap from ~7px to 24px. **Wrong.** Measured on a real slide, the
-  box-to-box gap is **16px with the floor and 16px without it** — padding grows
-  the headline's box downward by exactly as much as it pushes the next element
-  down, so `next.top - box.bottom` is invariant under the very thing the floor
-  changes. The fix is still correct, for a different reason: the GLYPHS do not
-  move while the CTA does, so ink-to-CTA went from **0px to 19px**.
-- **What happened:** the collision gate compared box bottom to box top, which
-  meant it could never see this class of failure — before or after the floor. A
-  headline rendering its cedilla exactly on a CTA chip measured a clean 16px.
-- **Why it matters:** every descender collision that shipped was invisible to
-  the gate built to catch descender collisions, and nothing would have caught a
-  recurrence.
-- **Fixed 2026-08-19 (PR #64):** the gate measures from the previous block's INK
-  (`Range.getBoundingClientRect()` over its text) to the next block's box.
-
 ### One integration test fails only inside a full-suite run
 
 - **Kind:** Defect
@@ -182,6 +142,14 @@ Rules that keep this file worth reading:
   so the next person does not mistake it for a reproduction.
 
 ## Resolved
+
+### The prompt-hash guard covers the system prompt only
+
+*Resolved 2026-08-19 (PR #66).* `PROMPT_TEXT.parse` is now the system prompt PLUS the rule-bearing parts of the user message. Those are assembled per call and cannot be hashed as one string, so their TEMPLATES are rendered for a fixed, boring set of inputs — three formats and three slide-count shapes — which pins the wording and the numbers the builders produce without pinning the brief text that legitimately differs every call.
+
+Found by causing it: rewriting the story budgets in #65 changed every number a story deck is held to and moved no hash at all. Two tests now assert the coverage itself, so a refactor cannot quietly narrow it back — one checks the rendered rules are present, the other that a change to them moves the digest.
+
+Note for whoever next reads a diff here: the BASE format contributes nothing to the user message by design, so only 9:16 and 1:1 appear. Its numbers live in the static system prompt, which is what keeps the cache warm across posts.
 
 ### The story budget shrinks ~20% across the board — every part, not just body
 
