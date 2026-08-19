@@ -83,7 +83,7 @@ interface Sample {
   }
   console.log(`measuring ${samples.length} shipped slides against ${config.webUrl}\n`);
 
-  const results: Array<{ slack: number; role: string; label: string }> = [];
+  const results: Array<{ slack: number; role: string; state: string; collide: boolean; label: string }> = [];
   // One scaffold per recipe keeps the page pool warm and the styling honest.
   for (const recipe of new Set(samples.map((s) => s.recipe))) {
     const mine = samples.filter((s) => s.recipe === recipe);
@@ -93,12 +93,29 @@ interface Sample {
       verdicts.forEach((v, i) => {
         const m = mine[i]!;
         if (v.state === 'unknown') return;
-        results.push({ slack: v.slack, role: m.role, label: `${m.title.slice(0, 26)} #${m.index + 1} ${m.role}` });
+        results.push({
+          slack: v.slack,
+          role: m.role,
+          state: v.state,
+          collide: v.collide,
+          label: `${m.title.slice(0, 26)} #${m.index + 1} ${m.role}`,
+        });
       });
     } finally {
       await probe.close();
     }
   }
+
+  /**
+   * REGRESSION CHECK. These slides all SHIPPED, so they rendered acceptably at
+   * the time. Anything that overflows or collides now is something a later
+   * change did to them — which matters because the type, measure, story-reserve
+   * and descender floors all rewrite CSS for every brand at render.
+   */
+  const broken = results.filter((r) => r.state === 'overflows' || r.collide);
+  console.log(`overflowing or colliding: ${broken.length} of ${results.length}`);
+  broken.forEach((r) => console.log(`    ${r.state === 'overflows' ? 'OVERFLOW' : 'COLLIDE '}  ${r.label}`));
+  console.log('');
 
   results.sort((a, b) => b.slack - a.slack);
   const pct = (x: number) => `${(x * 100).toFixed(1)}%`;

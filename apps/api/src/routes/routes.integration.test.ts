@@ -83,6 +83,27 @@ beforeEach(async () => {
   );
 });
 
+/**
+ * Assert a response status, and say WHAT the server actually replied when it
+ * does not match.
+ *
+ * This suite flakes: three different tests in this file have failed a full-suite
+ * run and then passed on their own, and the only evidence a bare
+ * `expect(res.status).toBe(200)` leaves behind is "expected 400 to be 200" —
+ * which is exactly the information needed to diagnose it, minus the part that
+ * would help. Twelve clean runs (serial, parallel, and under heavy concurrent
+ * load) failed to reproduce it, so the next occurrence has to carry its own
+ * evidence.
+ */
+function expectStatus(res: { status: number; body?: unknown; text?: string }, want: number): void {
+  if (res.status !== want) {
+    const detail = res.body && Object.keys(res.body as object).length
+      ? JSON.stringify(res.body)
+      : (res.text ?? '').slice(0, 400);
+    throw new Error(`expected status ${want}, got ${res.status} — server said: ${detail}`);
+  }
+}
+
 // Seed helpers ---------------------------------------------------------------
 async function seedBusiness(overrides: Record<string, unknown> = {}) {
   return BusinessModel.create({
@@ -113,16 +134,16 @@ async function seedApprovedKit(businessId: string) {
 describe('businesses', () => {
   it('creates and lists businesses', async () => {
     const created = await request(app()).post('/businesses').send({ name: 'Acme' });
-    expect(created.status).toBe(201);
+    expectStatus(created, 201);
     const list = await request(app()).get('/businesses');
-    expect(list.status).toBe(200);
+    expectStatus(list, 200);
     expect(list.body.map((b: any) => b.name)).toContain('Acme');
   });
 
   it('rejects an analyze against a private URL (SSRF guard)', async () => {
     const biz = await seedBusiness({ websiteUrl: 'http://localhost:9999' });
     const res = await request(app()).post(`/businesses/${biz._id}/analyze`);
-    expect(res.status).toBe(400);
+    expectStatus(res, 400);
     expect(res.body.error).toMatch(/private host/i);
   });
 });
@@ -134,7 +155,7 @@ describe('projects', () => {
     const res = await request(app())
       .post('/projects')
       .send({ businessId: String(biz._id), title: 'P', type: 'carousel', format: '1080x1080' });
-    expect(res.status).toBe(400);
+    expectStatus(res, 400);
   });
 
   it('creates, normalizes slide ids/order, and persists a PATCH', async () => {
@@ -143,7 +164,7 @@ describe('projects', () => {
     const created = await request(app())
       .post('/projects')
       .send({ businessId: String(biz._id), title: 'P', type: 'carousel', format: '1080x1080' });
-    expect(created.status).toBe(201);
+    expectStatus(created, 201);
 
     const patched = await request(app())
       .patch(`/projects/${created.body._id}`)
@@ -153,7 +174,7 @@ describe('projects', () => {
           { authored: { html: '<h1 class="headline">B</h1>' } },
         ],
       });
-    expect(patched.status).toBe(200);
+    expectStatus(patched, 200);
     expect(patched.body.slides).toHaveLength(2);
     expect(patched.body.slides[0].id).toBeTruthy();
     expect(patched.body.slides.map((s: any) => s.order)).toEqual([0, 1]);
@@ -171,7 +192,7 @@ describe('projects', () => {
       .send({ slides: [{ authored: { html: '<h1 class="headline">ORIGINAL</h1>' } }] });
 
     const saved = await request(app()).post(`/projects/${pid}/versions`).send({ label: 'checkpoint' });
-    expect(saved.status).toBe(201);
+    expectStatus(saved, 201);
 
     await request(app())
       .patch(`/projects/${pid}`)
@@ -182,7 +203,7 @@ describe('projects', () => {
     expect(checkpoint).toBeTruthy();
 
     const restored = await request(app()).post(`/projects/${pid}/versions/${checkpoint._id}/restore`);
-    expect(restored.status).toBe(200);
+    expectStatus(restored, 200);
     expect(restored.body.slides[0].authored.html).toContain('ORIGINAL');
 
     // The pre-restore state must itself be recoverable.
@@ -218,7 +239,7 @@ describe('projects', () => {
     const list = await request(app()).get(`/projects/${pid}/versions`);
     const legacy = list.body.versions.find((v: any) => v.label === 'legacy');
     const restored = await request(app()).post(`/projects/${pid}/versions/${legacy._id}/restore`);
-    expect(restored.status).toBe(200);
+    expectStatus(restored, 200);
     expect(restored.body.slides).toHaveLength(1);
     expect(restored.body.slides[0].authored.html).toContain('Survives');
     expect(restored.body.slides[0].layoutType).toBeUndefined();
@@ -267,7 +288,7 @@ describe('projects', () => {
           },
         ],
       });
-    expect(res.status).toBe(200);
+    expectStatus(res, 200);
     expect(res.body.slides[0].photos).toHaveLength(0);
     expect(String(res.body.slides[1].photos[0].mediaAssetId)).toBe(String(mine._id));
   });
@@ -316,7 +337,7 @@ describe('projects', () => {
     );
 
     const read = await request(app()).get(`/projects/${pid}`);
-    expect(read.status).toBe(200);
+    expectStatus(read, 200);
     expect(read.body.slides).toHaveLength(1);
     expect(read.body.slides[0].authored.html).toContain('Still here');
     // Crucially NOT resurrected as a photo — the back-compat rule is gone, so
@@ -328,7 +349,7 @@ describe('projects', () => {
     const patched = await request(app())
       .patch(`/projects/${pid}`)
       .send({ slides: [{ ...read.body.slides[0], mediaAssetId: String(asset._id) }] });
-    expect(patched.status).toBe(200);
+    expectStatus(patched, 200);
     expect(patched.body.slides[0].mediaAssetId).toBeUndefined();
     expect(patched.body.slides[0].photos).toEqual([]);
     const stored = await ProjectModel.collection.findOne({ _id: new mongoose.Types.ObjectId(pid) });
@@ -355,7 +376,7 @@ describe('PUT /projects/:id/slides/:slideId/photos', () => {
           },
         ],
       });
-    expect(created.status).toBe(201);
+    expectStatus(created, 201);
     const asset = await MediaAssetModel.create({
       businessId: biz._id,
       type: 'upload',
@@ -376,7 +397,7 @@ describe('PUT /projects/:id/slides/:slideId/photos', () => {
           { id: 'p1', mediaAssetId: String(asset._id), placement: 'slot', slot: 'hero', fit: 'cover' },
         ],
       });
-    expect(res.status).toBe(200);
+    expectStatus(res, 200);
     expect(res.body.slides[0].photos).toHaveLength(1);
     expect(res.body.slides[0].photos[0].slot).toBe('hero');
   });
@@ -389,7 +410,7 @@ describe('PUT /projects/:id/slides/:slideId/photos', () => {
       .send({
         photos: [{ id: 'p1', mediaAssetId: String(asset._id), placement: 'slot', slot: 'nope' }],
       });
-    expect(res.status).toBe(400);
+    expectStatus(res, 400);
     expect(res.body.error).toMatch(/no image slot named/i);
   });
 
@@ -411,7 +432,7 @@ describe('PUT /projects/:id/slides/:slideId/photos', () => {
           { id: 'p2', mediaAssetId: String(second._id), placement: 'background' },
         ],
       });
-    expect(res.status).toBe(200);
+    expectStatus(res, 200);
     expect(res.body.slides[0].photos.filter((p: { placement: string }) => p.placement === 'background')).toHaveLength(1);
   });
 
@@ -434,7 +455,7 @@ describe('PUT /projects/:id/slides/:slideId/photos', () => {
           { id: 'p2', mediaAssetId: String(asset._id), placement: 'slot', slot: 'hero' },
         ],
       });
-    expect(res.status).toBe(200);
+    expectStatus(res, 200);
     const kept = res.body.slides[0].photos;
     expect(kept).toHaveLength(1);
     expect(String(kept[0].mediaAssetId)).toBe(String(asset._id));
@@ -445,7 +466,7 @@ describe('PUT /projects/:id/slides/:slideId/photos', () => {
     const res = await request(app())
       .put(`/projects/${project._id}/slides/${slideId}/photos`)
       .send({ photos: [{ id: 'p1', mediaAssetId: String(asset._id), placement: 'free' }] });
-    expect(res.status).toBe(200);
+    expectStatus(res, 200);
     expect(res.body.slides[0].photos[0].frame).toBeTruthy();
   });
 
@@ -454,7 +475,7 @@ describe('PUT /projects/:id/slides/:slideId/photos', () => {
     const res = await request(app())
       .put(`/projects/${project._id}/slides/does-not-exist/photos`)
       .send({ photos: [{ id: 'p1', mediaAssetId: String(asset._id), placement: 'free' }] });
-    expect(res.status).toBe(404);
+    expectStatus(res, 404);
   });
 });
 
@@ -497,7 +518,7 @@ describe('recipe candidates', () => {
 
   it('authors candidates concurrently with distinct direction notes and stores them', async () => {
     const { kit, res } = await seedAndAuthor();
-    expect(res.status).toBe(200);
+    expectStatus(res, 200);
     expect(res.body.candidates).toHaveLength(2);
 
     const notes = res.body.candidates.map((c: any) => c.note);
@@ -520,12 +541,12 @@ describe('recipe candidates', () => {
 
   it('caps the run at three candidates', async () => {
     const { res } = await seedAndAuthor(3);
-    expect(res.status).toBe(200);
+    expectStatus(res, 200);
     expect(res.body.candidates).toHaveLength(3);
     const bad = await request(app())
       .post(`/brandkits/${String(new mongoose.Types.ObjectId())}/recipe/candidates`)
       .send({ count: 4 });
-    expect(bad.status).toBe(400); // validation runs before the kit lookup
+    expectStatus(bad, 400); // validation runs before the kit lookup
   });
 
   it('select promotes the chosen candidate to kit.recipe and clears the list', async () => {
@@ -535,7 +556,7 @@ describe('recipe candidates', () => {
     const sel = await request(app())
       .post(`/brandkits/${kit._id}/recipe/select`)
       .send({ candidateId: chosen.id });
-    expect(sel.status).toBe(200);
+    expectStatus(sel, 200);
     expect(sel.body.recipe?.signature?.name).toBe(chosen.recipe.signature.name);
 
     const fresh = await BrandKitModel.findById(kit._id).lean<Record<string, any> | null>();
@@ -551,7 +572,7 @@ describe('recipe candidates', () => {
     const sel = await request(app())
       .post(`/brandkits/${kit._id}/recipe/select`)
       .send({ candidateId: 'not-a-real-candidate' });
-    expect(sel.status).toBe(404);
+    expectStatus(sel, 404);
     const fresh = await BrandKitModel.findById(kit._id).lean<Record<string, any> | null>();
     expect(fresh?.recipe).toBeFalsy(); // nothing was promoted
     expect(fresh?.recipeCandidates).toHaveLength(2); // and nothing was cleared
@@ -568,14 +589,14 @@ describe('recipe candidates', () => {
       return fakeRecipe('Survivor');
     });
     const partial = await request(app()).post(`/brandkits/${kit._id}/recipe/candidates`).send({});
-    expect(partial.status).toBe(200);
+    expectStatus(partial, 200);
     expect(partial.body.candidates).toHaveLength(1);
     expect(partial.body.candidates[0].recipe.signature.name).toBe('Survivor');
 
     // Every author fails → a 502 with the upstream reason, nothing persisted.
     authorRecipeMock.mockRejectedValue(new Error('model exploded'));
     const res = await request(app()).post(`/brandkits/${kit._id}/recipe/candidates`).send({});
-    expect(res.status).toBe(502);
+    expectStatus(res, 502);
     expect(res.body.error).toMatch(/model exploded/);
   });
 });
@@ -637,7 +658,7 @@ describe('recipe refine', () => {
     aiReplyMock.mockReturnValue(CALM_BG);
 
     const res = await refine(String(kit._id), { layer: 'background', instruction: 'too busy — calm it' });
-    expect(res.status).toBe(200);
+    expectStatus(res, 200);
     expect(res.body.refine).toMatchObject({ layer: 'background', mode: 'layer' });
 
     const fresh = await BrandKitModel.findById(kit._id).lean<Record<string, any> | null>();
@@ -658,7 +679,7 @@ describe('recipe refine', () => {
     aiReplyMock.mockReturnValue(WHOLE);
 
     const res = await refine(String(kit._id), { layer: 'background', instruction: 'flatten the ground' });
-    expect(res.status).toBe(200);
+    expectStatus(res, 200);
     expect(res.body.refine).toMatchObject({ layer: 'background', mode: 'sheet' });
     expect(JSON.stringify(aiReplyMock.mock.calls[0]?.[0] ?? {})).toContain('NO LAYER SPLIT');
 
@@ -685,7 +706,7 @@ describe('recipe refine', () => {
     aiReplyMock.mockReturnValue([CALM_BG, TYPE, COMPONENTS].join('\n'));
 
     const res = await refine(String(kit._id), { layer: 'background', instruction: 'calmer' });
-    expect(res.status).toBe(200);
+    expectStatus(res, 200);
     expect(res.body.refine.repairs.join(' ')).toMatch(/ink/);
     const fresh = await BrandKitModel.findById(kit._id).lean<Record<string, any> | null>();
     expect(fresh?.recipe?.tokens?.ink).not.toBe('#1A2030');
@@ -699,7 +720,7 @@ describe('recipe refine', () => {
       ['Happy to — here is the calmer background:', '', '```css', CALM_BG, '```', '', 'Hope that reads better!'].join('\n'),
     );
     const res = await refine(String(kit._id), { layer: 'background', instruction: 'calmer' });
-    expect(res.status).toBe(200);
+    expectStatus(res, 200);
     const fresh = await BrandKitModel.findById(kit._id).lean<Record<string, any> | null>();
     expect(fresh?.recipe?.layers?.background).toBe(CALM_BG);
   });
@@ -709,19 +730,19 @@ describe('recipe refine', () => {
     aiReplyMock.mockReturnValue(CALM_BG);
 
     const badLayer = await refine(String(kit._id), { layer: 'colours', instruction: 'x' });
-    expect(badLayer.status).toBe(400);
+    expectStatus(badLayer, 400);
     const noInstruction = await refine(String(kit._id), { layer: 'type', instruction: '  ' });
-    expect(noInstruction.status).toBe(400);
+    expectStatus(noInstruction, 400);
 
     const unknown = await refine(String(new mongoose.Types.ObjectId()), {
       layer: 'type',
       instruction: 'bigger headlines',
     });
-    expect(unknown.status).toBe(404);
+    expectStatus(unknown, 404);
 
     const bare = await seedKitWithRecipe(null);
     const noRecipe = await refine(String(bare._id), { layer: 'type', instruction: 'bigger headlines' });
-    expect(noRecipe.status).toBe(400);
+    expectStatus(noRecipe, 400);
     expect(noRecipe.body.error).toMatch(/no recipe/i);
 
     // None of the rejections reached the model.
@@ -732,7 +753,7 @@ describe('recipe refine', () => {
     const kit = await seedKitWithRecipe(refinableRecipe());
     aiReplyMock.mockReturnValue('I would rather not.');
     const res = await refine(String(kit._id), { layer: 'type', instruction: 'bigger headlines' });
-    expect(res.status).toBe(502);
+    expectStatus(res, 502);
     expect(res.body.error).toMatch(/no CSS/i);
     const fresh = await BrandKitModel.findById(kit._id).lean<Record<string, any> | null>();
     expect(fresh?.recipe?.stylesheet).toContain('radial-gradient'); // nothing was saved
@@ -781,7 +802,7 @@ describe('tweak signals → kit suggestion', () => {
         format: '1080x1080',
         slides: [{ authored: { html: '<h1 class="headline">Hi</h1>' } }],
       });
-    expect(created.status).toBe(201);
+    expectStatus(created, 201);
     return { biz, kit, project: created.body, slideId: created.body.slides[0].id as string };
   }
 
@@ -803,16 +824,16 @@ describe('tweak signals → kit suggestion', () => {
         // Single-quoted, and `headline` is neither first nor last.
         slides: [{ authored: { html: `<h1 class='lead headline wide'>Hi</h1>` } }],
       });
-    expect(created.status).toBe(201);
+    expectStatus(created, 201);
     const id = created.body._id as string;
     const sid = created.body.slides[0].id as string;
 
     const smaller = await press(id, sid, 'smaller-headline');
-    expect(smaller.status).toBe(200);
+    expectStatus(smaller, 200);
     expect(smaller.body.slides[0].authored.html).toContain('sm');
 
     const bigger = await press(id, sid, 'bigger-headline');
-    expect(bigger.status).toBe(200);
+    expectStatus(bigger, 200);
     expect(bigger.body.slides[0].authored.html).not.toMatch(/\bsm\b/);
   });
 
@@ -824,7 +845,7 @@ describe('tweak signals → kit suggestion', () => {
     expect(fresh?.tweakSignals?.smallerHeadline).toBe(3);
 
     const state = await request(app()).get(`/businesses/${biz._id}/brandkit`);
-    expect(state.status).toBe(200);
+    expectStatus(state, 200);
     expect(state.body.approved.tweakSignals.smallerHeadline).toBe(3);
     // Density drives a rhythm multiplier (roomy 1.15 → balanced 1 → dense
     // 0.86): repeated "smaller headline" means the type keeps running too BIG,
@@ -851,7 +872,7 @@ describe('tweak signals → kit suggestion', () => {
     for (let i = 0; i < 3; i++) await press(project._id, slideId, 'smaller-headline');
 
     const patched = await request(app()).patch(`/brandkits/${kit._id}`).send({ recipe: { density: 'dense' } });
-    expect(patched.status).toBe(200);
+    expectStatus(patched, 200);
     expect(patched.body.recipe.typography.density).toBe('dense');
 
     const fresh = await BrandKitModel.findById(kit._id).lean<Record<string, any> | null>();
@@ -867,7 +888,7 @@ describe('tweak signals → kit suggestion', () => {
     for (let i = 0; i < 3; i++) await press(project._id, slideId, 'smaller-headline');
 
     const dismissed = await request(app()).post(`/brandkits/${kit._id}/suggestion/dismiss`);
-    expect(dismissed.status).toBe(200);
+    expectStatus(dismissed, 200);
 
     const state = await request(app()).get(`/businesses/${biz._id}/brandkit`);
     expect(state.body.suggestion).toBeNull();
@@ -899,7 +920,7 @@ describe('tweak signals → kit suggestion', () => {
 
     // …and applying swaps default ↔ inverse (round-trippable) and spends the counter.
     const patched = await request(app()).patch(`/brandkits/${inv.kit._id}`).send({ recipe: { flipSurfaces: true } });
-    expect(patched.status).toBe(200);
+    expectStatus(patched, 200);
     expect(patched.body.recipe.tokens.ground).toBe('#F8FAFC');
     expect(patched.body.recipe.tokens.ink).toBe('#0B0F1A');
     expect(patched.body.recipe.surfaces.inverse).toMatchObject({ ground: '#0B0F1A', ink: '#F8FAFC' });
@@ -936,7 +957,7 @@ describe('modelFor', () => {
 
     // Settings PUT persists the override fields too.
     const res = await request(app()).put('/settings').send({ visionModel: 'claude-vision-override' });
-    expect(res.status).toBe(200);
+    expectStatus(res, 200);
     expect(await modelFor('vision')).toBe('claude-vision-override');
   });
 });
@@ -986,7 +1007,7 @@ describe('video export jobs', () => {
           },
         ],
       });
-    expect(created.status).toBe(201);
+    expectStatus(created, 201);
     return created.body;
   }
 
@@ -1017,12 +1038,12 @@ describe('video export jobs', () => {
 
     const project = await seedAuthoredProject();
     const started = await request(app()).post(`/projects/${project._id}/export-video`);
-    expect(started.status).toBe(202);
+    expectStatus(started, 202);
     const jobId = started.body.jobId as string;
     expect(jobId).toBeTruthy();
 
     const poll = await request(app()).get(`/projects/${project._id}/export-video/${jobId}`);
-    expect(poll.status).toBe(200);
+    expectStatus(poll, 200);
     expect(['queued', 'rendering']).toContain(poll.body.state);
     expect(typeof poll.body.percent).toBe('number');
 
@@ -1033,14 +1054,14 @@ describe('video export jobs', () => {
     const cancel = await request(app()).post(
       `/projects/${project._id}/export-video/${jobId}/cancel`,
     );
-    expect(cancel.status).toBe(200);
+    expectStatus(cancel, 200);
     expect(cancel.body.state).toBe('cancelled');
 
     // The running render notices the durable flag and aborts; the job STAYS
     // cancelled (the runner must not overwrite it with done/error).
     await until(() => renderEnded);
     const after = await request(app()).get(`/projects/${project._id}/export-video/${jobId}`);
-    expect(after.status).toBe(200);
+    expectStatus(after, 200);
     expect(after.body.state).toBe('cancelled');
     expect((await VideoJobModel.findById(jobId))?.get('state')).toBe('cancelled');
 
@@ -1048,7 +1069,7 @@ describe('video export jobs', () => {
     const again = await request(app()).post(
       `/projects/${project._id}/export-video/${jobId}/cancel`,
     );
-    expect(again.status).toBe(200);
+    expectStatus(again, 200);
     expect(again.body.state).toBe('cancelled');
   }, 20_000);
 
@@ -1059,13 +1080,13 @@ describe('video export jobs', () => {
 
     const project = await seedAuthoredProject();
     const started = await request(app()).post(`/projects/${project._id}/export-video`);
-    expect(started.status).toBe(202);
+    expectStatus(started, 202);
     const jobId = started.body.jobId as string;
 
     let downloadHeaders: Record<string, string> | null = null;
     for (let i = 0; i < 100; i++) {
       const res = await request(app()).get(`/projects/${project._id}/export-video/${jobId}`);
-      expect(res.status).toBe(200);
+      expectStatus(res, 200);
       if ((res.headers['content-type'] ?? '').startsWith('video/mp4')) {
         downloadHeaders = res.headers as Record<string, string>;
         break;
@@ -1131,7 +1152,7 @@ describe('POST /projects/:id/promo-story', () => {
       .post('/projects')
       .send({ businessId: String(biz._id), title: 'S', type: 'story', format: '1080x1920' });
     const res = await request(app()).post(`/projects/${story.body._id}/promo-story`);
-    expect(res.status).toBe(400);
+    expectStatus(res, 400);
     expect(res.body.error).toMatch(/only a carousel/i);
   });
 
@@ -1142,7 +1163,7 @@ describe('POST /projects/:id/promo-story', () => {
       .post('/projects')
       .send({ businessId: String(biz._id), title: 'C', type: 'carousel', format: '1080x1350' });
     const res = await request(app()).post(`/projects/${empty.body._id}/promo-story`);
-    expect(res.status).toBe(400);
+    expectStatus(res, 400);
     expect(res.body.error).toMatch(/no slides/i);
   });
 
@@ -1161,7 +1182,7 @@ describe('POST /projects/:id/promo-story', () => {
       .patch(`/projects/${created.body._id}`)
       .send({ slides: [{ id: 's1', order: 0 }] });
     const res = await request(app()).post(`/projects/${created.body._id}/promo-story`);
-    expect(res.status).toBe(400);
+    expectStatus(res, 400);
     expect(res.body.error).toMatch(/no authored markup/i);
   });
 
@@ -1170,13 +1191,13 @@ describe('POST /projects/:id/promo-story', () => {
     // kit approved before recipes existed.
     const id = await carouselWithCover();
     const res = await request(app()).post(`/projects/${id}/promo-story`);
-    expect(res.status).toBe(400);
+    expectStatus(res, 400);
     expect(res.body.error).toMatch(/no design recipe/i);
   });
 
   it('404s on an unknown project', async () => {
     const res = await request(app()).post(`/projects/${new mongoose.Types.ObjectId()}/promo-story`);
-    expect(res.status).toBe(404);
+    expectStatus(res, 404);
   });
 })
 
@@ -1191,7 +1212,7 @@ describe('compose guards and settings from the carousel review', () => {
     const res = await request(app())
       .post(`/projects/${created.body._id}/compose`)
       .send({ idea: 'Some idea' });
-    expect(res.status).toBe(400);
+    expectStatus(res, 400);
     expect(res.body.error).toMatch(/no usable photos/i);
     // The same call with the acknowledgement gets PAST the gate (it then fails
     // later on the missing recipe, which is the pre-existing behaviour).
@@ -1211,7 +1232,7 @@ describe('compose guards and settings from the carousel review', () => {
         caption: { text: 'Ready-made caption', hashtags: ['#carcare', '#ceramiccoating'] },
         settings: { dmKeyword: 'COATING', audience: 'car owner' },
       });
-    expect(created.status).toBe(201);
+    expectStatus(created, 201);
     expect(created.body.caption?.text).toBe('Ready-made caption');
     expect(created.body.caption?.hashtags).toHaveLength(2);
     expect(created.body.settings?.dmKeyword).toBe('COATING');
