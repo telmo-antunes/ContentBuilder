@@ -487,7 +487,7 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
     } finally {
       setPairBusy(false);
     }
-  }, [projectId, toast]);
+  }, [projectId]);
 
   const regenCaption = useCallback(async () => {
     setCapBusy('regen');
