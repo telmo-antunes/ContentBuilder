@@ -217,6 +217,17 @@ export interface ComposeOptions {
    * in instead of leaving nothing behind at all.
    */
   onProgress?: (p: ComposeProgress) => void;
+  /**
+   * Copy problems that survived the corrective re-parse. Absent by default,
+   * like `record` — see the call site for why anything survives at all.
+   */
+  onCopyCheck?: (r: CopyCheckSummary) => void;
+}
+
+/** What the copy checks still object to after compose has done what it can. */
+export interface CopyCheckSummary {
+  /** Lines that stop mid-thought. Empty is the expected answer. */
+  unfinished: UnfinishedProse[];
 }
 
 /** Where a compose has got to. `done`/`total` are set only where there is a count. */
@@ -721,8 +732,21 @@ export interface UnfinishedProse {
   slide: number;
   label: string;
   text: string;
-  reason: 'no terminal punctuation' | 'ends on a dangling word';
+  reason: 'no terminal punctuation' | 'ends on a dangling word' | 'starts a sentence it never finishes';
 }
+
+/**
+ * A sentence break with more words after it. A line containing one is PROSE,
+ * whatever part it is written into — and prose that opens a second sentence has
+ * to close it.
+ *
+ * This is the sharpest of the three rules and the one that catches what the
+ * others cannot: "Miss the ducts. The smell finds" shipped past both of them,
+ * because a headline is allowed to be a fragment and "finds" is a verb rather
+ * than a dangling function word. Measured across 282 stored strings it fires
+ * exactly once — on that line.
+ */
+const INTERNAL_SENTENCE_BREAK = /[.!?…]\s+\S/;
 
 /**
  * Copy that stops mid-sentence.
@@ -750,6 +774,11 @@ export function unfinishedProse(slides: ParsedSlide[]): UnfinishedProse[] {
     // One word is a label however it is punctuated; two words can still dangle.
     if (!v || v.split(/\s+/).length < 2) return;
     if (TERMINAL_PUNCTUATION.test(v)) return;
+    // Whatever the part is FOR, a line that already broke a sentence is prose.
+    if (INTERNAL_SENTENCE_BREAK.test(v)) {
+      out.push({ slide, label, text: v, reason: 'starts a sentence it never finishes' });
+      return;
+    }
     if (needsFullStop) out.push({ slide, label, text: v, reason: 'no terminal punctuation' });
     else if (dangles(v)) out.push({ slide, label, text: v, reason: 'ends on a dangling word' });
   };
@@ -1424,6 +1453,27 @@ export async function parseForCompose(
   if (stillLost.length) {
     console.warn(`[compose] parse: ${stillLost.length} verbatim string(s) never made it into the deck`);
   }
+
+  /**
+   * DID THE CORRECTION TAKE?
+   *
+   * Asking once was not enough. A deck went out with "The car looks flawless.
+   * The smell tells a different story" — flagged, corrected for, and shipped
+   * anyway, because nothing looked again and nothing told the caller. The budget
+   * path re-checks and clamps; the verbatim path warns. This had neither, so a
+   * check that fired was indistinguishable from a check that passed.
+   *
+   * There is still nothing to repair deterministically — the missing words are
+   * the point — so what survives is REPORTED, to the caller and not only to a
+   * terminal nobody is reading.
+   */
+  const stillUnfinished = unfinishedProse(slides);
+  for (const u of stillUnfinished) {
+    console.warn(
+      `[compose] parse: slide ${u.slide + 1} ${u.label} still stops mid-thought after the correction — ${JSON.stringify(u.text)}`,
+    );
+  }
+  opts?.onCopyCheck?.({ unfinished: stillUnfinished });
 
   // Which slides get an image PLACEHOLDER is the parse step's judgement, per
   // slide — corrected by `normalizeParsedDeck` for what the brand's own

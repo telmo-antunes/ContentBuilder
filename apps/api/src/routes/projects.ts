@@ -41,7 +41,7 @@ import { getStorage } from '../storage';
 import { generateCaption, type GeneratedCaption } from '../lib/caption';
 import { SITE_PHOTO_LABEL } from '../lib/harvest';
 import { lessonsFor, noteSlideSignal, observeOutcome, recordGeneration } from '../lib/learningLoop';
-import type { ComposeRecord, LayoutCheckSummary } from '../lib/htmlDirector/compose';
+import type { ComposeRecord, CopyCheckSummary, LayoutCheckSummary } from '../lib/htmlDirector/compose';
 import { postUpdateStatus } from '../lib/promptStatus';
 import { aiDraftConfigured, config } from '../config';
 
@@ -640,6 +640,7 @@ projectsRouter.post(
     let composed;
     let captured: ComposeRecord | undefined;
     let layout: LayoutCheckSummary | undefined;
+    let copy: CopyCheckSummary | undefined;
     try {
       composed = await composeProject(parsedRecipe.data, briefIdea, {
         format: project.get('format'),
@@ -656,6 +657,14 @@ projectsRouter.post(
         },
         onLayoutCheck: (r) => {
           layout = r;
+        },
+        /**
+         * Copy the checks still object to. A deck shipped with a body that
+         * stopped mid-sentence AFTER being flagged and corrected for, because
+         * the only trace was a warning on the server's stdout.
+         */
+        onCopyCheck: (r) => {
+          copy = r;
         },
         /**
          * A crumb trail on the document itself, so a caller polling
@@ -806,6 +815,7 @@ projectsRouter.post(
        * instead of reading it off the server's terminal.
        */
       ...(layout ? { layout } : {}),
+      ...(copy?.unfinished.length ? { copy } : {}),
     });
   }),
 );
