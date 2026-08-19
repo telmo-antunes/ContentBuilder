@@ -51,6 +51,11 @@ const SYSTEM = `You check whether a social slide's PHOTOGRAPH agrees with its CO
 You are shown one image per slide, each followed by that slide's text. Report ONLY direct contradictions — cases where a reader who looked at the picture would take away the opposite of what the words say. Two kinds:
 
 1. STATE MISMATCH — the copy asserts a condition (healthy, clean, worn, damaged) and the photo shows the other one.
+   WORK THIS ONE THROUGH THE WORD, not by impression. The state case is the harder judgement and the more common one, and asking it loosely gets it right only about half the time. So do it in three steps, for each slide that asserts a state:
+     a. QUOTE the word the copy uses for the state — "tight", "flat", "clinging", "sheeting", "beading", "matte", "swirled", "even".
+     b. Name its OPPOSITE — the thing the photo would have to show for the copy to be wrong ("tight beads" ↔ "flat, clinging film"; "sheets off" ↔ "sits in droplets").
+     c. Ask only that narrow question of the photo: which of the two does this picture show? Report a contradiction only when the photo clearly shows the opposite, not when it is ambiguous or shows neither.
+   If the copy asserts no state in words, there is no state mismatch to find on that slide. Do not infer one.
 2. PRACTICE MISMATCH — the deck warns against a practice, or recommends one, and a photo depicts the opposite practice approvingly. THE WHOLE DECK COUNTS, not just the slide the photo sits on: a photo of a practice that a LATER slide names as harmful is a contradiction, because the reader meets both. You are given every slide's copy for exactly this reason.
 
 NOT a contradiction, and never report it:

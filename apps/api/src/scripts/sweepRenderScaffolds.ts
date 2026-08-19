@@ -7,8 +7,9 @@
  * afternoon by three stalled runs, and they show up in `GET /businesses`
  * alongside real brands.
  *
- * The ceiling in renderCheck.ts should stop new ones appearing; this clears what
- * earlier runs left, and gives an easy way to check.
+ * The API now sweeps on start (see lib/sweepScaffolds.ts, which owns the logic);
+ * this stays as the way to LOOK without restarting anything, and to clear them
+ * on a running instance.
  *
  *   npm run scaffolds:orphans --workspace=apps/api --          # list only
  *   npm run scaffolds:orphans --workspace=apps/api -- --delete
