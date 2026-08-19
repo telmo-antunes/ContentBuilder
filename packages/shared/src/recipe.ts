@@ -23,6 +23,7 @@ import { slideArchetypeCss } from './archetypes';
 import { slideTypesettingCss } from './lineBreaks';
 import {
   enforceDescenderClearance,
+  enforceLockupGap,
   enforceMeasureFloor,
   enforceStoryReserve,
   enforceTypeFloor,
@@ -433,12 +434,14 @@ export function recipeStylesheetFor(recipe: BrandRecipe, format: string): string
    * already in the database on the next paint, with no re-authoring and no AI
    * spend, and it keeps holding if a future model drifts back to small type.
    */
-  const authored = enforceDescenderClearance(
+  const authored = enforceLockupGap(
+    enforceDescenderClearance(
     enforceStoryReserve(
       enforceMeasureFloor(
         enforceTypeFloor([base, extra ? `/* format ${format} */\n${extra}` : ''].filter(Boolean).join('\n')),
       ),
-      format,
+        format,
+      ),
     ),
   );
   // The archetype layer is app capability like the image layer, and goes LAST:

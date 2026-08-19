@@ -51,6 +51,28 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
+### One shipped slide has 33px more content than its canvas
+
+- **Kind:** Defect
+- **Severity:** minor
+- **First seen:** 2026-08-18 — smoke-odour-removal, slide 4
+- **What happened:** eyebrow + a two-line headline + a two-row panel + a
+  photograph comes to **1195px** of content in **1162px** of space. The slide is
+  bottom-anchored (`justify-content: flex-end`), so the excess goes off the TOP:
+  the eyebrow renders at 59px against a 92px padding, sitting in the safe margin
+  rather than below it.
+- **Not the photograph.** It is already `shape: wide, size: sm`, the smallest the
+  slot offers, and shrinking it further is not available. The 369px picture is
+  not the problem — the 507px panel above it is.
+- **Why it stays open:** the remedy is to cut roughly one line of copy, and the
+  copy is not mine to cut. Everything mechanical has been tried.
+- **Why it will not recur:** #58 reserves an empty photo slot at compose time, so
+  a deck composed today is gated with its picture's space accounted for and the
+  repair ladder runs. This slide predates that — its slot was empty when the
+  deck was gated and the photograph was attached afterwards, which is exactly the
+  hole #58 closed.
+- **Direction:** trimming one of the two panel notes by about a line clears it.
+
 ### One integration test fails only inside a full-suite run
 
 - **Kind:** Defect
@@ -150,6 +172,14 @@ Rules that keep this file worth reading:
   so the next person does not mistake it for a reproduction.
 
 ## Resolved
+
+### Eight shipped slides sat 5px from a collision, on one missing margin
+
+*Resolved 2026-08-19 (PR #68).* The corpus baseline's nine faults were not nine problems. Eight were the same pair — `logo-row → eyebrow` — on the same brands, and the survey of every slide's tightest ink-to-ink gap made it unmistakable: a median of **32px**, never below **14px**, except those eight at **5px**. Neither `.logo-row` nor `.eyebrow` declares any vertical margin, so they sit flush and only the eyebrow's leading separates them; every other block in those recipes carries one, and the eyebrow was simply missed. `enforceLockupGap` puts 24px under a lockup, at render like the other floors, and only on classes the recipe gave no margin of their own.
+
+The gate's own measure was also inconsistent, and this is what exposed it: it compared the previous block's INK to the next block's BOX — lenient at one end, strict at the other. A line box sits above its glyphs by the half-leading, which is why those eight read 0px while the glyphs were 5px apart. It now measures ink to ink at both ends.
+
+**Corpus: 9 faults → 1.**
 
 ### The corpus check only ran because someone thought to run it
 

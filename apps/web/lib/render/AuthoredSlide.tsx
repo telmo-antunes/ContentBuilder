@@ -150,18 +150,20 @@ export function AuthoredSlide({
        * the type actually renders. Padding below it is empty by definition, so
        * excluding it is what makes the clearance real rather than nominal.
        */
-      const inkBottomOf = (c: HTMLElement): number => {
-        if (!c.textContent?.trim()) return c.offsetTop + c.offsetHeight;
+      const inkOf = (c: HTMLElement): { top: number; bottom: number } => {
+        const box = { top: c.offsetTop, bottom: c.offsetTop + c.offsetHeight };
+        if (!c.textContent?.trim()) return box;
         try {
           const range = document.createRange();
           range.selectNodeContents(c);
           const rect = range.getBoundingClientRect();
-          if (!rect.height) return c.offsetTop + c.offsetHeight;
+          if (!rect.height) return box;
           // Range rects are viewport-relative; the rest of this pass works in
           // the slide's own layout space, so convert through the slide's origin.
-          return Math.round(rect.bottom - el.getBoundingClientRect().top);
+          const origin = el.getBoundingClientRect().top;
+          return { top: Math.round(rect.top - origin), bottom: Math.round(rect.bottom - origin) };
         } catch {
-          return c.offsetTop + c.offsetHeight;
+          return box;
         }
       };
 
@@ -171,9 +173,18 @@ export function AuthoredSlide({
         .map((c) => ({
           top: c.offsetTop,
           bottom: c.offsetTop + c.offsetHeight,
-          // Where the type stops. Never below the box — a Range that misreports
-          // must not turn into a phantom collision.
-          inkBottom: Math.min(inkBottomOf(c), c.offsetTop + c.offsetHeight),
+          /**
+           * Where the type actually starts and stops.
+           *
+           * BOTH ends, because measuring one end as ink and the other as its box
+           * is lenient at the top and strict at the bottom. A line box sits
+           * above its glyphs by the half-leading, so eight shipped slides read a
+           * 0px gap between a wordmark and the eyebrow under it while the glyphs
+           * were 5px apart. Clamped inside the box either way — a Range that
+           * misreports must not invent a collision.
+           */
+          inkBottom: Math.min(inkOf(c).bottom, c.offsetTop + c.offsetHeight),
+          inkTop: Math.max(inkOf(c).top, c.offsetTop),
           /**
            * A RESERVED photo slot holds its geometry and paints nothing (see
            * `reservedSlotCss`). It has to keep counting for OVERFLOW — reserving
@@ -206,9 +217,9 @@ export function AuthoredSlide({
       let collide = false;
       for (let i = 1; i < painted.length; i += 1) {
         const prev = painted[i - 1]!;
-        // Ink to box: what the reader sees is the previous block's last glyph
-        // against the next block's painted edge.
-        if (painted[i]!.top - prev.inkBottom < MIN_CLEARANCE) { collide = true; break; }
+        // Ink to ink: what the reader sees is one block's last glyph against
+        // the next block's first.
+        if (painted[i]!.inkTop - prev.inkBottom < MIN_CLEARANCE) { collide = true; break; }
       }
 
       /**

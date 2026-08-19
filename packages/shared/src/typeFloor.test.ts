@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   ABSOLUTE_FLOOR_PX,
   DESCENDER_CLEARANCE_EM,
+  LOCKUP_GAP_PX,
   MEASURE_FLOOR_CH,
   TYPE_FLOOR_PX,
   enforceDescenderClearance,
+  enforceLockupGap,
   enforceMeasureFloor,
   enforceStoryReserve,
   enforceTypeFloor,
@@ -216,5 +218,42 @@ describe('enforceDescenderClearance', () => {
 
   it('does nothing to empty CSS', () => {
     expect(enforceDescenderClearance('')).toBe('');
+  });
+})
+
+describe('enforceLockupGap', () => {
+  const base =
+    '.cb-slide .logo-row{display:flex;gap:20px}' +
+    '.cb-slide .eyebrow{font-size:26px;letter-spacing:.28em}' +
+    '.cb-slide .headline{font-size:104px;margin-top:30px}';
+
+  it('puts air under the lockup when the recipe declared none', () => {
+    // Measured: eight shipped slides read a 5px ink gap on this exact pair,
+    // against a corpus median of 32px and a next-tightest of 14px. Neither
+    // class declares a vertical margin, so they sit flush.
+    const out = enforceLockupGap(base);
+    expect(out).toContain(`.cb-slide .logo-row + .eyebrow{margin-top:${LOCKUP_GAP_PX}px}`);
+    expect(out).toContain(base); // the brand's own CSS is untouched
+  });
+
+  it('leaves a class the brand already spaced deliberately', () => {
+    // `.headline` sets its own margin-top, so it is not in the selector.
+    expect(enforceLockupGap(base)).not.toContain('.logo-row + .headline');
+  });
+
+  it('does nothing to a brand with no lockup', () => {
+    const noLockup = '.cb-slide .eyebrow{font-size:26px}';
+    expect(enforceLockupGap(noLockup)).toBe(noLockup);
+  });
+
+  it('does nothing to empty CSS', () => {
+    expect(enforceLockupGap('')).toBe('');
+  });
+
+  it('only reaches the element DIRECTLY after the lockup', () => {
+    // A gap further down the slide is the brand's own rhythm, not ours.
+    const out = enforceLockupGap(base);
+    expect(out).toContain('.logo-row + .eyebrow');
+    expect(out).not.toMatch(/\.logo-row\s+\.eyebrow\{/); // descendant, not sibling
   });
 })
