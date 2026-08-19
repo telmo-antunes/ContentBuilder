@@ -2117,6 +2117,25 @@ export async function composeProject(
       o.onParsePrompt?.(u);
     },
   });
+  /**
+   * ARCHETYPES BEFORE COMPOSITION, NOT AFTER.
+   *
+   * `assignArchetypes` needs a role and whether the slide has a photo — both
+   * decided by the parse, neither by the composer. It ran afterwards only
+   * because that is where the render check needed it, which meant every slide
+   * was written without knowing the composition it was being written FOR, and
+   * that anything looking at a slide before this point was looking at a slide
+   * that does not ship: the archetype layer owns where a slide's leftover space
+   * lands, so the same markup reads 34% empty under one and 66% under none.
+   *
+   * Deciding it here is what makes an early check honest, and it is the half of
+   * that idea which pays for itself immediately.
+   */
+  const archetypes = assignArchetypes(
+    inputs.map((input) => ({ role: input.role, hasPhoto: input.photo === true })),
+  );
+  const invertAt = planInversion(archetypes, Boolean(recipe.surfaces?.inverse));
+
   // Slides are independent of one another, so compose them through a small
   // pool rather than serially — deck latency drops from Σ(slides) to roughly
   // ⌈n / pool⌉ × slide. Output order and the fail-the-batch error semantics of
@@ -2217,9 +2236,6 @@ export async function composeProject(
    * slide gets a photo slot, having been told how many pictures the brand
    * actually has. Waiting for the fill would mean waiting until after the check.
    */
-  const archetypes = assignArchetypes(
-    kept.map((input) => ({ role: input.role, hasPhoto: input.photo === true })),
-  );
   kept.forEach((_, i) => {
     const a = out[i]?.authored;
     if (a) a.archetype = archetypes[i];
@@ -2230,7 +2246,6 @@ export async function composeProject(
    * a composer looking at one slide cannot judge a deck's rhythm. `bg:'inverse'`
    * has existed as a per-slide opt-in the composer almost never took.
    */
-  const invertAt = planInversion(archetypes, Boolean(recipe.surfaces?.inverse));
   if (invertAt !== undefined) {
     const a = out[invertAt]?.authored;
     // Never overrides a surface the composer chose deliberately.
