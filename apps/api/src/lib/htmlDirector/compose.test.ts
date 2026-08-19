@@ -717,6 +717,21 @@ describe('copy that stops mid-thought', () => {
     expect(seen[0]!.unfinished).toEqual([]);
   });
 
+  it('does not accept a trailing colon as an ending', () => {
+    // A colon promises something after it. This shipped as "finished":
+    // "Tight beads: healthy. Flat, clinging beads:" — a comparison cut off
+    // before its second half. One string in 284 ends with a colon and it is
+    // that one, so there is no legitimate use to protect.
+    expect(flag({ headline: 'Tight beads: healthy. Flat, clinging beads:' })).toEqual([
+      'headline: starts a sentence it never finishes',
+    ]);
+    expect(flag({ body: 'What you get:' })).toEqual(['body: no terminal punctuation']);
+  });
+
+  it('still accepts a colon INSIDE a line that ends properly', () => {
+    expect(flag({ headline: 'Tight beads: healthy. Flat beads: not.' })).toEqual([]);
+  });
+
   it('ignores a single word, however it is punctuated', () => {
     expect(flag({ body: 'Extraction' })).toEqual([]);
     expect(flag({ headline: 'Deposits' })).toEqual([]);
