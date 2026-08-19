@@ -938,6 +938,11 @@ input[type='color'] {
 .studio-rgrid .k { font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); margin-bottom: 8px; }
 .studio-rgrid .v { font-size: 12px; color: var(--muted); line-height: 1.5; }
 .studio-sw { display: inline-block; width: 16px; height: 16px; border-radius: 4px; border: 1px solid var(--border-strong); vertical-align: middle; margin-right: 3px; }
+/* "Looks empty" is a softer badge than "Overflows": the slide renders fine, it
+   just has nothing in it. Same chip, quieter, so a real fit failure still reads
+   first when both could apply. */
+.studio-pcard .ovf.soft { opacity: .82; font-weight: 500; }
+
 /* An UNRELATED picture is a softer complaint than a contradiction: the deck is
    not wrong, nobody chose the photograph. Same shape, quieter edge, so the two
    read as different kinds of question rather than the same alarm twice. */
