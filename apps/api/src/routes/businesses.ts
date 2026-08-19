@@ -31,13 +31,25 @@ const updateSchema = z.object({
 /** Attach kit-status + project-count summaries used by the list/detail UI. */
 async function enrich(businesses: Array<Record<string, any>>) {
   const ids = businesses.map((b) => b._id);
-  const [approvedKits, draftIds, counts] = await Promise.all([
+  const [approvedKits, draftIds, counts, photoCounts] = await Promise.all([
     BrandKitModel.find({ businessId: { $in: ids }, status: 'approved' })
       .select('businessId colors logo recipe createdAt')
       .sort({ createdAt: -1 })
       .lean(),
     BrandKitModel.distinct('businessId', { businessId: { $in: ids }, status: 'draft' }),
     ProjectModel.aggregate([
+      { $match: { businessId: { $in: ids } } },
+      { $group: { _id: '$businessId', n: { $sum: 1 } } },
+    ]),
+    /**
+     * THE OTHER PRECONDITION FOR COMPOSING. Compose refuses an imageless deck
+     * unless it is asked for one, and this response carried no way to tell:
+     * `mediaAssets` is not a field on a business, so a caller checking readiness
+     * here got a silent false negative and had to know to try
+     * `/businesses/:id/media` instead. Reading it the obvious way came within
+     * one step of escalating "this brand has no photos" about a brand with 76.
+     */
+    MediaAssetModel.aggregate([
       { $match: { businessId: { $in: ids } } },
       { $group: { _id: '$businessId', n: { $sum: 1 } } },
     ]),
@@ -51,6 +63,7 @@ async function enrich(businesses: Array<Record<string, any>>) {
   }
   const draft = new Set(draftIds.map(String));
   const countByBiz = new Map(counts.map((c: { _id: unknown; n: number }) => [String(c._id), c.n]));
+  const photosByBiz = new Map(photoCounts.map((c: { _id: unknown; n: number }) => [String(c._id), c.n]));
   return businesses.map((b) => {
     const id = String(b._id);
     const kit = kitByBiz.get(id);
@@ -68,6 +81,8 @@ async function enrich(businesses: Array<Record<string, any>>) {
       hasDraftKit: draft.has(id),
       hasProfile: Boolean(b.profile?.category),
       projectCount: countByBiz.get(id) ?? 0,
+      /** How many of the brand's own photographs a deck could draw on. */
+      photoCount: photosByBiz.get(id) ?? 0,
       kit: kit ? { colors: kit.colors, logoUrl: kit.logo?.url } : undefined,
     };
   });

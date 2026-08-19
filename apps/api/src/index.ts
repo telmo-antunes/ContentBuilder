@@ -3,6 +3,7 @@ import { connectDb, disconnectDb } from './db';
 import { createApp } from './app';
 import { closeBrowser } from './lib/browser';
 import { failInterruptedVideoJobs } from './lib/videoJobs';
+import { sweepRenderScaffolds } from './lib/sweepScaffolds';
 
 async function main() {
   logConfigStatus();
@@ -13,6 +14,23 @@ async function main() {
   const interrupted = await failInterruptedVideoJobs().catch(() => 0);
   if (interrupted > 0) {
     console.log(`[api] marked ${interrupted} interrupted video job(s) as failed`);
+  }
+
+  /**
+   * Same reasoning, one line down: a render-check scaffold is disposed in a
+   * `finally` the process never reaches if a compose wedges, so anything still
+   * here at start-up is orphaned by definition. A leaked scaffold COPIES the
+   * recipe it was measuring, so it shows up beside real brands and quietly
+   * contaminates anything that samples them — two of the six most recent brand
+   * kits turned out to be leaks. The sweep script has existed all along and
+   * nothing ever ran it; a restart is the natural moment.
+   */
+  const swept = await sweepRenderScaffolds().catch(() => null);
+  if (swept?.businesses) {
+    console.log(
+      `[api] swept ${swept.businesses} orphaned render-check scaffold(s) ` +
+        `(${swept.kits} kit(s), ${swept.projects} project(s))`,
+    );
   }
 
   const app = createApp();

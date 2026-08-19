@@ -51,24 +51,6 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
-### Leaked `__render-check-*` scaffolds accumulate in the database
-
-- **Kind:** Defect
-- **Severity:** minor
-- **First seen:** 2026-08-19 — while identifying the two broken recipes
-- **What happened:** two of the six most recent brand kits were
-  `__render-check-*` scaffolds. A scaffold COPIES the recipe it measures, so a
-  leaked one reads as an extra brand with identical geometry — it contaminated
-  the recipe sample and made the ordering unstable between runs, because every
-  run of the measuring script created more.
-- **Why it matters:** beyond the measurement noise, these are orphaned business,
-  kit and project rows accruing in a real database. The hang finding already
-  noted each wedged compose leaks one; this shows they are not being swept.
-- **Direction:** `sweepRenderScaffolds.ts` exists — find out whether anything
-  actually runs it. A scaffold is disposable by construction, so the sweep could
-  run on API start, or the scaffold could carry a TTL index and expire itself,
-  which needs no scheduler at all.
-
 ### One integration test fails only inside a full-suite run
 
 - **Kind:** Defect
@@ -85,6 +67,17 @@ Rules that keep this file worth reading:
   likeliest cause is shared state between test files — a business, kit or
   counter left behind by whichever file ran before it. Worth checking whether
   the integration tests share one database without isolating per file.
+- **Seen again, same day, DIFFERENT test:** `projects > version history:
+  snapshot, restore, and the safety re-snapshot` failed in one full run and
+  passed both in that file alone and in the next full run. Two different tests
+  in the same file failing on different runs makes this a property of the FILE
+  (or of running it alongside 44 others), not of either test.
+- **Correction 2026-08-19:** my own direction was wrong. The integration suite
+  DOES isolate — its own `MongoMemoryServer` in `beforeAll`, and every collection
+  cleared in `beforeEach` — so it is not shared state between test files. The
+  failure was a `400`, i.e. the request was rejected on validation, and I have no
+  reproduction. Left open with the wrong explanation removed rather than a new
+  guess put in its place.
 
 ### `POST /compose` hung three times and persisted nothing — cause still unknown
 
@@ -132,91 +125,23 @@ Rules that keep this file worth reading:
   was launched from, not at the compose endpoint, and it is recorded here only
   so the next person does not mistake it for a reproduction.
 
-### The CRM payload's `caption` is a string; the API wants `{text, hashtags}`
+## Resolved
 
-- **Kind:** Friction
-- **Severity:** minor
-- **First seen:** 2026-08-12 — prepaid-packages-cash-flow
-- **What happened:** `builds/<slug>.instagram.json` carries `caption` as a bare
-  **string** and the hashtags separately as `hashtags: string[]`.
-  `createProjectSchema` expects `caption: {text, hashtags}`. Reading
-  `payload.caption.text` yields `undefined`, zod's `.default('')` accepts it
-  silently, and the project is created with an empty caption while the hashtags
-  — read from the sibling `payload.hashtags` — arrive intact. The result looks
-  exactly like a partial write on ContentBuilder's side.
-- **Correction:** I first logged this as `createProject` dropping
-  `caption.text`, and called it a regression against *The keyword and the
-  caption lived in different places*. **That was wrong** — a direct
-  `POST /projects` with `caption: {text: 'HELLO CAPTION TEXT', hashtags: [...]}`
-  round-trips perfectly. ContentBuilder is not at fault; the caller is, and the
-  shape mismatch is what makes the mistake easy.
-- **Why it matters:** the failure is silent on both sides, and the thing lost is
-  the caption the CRM spent real effort drafting in the house voice.
-- **Direction:** belongs on the CRM side or in the skill rather than here —
-  either emit `caption: {text, hashtags}` from `content:instagram`, or have the
-  skill map it explicitly. Making `captionSchema.text` required for create
-  would also turn the silent loss into a 400.
+### Leaked `__render-check-*` scaffolds accumulate in the database
+
+*Resolved 2026-08-19 (PR #63).* The sweep existed and nothing ran it. Its logic moved to `lib/sweepScaffolds.ts` and the API sweeps on start, beside the existing `failInterruptedVideoJobs()` — same reasoning, one line down: a scaffold is disposed in a `finally` the process never reaches if a compose wedges, so anything still there at start-up is orphaned by definition. The script stays as the way to look without restarting anything.
 
 ### Neither precondition for composing is visible on `GET /businesses/:id`
 
-- **Kind:** Friction
-- **Severity:** minor
-- **First seen:** 2026-08-12 — prepaid-packages-cash-flow
-- **What happened:** compose requires a design recipe and refuses an imageless
-  deck, but `GET /businesses/:id` carries **neither** — `mediaAssets` is absent
-  from the response and the kit it returns has no `recipe` key. The real answers
-  live at `/businesses/:id/media` (**76** assets) and `/businesses/:id/brandkit`
-  (recipe v2, under `.approved`). Reading the business response first, I
-  concluded the brand had no photos and no recipe, and came close to escalating
-  "this brand has no design recipe yet" — which the skill says to stop on.
-- **Correction:** I first logged this as the endpoint *reporting* `mediaAssets:
-  0`. It reports nothing; my own `(b.mediaAssets || []).length` turned an absent
-  field into a zero. The API is not lying — it is just not the place to look.
-- **Why it matters:** an agent checking readiness on the obvious endpoint gets a
-  false negative on both preconditions, and the mistake is silent.
-- **Direction:** cheapest fix is documentation — the skill should say to check
-  `/media` and `/brandkit` (`.approved.recipe`) rather than the business
-  response. Including counts on the business summary would also work.
+*Resolved 2026-08-19 (PR #63).* Half of it was already fixed — `hasRecipe` has been on the response for a while. The photo precondition was not, so the response now carries `photoCount`. Reading it the obvious way came within one step of escalating "this brand has no photos" about a brand with 76.
 
-### The review page names half the typography
+### The CRM payload's `caption` is a string; the API wants `{text, hashtags}`
 
-- **Kind:** Defect
-- **Severity:** cost me a fix
-- **First seen:** 2026-08-11 — `how-often-ceramic-coating`
-- **Corrected 2026-08-11:** reported originally as "the recipe defines no body
-  typeface". It does — `tokens.bodyFamily` is `Inter`, and `.cb-slide` sets
-  `font-family: var(--cb-body)`, so every line of body copy renders in it. The
-  *symptom* was real and the *diagnosis* was wrong, which is worth recording:
-  the fix would otherwise have gone to the recipe author instead of to the page.
-- **What happened:** the review page showed `Type: Playfair Display` and nothing
-  else, in both the recipe panel and the token strip. A reviewer reasonably
-  concluded no body face was set and that the sans on every slide was a browser
-  default.
-- **Why it matters:** a panel that names half the typography reads as the whole
-  of it. The wrong conclusion here would have cost a re-author of a brand whose
-  type was already correct.
-- **Fixed 2026-08-11** — both places now show the display and body faces.
+*Resolved 2026-08-19 — CarDetailScheduler PR #298, the caller's side as the correction said.* `content-instagram.mts` now emits `caption: {text, hashtags}`, keeping `hashtags` at the top level too because that is where the house rule lives. The same change refuses a brief with no beats and no verified claims: a payload carrying only a headline, a reader and a CTA composes into a deck of hooks with nothing under them, which happened twice and both times read as a compose problem rather than an empty brief.
 
 ### An image can still contradict its slide, and the checker only catches some of it
 
-- **Kind:** Gap
-- **Severity:** minor
-- **First seen:** 2026-08-11 — `how-often-ceramic-coating`, round 2
-- **What happened:** the new `image-copy-check` catches PRACTICE mismatches
-  reliably — a wash-bay photo against a deck that condemns automatic washes was
-  flagged 3 runs out of 3, with no false positives on the corrected deck across
-  2 runs. STATE mismatches are inconsistent: a photo of flat clinging droplets
-  under "water sheets off cleanly" was caught on one run and missed on the next.
-- **Why it matters:** the state case is the harder judgement (is this beading or
-  sheeting?) and it is also the more common one. An inconsistent check is worth
-  having, but it is not a guarantee, and the hand-back should not describe it as
-  one.
-- **Direction:** for state claims the copy usually names the state in words —
-  "tight", "flat", "clinging", "sheeting". Extracting that adjective and asking
-  the narrower question ("does this photo show tight beads or flat ones?") is
-  likely more reliable than asking for contradictions in general.
-
-## Resolved
+*Resolved 2026-08-19 (PR #63).* The state case is now worked through the WORD rather than by impression, as the direction suggested: quote the state adjective the copy uses ("tight", "flat", "clinging", "sheeting"), name its opposite, then ask the photo only that narrow question — and report nothing when the picture is ambiguous or shows neither. A slide whose copy asserts no state in words has no state mismatch to find, and the checker is told not to infer one.
 
 ### Descenders collide with the block below
 
