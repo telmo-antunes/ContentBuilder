@@ -51,23 +51,6 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
-### The review page renders a different slide from the one that exports
-
-- **Kind:** Gap
-- **Severity:** minor
-- **First seen:** 2026-08-19 — proving the slack badge
-- **What happened:** the same slide measures **9.7%** slack on the review page
-  and **65%** through the export path. Neither is wrong: the review render passes
-  `editing`, so an unfilled photo slot draws the "Add photo" placeholder and
-  occupies the space, while the export hides the slot and leaves the hole.
-- **Why it matters:** the page whose job is to show what will ship is showing
-  something else, in the one respect that decides whether a slide reads empty.
-  A reviewer looking at a placeholder cannot see the gap their reader will.
-- **Direction:** the "Needs photo" badge already says *"it exports as a blank
-  panel"*, which is the honest warning — so this is not urgent. If it is worth
-  closing, the phone view (which exists to show the deck as a reader meets it)
-  is the natural place to render with `editing` off.
-
 ### One integration test fails only inside a full-suite run
 
 - **Kind:** Defect
@@ -180,6 +163,22 @@ Rules that keep this file worth reading:
   so the next person does not mistake it for a reproduction.
 
 ## Resolved
+
+### The review page renders a different slide from the one that exports
+
+*Resolved 2026-08-19 (PR #80).* Phone view now renders with `editing` off, exactly as the export does, so an unfilled photo slot is hidden rather than drawn as an "Add photo" placeholder. That view exists to show the deck as a reader meets it, and it was showing a slide the reader never sees in the one respect that decides whether it looks empty.
+
+Measured on the same slide, same moment:
+
+| | slot | slack |
+|---|---|---|
+| strip view | placeholder drawn | 9.7% |
+| phone view | `display: none` | **43.7%** |
+| the export path (`verifyDeck`) | hidden | **44%** |
+
+Phone view and the export now agree to within rounding, so the slack badge tells the truth there.
+
+The strip keeps the affordance, deliberately — it is where photos are attached, and the toggle is one click away. `editing` controls exactly one thing in `AuthoredSlide` (the empty-slot CSS), so the change is that narrow.
 
 ### Removing a photo leaves a hole nothing re-checks
 
