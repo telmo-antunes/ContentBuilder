@@ -48,7 +48,7 @@ import { SLACK_LIMIT, maxSlackFor as maxSlackForRole } from '@contentbuilder/sha
 import { config } from '../../config';
 import { topLevelBlocks, type SlideBlock } from './dedupeBlocks';
 import { variantIndexOf, type ComposeSlideInput } from './prompt';
-import { saysTheSameThing } from './visionRepair';
+import { keepsThePoint, saysTheSameThing } from './visionRepair';
 
 // ── Public shape ────────────────────────────────────────────────────────────
 
@@ -994,6 +994,8 @@ export interface DeckCheckOptions extends CheckOptions {
    * the tests can run the whole pass without a vision model.
    */
   repairByLooking?: LayoutRepairContext['repairByLooking'];
+  /** Ask the copywriter for more, given what the render measured. */
+  rewriteForFault?: LayoutRepairContext['rewriteForFault'];
 }
 
 export interface DeckCheckResult {
@@ -1139,6 +1141,7 @@ export async function renderCheckDeck(
             // double in a test implements `measure` alone and never reaches it.
             ...(probe.shoot ? { shoot: (html: string) => probe.shoot!(i, html) } : {}),
             ...(opts?.repairByLooking ? { repairByLooking: opts.repairByLooking } : {}),
+            ...(opts?.rewriteForFault ? { rewriteForFault: opts.rewriteForFault } : {}),
           })
             .then((r) => ({ index: i, ...r }))
             .catch((err) => {
@@ -1257,6 +1260,17 @@ export interface LayoutRepairContext {
     faults: readonly string[];
     role?: string;
   }) => Promise<{ html: string; change: string } | null>;
+  /**
+   * Ask the copywriter for MORE, having been told what the render measured.
+   *
+   * The rung that looks at a slide can only rearrange it, because it is
+   * forbidden from touching the words — and the fault that costs the most is a
+   * slide with too little ON it, which no rearrangement fixes. This is the
+   * hook that closes the loop at the writing end: the verdict goes back to the
+   * step that is allowed to write, and it draws on the same material the deck
+   * was briefed from. Returns fresh copy, or null when it has nothing to add.
+   */
+  rewriteForFault?: (input: ComposeSlideInput, faults: readonly string[]) => Promise<string | null>;
 }
 
 /** Everything a verdict says is wrong, in the words a human would use. */
@@ -1337,6 +1351,41 @@ export async function repairLayout(
    * the renderer cannot re-measure is left exactly as it was.
    */
   let aiCalls = 0;
+
+  /**
+   * ── Say more ──────────────────────────────────────────────────────────────
+   *
+   * Tried BEFORE the rearrangement rung, because it addresses the cause rather
+   * than the symptom. A slide measuring 69% empty does not need its blocks
+   * moved; it needs another sentence, and only the copywriter may write one.
+   *
+   * Only for `tooLittle` faults. A slide that OVERFLOWS has the opposite
+   * problem and asking for more copy would make it worse, which is why this
+   * rung reads the fault before it acts rather than firing on any complaint.
+   */
+  // Requires a headline to anchor to — see `keepsThePoint`. A slide without one
+  // has nothing to hold it to its own subject, so it is left alone.
+  if (tooLittle(faults) && !tooMuch(faults) && ctx.rewriteForFault && input.parts.headline) {
+    const richer = await ctx.rewriteForFault(input, faults).catch(() => null);
+    aiCalls += 1;
+    if (richer && !keepsThePoint(input.parts.headline, richer)) {
+      // Measuring better is not enough. Asked to fill an empty slide without
+      // being told what it said, the copywriter returned the deck's COVER —
+      // lockup, cover headline and all. It measured beautifully.
+      console.warn('[render-check] the rewrite lost the slide\'s headline — kept the original');
+    } else if (richer) {
+      const after = await ctx.measure(richer);
+      const next = layoutFaults(after, maxHeadlineLines, input.role);
+      if (after.state !== 'unknown' && next.length < faults.length) {
+        steps.push('said-more');
+        current = richer;
+        faults = next;
+      } else {
+        console.warn('[render-check] the rewrite did not measure better — kept the original');
+      }
+    }
+  }
+
   if (faults.length && ctx.shoot && ctx.repairByLooking) {
     const image = await ctx.shoot(current).catch(() => null);
     if (image) {

@@ -34,9 +34,17 @@ import type { ComposeSlideInput } from '../lib/htmlDirector/prompt';
       role: s.authored?.role,
       ...(s.authored?.archetype ? { archetype: s.authored.archetype } : {}),
     }));
+  /**
+   * The parts matter. Reading only the stored HTML and passing `parts: {}` is
+   * what let the rewrite rung return the deck's cover: with nothing to anchor
+   * to, "fill this slide" is read as "write a slide". The headline is recovered
+   * from the markup so the rung has the slide's own point in hand.
+   */
+  const headlineOf = (html: string) =>
+    /<[^>]*class="[^"]*\bheadline\b[^"]*"[^>]*>([\s\S]*?)<\//.exec(html)?.[1]?.replace(/<[^>]+>/g, '').trim();
   const inputs = slides.map((s) => ({
     role: (s.role ?? 'statement') as ComposeSlideInput['role'],
-    parts: {},
+    parts: { ...(headlineOf(s.html) ? { headline: headlineOf(s.html) } : {}) },
     format: project.format,
     index: 0,
   })) as ComposeSlideInput[];
@@ -44,6 +52,31 @@ import type { ComposeSlideInput } from '../lib/htmlDirector/prompt';
   console.log(`checking ${slides.length} slides with the vision rung wired\n`);
   const out = await renderCheckDeck(recipe, inputs, slides, project.format, {
     repairByLooking: (args) => repairByLooking(recipe, args),
+    // The writing end of the loop, wired the way compose wires it.
+    ...(process.argv.includes('--rewrite')
+      ? {
+          rewriteForFault: async (input, faults) => {
+            const gap = faults.find((f) => f.startsWith('slack'));
+            if (!gap) return null;
+            const { parseSlideDirection, composeSlide } = await import('../lib/htmlDirector/compose');
+            const direction =
+              `This slide rendered with ${gap.replace('slack ', '')} of the frame empty — it reads as unfinished. ` +
+              'Give it the substance it is missing, taking it ONLY from the material this post was briefed with: ' +
+              'a body line that earns its place, or an enumeration if the material is a set of things. ' +
+              'Keep the headline and the point exactly as they are. Invent nothing.';
+            const richer = await parseSlideDirection(recipe, direction, {
+              role: input.role,
+              index: input.index,
+              post: { idea: process.env.CB_IDEA ?? '', says: input.parts },
+            });
+            return (await composeSlide(recipe, richer, { renderCheck: false })).html;
+          },
+        }
+      : {}),
+  });
+  out.slides.forEach((s, i) => {
+    const t = s.html.replace(/<[^>]+>/g, ' | ').replace(/\s+/g, ' ').trim();
+    console.log(`  slide ${i + 1}: ${t.slice(0, 120)}`);
   });
   console.log(`measured ${out.measured}, repaired ${out.repaired}, ai calls ${out.aiCalls}`);
   out.notes.forEach((n) => console.log(`  ${n}`));

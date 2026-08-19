@@ -2251,6 +2251,36 @@ export async function composeProject(
        * spend a vision call — the eval, the tests — simply does not pass it.
        */
       repairByLooking: (args) => repairByLooking(recipe, args),
+      /**
+       * THE LOOP, CLOSED AT THE WRITING END.
+       *
+       * A slide the gates call empty is a copy problem, not a layout one, and
+       * the composer cannot fix it — it may only arrange what it was given.
+       * This hands the verdict back to the copywriter, with the post's own
+       * brief and what the slide says today, and asks for the missing line.
+       *
+       * `parseSlideDirection` is the same helper the Studio's per-slide
+       * rewrite uses, so this inherits its rules: the material is the brief,
+       * the budgets still apply, and nothing may be invented. The result is
+       * typeset through the ordinary composer with the render check OFF, so a
+       * repair can never recurse.
+       */
+      rewriteForFault: async (input, faults) => {
+        const gap = faults.find((f) => f.startsWith('slack'));
+        if (!gap) return null;
+        const direction =
+          `This slide rendered with ${gap.replace('slack ', '')} of the frame empty — it reads as unfinished. ` +
+          'Give it the substance it is missing, taking it ONLY from the material this post was briefed with: ' +
+          'a body line that earns its place, or an enumeration if the material is a set of things. ' +
+          'Keep the headline and the point exactly as they are. Invent nothing.';
+        const richer = await parseSlideDirection(recipe, direction, {
+          ...o,
+          role: input.role,
+          index: input.index,
+          post: { idea: brief?.idea ?? idea, says: input.parts },
+        });
+        return (await composeSlide(recipe, richer, { ...o, renderCheck: false })).html;
+      },
     });
     checked.slides.forEach((s, i) => {
       out[i]!.authored = { ...out[i]!.authored, html: s.html };
