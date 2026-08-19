@@ -51,126 +51,6 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
-### One integration test fails only inside a full-suite run
-
-- **Kind:** Defect
-- **Severity:** minor
-- **First seen:** 2026-08-19 — while verifying the story reserve
-- **What happened:** `routes.integration.test.ts > tweak signals → kit suggestion
-  > three smaller-headline presses …` failed with `expected 400 to be 200` in one
-  full `vitest run`, then passed in that same file run alone and in two
-  consecutive full runs afterwards. Nothing in the change under test touched
-  that route.
-- **Why it matters:** a suite that fails once in a while trains you to re-run
-  instead of read, which is exactly how a real regression gets waved through.
-- **Direction:** a 400 suggests the request was rejected on validation, so the
-  likeliest cause is shared state between test files — a business, kit or
-  counter left behind by whichever file ran before it. Worth checking whether
-  the integration tests share one database without isolating per file.
-- **Seen again, same day, DIFFERENT test:** `projects > version history:
-  snapshot, restore, and the safety re-snapshot` failed in one full run and
-  passed both in that file alone and in the next full run. Two different tests
-  in the same file failing on different runs makes this a property of the FILE
-  (or of running it alongside 44 others), not of either test.
-- **Correction 2026-08-19:** my own direction was wrong. The integration suite
-  DOES isolate — its own `MongoMemoryServer` in `beforeAll`, and every collection
-  cleared in `beforeEach` — so it is not shared state between test files. The
-  failure was a `400`, i.e. the request was rejected on validation, and I have no
-  reproduction. Left open with the wrong explanation removed rather than a new
-  guess put in its place.
-- **2026-08-19 — hunted, not caught. Two hypotheses ruled OUT.**
-  - *Shared state between test files* — no. The suite isolates properly: its own
-    `MongoMemoryServer` in `beforeAll`, every collection cleared in `beforeEach`.
-  - *Machine load* — no. The three observed failures all happened while Puppeteer
-    was rendering the 79-slide corpus against the same machine, which looked
-    like a clean explanation. Reproducing it deliberately — the full suite three
-    times WHILE the render corpus ran — passed 3/3.
-  - Twelve clean runs in total: 3 serial (`--no-file-parallelism`), 6 parallel,
-    3 under heavy concurrent load. Three failures earlier the same day, each a
-    DIFFERENT test in this one file.
-- **What was done instead:** every status assertion in the file now reports what
-  the server actually replied. `expected 400 to be 200` is precisely the
-  information needed to diagnose this, minus the part that would help; the next
-  occurrence will carry the response body with it.
-- **Fourth distinct test, 2026-08-19:** `tweak signals → kit suggestion >
-  resizes a headline whose class attribute does not start with \`headline\``
-  failed one full run, then passed the file alone and three more full runs.
-  Four different tests in this one file now. I did NOT capture the message, so
-  I cannot say whether it hit one of the two `expectStatus` assertions (which
-  would have printed the response body) or the content assertion after them —
-  worth capturing next time before re-running, because re-running destroys the
-  evidence.
-- **2026-08-19 — the diagnostic fired, and it is not what either hypothesis
-  predicted.** `version history: snapshot, restore` failed at
-  `POST /projects/:id/versions` with **404 and a completely empty body**.
-  - The app's own 404 sends `{error:'not found'}`. Express's default sends
-    `Cannot POST /path`. **This sent neither.**
-  - The file has no `.concurrent`, and `createApp()` is synchronous with no
-    deferred route mounting, so "the routes were not mounted yet" does not
-    explain it either.
-  - A 404 with no body at all points at the response never being written by any
-    handler — which is a different kind of failure from a route rejecting a
-    request, and worth chasing from that end.
-- The assertion now also records the request line and the content-type, which is
-  what separates "no route matched" from "a route matched and answered 404".
-- **2026-08-19, second and third firings — the sharpest evidence yet.** With the
-  request line and content-type recorded:
-
-  ```
-  expected status 200, got 404 on PATCH /brandkits/<id> [text/html] — (empty body)
-  expected status 201, got 404 on POST  /projects/<id>/versions      — (empty body)
-  ```
-
-  **`text/html` is the finding.** The app's own 404 sends JSON
-  (`{error:'not found'}`) and every ApiError goes through the JSON error
-  handler. `text/html` is Express's own finalhandler, which runs only when NO
-  ROUTE MATCHED — yet `brandKitRouter.patch('/:kitId')` demonstrably exists and
-  is mounted at `/brandkits`. So the request reached an app that did not have
-  the route on it.
-- **Ruled out, with reasons:**
-  - *Shared state between files* — the suite has its own `MongoMemoryServer` and
-    clears every collection per test.
-  - *Machine load* — reproduced deliberately under a full Puppeteer corpus
-    render, 3/3 clean.
-  - *The rate limiter* — its `hits` map is created INSIDE `createApp()`, so it
-    cannot accumulate across app instances.
-- **The one structural oddity left:** `const app = () => createApp()` builds a
-  whole new Express app for EVERY request in the file — 60-odd of them — and
-  supertest binds a fresh ephemeral port to each. "The request reached an app
-  without the route" fits that shape better than anything else tried.
-  - Consolidating to one app per file is the obvious experiment, and it is NOT
-    obviously safe: the rate-limiting test needs a limiter that accumulates, and
-    the limiter lives inside the app. A shared app would let those hits leak
-    into every other test in the file. Whoever tries it should give the
-    rate-limit test its own app rather than sharing one everywhere.
-- **Seven firings now, on seven different tests in this one file.** Every one
-  passed on its own and on the next full run.
-- **2026-08-19 — the one-app-per-file experiment, MEASURED.** Six consecutive
-  runs of this file alone, each way:
-
-  | | runs that failed |
-  |---|---|
-  | an Express app per request (as it was) | **5 of 6** |
-  | one app for the file | **1 of 6** |
-
-  Sixty short-lived Express apps per file, each bound to its own ephemeral port
-  by supertest, is doing most of the damage. Shipped (PR #82): the app holds no
-  per-test state — `beforeEach` clears every collection — except the rate
-  limiter, whose `hits` map lives inside `createApp`, so the rate-limiting test
-  builds its own. The rest of the file makes 9 rate-limited POSTs against a
-  window of 30.
-- **NOT fixed, and the remaining failure has the same signature.** The one
-  failing run of six was the rate-limiting test reporting `expected 400 to be
-  429` — because its `POST /projects` came back without an `_id`, so thirty
-  requests later it was posting to `/projects/undefined/caption`. That is the
-  same symptom as every other firing: **a request whose response is not the one
-  its route should have produced.** Fewer apps makes it rarer; it does not
-  explain it.
-- The rate-limiting test now asserts its own setup, so the next occurrence says
-  "the create failed" instead of "expected 400 to be 429" thirty requests later.
-- **Next person: do not re-run the two experiments above.** Read the failure
-  BEFORE re-running — re-running destroys the evidence.
-
 ### `POST /compose` hung three times and persisted nothing — cause still unknown
 
 - **Kind:** Defect
@@ -218,6 +98,26 @@ Rules that keep this file worth reading:
   so the next person does not mistake it for a reproduction.
 
 ## Resolved
+
+### One integration test fails only inside a full-suite run — CAUSE FOUND
+
+*Resolved 2026-08-19 (PR #83).* `request(app)` makes supertest call `app.listen(0)` and close it again for **every request**. This file makes sixty-odd, and vitest runs it beside forty-four other files — so the suite was opening and tearing down thousands of ephemeral ports. Handing supertest a server that is already listening, and that it therefore does not own, removes the churn entirely.
+
+Measured, six runs of the file each way, then twenty more to confirm:
+
+| | runs that failed |
+|---|---|
+| an Express app per request | 5 of 6 |
+| one app, still one server per request | 1 of 6 |
+| **one app and one server for the file** | **0 of 6, then 0 of 10, then 0 of 4 full-suite runs** |
+
+That is 20 consecutive clean runs including the parallel full-suite condition it only ever failed in.
+
+**Why it looked so strange.** Every symptom was a request receiving a response that was not its own: a 404 whose content-type was `text/html` — Express's finalhandler, so no route matched — on routes that demonstrably exist, and creates returning a body with no `_id`. That is what socket churn on that scale produces, and it is why no amount of reading the routes explained it.
+
+**What did NOT explain it, each ruled out with a reason rather than left hanging:** shared state between files (the suite has its own `MongoMemoryServer` and clears every collection per test); machine load (reproduced deliberately under a full Puppeteer corpus render, 3/3 clean); the rate limiter (its `hits` map is created inside `createApp`, so it cannot accumulate across instances).
+
+Seven firings, seven different tests, one file, and none of them was about the test that failed.
 
 ### The review page renders a different slide from the one that exports
 

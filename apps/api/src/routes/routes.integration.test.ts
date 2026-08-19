@@ -58,6 +58,7 @@ vi.mock('@anthropic-ai/sdk', () => ({
   },
 }));
 
+import type { Server } from 'node:http';
 import { createApp } from '../app';
 import { modelFor } from '../lib/ai';
 import { VideoExportCancelled, type IsCancelled } from '../lib/videoExporter';
@@ -85,14 +86,31 @@ let mongod: MongoMemoryServer;
  * the window of 30.
  */
 const sharedApp = createApp();
-const app = () => sharedApp;
+
+/**
+ * ONE LISTENING SERVER for the file, too.
+ *
+ * `request(app)` makes supertest call `app.listen(0)` and close it again for
+ * EVERY request — sixty ephemeral ports opened and torn down per file, times
+ * however many files vitest runs at once. Sharing the app removed the cost of
+ * building sixty Express apps; it did not remove that churn, because supertest
+ * binds per `request()` call whatever it is given.
+ *
+ * Handing it a server it does not own removes the churn as well: supertest uses
+ * an already-listening server as-is. Whether the churn is what corrupts a
+ * response is exactly what this measures.
+ */
+let server: Server;
+const app = () => server;
 
 beforeAll(async () => {
   mongod = await MongoMemoryServer.create();
   await mongoose.connect(mongod.getUri());
+  server = sharedApp.listen(0);
 }, 120_000);
 
 afterAll(async () => {
+  await new Promise<void>((resolve) => server?.close(() => resolve()));
   await mongoose.disconnect();
   await mongod?.stop();
 });
