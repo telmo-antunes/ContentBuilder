@@ -35,6 +35,8 @@ interface Sample {
   role: string;
   html: string;
   recipe: BrandRecipe;
+  /** The size each slot's photograph actually occupies on the stored slide. */
+  slotSizes: Record<string, { shape?: string; size?: string }>;
 }
 
 /**
@@ -98,17 +100,30 @@ async function writeBaseline(labels: string[]): Promise<void> {
     for (const p of projects) {
       if (String(p.title ?? '').startsWith('__')) continue; // render-check scaffolds
       const recipe = recipeByBusiness.get(String(p.businessId)) ?? fallback;
-      (p.slides ?? []).forEach((s: { authored?: { html?: string; role?: string } }, i: number) => {
-        if (s.authored?.html) {
+      type StoredPhoto = { placement?: string; slot?: string; shape?: string; size?: string };
+      (p.slides ?? []).forEach(
+        (s: { authored?: { html?: string; role?: string }; photos?: StoredPhoto[] }, i: number) => {
+          if (!s.authored?.html) return;
+          /**
+           * Carry the REAL slot geometry through. Without it every slot is
+           * reserved at the default size, which over-reports precisely the
+           * slides someone has already hand-tuned: one shipped slide renders
+           * clean at `wide`/`sm` and was flagged as overflowing for that reason.
+           */
+          const slotSizes: Record<string, { shape?: string; size?: string }> = {};
+          for (const ph of s.photos ?? []) {
+            if (ph.placement === 'slot' && ph.slot) slotSizes[ph.slot] = { shape: ph.shape, size: ph.size };
+          }
           samples.push({
             title: String(p.title ?? name),
             index: i,
             role: s.authored.role ?? '?',
             html: s.authored.html,
             recipe,
+            slotSizes,
           });
-        }
-      });
+        },
+      );
     }
   }
 
@@ -123,7 +138,11 @@ async function writeBaseline(labels: string[]): Promise<void> {
   // One scaffold per recipe keeps the page pool warm and the styling honest.
   for (const recipe of new Set(samples.map((s) => s.recipe))) {
     const mine = samples.filter((s) => s.recipe === recipe);
-    const probe = await openRenderProbe(recipe, '1080x1350', mine.map((m) => ({ html: m.html, role: m.role })));
+    const probe = await openRenderProbe(
+      recipe,
+      '1080x1350',
+      mine.map((m) => ({ html: m.html, role: m.role, slotSizes: m.slotSizes })),
+    );
     try {
       const verdicts = await probe.measure(mine.map((m, i) => ({ index: i, html: m.html })));
       verdicts.forEach((v, i) => {

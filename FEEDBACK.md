@@ -51,29 +51,6 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
-### The corpus check reserves photo slots at DEFAULT size
-
-- **Kind:** Gap
-- **Severity:** minor
-- **First seen:** 2026-08-19 — after fixing smoke-odour-removal slide 4
-- **What happened:** the slide renders clean in production (`overflow: false`,
-  measured with its real photograph) and the corpus check still reports it as
-  overflowing. The check is right about what it measures and wrong about what
-  ships: a scaffold carries no media, so `resolveSlidePhotos` discards the slide's
-  photo entry, the slot is reserved at the DEFAULT geometry, and this photo is
-  `shape: wide, size: sm` — deliberately smaller than default.
-- **Why it matters:** it is a false positive on exactly the slides someone has
-  already hand-tuned, which is the population most likely to be re-checked. One
-  of 79 today, but it will grow with every photo anyone shrinks.
-- **Why the default is still right at COMPOSE time:** no photo has been chosen
-  then, so assuming the full-size slot is the honest conservative call. The two
-  cases genuinely differ.
-- **Direction:** the corpus check reads each slide's stored `photos` already —
-  it needs to carry `shape`/`size` through to the reserve. `resolveSlidePhotos`
-  drops a photo with no resolvable asset (`if (!asset?.url) continue`), so the
-  geometry has to reach `reservedSlotCss` some other way than through a
-  photo record: probably a slot-geometry hint on the scaffold's slide.
-
 ### One integration test fails only inside a full-suite run
 
 - **Kind:** Defect
@@ -173,6 +150,16 @@ Rules that keep this file worth reading:
   so the next person does not mistake it for a reproduction.
 
 ## Resolved
+
+### The corpus check reserves photo slots at DEFAULT size
+
+*Resolved 2026-08-19 (PR #71).* `resolveSlidePhotos` used to drop a photo whose asset it could not resolve, taking the slot's geometry with it — so a scaffold, which carries no media, reserved every slot at the default size and over-reported any slide whose photograph had been deliberately shrunk. It now keeps the geometry and skips only the image, which is exactly what a reserve needs: the space a picture will take, without a picture.
+
+The scaffold writes photo records with a dangling `mediaAssetId`. That is honest rather than a trick — a scaffold really does have no media, the schema requires the field, and the resulting state is the same one a slide reaches when an asset is deleted from the library while the slide still points at it. That case now holds its space instead of collapsing, which is a small fix in its own right.
+
+**Corpus: 0 faults of 79.** The baseline is empty.
+
+The default is still what a reserve falls back to when a slide records no geometry, and that remains right at compose time: no photograph has been chosen yet, so assuming the full-size slot is the conservative call. The two cases genuinely differ, which is why this needed the geometry carried rather than the default changed.
 
 ### One shipped slide has 33px more content than its canvas
 
