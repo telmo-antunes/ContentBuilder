@@ -260,6 +260,15 @@ export const TOUCHPOINT_REGISTRY: Record<TouchpointId, Touchpoint> = {
           'The extra height now goes into air and scale, which is what a 9:16 canvas is for.',
         ],
       },
+      {
+        version: 9,
+        date: '2026-08-19',
+        summary: 'A line that stops mid-sentence is caught and rewritten.',
+        improves: [
+          'A deck shipped "Enzymes break the source. Fragrance covers" — well inside its budget, so nothing clamped it and nothing noticed. Copy that stops mid-thought is now sent back to be finished.',
+          'A headline may still be a fragment, which is how most of them read. What it may not do is end on a word that leaves the phrase open.',
+        ],
+      },
     ],
   },
 

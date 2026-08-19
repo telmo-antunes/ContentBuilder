@@ -61,7 +61,7 @@ vi.mock('../ai', () => {
   };
 });
 
-const { composeSlide, composeProject, parseForCompose, composeBudgetsFor } = await import('./compose');
+const { composeSlide, composeProject, parseForCompose, composeBudgetsFor, unfinishedProse } = await import('./compose');
 type LayoutCheckSummary = import('./compose').LayoutCheckSummary;
 type ComposeProgress = import('./compose').ComposeProgress;
 const { detailMastersRecipe } = await import('./recipes');
@@ -630,6 +630,56 @@ describe('format-aware parse', () => {
     expect(story).toEqual(post);
     // …and the square still tightens, which measurement never contradicted.
     expect(composeBudgetsFor('1080x1080').headline).toBeLessThan(post.headline);
+  });
+});
+
+describe('copy that stops mid-thought', () => {
+  const slide = (parts: Record<string, unknown>, role = 'statement') => ({ role, parts }) as never;
+  const flag = (parts: Record<string, unknown>, role?: string) =>
+    unfinishedProse([slide(parts, role)]).map((u) => `${u.label}: ${u.reason}`);
+
+  it('catches the line that actually shipped', () => {
+    // 41 characters against a 150 budget, so nothing clamped it and nothing
+    // noticed. The copywriter simply stopped.
+    expect(flag({ body: 'Enzymes break the source. Fragrance covers' })).toEqual([
+      'body: no terminal punctuation',
+    ]);
+  });
+
+  it('catches a headline left open on a dangling word', () => {
+    expect(flag({ headline: 'Cut no-shows by' })).toEqual(['headline: ends on a dangling word']);
+  });
+
+  it('leaves a sentence that legitimately ends on a particle', () => {
+    // English ends sentences on particles all the time. Without the
+    // terminal-punctuation guard this rule fired on 12 good lines out of 13.
+    expect(flag({ body: 'Every redemption tracked. Every session accounted for.' })).toEqual([]);
+    expect(flag({ body: 'Some jobs you quote yourself into.' })).toEqual([]);
+    expect(flag({ body: 'It does not have to be.' })).toEqual([]);
+  });
+
+  it('lets a headline be a fragment, because 34 of 93 shipped ones are', () => {
+    expect(flag({ headline: 'The job that comes back' })).toEqual([]);
+    expect(flag({ headline: 'Read the water, not the calendar' })).toEqual([]);
+  });
+
+  it('never judges a label — an eyebrow, a CTA or a handle is not a sentence', () => {
+    // "Reframe this" and "What a package is" are real eyebrows. Checking them
+    // produced nothing but false alarms.
+    expect(flag({ eyebrow: 'Reframe this', cta: 'Book a slot', handle: '@detailmasters' })).toEqual([]);
+  });
+
+  it('holds a row note to prose, and a row item to a fragment', () => {
+    expect(flag({ rows: [{ text: 'Extraction', note: 'Pulls back out what you put in' }] })).toEqual([
+      'rows[0].note: no terminal punctuation',
+    ]);
+    // The row's own text is scanned, not read — a fragment is correct there.
+    expect(flag({ rows: [{ text: 'Saturated foam holds odour deep' }] })).toEqual([]);
+  });
+
+  it('ignores a single word, however it is punctuated', () => {
+    expect(flag({ body: 'Extraction' })).toEqual([]);
+    expect(flag({ headline: 'Deposits' })).toEqual([]);
   });
 });
 

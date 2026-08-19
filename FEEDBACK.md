@@ -151,6 +151,24 @@ Rules that keep this file worth reading:
 
 ## Resolved
 
+### Nothing catches copy that stops mid-sentence
+
+*Resolved 2026-08-19 (PR #74, Copywriter v9).* A deck shipped `"Enzymes break the source. Fragrance covers"` — 41 characters against a 150 budget, so no clamp touched it and no gate looked at it. The recorded parse output confirmed the copywriter wrote it that way rather than the code cutting it.
+
+`unfinishedProse` now joins the budget, verbatim and repeated-slide complaints in the one corrective re-parse, and it says so plainly: *finish the sentence — do not simply add a full stop to what is there*. Nothing is repaired deterministically, because the missing words are the point.
+
+Two rules, both measured against every string in every stored deck before being trusted:
+
+| part | rule | evidence |
+|---|---|---|
+| body, row note | must end with terminal punctuation | 50 of 51 bodies, 13 of 13 notes already do |
+| headline, tagline, quote, row text | may be a fragment, but must not end on a dangling word | 34 of 93 headlines carry no full stop by design |
+| eyebrow, cta, handle | never checked | they are labels — checking them produced only false alarms |
+
+The terminal-punctuation guard on the dangling-word rule is what makes it usable: English ends sentences on particles constantly ("paid for.", "what you put in.", "it does not have to be."), and without the guard the rule fired on 12 good lines out of 13. With it, `validateProseCheck.ts` finds **2 hits in 174 shipped strings** — one real truncation and one borderline noun-phrase list.
+
+The dangling-word list is now shared with `dropDanglers`, which asks the same question of copy the CLAMP cut. One list, one meaning.
+
 ### The descender floor was sized against a neighbour that had its own margin
 
 - **Kind:** Defect
