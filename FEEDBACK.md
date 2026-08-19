@@ -51,6 +51,59 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
+### The image checker cannot see an irrelevant picture, only a contradictory one
+
+- **Kind:** Gap
+- **Severity:** cost me a fix
+- **First seen:** 2026-08-19 — the rebuilt smoke-odour deck
+- **What happened:** two of three photographs on a finished deck were wrong, and
+  `image-copy-check` returned `{"contradictions":[],"checked":3}`.
+  - Slide 6, **"Ozone — read the manual"**, carried a CRM screenshot of the
+    prepaid-packages list: customer names, session counts, expiry dates.
+  - Slide 3, **"The headliner — holds the most, ruins the fastest"**, carried a
+    photo of a tool extracting a SEAT — the one surface the post says never to
+    extract like a seat.
+- **Why the checker passed them:** by design. Its prompt says *"NOT a
+  contradiction, and never report it: a photo that is merely generic,
+  decorative, or loosely related"*. A CRM screenshot beside "Ozone" is not a
+  contradiction, it is a non-sequitur — and irrelevance is exactly what
+  `fillSlotsFromPool` produces when it auto-fills from an 80-photo brand library
+  that contains no picture of the thing this slide is about.
+- **I made this worse by trusting it.** I reported "both photos checked, no
+  contradictions" as though the checker had validated the pairing. It had
+  answered a narrower question than the one I needed, and I only found out by
+  opening the files.
+- **Why it matters:** the auto-fill is the point where a deck acquires pictures
+  nobody chose, and the only check that looks at pictures is the one that cannot
+  judge them. A product screenshot with customer names on a public post is worse
+  than a bad crop.
+- **Direction:** the checker already receives every slide's copy. A second, much
+  easier question would cover this: *does this photograph show what this slide is
+  about — yes, no, or unrelated?* Irrelevance is a far simpler judgement than
+  contradiction, and it is the one the auto-fill needs. Failing that,
+  `fillSlotsFromPool` should not fill a slot it has no relevant candidate for —
+  an empty slot is hidden at render, which is honest.
+
+### Removing a photo leaves a hole nothing re-checks
+
+- **Kind:** Gap
+- **Severity:** cost me a fix
+- **First seen:** 2026-08-19 — the same deck
+- **What happened:** deleting the two wrong photographs took both slides from a
+  clean verdict to **65% slack** — a `feature` role, whose limit is 50%. The
+  layout gates run during COMPOSE; a person editing photos afterwards passes
+  through none of them. Composing had reserved those slots, so slack read fine
+  at the time and only jumped once they were emptied.
+- **Why it matters:** a photo slide with no photo is the emptiest slide the tool
+  can produce, and removing a bad picture is a completely ordinary edit.
+- **Direction:** the review page already renders every slide live and already
+  reads `overflow` off the DOM for its badge. `slack` and `collide` are
+  published on the same element by the same measurement — surfacing them costs
+  one more attribute read, and would catch this at the moment it is caused.
+- **What was done here:** both slides were re-composed through the product's own
+  per-slide variants endpoint with a direction saying to carry the point in type
+  instead, which took them to 44%.
+
 ### One integration test fails only inside a full-suite run
 
 - **Kind:** Defect
