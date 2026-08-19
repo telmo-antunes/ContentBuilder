@@ -12,7 +12,11 @@ import { config } from '../config';
   if (!id) throw new Error('usage: verifyDeck.ts <projectId>');
   await connectDb();
   const { ProjectModel } = await import('../models');
-  const project = await ProjectModel.findById(id).lean();
+  // `.lean()` widens to a union that includes an array, so the shape this needs
+  // is named rather than inferred.
+  const project = (await ProjectModel.findById(id).lean()) as
+    | { slides?: Array<{ id: string; authored?: { role?: string } }> }
+    | null;
   if (!project) throw new Error(`no project ${id}`);
 
   const { getBrowser } = await import('../lib/browser');
@@ -20,8 +24,7 @@ import { config } from '../config';
   await page.setViewport({ width: 1080, height: 1350, deviceScaleFactor: 1 });
   let bad = 0;
   try {
-    for (const [i, s] of (project.slides ?? []).entries()) {
-      const slide = s as { id: string; authored?: { role?: string } };
+    for (const [i, slide] of (project.slides ?? []).entries()) {
       await page.goto(`${config.webUrl}/render?projectId=${id}&slideId=${slide.id}`, {
         waitUntil: 'load',
         timeout: 45000,
