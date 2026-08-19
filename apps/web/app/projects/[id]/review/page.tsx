@@ -134,7 +134,13 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
    */
   const [pairBusy, setPairBusy] = useState(false);
   const [pairing, setPairing] = useState<
-    { contradictions: Array<{ slide: number; says: string; shows: string; question: string }>; checked: number } | null
+    | {
+        contradictions: Array<{ slide: number; says: string; shows: string; question: string }>;
+        /** Pictures that are not ABOUT their slide — see the API's `Unrelated`. */
+        unrelated?: Array<{ slide: number; about: string; shows: string; question: string }>;
+        checked: number;
+      }
+    | null
   >(null);
   // Version history drawer.
   const [histOpen, setHistOpen] = useState(false);
@@ -1109,7 +1115,7 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                   {pairBusy ? 'Looking…' : 'Check images'}
                 </button>
               </div>
-              {pairing && pairing.contradictions.length === 0 && (
+              {pairing && pairing.contradictions.length === 0 && !pairing.unrelated?.length && (
                 <p className="studio-note">
                   Nothing flagged across {pairing.checked} illustrated slide{pairing.checked === 1 ? '' : 's'}.
                 </p>
@@ -1118,6 +1124,15 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                 <div key={`${c.slide}-${c.question}`} className="studio-warn">
                   <strong>Slide {c.slide}</strong> — says “{c.says}”, shows “{c.shows}”.
                   <div>{c.question}</div>
+                </div>
+              ))}
+              {/* A different complaint from a contradiction, and shown as one: a
+                  contradiction says the deck is WRONG, this says nobody chose
+                  the picture. Pool auto-fill is where these come from. */}
+              {pairing?.unrelated?.map((u) => (
+                <div key={`u-${u.slide}-${u.question}`} className="studio-warn soft">
+                  <strong>Slide {u.slide}</strong> — about “{u.about}”, shows “{u.shows}”.
+                  <div>{u.question}</div>
                 </div>
               ))}
             </section>

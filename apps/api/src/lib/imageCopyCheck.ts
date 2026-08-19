@@ -46,6 +46,33 @@ export interface Contradiction {
   question: string;
 }
 
+/**
+ * A photograph that is not ABOUT its slide — a different question from whether
+ * it contradicts it, and a much easier one.
+ *
+ * A real deck shipped a CRM screenshot of a customer list under "Ozone — read
+ * the manual", and a photo of a seat being extracted under "The headliner". The
+ * contradiction check passed both, correctly: neither asserts the opposite of
+ * its slide, and the prompt below has always excluded photos that are "merely
+ * generic, decorative, or loosely related" because a false alarm there teaches
+ * people to ignore the check.
+ *
+ * But irrelevance is exactly what `fillSlotsFromPool` produces. It fills a slot
+ * from the brand's whole library whether or not that library holds a picture of
+ * what this slide is about, and nobody chose the result. Kept as its own list
+ * rather than folded into `contradictions` for the same reason the distinction
+ * matters: a contradiction says the deck is WRONG, and this says nobody looked.
+ */
+export interface Unrelated {
+  slide: number;
+  /** What this slide is about, in the checker's words. */
+  about: string;
+  /** What the picture shows instead. */
+  shows: string;
+  /** The question to put to the reviewer. */
+  question: string;
+}
+
 const SYSTEM = `You check whether a social slide's PHOTOGRAPH agrees with its COPY.
 
 You are shown one image per slide, each followed by that slide's text. Report ONLY direct contradictions — cases where a reader who looked at the picture would take away the opposite of what the words say. Two kinds:
@@ -66,10 +93,24 @@ NOT a contradiction, and never report it:
 
 Judge the picture on what it actually depicts, not on what it could symbolise. If you are unsure, say nothing — a false alarm here trains people to ignore the check.
 
-Return STRICT JSON only, no prose, no fences:
-{"contradictions":[{"slide":<number>,"says":"<what the copy asserts, <=90 chars>","shows":"<what the photo depicts, <=90 chars>","question":"<one sentence ending in a question mark>"}]}
+THEN, SEPARATELY, A SECOND AND MUCH EASIER QUESTION: is each photograph ABOUT its slide at all?
 
-An empty array is the expected answer for most decks.`;
+Some pictures are attached automatically from the brand's library, which may hold nothing relevant to this slide. A real deck shipped a screenshot of a software customer list under a slide about ozone machines, and a photo of a car SEAT being cleaned under a slide about the roof lining. Neither contradicts its slide. Both are simply not pictures of what the slide is about, and nobody chose them.
+
+Report one as "unrelated" when a reader would not connect the picture to the words at all — a different subject, a different object, a screenshot where the slide discusses a physical thing.
+
+NOT unrelated, and never report it:
+- A picture of the right subject that is merely atmospheric, wide, or abstract.
+- A picture that shows the topic without showing the exact object named.
+- A picture whose connection needs a sentence to explain but is real once explained.
+- Anything you already reported as a contradiction.
+
+The bar is deliberately low: report it only when you cannot say what the picture has to do with the slide.
+
+Return STRICT JSON only, no prose, no fences:
+{"contradictions":[{"slide":<number>,"says":"<what the copy asserts, <=90 chars>","shows":"<what the photo depicts, <=90 chars>","question":"<one sentence ending in a question mark>"}],"unrelated":[{"slide":<number>,"about":"<what the slide is about, <=90 chars>","shows":"<what the photo depicts, <=90 chars>","question":"<one sentence ending in a question mark>"}]}
+
+Two empty arrays are the expected answer for most decks.`;
 
 /**
  * Downscaled hard: this asks "what is in this picture", which survives 640px
@@ -103,9 +144,11 @@ export async function findImageCopyContradictions(
      */
     deckCopy?: string[];
   },
-): Promise<{ contradictions: Contradiction[]; checked: number; skipped?: string }> {
+): Promise<{ contradictions: Contradiction[]; unrelated: Unrelated[]; checked: number; skipped?: string }> {
   const usable = pairings.filter((p) => p.copy.trim() && p.image?.length);
-  if (!usable.length) return { contradictions: [], checked: 0, skipped: 'no slide has both a picture and copy' };
+  if (!usable.length) {
+    return { contradictions: [], unrelated: [], checked: 0, skipped: 'no slide has both a picture and copy' };
+  }
 
   try {
     const content: Array<Record<string, unknown>> = [];
@@ -117,7 +160,7 @@ export async function findImageCopyContradictions(
       content.push({ type: 'text', text: `Slide ${p.index} copy:\n${p.copy.slice(0, 600)}` });
       checked += 1;
     }
-    if (!checked) return { contradictions: [], checked: 0, skipped: 'no image could be read' };
+    if (!checked) return { contradictions: [], unrelated: [], checked: 0, skipped: 'no image could be read' };
 
     if (opts?.deckCopy?.length) {
       content.push({
@@ -145,17 +188,18 @@ export async function findImageCopyContradictions(
     const text = textOf(resp);
     const start = text.indexOf('{');
     const end = text.lastIndexOf('}');
-    if (start === -1 || end === -1) return { contradictions: [], checked, skipped: 'no JSON verdict' };
+    if (start === -1 || end === -1) return { contradictions: [], unrelated: [], checked, skipped: 'no JSON verdict' };
 
-    const parsed = JSON.parse(text.slice(start, end + 1)) as { contradictions?: unknown };
-    const raw = Array.isArray(parsed.contradictions) ? parsed.contradictions : [];
+    const parsed = JSON.parse(text.slice(start, end + 1)) as { contradictions?: unknown; unrelated?: unknown };
     const known = new Set(usable.map((p) => p.index));
-    const contradictions = raw
+    // A verdict about a slide that was not sent is a hallucinated slide number,
+    // and pointing the reviewer at the wrong card is worse than saying nothing.
+    const sent = (c: { slide?: unknown; question?: unknown }) =>
+      typeof c.slide === 'number' && known.has(c.slide) && Boolean(c.question);
+
+    const contradictions = (Array.isArray(parsed.contradictions) ? parsed.contradictions : [])
       .map((c) => c as Partial<Contradiction>)
-      // A verdict about a slide that was not sent is a hallucinated slide
-      // number, and pointing the reviewer at the wrong card is worse than
-      // saying nothing.
-      .filter((c) => typeof c.slide === 'number' && known.has(c.slide) && c.question)
+      .filter(sent)
       .slice(0, 12)
       .map((c) => ({
         slide: c.slide as number,
@@ -164,9 +208,24 @@ export async function findImageCopyContradictions(
         question: String(c.question).slice(0, 220),
       }));
 
-    return { contradictions, checked };
+    // A slide already named as a contradiction is not also reported as
+    // unrelated: the reviewer gets one question per picture, and the sharper
+    // one wins.
+    const flagged = new Set(contradictions.map((c) => c.slide));
+    const unrelated = (Array.isArray(parsed.unrelated) ? parsed.unrelated : [])
+      .map((c) => c as Partial<Unrelated>)
+      .filter((c) => sent(c) && !flagged.has(c.slide as number))
+      .slice(0, 12)
+      .map((c) => ({
+        slide: c.slide as number,
+        about: String(c.about ?? '').slice(0, 90),
+        shows: String(c.shows ?? '').slice(0, 90),
+        question: String(c.question).slice(0, 220),
+      }));
+
+    return { contradictions, unrelated, checked };
   } catch (err) {
     console.warn('[imageCopyCheck]', err instanceof Error ? err.message : err);
-    return { contradictions: [], checked: 0, skipped: 'the check could not run' };
+    return { contradictions: [], unrelated: [], checked: 0, skipped: 'the check could not run' };
   }
 }
