@@ -462,29 +462,41 @@ export function bodyBudgetFor(
  * source of truth.
  */
 export function composeBudgetsFor(format: string): ComposeBudgets {
-  const scale = format === '1080x1920' ? 0.8 : format === '1080x1080' ? 0.9 : 1;
   /**
-   * The body does NOT follow the story's global squeeze.
+   * A STORY TAKES NO CUT AT ALL — measured, part by part.
    *
-   * The ~20% cut is there for Instagram's UI, but that UI is a BAND at the top
-   * and the bottom, not a proportional shrink of the whole canvas — and the band
-   * is now reserved in the padding itself (`enforceStoryReserve`), where it
-   * belongs. Measured after that reserve, a story still holds MORE body than a
-   * post: the tightest sound recipe carrying the full furniture overflows at 175
-   * characters on a story and at 146 on a post. A story is a taller canvas, so
-   * prose has more room to run, not less.
+   * The story budgets used to be the post's × 0.8, on the reasoning that
+   * Instagram overlays its UI so the safe area is tighter. The reasoning
+   * confuses a BAND with a proportional shrink: the UI takes a fixed strip off
+   * the top and the bottom, which `enforceStoryReserve` now reserves in the
+   * padding where it belongs, and what is left is a canvas 570px TALLER than a
+   * post. `src/scripts/measurePartCeilings.ts` grows one part at a time on a
+   * slide carrying the full furniture, across every stored recipe:
    *
-   * Held at parity with the post rather than raised past it: the post's numbers
-   * are the measured ones, and there is no evidence for going further. The other
-   * parts keep the 0.8 — the eyebrow, headline and CTA compete for the same
-   * vertical band the reserve takes, and none of them has been measured yet.
+   *              story budget   fits up to        post parity
+   *   eyebrow         21          63  (3×)            26   ✓
+   *   headline        48          72, fails at 96     60   ✓
+   *   cta             19          57  (3×)            24   ✓
+   *   rowText         34         102  (3×)            42   ✓
+   *   body            72         175 (vs 146 on a post)     90   ✓ (since #58)
+   *
+   * Every part clears post parity with room over it, so the cut is removed
+   * rather than re-tuned. Parity, not more: the post's numbers are the measured
+   * ones, and where a budget is EDITORIAL rather than a fit limit — an eyebrow
+   * is "a label, not a summary", a row is "scanned, not read" — the same rule
+   * should hold on both canvases anyway. On the post those two fit at 3× their
+   * budget and are still not raised, for exactly that reason.
+   *
+   * The square keeps its 0.9. It is genuinely a SHORTER canvas than the 4:5, so
+   * that reasoning survives where the story's did not — and it has not been
+   * measured.
    */
-  const bodyScale = format === '1080x1920' ? 1 : scale;
+  const scale = format === '1080x1080' ? 0.9 : 1;
   return {
     eyebrow: Math.round(BASE_BUDGETS.eyebrow * scale),
     headline: Math.round(BASE_BUDGETS.headline * scale),
-    body: Math.round(BASE_BUDGETS.body * bodyScale),
-    explainBody: Math.round(BASE_BUDGETS.explainBody * bodyScale),
+    body: Math.round(BASE_BUDGETS.body * scale),
+    explainBody: Math.round(BASE_BUDGETS.explainBody * scale),
     cta: Math.round(BASE_BUDGETS.cta * scale),
     rowText: Math.round(BASE_BUDGETS.rowText * scale),
   };
@@ -964,7 +976,7 @@ function formatGuidance(format: string): string {
     `(<= ${b.explainBody} on a statement or feature slide that has no tagline), ` +
     `cta <= ${b.cta}, rows text <= ${b.rowText}`;
   if (format === '1080x1920') {
-    return `FORMAT: 1080×1920 story (9:16). Instagram overlays its UI over the top and bottom of a story, so the safe area is tighter than a post and the copy budgets shrink ~20%: ${numbers}.`;
+    return `FORMAT: 1080×1920 story (9:16). Instagram overlays its UI over the top and bottom, and the layout already reserves that band — what is left is a TALLER canvas than a post, so the copy budgets are the same, not smaller: ${numbers}. Use the height for air and scale, not for more words.`;
   }
   if (format === '1080x1080') {
     return `FORMAT: 1080×1080 square (1:1). A shorter canvas than the 4:5 post, so keep copy slightly tighter: ${numbers}.`;

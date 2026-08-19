@@ -582,18 +582,19 @@ describe('parse budgets enforced in code', () => {
 describe('format-aware parse', () => {
   const tiny = JSON.stringify({ slides: [{ role: 'cover', parts: { headline: 'Hi there.' } }] });
 
-  it('states the story format’s reduced budgets in the USER message only', async () => {
+  it('states the story format’s budgets in the USER message only', async () => {
     reply.mockReturnValueOnce(tiny);
     await parseForCompose(detailMastersRecipe, 'idea', { model: 'm', format: '1080x1920' });
     const user = userOf(aiCalls[0]!);
-    expect(user).toContain('eyebrow <= 21');
-    expect(user).toContain('headline <= 48');
-    // The body does NOT take the story's 20% cut — measured, a story holds more
-    // prose than a post, and Instagram's UI is a band the padding now reserves.
+    // A story takes NO cut. Measured part by part: every one clears post parity
+    // with room over it, on a canvas 570px taller whose UI band the padding
+    // already reserves. The per-format LINE still belongs to the user message.
+    expect(user).toContain('eyebrow <= 26');
+    expect(user).toContain('headline <= 60');
     expect(user).toContain('body <= 90');
-    expect(user).toContain('cta <= 19');
-    expect(user).toContain('rows text <= 34');
-    expect(user).toContain('safe area');
+    expect(user).toContain('cta <= 24');
+    expect(user).toContain('rows text <= 42');
+    expect(user).toContain('TALLER canvas');
     // the system prompt stays static across formats (cache-friendly)
     expect(sysOf(aiCalls[0]!)).not.toContain('FORMAT:');
     expect(sysOf(aiCalls[0]!)).not.toContain('1080');
@@ -610,15 +611,25 @@ describe('format-aware parse', () => {
     expect(sysOf(aiCalls[1]!)).toBe(sysOf(aiCalls[0]!));
   });
 
-  it('enforces the story budgets, not the base ones', async () => {
-    const headline = 'A headline that fits the post budget but not the story one'; // 59 chars
+  it('enforces the SQUARE budgets, not the base ones', async () => {
+    // The square is the format that still takes a cut, and for a reason that
+    // survived measurement: it is genuinely a shorter canvas than the 4:5. The
+    // story no longer takes one, so this is where a per-format budget is tested.
+    const headline = 'A headline that fits the post budget but not the square'; // 55 chars
     expect(headline.length).toBeLessThanOrEqual(60);
-    expect(headline.length).toBeGreaterThan(48 * 1.1);
+    expect(headline.length).toBeGreaterThan(54 * 1.01);
     const json = JSON.stringify({ slides: [{ role: 'cover', parts: { headline } }] });
     reply.mockReturnValueOnce(json).mockReturnValueOnce(json);
-    const inputs = await parseForCompose(detailMastersRecipe, 'idea', { model: 'm', format: '1080x1920' });
-    expect(aiCalls).toHaveLength(2); // >10% over the story budget → corrective re-parse
-    expect(inputs[0]!.parts.headline!.length).toBeLessThanOrEqual(48);
+    const inputs = await parseForCompose(detailMastersRecipe, 'idea', { model: 'm', format: '1080x1080' });
+    expect(inputs[0]!.parts.headline!.length).toBeLessThanOrEqual(54);
+  });
+
+  it('gives a story the same budgets as a post, on every part', async () => {
+    const post = composeBudgetsFor('1080x1350');
+    const story = composeBudgetsFor('1080x1920');
+    expect(story).toEqual(post);
+    // …and the square still tightens, which measurement never contradicted.
+    expect(composeBudgetsFor('1080x1080').headline).toBeLessThan(post.headline);
   });
 });
 

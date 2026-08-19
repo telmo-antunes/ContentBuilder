@@ -51,6 +51,25 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
+### The prompt-hash guard covers the system prompt only
+
+- **Kind:** Gap
+- **Severity:** minor
+- **First seen:** 2026-08-19 — changing the story budgets
+- **What happened:** `PROMPT_TEXT.parse` is `PARSE_SYSTEM`, so the hash guard
+  watches the static system prompt and nothing else. The per-format budget line
+  lives in the USER message (`formatGuidance`), and rewriting it — changing every
+  number a story deck is held to — moved no hash at all. The guard passed a
+  change to what the model is told, silently.
+- **Why it matters:** the guard exists so a prompt edit cannot ship without a
+  deliberate version bump. Half the prompt is outside it, and it is the half
+  that varies per post, which is where a regression would be hardest to spot.
+- **Direction:** the user message is assembled per call, so it cannot be hashed
+  as one string — but its TEMPLATE can. Hashing the format-guidance and
+  count-guidance builders' output for a fixed set of inputs would cover the
+  parts that actually carry rules, without pinning the brief text that
+  legitimately differs every time.
+
 ### The collision gate reads the one number the problem cannot move
 
 - **Kind:** Defect
@@ -163,6 +182,23 @@ Rules that keep this file worth reading:
   so the next person does not mistake it for a reproduction.
 
 ## Resolved
+
+### The story budget shrinks ~20% across the board — every part, not just body
+
+*Resolved 2026-08-19 (PR #65, Copywriter v8).* #58 corrected `body` to post parity and left the other parts on the unmeasured 0.8, saying so at the time. Now measured, one part at a time on a slide carrying the full furniture, across every stored recipe (`src/scripts/measurePartCeilings.ts`):
+
+| part | story budget | fits up to | post parity |
+|---|---|---|---|
+| eyebrow | 21 | 63 (3×) | 26 ✓ |
+| headline | 48 | 72, overflows at 96 | 60 ✓ |
+| cta | 19 | 57 (3×) | 24 ✓ |
+| rowText | 34 | 102 (3×) | 42 ✓ |
+
+Every part clears post parity with room over it, so the cut is **removed** rather than re-tuned. Parity and no further: the post's numbers are the measured ones, and where a budget is EDITORIAL rather than a fit limit — an eyebrow is "a label, not a summary", a row is "scanned, not read" — the same rule should hold on both canvases. Those two fit at 3× their budget on a POST as well and are still not raised, for that reason.
+
+The square keeps its 0.9: it is genuinely a shorter canvas than the 4:5, so that reasoning survived where the story's did not.
+
+Method note: on the post, every part overflowed at 1.25× — the full-furniture fixture is saturated there, so those numbers measure the slide's total capacity rather than each part's own ceiling. The story half is the informative one.
 
 ### The collision gate reads the one number the problem cannot move
 
