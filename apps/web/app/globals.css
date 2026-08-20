@@ -2627,3 +2627,71 @@ input[type='color'] {
 .mo-kit .bk-logo-stage { border-radius: 12px; min-height: 110px; display: grid; place-items: center; padding: 14px; }
 .mo-kit .bk-logo-stage img { max-height: 90px; max-width: 80%; object-fit: contain; }
 .mo-kit .shot { border-radius: 12px; width: 100%; border: 1px solid var(--mo-line); }
+
+/* ═══ MOMENTUM · The Dossier — /start + brand room as ONE surface (batch 6) ═
+   A brand IS a dossier: identity, voice, profile, lessons, work. During setup
+   the document fills itself line by line as the analysis reads the site; ever
+   after, the brand room IS that document, every line a receipt with an Edit.
+   "Resume setup" stops being a feature — an unfinished dossier just still has
+   queued lines. Scoped under .mo-dossier-page. */
+.mo-dossier { background: var(--mo-card); border: 1px solid var(--mo-line); border-radius: 22px; box-shadow: var(--mo-shadow); overflow: hidden; }
+.mo-dhead { display: flex; align-items: center; gap: 14px; padding: 18px 24px; border-bottom: 1px solid var(--mo-line); }
+.mo-dhead .k { width: 40px; height: 40px; border-radius: 11px; background: var(--mo-bg); border: 1px solid var(--mo-line); display: grid; place-items: center; overflow: hidden; flex: none; font-family: var(--mo-disp); font-weight: 600; font-size: 16px; color: var(--mo-muted); }
+.mo-dhead .k img { width: 100%; height: 100%; object-fit: contain; }
+.mo-dhead .t { font-family: var(--mo-disp); font-weight: 600; font-size: 19px; letter-spacing: -0.02em; color: var(--mo-ink); }
+.mo-dhead .s { font-size: 12.5px; color: var(--mo-muted); margin-top: 2px; }
+.mo-dhead .s a { color: inherit; }
+.mo-dhead .live { margin-left: auto; display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px; font-weight: 700; color: var(--mo-indigo); }
+.mo-dhead .live i { width: 7px; height: 7px; border-radius: 50%; background: var(--mo-indigo); animation: mo-pip 1.4s ease-in-out infinite; }
+
+.mo-drow { display: grid; grid-template-columns: 130px minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 14px 24px; border-bottom: 1px solid var(--mo-line); }
+.mo-drow:last-child { border-bottom: none; }
+.mo-drow .l { font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--mo-faint); }
+.mo-drow .v { font-size: 13.5px; color: var(--mo-ink); min-width: 0; }
+.mo-drow .v .sw { width: 15px; height: 15px; border-radius: 4px; display: inline-block; vertical-align: -3px; margin-right: 4px; box-shadow: inset 0 0 0 1px rgb(22 24 31 / 12%); }
+.mo-drow .v .chp { display: inline-block; font-size: 11px; background: var(--mo-bg); border: 1px solid var(--mo-line); border-radius: 999px; padding: 2px 8px; margin-left: 4px; color: var(--mo-muted); }
+.mo-drow .v .logoth { height: 30px; max-width: 130px; object-fit: contain; vertical-align: middle; border-radius: 6px; }
+.mo-drow.pending .v { color: var(--mo-faint); }
+.mo-drow.filling { animation: mo-rise 0.45s var(--mo-spring) both; }
+.mo-drow .shimmer { display: inline-block; width: 220px; max-width: 100%; height: 12px; border-radius: 6px; background: linear-gradient(90deg, var(--mo-line) 25%, var(--mo-card-2) 50%, var(--mo-line) 75%); background-size: 200% 100%; animation: mo-sh 1.4s linear infinite; }
+@keyframes mo-sh { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .mo-drow .shimmer { animation: none; } }
+.mo-dst { font-size: 11px; font-weight: 700; border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
+.mo-dst.ok { color: var(--mo-green); background: var(--mo-green-bg); }
+.mo-dst.warn { color: var(--mo-amber); background: var(--mo-amber-bg); }
+.mo-dst.busy { color: var(--mo-indigo); background: var(--mo-indigo-bg); }
+.mo-dst.wait { color: var(--mo-faint); background: var(--mo-bg); }
+.mo-drow .edit { font-size: 12px; font-weight: 600; color: var(--mo-indigo); background: none; border: none; cursor: pointer; font-family: inherit; white-space: nowrap; }
+.mo-drow .edit:hover { text-decoration: underline; }
+.mo-drow .side { display: flex; align-items: center; gap: 10px; }
+.mo-drow-body { grid-column: 1 / -1; padding: 2px 0 6px; animation: mo-rise 0.35s var(--mo-spring) both; }
+
+/* The status line's inline actions (setup's doors). */
+.mo-drow .actrow { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+
+/* The work strip at the document's foot. */
+.mo-dwork { padding: 16px 24px 20px; border-top: 1px solid var(--mo-line); background: var(--mo-card-2); }
+.mo-dwork .wh { display: flex; align-items: center; gap: 9px; margin-bottom: 12px; flex-wrap: wrap; }
+.mo-dwork .wh .t { font-family: var(--mo-disp); font-weight: 600; font-size: 14.5px; color: var(--mo-ink); }
+.mo-dwork .wh .b { font-family: var(--mono, ui-monospace); font-size: 10px; color: var(--mo-muted); background: var(--mo-bg); border: 1px solid var(--mo-line); border-radius: 999px; padding: 2px 9px; }
+.mo-dwork .filters { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+.mo-dwork .filters button { font-size: 11.5px; font-weight: 600; border: 1px solid var(--mo-line-strong); border-radius: 999px; padding: 5px 12px; color: var(--mo-muted); background: var(--mo-card); cursor: pointer; font-family: inherit; }
+.mo-dwork .filters button.on { background: var(--mo-ink); color: var(--mo-card); border-color: var(--mo-ink); }
+.mo-dwork .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; }
+.mo-dpost { position: relative; background: var(--mo-card); border: 1px solid var(--mo-line); border-radius: 14px; box-shadow: var(--mo-shadow); padding: 10px; transition: transform 0.3s var(--mo-spring), box-shadow 0.3s var(--ease); }
+.mo-dpost:hover { transform: translateY(-3px); box-shadow: var(--mo-shadow-hover); }
+.mo-dpost .thumb { display: block; border-radius: 9px; overflow: hidden; }
+.mo-dpost .menu { position: absolute; top: 8px; right: 8px; z-index: 2; }
+.mo-dpost .tt { display: block; font-size: 12.5px; font-weight: 600; color: var(--mo-ink); margin-top: 8px; line-height: 1.3; }
+.mo-dpost .tt:hover { text-decoration: none; color: var(--mo-indigo); }
+.mo-dpost .tm { font-size: 11px; color: var(--mo-faint); margin-top: 3px; }
+.mo-dpost .tm .fl { font-weight: 700; }
+.mo-dpost .tm .fl.ok { color: var(--mo-green); }
+.mo-dpost .tm .fl.warn { color: var(--mo-amber); }
+
+/* /start — opening a dossier. */
+.mo-open { max-width: 560px; }
+.mo-open .fld { margin-bottom: 14px; }
+.mo-open label { display: block; font-size: 11.5px; font-weight: 600; color: var(--mo-muted); margin-bottom: 6px; }
+.mo-open input, .mo-open select { width: 100%; }
+.mo-open .hint { font-size: 11.5px; color: var(--mo-faint); margin-top: 6px; }
