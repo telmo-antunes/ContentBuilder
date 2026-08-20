@@ -151,24 +151,27 @@ export default function BrandKitPage() {
   };
 
   return (
-    <div>
-      <p className="muted" style={{ marginBottom: 6 }}>
-        <Link href={`/businesses/${id}`}>← Back to brand</Link>
+    <div className="mo-page mo-kit mo-studio">
+      <p className="mo-crumb">
+        <Link href="/">Home</Link>
+        {' / '}
+        <Link href={`/businesses/${id}`}>{business?.name ?? 'Brand'}</Link>
+        {' / '}
+        Brand kit
       </p>
-      <h1>Brand kit{business ? ` — ${business.name}` : ''}</h1>
 
       {error && <ErrorState message={error} onRetry={() => void reload()} />}
       {loading && (
-        // The atelier's shape while it loads: hero band, then the two columns.
+        // The Passport's shape while it loads: header, chips, hero tile, receipts.
         <div role="status" aria-label="Loading the brand kit">
-          <Skeleton shape="block" h={240} style={{ borderRadius: 22, marginBottom: 30 }} />
-          <div className="bk-cols">
-            <div>
-              <Skeleton shape="block" h={220} style={{ marginBottom: 24 }} />
-              <Skeleton shape="block" h={160} />
-            </div>
-            <Skeleton shape="block" h={300} />
+          <Skeleton shape="block" w={380} h={34} style={{ marginBottom: 20 }} />
+          <div className="row" style={{ gap: 8, marginBottom: 18 }}>
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} shape="block" w={170} h={30} style={{ borderRadius: 999 }} />
+            ))}
           </div>
+          <Skeleton shape="block" h={380} style={{ borderRadius: 20, marginBottom: 14 }} />
+          <Skeleton shape="block" h={180} style={{ borderRadius: 20 }} />
         </div>
       )}
 
@@ -184,14 +187,17 @@ export default function BrandKitPage() {
       )}
 
       {!loading && !kit && busy !== 'analyze' && (
-        <div className="card" style={{ maxWidth: 640 }}>
-          <p className="muted" style={{ marginTop: 0 }}>
+        <div className="mo-tile" style={{ maxWidth: 640 }}>
+          <div className="mo-th">
+            <span className="t">{business ? `The ${business.name} kit` : 'The brand kit'}</span>
+          </div>
+          <p style={{ margin: '0 0 14px', fontSize: 14, color: 'var(--mo-muted)' }}>
             Derive a brand kit from the website, or enter one manually (common for businesses that
             live only on Instagram). The extracted kit is always a draft until you approve it.
           </p>
-          <div className="row">
+          <div className="row" style={{ gap: 8 }}>
             <button
-              className="btn primary"
+              className="mo-btn prim"
               onClick={analyze}
               disabled={!business?.websiteUrl || !business?.hasProfile || busy !== null}
               title={
@@ -204,19 +210,19 @@ export default function BrandKitPage() {
             >
               Analyze website
             </button>
-            <button className="btn" onClick={startManual} disabled={busy !== null}>
+            <button className="mo-btn" onClick={startManual} disabled={busy !== null}>
               {busy === 'manual' ? 'Creating…' : 'Skip extraction / enter manually'}
             </button>
           </div>
           {business && !business.hasProfile && (
-            <p className="muted" style={{ fontSize: 13, marginBottom: 0 }}>
+            <p style={{ fontSize: 13, color: 'var(--mo-muted)', margin: '12px 0 0' }}>
               AI extraction is locked until you{' '}
               <Link href={`/businesses/${id}`}>complete this brand&apos;s profile</Link>. You can still
               enter the kit manually now.
             </p>
           )}
           {!business?.websiteUrl && (
-            <p className="muted" style={{ fontSize: 13, marginBottom: 0 }}>
+            <p style={{ fontSize: 13, color: 'var(--mo-muted)', margin: '12px 0 0' }}>
               This brand has no website URL — use manual entry, or add a URL on the brand page.
             </p>
           )}
@@ -228,6 +234,7 @@ export default function BrandKitPage() {
           key={kit._id}
           businessId={id}
           businessName={business?.name ?? 'Your brand'}
+          projects={business?.projects ?? []}
           kit={kit}
           hasApproved={hasApproved}
           suggestion={suggestion}
@@ -249,31 +256,30 @@ export default function BrandKitPage() {
 function provenanceChips(p: BrandKit['provenance'] | undefined): string[] {
   if (!p) return [];
   const chips: string[] = [];
-  if (p.colors === 'computed') chips.push('Colors read from the site\u2019s real styles');
+  if (p.colors === 'computed') chips.push('Colors read from the site’s real styles');
   else if (p.colors === 'sampled') chips.push('Colors sampled from a screenshot');
   else if (p.colors === 'manual') chips.push('Colors entered manually');
   if (p.fonts === 'site:google-fonts') chips.push('Real site fonts, served via Google Fonts');
   else if (typeof p.fonts === 'string' && p.fonts.startsWith('personality:')) {
-    chips.push(`Fonts matched to the headline\u2019s style (${p.fonts.split(':')[1]?.replace(/-/g, ' ')})`);
+    chips.push(`Fonts matched to the headline’s style (${p.fonts.split(':')[1]?.replace(/-/g, ' ')})`);
   } else if (p.fonts === 'computed+mapped') chips.push('Fonts name-matched from the site');
   else if (p.fonts === 'manual') chips.push('Fonts chosen manually');
   if (p.logo === 'dom') chips.push('Logo found on the site');
-  else if (p.logo === 'none') chips.push('No logo found \u2014 upload one');
   return chips;
 }
 
-/** Plain-voice copy for the learned suggestion \u2014 what happened, what one click does. */
+/** Plain-voice copy for the learned suggestion — what happened, what one click does. */
 function suggestionCopy(s: TweakSuggestion): string {
   if (s.kind === 'invert') {
-    return `You\u2019ve flipped ${s.count} posts to the inverse surface \u2014 make it the default so new posts start there?`;
+    return `You’ve flipped ${s.count} posts to the inverse surface — make it the default so new posts start there?`;
   }
   const posts = `${s.count} post${s.count === 1 ? '' : 's'}`;
   return s.reason === 'smaller-headline'
-    ? `You\u2019ve shrunk headlines on ${posts} \u2014 set the type a step denser so they start out right?`
-    : `You\u2019ve bumped headlines up on ${posts} \u2014 give the type a step more room so they start out right?`;
+    ? `You’ve shrunk headlines on ${posts} — set the type a step denser so they start out right?`
+    : `You’ve bumped headlines up on ${posts} — give the type a step more room so they start out right?`;
 }
 
-/** Strip Next.js's internal font tokens ("__Playfair_Display_eea437" \u2192 "Playfair Display"). */
+/** Strip Next.js's internal font tokens ("__Playfair_Display_eea437" → "Playfair Display"). */
 function cleanFontName(raw: string): string {
   return raw
     .split(',')[0]!
@@ -337,6 +343,7 @@ function FontSelect({
 function KitEditor({
   businessId,
   businessName,
+  projects,
   kit,
   hasApproved,
   suggestion,
@@ -350,6 +357,7 @@ function KitEditor({
 }: {
   businessId: string;
   businessName: string;
+  projects: BusinessDetail['projects'];
   kit: BrandKit;
   hasApproved: boolean;
   suggestion: TweakSuggestion | null;
@@ -382,29 +390,13 @@ function KitEditor({
   const [refineLayer, setRefineLayer] = useState<RecipeLayer>('background');
   const [refineNote, setRefineNote] = useState('');
   // What the server currently holds — the baseline unsaved edits are measured
-  // against for the "Now → After save" diff.
+  // against for the forecast's "now → after save" comparison.
   const [savedBase, setSavedBase] = useState(() => ({
     colors: { ...kit.colors },
     heading: kit.fonts.render.heading,
     body: kit.fonts.render.body,
   }));
   const fileRef = useRef<HTMLInputElement>(null);
-
-  // Reveal sections as they scroll into view (motion the eye follows down the page).
-  useEffect(() => {
-    const io = new IntersectionObserver(
-      (entries) =>
-        entries.forEach((en) => {
-          if (en.isIntersecting) {
-            en.target.classList.add('in');
-            io.unobserve(en.target);
-          }
-        }),
-      { threshold: 0.12, rootMargin: '0px 0px -8% 0px' },
-    );
-    document.querySelectorAll('.bk-reveal').forEach((el) => io.observe(el));
-    return () => io.disconnect();
-  }, []);
 
   const setColor = (role: keyof BrandKit['colors'], value: string) =>
     setColors((c) => ({ ...c, [role]: value }));
@@ -451,8 +443,8 @@ function KitEditor({
         onApproved();
       } else {
         toast('Brand kit saved');
-        // Re-baseline the diff and adopt the server's re-pointed recipe, so
-        // the "Now → After save" panel folds away once the save lands.
+        // Re-baseline the forecast and adopt the server's re-pointed recipe,
+        // so the "now → after save" comparison folds away once the save lands.
         setSavedBase({ colors: { ...colors }, heading, body });
         const rec = (updated as { recipe?: BrandRecipe }).recipe;
         if (rec) setRecipe(rec);
@@ -487,16 +479,7 @@ function KitEditor({
       return '#ffffff';
     }
   };
-  const onHeroMove = (e: React.MouseEvent<HTMLElement>) => {
-    const el = e.currentTarget;
-    const r = el.getBoundingClientRect();
-    el.style.setProperty('--mx', String((e.clientX - r.left) / r.width - 0.5));
-    el.style.setProperty('--my', String((e.clientY - r.top) / r.height - 0.5));
-  };
-  const onHeroLeave = (e: React.MouseEvent<HTMLElement>) => {
-    e.currentTarget.style.setProperty('--mx', '0');
-    e.currentTarget.style.setProperty('--my', '0');
-  };
+
   /**
    * Tune the recipe directly. Instant and scoped — a colour or tempo change used
    * to require a full re-author, which also rewrote everything else.
@@ -631,15 +614,13 @@ function KitEditor({
         '</h1><p class="tagline">On-brand in seconds.</p>',
     },
   };
-  const textOnBrand = readable(colors.background);
-  const tint = (a: string) => (HEX.test(colors.text) ? colors.text + a : `rgba(20,18,14,${parseInt(a, 16) / 255})`);
   // The kit's colours are already known while the recipe is being authored, so
   // the working panel ghosts THIS brand rather than five grey placeholders.
   const paletteSwatches = ROLES.map(([role]) => colors[role]).filter((c) => HEX.test(c));
 
   // ── Kit-edit diff: what saving will do to every post, shown BEFORE saving ──
   // applyKitToRecipe is the exact pure function the server runs on save, so the
-  // "After save" sample is a preview of the real consequence, not a guess.
+  // "After save" forecast is a preview of the real consequence, not a guess.
   const kitEditsDirty =
     ROLES.some(([role]) => colors[role] !== savedBase.colors[role]) ||
     heading !== savedBase.heading ||
@@ -669,402 +650,459 @@ function KitEditor({
     logoTreatment,
     recipe,
   };
+  /** The kit the forecast paints your recent posts with. */
+  const forecastKit: RenderBrandKit = kitDiff ? { ...renderKit, recipe: kitDiff.after } : renderKit;
+
+  // Recent posts with an authored first slide — the forecast's subjects.
+  const recentPosts = useMemo(
+    () =>
+      [...projects]
+        .sort((a, b) => String(b.updatedAt ?? '').localeCompare(String(a.updatedAt ?? '')))
+        .map((p) => ({
+          project: p,
+          first: [...(p.slides ?? [])].sort((a, b) => a.order - b.order)[0],
+        }))
+        .filter((x) => x.first?.authored?.html)
+        .slice(0, 3),
+    [projects],
+  );
+
+  // ── Readiness: the four things a finished kit has, driving the bar ──
+  const voiceOk = voice.trim().length > 0;
+  const logoOk = Boolean(logo?.url);
+  const recipeOk = Boolean(recipe);
+  const checksPassed = [colorsValid, voiceOk, logoOk, recipeOk].filter(Boolean).length;
+  const checksLeft = 4 - checksPassed;
+  const readyPct = Math.round((100 * checksPassed) / 4);
+
+  /** Check chips jump to their receipt and open it — status as navigation. */
+  const openReceipt = (rid: string) => {
+    const el = document.getElementById(rid) as HTMLDetailsElement | null;
+    if (el) {
+      el.open = true;
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
 
   return (
     <>
-      {/* ── The brand, alive: a hero rendered in the brand's OWN colors ── */}
-      <section
-        className="bk-hero bk-rise"
-        style={{ background: colors.background, color: textOnBrand }}
-        onMouseMove={onHeroMove}
-        onMouseLeave={onHeroLeave}
-      >
-        <span className="bk-blob a" style={{ background: colors.primary }} />
-        <span className="bk-blob b" style={{ background: colors.accent }} />
-        <span className="bk-blob c" style={{ background: colors.secondary }} />
-        <span className="bk-sheen" />
-        <span className="bk-hero-grain" />
-        <span className="bk-hero-wm" style={{ color: textOnBrand }} aria-hidden>
-          {businessName.trim().charAt(0).toUpperCase()}
-        </span>
-        <span className="bk-accent-line" style={{ color: colors.accent }} />
-        <span className="bk-vignette" />
-        <div className="bk-hero-inner">
-          <div className="bk-hero-id">
-            {logo?.url && <img className="bk-hero-logo" src={logo.url} alt="" />}
-            <div className="bk-hero-eyebrow" style={{ color: colors.accent }}>
-              Brand kit · the design system
-            </div>
-            <h1 className="bk-hero-name2">
-              {businessName.split(' ').map((word, i) => (
-                <span key={`${word}-${i}`} className="bk-word" style={{ animationDelay: `${0.18 + i * 0.1}s` }}>
-                  {word}
-                  {i < businessName.split(' ').length - 1 ? ' ' : ''}
-                </span>
-              ))}
-            </h1>
-            <div className="bk-hero-meta">
-              <span
-                className="bk-hero-pill"
-                style={{ background: tint('22'), color: textOnBrand, border: `1px solid ${tint('33')}` }}
-              >
-                <span style={{ width: 7, height: 7, borderRadius: '50%', background: isDraft ? '#e0a23a' : colors.accent }} />
-                {isDraft ? 'Draft — review & approve' : 'Approved'}
-              </span>
-              {provenanceChips(kit.provenance)
-                .slice(0, 2)
-                .map((chip) => (
-                  <span
-                    key={chip}
-                    className="bk-hero-pill"
-                    style={{ background: tint('14'), color: textOnBrand, border: `1px solid ${tint('22')}`, opacity: 0.9 }}
-                  >
-                    {chip}
-                  </span>
-                ))}
-            </div>
+      <header className="mo-shead">
+        <div>
+          <div className="htitle">
+            <span className="klogo">
+              {logo?.url ? <img src={logo.url} alt="" /> : <span>{businessName.trim().charAt(0).toUpperCase()}</span>}
+            </span>
+            <h1>The {businessName} kit</h1>
           </div>
-          <div className="bk-hero-sample">
-            <div className="tilt">
-              <ScaledSlide format="1080x1350" displayWidth={210}>
-                <SlideRenderer slide={previewSlide} brandKit={renderKit} format="1080x1350" forExport />
-              </ScaledSlide>
-            </div>
+          <div className="meta">
+            <span>{recipeOk ? <b>Recipe live</b> : 'No recipe yet'}</span>
+            <span>
+              Drives <b>{projects.length}</b> post{projects.length === 1 ? '' : 's'}
+            </span>
+            <span>{isDraft ? <b style={{ color: 'var(--mo-amber)' }}>Draft — review &amp; approve</b> : <b style={{ color: 'var(--mo-green)' }}>Approved</b>}</span>
           </div>
         </div>
-      </section>
-
-      {/* ── The recipe — the centrepiece ── */}
-      <section className="bk-sec bk-reveal" style={{ animationDelay: '0.05s' }}>
-        <div className={`bk-recipe${busy === 'recipe' ? ' bk-shimmer' : ''}`}>
-          <div className="bk-recipe-top">
-            <span className="lbl">The recipe</span>
-            {recipe ? (
-              <span className="badge ok"><span className="dot" /> live</span>
-            ) : (
-              <span className="badge">not designed yet</span>
-            )}
-            <div className="bk-recipe-cta">
-              <span className="bk-count" role="group" aria-label="How many directions to design">
-                {([2, 3] as const).map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    className={candCount === n ? 'on' : ''}
-                    aria-pressed={candCount === n}
-                    onClick={() => setCandCount(n)}
-                    disabled={busy !== null}
-                  >
-                    {n}
-                  </button>
-                ))}
-              </span>
-              <button className="btn sm primary" onClick={authorCandidates} disabled={busy !== null}>
-                {busy === 'candidates' ? (
-                  'Designing…'
-                ) : (
-                  <>
-                    <Icon name="sparkle" size={13} /> Design {candCount} directions
-                  </>
-                )}
-              </button>
-              {recipe && (
-                <button
-                  className="btn ghost sm"
-                  onClick={authorRec}
-                  disabled={busy !== null}
-                  title="One straight re-author — no choice of directions"
-                >
-                  {busy === 'recipe' ? 'Redesigning…' : 'Redesign'}
-                </button>
+        <div className="side">
+          <div className="mo-ship" aria-label={`Kit readiness: ${readyPct}%`}>
+            <div className="lbl">
+              <span>Kit readiness</span>
+              <b>{readyPct}%</b>
+            </div>
+            <div className="mo-pbar">
+              <i style={{ width: `${readyPct}%` }} />
+            </div>
+            <div className="hint">
+              {checksLeft > 0 ? (
+                <>
+                  <b>
+                    {checksLeft} thing{checksLeft === 1 ? '' : 's'} left
+                  </b>{' '}
+                  — then {isDraft ? 'Approve' : 'Save'} lights up
+                </>
+              ) : (
+                <b className="done">All set — {isDraft ? 'approve when ready' : 'every detail in place'}</b>
               )}
             </div>
           </div>
-          {busy === 'recipe' || busy === 'candidates' ? (
-            <WorkingPanel
-              active
-              bare
-              stages={RECIPE_STAGES}
-              title={busy === 'candidates' ? `Designing ${candCount} directions` : 'Designing the recipe'}
-              // One ghost per direction, labelled and in the brand's own colours,
-              // so the wait shows what is actually being made.
-              count={busy === 'candidates' ? candCount : 1}
-              notes={busy === 'candidates' ? CANDIDATE_NOTES.slice(0, candCount) : undefined}
-              palette={paletteSwatches}
-              sub={
-                busy === 'candidates'
-                  ? `Authoring ${candCount} complete design systems in parallel — one faithful, one bolder${candCount === 3 ? ', one quieter' : ''} — so you choose visually. This takes ~40–70s.`
-                  : "Authoring your brand's design system — palette rationing, a type system, a signature move, imagery and voice. This takes ~40–70s."
-              }
-            />
-          ) : candidates ? (
-            <div className="bk-cands">
-              <p className="bk-cands-lead">
-                {candidates.length === 1
-                  ? 'One direction came back — a complete design system authored from this kit.'
-                  : `${candidates.length} directions, each a complete design system authored from this kit.`}{' '}
-                The samples below are live renders — pick the one that feels like the brand
-                {recipe ? ', or keep the current recipe' : ''}.
-              </p>
-              <div className="bk-cands-row">
-                {candidates.map((c) => {
-                  const [dirName, dirDetail] = c.note.split(/\s+—\s+/);
-                  const selecting = busy === `select:${c.id}`;
-                  return (
-                    <article key={c.id} className="bk-cand">
-                      <div className="bk-cand-slide">
-                        <ScaledSlide format="1080x1350" displayWidth={240}>
-                          <SlideRenderer
-                            slide={previewSlide}
-                            brandKit={{ ...renderKit, recipe: c.recipe }}
-                            format="1080x1350"
-                            forExport
-                          />
-                        </ScaledSlide>
-                      </div>
-                      <div className="bk-cand-note">
-                        <strong>{dirName || 'Direction'}</strong>
-                        {dirDetail && <span>{dirDetail}</span>}
-                      </div>
-                      <ul className="bk-cand-facts">
-                        <li>{c.recipe.signature.name}</li>
+        </div>
+      </header>
+
+      {/* ── Check chips: what's confirmed, what still needs a human ── */}
+      <div className="mo-checks" aria-label="Kit checks">
+        {provenanceChips(kit.provenance).map((chip) => (
+          <span className="mo-chk ok" key={chip}>
+            <i />
+            {chip}
+          </span>
+        ))}
+        {recipeOk ? (
+          <span className="mo-chk ok">
+            <i />
+            Recipe designed
+          </span>
+        ) : (
+          <button
+            className="mo-chk warn"
+            onClick={() => document.getElementById('kit-recipe')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+          >
+            <i />
+            No recipe yet <span className="go">Design it →</span>
+          </button>
+        )}
+        {!colorsValid && (
+          <button className="mo-chk warn" onClick={() => openReceipt('rcpt-palette')}>
+            <i />
+            A color isn&rsquo;t a valid hex <span className="go">Fix →</span>
+          </button>
+        )}
+        {!logoOk && (
+          <button className="mo-chk warn" onClick={() => openReceipt('rcpt-logo')}>
+            <i />
+            No logo yet <span className="go">Upload →</span>
+          </button>
+        )}
+        {voiceOk ? (
+          <span className="mo-chk ok">
+            <i />
+            Voice written
+          </span>
+        ) : (
+          <button className="mo-chk warn" onClick={() => openReceipt('rcpt-voice')}>
+            <i />
+            Voice is empty <span className="go">Write it →</span>
+          </button>
+        )}
+      </div>
+
+      {/* ── The recipe — the hero tile ── */}
+      <section className="mo-tile" id="kit-recipe" style={{ marginBottom: 14 }}>
+        <div className="mo-th">
+          <span className="t">The recipe</span>
+          <span className="b">drives every slide</span>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span className="mo-toggle" role="group" aria-label="How many directions to design" style={{ borderRadius: 10 }}>
+              {([2, 3] as const).map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  className={candCount === n ? 'on' : ''}
+                  aria-pressed={candCount === n}
+                  onClick={() => setCandCount(n)}
+                  disabled={busy !== null}
+                  style={{ padding: '6px 12px', fontSize: 12 }}
+                >
+                  {n}
+                </button>
+              ))}
+            </span>
+            <button className="mo-btn sm prim" onClick={authorCandidates} disabled={busy !== null}>
+              {busy === 'candidates' ? 'Designing…' : <>✦ Design {candCount} directions</>}
+            </button>
+            {recipeOk && (
+              <button
+                className="mo-btn sm"
+                onClick={authorRec}
+                disabled={busy !== null}
+                title="One straight re-author — no choice of directions"
+              >
+                {busy === 'recipe' ? 'Redesigning…' : 'Redesign'}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {busy === 'recipe' || busy === 'candidates' ? (
+          <WorkingPanel
+            active
+            bare
+            stages={RECIPE_STAGES}
+            title={busy === 'candidates' ? `Designing ${candCount} directions` : 'Designing the recipe'}
+            // One ghost per direction, labelled and in the brand's own colours,
+            // so the wait shows what is actually being made.
+            count={busy === 'candidates' ? candCount : 1}
+            notes={busy === 'candidates' ? CANDIDATE_NOTES.slice(0, candCount) : undefined}
+            palette={paletteSwatches}
+            sub={
+              busy === 'candidates'
+                ? `Authoring ${candCount} complete design systems in parallel — one faithful, one bolder${candCount === 3 ? ', one quieter' : ''} — so you choose visually. This takes ~40–70s.`
+                : "Authoring your brand's design system — palette rationing, a type system, a signature move, imagery and voice. This takes ~40–70s."
+            }
+          />
+        ) : candidates ? (
+          <div className="bk-cands">
+            <p className="bk-cands-lead">
+              {candidates.length === 1
+                ? 'One direction came back — a complete design system authored from this kit.'
+                : `${candidates.length} directions, each a complete design system authored from this kit.`}{' '}
+              The samples below are live renders — pick the one that feels like the brand
+              {recipeOk ? ', or keep the current recipe' : ''}.
+            </p>
+            <div className="bk-cands-row">
+              {candidates.map((c) => {
+                const [dirName, dirDetail] = c.note.split(/\s+—\s+/);
+                const selecting = busy === `select:${c.id}`;
+                return (
+                  <article key={c.id} className="bk-cand">
+                    <div className="bk-cand-slide">
+                      <ScaledSlide format="1080x1350" displayWidth={240}>
+                        <SlideRenderer
+                          slide={previewSlide}
+                          brandKit={{ ...renderKit, recipe: c.recipe }}
+                          format="1080x1350"
+                          forExport
+                        />
+                      </ScaledSlide>
+                    </div>
+                    <div className="bk-cand-note">
+                      <strong>{dirName || 'Direction'}</strong>
+                      {dirDetail && <span>{dirDetail}</span>}
+                    </div>
+                    <ul className="bk-cand-facts">
+                      <li>{c.recipe.signature.name}</li>
+                      <li>
+                        {c.recipe.tokens.displayFamily}
+                        {c.recipe.tokens.accentFamily ? ` · ${c.recipe.tokens.accentFamily}` : ''}
+                      </li>
+                      {c.recipe.motion?.style && (
                         <li>
-                          {c.recipe.tokens.displayFamily}
-                          {c.recipe.tokens.accentFamily ? ` · ${c.recipe.tokens.accentFamily}` : ''}
+                          {c.recipe.motion.style}
+                          {c.recipe.motion.pace ? ` · ${c.recipe.motion.pace}` : ''}
                         </li>
-                        {c.recipe.motion?.style && (
-                          <li>
-                            {c.recipe.motion.style}
-                            {c.recipe.motion.pace ? ` · ${c.recipe.motion.pace}` : ''}
-                          </li>
+                      )}
+                    </ul>
+                    <button
+                      className="mo-btn sm prim"
+                      onClick={() => void chooseCandidate(c.id)}
+                      disabled={busy !== null}
+                    >
+                      {selecting ? 'Applying…' : <>✓ Use this direction</>}
+                    </button>
+                  </article>
+                );
+              })}
+            </div>
+            {recipeOk && (
+              <div className="bk-cands-dismiss">
+                <button className="mo-btn sm" onClick={() => setCandidates(null)} disabled={busy !== null}>
+                  Keep the current recipe
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="mo-krec">
+            <div>
+              <div className="samplewrap">
+                <span className="live">● live</span>
+                <ScaledSlide format="1080x1350" displayWidth={280}>
+                  <SlideRenderer slide={previewSlide} brandKit={renderKit} format="1080x1350" forExport />
+                </ScaledSlide>
+              </div>
+            </div>
+            <div>
+              {recipe ? (
+                <>
+                  <p className="quote">&ldquo;{recipe.signature.description || recipe.signature.name}&rdquo;</p>
+                  <div className="mo-kfact">
+                    <span className="l">Palette</span>
+                    <span className="v">
+                      <span className="sw" style={{ background: recipe.tokens.ground }} />
+                      <span className="sw" style={{ background: recipe.tokens.accent }} />
+                      {recipe.tokens.ink && <span className="sw" style={{ background: recipe.tokens.ink }} />}
+                      {recipe.tokens.accentAlt && <span className="sw" style={{ background: recipe.tokens.accentAlt }} />}
+                    </span>
+                    <button className="go" onClick={() => openReceipt('rcpt-palette')}>Edit</button>
+                  </div>
+                  <div className="mo-kfact">
+                    <span className="l">Type</span>
+                    <span className="v">
+                      {recipe.tokens.displayFamily}
+                      {recipe.tokens.accentFamily ? ` · ${recipe.tokens.accentFamily}` : ''}
+                    </span>
+                    <button className="go" onClick={() => openReceipt('rcpt-type')}>Edit</button>
+                  </div>
+                  <div className="mo-kfact">
+                    <span className="l">Signature</span>
+                    <span className="v">{recipe.signature.name}</span>
+                    <span />
+                  </div>
+                  <div className="mo-kfact">
+                    <span className="l">Imagery</span>
+                    <span className="v">{recipe.imagery.treatment || '—'}</span>
+                    <span />
+                  </div>
+                  <div className="mo-kfact">
+                    <span className="l">Voice</span>
+                    {voiceOk || recipe.voice.description ? (
+                      <span className="v">{voice.trim() || recipe.voice.description}</span>
+                    ) : (
+                      <span className="v warn">Not written yet — the copywriter falls back to a generic register</span>
+                    )}
+                    <button className="go" onClick={() => openReceipt('rcpt-voice')}>
+                      {voiceOk ? 'Edit' : 'Write it'}
+                    </button>
+                  </div>
+
+                  {/* WHY it chose this — recorded at author time. */}
+                  {recipe.rationale && Object.values(recipe.rationale).some(Boolean) && (
+                    <details className="bk-why">
+                      <summary>Why this design?</summary>
+                      <dl>
+                        {(['palette', 'type', 'signature', 'motion'] as const).map((k) =>
+                          recipe.rationale?.[k] ? (
+                            <div key={k}>
+                              <dt>{k}</dt>
+                              <dd>{recipe.rationale[k]}</dd>
+                            </div>
+                          ) : null,
                         )}
-                      </ul>
-                      <button
-                        className="btn sm primary"
-                        onClick={() => void chooseCandidate(c.id)}
+                      </dl>
+                    </details>
+                  )}
+
+                  {/* Direct knobs — instant, scoped, no 60s re-author for a tweak. */}
+                  <div className="bk-knobs">
+                    <span className="bk-knobs-lbl">Tune</span>
+                    <label>
+                      Case
+                      <select
+                        value={recipe.typography.displayCase}
+                        onChange={(e) => saveRecipeKnobs({ displayCase: e.target.value as 'upper' })}
                         disabled={busy !== null}
                       >
-                        {selecting ? (
-                          'Applying…'
-                        ) : (
-                          <>
-                            <Icon name="check" size={13} /> Use this direction
-                          </>
-                        )}
-                      </button>
-                    </article>
-                  );
-                })}
-              </div>
-              {recipe && (
-                <div className="bk-cands-dismiss">
-                  <button className="btn ghost sm" onClick={() => setCandidates(null)} disabled={busy !== null}>
-                    Keep the current recipe
-                  </button>
-                </div>
+                        <option value="upper">Uppercase</option>
+                        <option value="title">Title Case</option>
+                        <option value="sentence">Sentence case</option>
+                      </select>
+                    </label>
+                    <label>
+                      Density
+                      <select
+                        value={recipe.typography.density}
+                        onChange={(e) => saveRecipeKnobs({ density: e.target.value as 'roomy' })}
+                        disabled={busy !== null}
+                      >
+                        <option value="roomy">Roomy</option>
+                        <option value="balanced">Balanced</option>
+                        <option value="dense">Dense</option>
+                      </select>
+                    </label>
+                    <label>
+                      Motion
+                      <select
+                        value={recipe.motion?.style ?? 'rise'}
+                        onChange={(e) => saveRecipeKnobs({ motionStyle: e.target.value as 'rise' })}
+                        disabled={busy !== null}
+                      >
+                        <option value="rise">Rise</option>
+                        <option value="fade">Fade</option>
+                        <option value="slide">Slide</option>
+                        <option value="punch">Punch</option>
+                        <option value="pop">Pop</option>
+                      </select>
+                    </label>
+                    <label>
+                      Pace
+                      <select
+                        value={recipe.motion?.pace ?? 'balanced'}
+                        onChange={(e) => saveRecipeKnobs({ motionPace: e.target.value as 'calm' })}
+                        disabled={busy !== null}
+                      >
+                        <option value="calm">Calm</option>
+                        <option value="balanced">Balanced</option>
+                        <option value="punchy">Punchy</option>
+                      </select>
+                    </label>
+                  </div>
+
+                  {/* Refine — a scalpel beside Tune's dials: one layer, one ask. */}
+                  <div className="bk-refine">
+                    {busy === 'refine' ? (
+                      <WorkingPanel
+                        active
+                        bare
+                        stages={REFINE_STAGES}
+                        palette={paletteSwatches}
+                        title={`Refining the ${refineLayerLabel.toLowerCase()}`}
+                        sub="Rewriting this one layer against your note — the rest of the design stays exactly as it is. This takes ~15–40s."
+                      />
+                    ) : (
+                      <>
+                        <div className="bk-refine-row">
+                          <span className="bk-knobs-lbl">Refine</span>
+                          <label>
+                            Layer
+                            <select
+                              value={refineLayer}
+                              onChange={(e) => setRefineLayer(e.target.value as RecipeLayer)}
+                              disabled={busy !== null}
+                            >
+                              {REFINE_LAYERS.map(([key, label]) => (
+                                <option key={key} value={key}>
+                                  {label}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="bk-refine-ask">
+                            In your words
+                            <input
+                              value={refineNote}
+                              maxLength={200}
+                              placeholder="e.g. the background is too busy — calm it right down"
+                              onChange={(e) => setRefineNote(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') void refine();
+                              }}
+                              disabled={busy !== null}
+                            />
+                          </label>
+                          <button
+                            className="mo-btn sm"
+                            onClick={() => void refine()}
+                            disabled={busy !== null || !refineNote.trim()}
+                          >
+                            Refine
+                          </button>
+                        </div>
+                        <p className="bk-refine-hint">
+                          Changes one layer of the design and leaves the rest alone — far quicker, and
+                          much safer, than redesigning a recipe you already like.
+                        </p>
+                      </>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <p style={{ maxWidth: '62ch', color: 'var(--mo-muted)', lineHeight: 1.6, fontSize: 14 }}>
+                  The brand&rsquo;s design system. The AI reads this kit and authors a full recipe — palette
+                  rationing, a type system, a signature move, imagery treatment, and voice — that{' '}
+                  <em>every</em> future post composes against. This is where &ldquo;on-brand&rdquo; stops being a
+                  hope and becomes automatic.
+                </p>
               )}
             </div>
-          ) : recipe ? (
-            <>
-              <p className="bk-recipe-quote">
-                &ldquo;{recipe.signature.description || recipe.signature.name}&rdquo;
-              </p>
-              <div className="bk-recipe-grid">
-                <div>
-                  <div className="k">Palette</div>
-                  <div className="v">
-                    <span className="bk-bigsw" style={{ background: recipe.tokens.ground }} />
-                    <span className="bk-bigsw" style={{ background: recipe.tokens.accent }} />
-                    {recipe.tokens.ink && <span className="bk-bigsw" style={{ background: recipe.tokens.ink }} />}
-                    {recipe.tokens.accentAlt && <span className="bk-bigsw" style={{ background: recipe.tokens.accentAlt }} />}
-                  </div>
-                </div>
-                <div>
-                  <div className="k">Type</div>
-                  <div className="v">
-                    {recipe.tokens.displayFamily}
-                    {recipe.tokens.accentFamily ? ` · ${recipe.tokens.accentFamily}` : ''}
-                  </div>
-                </div>
-                <div>
-                  <div className="k">Signature</div>
-                  <div className="v">{recipe.signature.name}</div>
-                </div>
-                <div>
-                  <div className="k">Imagery</div>
-                  <div className="v">{recipe.imagery.treatment || '—'}</div>
-                </div>
-                <div>
-                  <div className="k">Voice</div>
-                  <div className="v">{recipe.voice.description || '—'}</div>
-                </div>
-              </div>
-
-              {/* WHY it chose this — recorded at author time. */}
-              {recipe.rationale && Object.values(recipe.rationale).some(Boolean) && (
-                <details className="bk-why">
-                  <summary>Why this design?</summary>
-                  <dl>
-                    {(['palette', 'type', 'signature', 'motion'] as const).map((k) =>
-                      recipe.rationale?.[k] ? (
-                        <div key={k}>
-                          <dt>{k}</dt>
-                          <dd>{recipe.rationale[k]}</dd>
-                        </div>
-                      ) : null,
-                    )}
-                  </dl>
-                </details>
-              )}
-
-              {/* Direct knobs — instant, scoped, no 60s re-author for a tweak. */}
-              <div className="bk-knobs">
-                <span className="bk-knobs-lbl">Tune</span>
-                <label>
-                  Case
-                  <select
-                    value={recipe.typography.displayCase}
-                    onChange={(e) => saveRecipeKnobs({ displayCase: e.target.value as 'upper' })}
-                    disabled={busy !== null}
-                  >
-                    <option value="upper">Uppercase</option>
-                    <option value="title">Title Case</option>
-                    <option value="sentence">Sentence case</option>
-                  </select>
-                </label>
-                <label>
-                  Density
-                  <select
-                    value={recipe.typography.density}
-                    onChange={(e) => saveRecipeKnobs({ density: e.target.value as 'roomy' })}
-                    disabled={busy !== null}
-                  >
-                    <option value="roomy">Roomy</option>
-                    <option value="balanced">Balanced</option>
-                    <option value="dense">Dense</option>
-                  </select>
-                </label>
-                <label>
-                  Motion
-                  <select
-                    value={recipe.motion?.style ?? 'rise'}
-                    onChange={(e) => saveRecipeKnobs({ motionStyle: e.target.value as 'rise' })}
-                    disabled={busy !== null}
-                  >
-                    <option value="rise">Rise</option>
-                    <option value="fade">Fade</option>
-                    <option value="slide">Slide</option>
-                    <option value="punch">Punch</option>
-                    <option value="pop">Pop</option>
-                  </select>
-                </label>
-                <label>
-                  Pace
-                  <select
-                    value={recipe.motion?.pace ?? 'balanced'}
-                    onChange={(e) => saveRecipeKnobs({ motionPace: e.target.value as 'calm' })}
-                    disabled={busy !== null}
-                  >
-                    <option value="calm">Calm</option>
-                    <option value="balanced">Balanced</option>
-                    <option value="punchy">Punchy</option>
-                  </select>
-                </label>
-              </div>
-
-              {/* Refine — a scalpel beside Tune's dials. "The background is too
-                  busy" used to mean a full re-author that changed everything;
-                  this rewrites ONE layer and leaves the rest byte-identical. */}
-              <div className="bk-refine">
-                {busy === 'refine' ? (
-                  <WorkingPanel
-                    active
-                    bare
-                    stages={REFINE_STAGES}
-                    palette={paletteSwatches}
-                    title={`Refining the ${refineLayerLabel.toLowerCase()}`}
-                    sub="Rewriting this one layer against your note — the rest of the design stays exactly as it is. This takes ~15–40s."
-                  />
-                ) : (
-                  <>
-                    <div className="bk-refine-row">
-                      <span className="bk-knobs-lbl">Refine</span>
-                      <label>
-                        Layer
-                        <select
-                          value={refineLayer}
-                          onChange={(e) => setRefineLayer(e.target.value as RecipeLayer)}
-                          disabled={busy !== null}
-                        >
-                          {REFINE_LAYERS.map(([key, label]) => (
-                            <option key={key} value={key}>
-                              {label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="bk-refine-ask">
-                        In your words
-                        <input
-                          value={refineNote}
-                          maxLength={200}
-                          placeholder="e.g. the background is too busy — calm it right down"
-                          onChange={(e) => setRefineNote(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') void refine();
-                          }}
-                          disabled={busy !== null}
-                        />
-                      </label>
-                      <button
-                        className="btn sm"
-                        onClick={() => void refine()}
-                        disabled={busy !== null || !refineNote.trim()}
-                      >
-                        Refine
-                      </button>
-                    </div>
-                    <p className="bk-refine-hint">
-                      Changes one layer of the design and leaves the rest alone — far quicker, and
-                      much safer, than redesigning a recipe you already like.
-                    </p>
-                  </>
-                )}
-              </div>
-            </>
-          ) : (
-            <p className="v" style={{ marginTop: 14, maxWidth: '62ch', color: 'var(--muted)', lineHeight: 1.6 }}>
-              The brand&rsquo;s design system. The AI reads this kit and authors a full recipe — palette rationing, a
-              type system, a signature move, imagery treatment, and voice — that <em>every</em> future post composes
-              against. This is where &ldquo;on-brand&rdquo; stops being a hope and becomes automatic.
-            </p>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Learned preference: repeated slide tweaks, distilled into one quiet,
             dismissible nudge. Applying rides the same knobs PATCH as Tune. */}
-        {recipe && suggestion && !candidates && busy !== 'recipe' && busy !== 'candidates' && (
+        {recipeOk && suggestion && !candidates && busy !== 'recipe' && busy !== 'candidates' && (
           <aside className="bk-suggest" role="status">
             <Icon name="sparkle" size={14} />
             <p className="bk-suggest-msg">{suggestionCopy(suggestion)}</p>
             <div className="row" style={{ gap: 6 }}>
-              <button
-                className="btn sm primary"
-                onClick={() => void applySuggestion(suggestion)}
-                disabled={busy !== null}
-              >
+              <button className="mo-btn sm prim" onClick={() => void applySuggestion(suggestion)} disabled={busy !== null}>
                 Make it so
               </button>
-              <button className="btn ghost sm" onClick={() => void snoozeSuggestion()} disabled={busy !== null}>
+              <button className="mo-btn sm" onClick={() => void snoozeSuggestion()} disabled={busy !== null}>
                 Not now
               </button>
             </div>
           </aside>
         )}
 
-        {/* What a NEWER design prompt would fix about this recipe. Sits beside
-            the learned nudge because it is the same kind of thing — a quiet,
-            evidenced offer — but its source is the app improving, not you. */}
+        {/* What a NEWER design prompt would fix about this recipe. */}
         {!candidates && busy !== 'recipe' && busy !== 'candidates' && (
           <PromptUpdates
             status={promptUpdates}
@@ -1073,17 +1111,24 @@ function KitEditor({
         )}
       </section>
 
-      {/* ── The atelier: living controls ── */}
-      <div className="bk-cols">
-        <div>
-          <section className="bk-sec bk-reveal" style={{ animationDelay: '0.1s' }}>
-            <div className="bk-sec-h">
-              <span className="n">01</span>
-              <h2>Palette &amp; roles</h2>
-              <span className="aside">click a chip to recolor</span>
-            </div>
-            {/* One control per colour: a chip (click → native picker) + an editable hex. */}
-            <div className="bk-palette">
+      {/* ── The details, as receipts: confirmed lines that open into editors ── */}
+      <div className="mo-krcpts">
+        <details className={`mo-rcpt${colorsValid ? '' : ' warn'}`} id="rcpt-palette">
+          <summary>
+            <span className="ok">{colorsValid ? '✓' : '!'}</span>
+            <span>
+              <span className="tt">Palette &amp; roles</span>
+              <div className="tm">{colorsValid ? '5 roles assigned' : 'A color isn’t a valid hex'}</div>
+            </span>
+            <span className="sws">
+              {ROLES.map(([role]) => (
+                <i key={role} style={{ background: HEX.test(colors[role]) ? colors[role] : 'var(--mo-line-strong)' }} />
+              ))}
+            </span>
+            <span className="edit">Edit</span>
+          </summary>
+          <div className="bodyy">
+            <div className="bk-palette" style={{ marginTop: 12 }}>
               {ROLES.map(([role, label]) => {
                 const hex = colors[role];
                 const valid = HEX.test(hex);
@@ -1106,7 +1151,7 @@ function KitEditor({
                         aria-invalid={!valid}
                         aria-label={`${label} hex`}
                         onChange={(e) => setColor(role, e.target.value.toUpperCase())}
-                        style={valid ? undefined : { borderColor: 'var(--danger)' }}
+                        style={valid ? undefined : { borderColor: 'var(--mo-red)' }}
                       />
                     </div>
                   </div>
@@ -1114,31 +1159,47 @@ function KitEditor({
               })}
             </div>
             {!colorsValid && (
-              <p className="muted" style={{ fontSize: 12, color: 'var(--danger)', marginTop: 6 }}>
+              <p style={{ fontSize: 12, color: 'var(--mo-red)', marginTop: 8 }}>
                 Enter valid hex colors (e.g. #0B1F3A) to save.
               </p>
             )}
             {kit.colors.palette?.length > 0 && (
-              <div style={{ marginTop: 16 }}>
-                <span className="muted" style={{ fontSize: 12 }}>Sampled from the site — click to copy:</span>
+              <div style={{ marginTop: 14 }}>
+                <span style={{ fontSize: 12, color: 'var(--mo-faint)' }}>Sampled from the site — click to copy:</span>
                 <div className="row" style={{ gap: 6, marginTop: 6 }}>
                   {kit.colors.palette.map((hex) => (
-                    <span key={hex} className="chip" style={{ background: hex }} title={hex} onClick={() => navigator.clipboard?.writeText(hex)} />
+                    <span
+                      key={hex}
+                      className="chip"
+                      style={{ background: hex }}
+                      title={hex}
+                      onClick={() => navigator.clipboard?.writeText(hex)}
+                    />
                   ))}
                 </div>
               </div>
             )}
-          </section>
+          </div>
+        </details>
 
-          <section className="bk-sec bk-reveal" style={{ animationDelay: '0.14s' }}>
-            <div className="bk-sec-h">
-              <span className="n">02</span>
-              <h2>Typography</h2>
-              <span className="aside">specimens in the brand fonts</span>
-            </div>
-            <div className="bk-type">
+        <details className="mo-rcpt" id="rcpt-type">
+          <summary>
+            <span className="ok">✓</span>
+            <span>
+              <span className="tt">Typography</span>
+              <div className="tm">
+                {heading} + {body}
+                {kit.fonts.detected?.heading ? ` · site uses ${cleanFontName(kit.fonts.detected.heading)}` : ''}
+              </div>
+            </span>
+            <span className="edit">Edit</span>
+          </summary>
+          <div className="bodyy">
+            <div className="bk-type" style={{ marginTop: 12 }}>
               <div className="bk-spec">
-                <div className="role">Heading{kit.fonts.detected?.heading ? ` · site: ${cleanFontName(kit.fonts.detected.heading)}` : ''}</div>
+                <div className="role">
+                  Heading{kit.fonts.detected?.heading ? ` · site: ${cleanFontName(kit.fonts.detected.heading)}` : ''}
+                </div>
                 <div className="aa" style={{ fontFamily: `'${heading}', var(--display)` }}>Aa</div>
                 <div className="pan" style={{ fontFamily: `'${heading}', var(--display)` }}>The quick brown fox.</div>
                 <FontSelect label="Heading font" value={heading} detected={kit.fonts.detected?.heading} onChange={setHeading} />
@@ -1150,47 +1211,43 @@ function KitEditor({
                 <FontSelect label="Body font" value={body} detected={kit.fonts.detected?.body} onChange={setBody} />
               </div>
             </div>
-          </section>
+          </div>
+        </details>
 
-          {kit.homepageScreenshot?.url && (
-            <section className="bk-sec bk-reveal" style={{ animationDelay: '0.18s' }}>
-              <div className="bk-sec-h">
-                <span className="n">03</span>
-                <h2>Source evidence</h2>
-                <span className="aside">the site the kit was read from</span>
+        <details className={`mo-rcpt${logoOk ? '' : ' warn'}`} id="rcpt-logo">
+          <summary>
+            <span className="ok">{logoOk ? '✓' : '!'}</span>
+            <span>
+              <span className="tt">Logo</span>
+              <div className="tm">
+                {logoOk
+                  ? `${logoTreatment === 'mono' ? 'Mono treatment' : 'Original'}${kit.provenance?.logo === 'dom' ? ' · found on the site' : ''}`
+                  : 'No logo yet — slides render without one'}
               </div>
-              <img className="shot" src={kit.homepageScreenshot.url} alt="homepage" style={{ borderRadius: 14, width: '100%' }} />
-            </section>
-          )}
-        </div>
-
-        {/* right rail: sticky preview + logo + voice */}
-        <div className="bk-sticky">
-          <section className="bk-reveal" style={{ animationDelay: '0.12s' }}>
-            <div className="section-label" style={{ marginTop: 0 }}>Live preview</div>
-            <ScaledSlide format="1080x1350" displayWidth={288}>
-              <SlideRenderer slide={previewSlide} brandKit={renderKit} format="1080x1350" forExport />
-            </ScaledSlide>
-          </section>
-
-          <section className="bk-reveal" style={{ animationDelay: '0.16s', marginTop: 20 }}>
-            <div className="section-label">Logo</div>
-            <div className="bk-logo-stage" style={{ background: colors.background }}>
-              {logo?.url ? <img src={logo.url} alt="" /> : <span style={{ color: textOnBrand, opacity: 0.6, fontSize: 13 }}>No logo yet</span>}
+            </span>
+            <span className="edit">{logoOk ? 'Edit' : 'Upload'}</span>
+          </summary>
+          <div className="bodyy">
+            <div className="bk-logo-stage" style={{ background: colors.background, marginTop: 12 }}>
+              {logo?.url ? (
+                <img src={logo.url} alt="" />
+              ) : (
+                <span style={{ color: readable(colors.background), opacity: 0.6, fontSize: 13 }}>No logo yet</span>
+              )}
             </div>
-            <div className="row" style={{ marginTop: 10 }}>
-              <button className="btn sm" onClick={() => fileRef.current?.click()} disabled={busy !== null}>
+            <div className="row" style={{ marginTop: 10, gap: 8 }}>
+              <button className="mo-btn sm" onClick={() => fileRef.current?.click()} disabled={busy !== null}>
                 {busy === 'logo' ? 'Uploading…' : logo ? 'Replace' : 'Upload'}
               </button>
               {logo && (
-                <button className="btn ghost sm" onClick={() => setLogo(undefined)}>Remove</button>
+                <button className="mo-btn sm" onClick={() => setLogo(undefined)}>Remove</button>
               )}
               {logo?.url && (
                 <div className="row" style={{ gap: 4, marginLeft: 'auto' }}>
                   {(['original', 'mono'] as const).map((t) => (
                     <button
                       key={t}
-                      className={`btn sm ${logoTreatment === t ? 'primary' : 'ghost'}`}
+                      className={`mo-btn sm${logoTreatment === t ? ' prim' : ''}`}
                       onClick={() => setLogoTreatment(t)}
                       title={t === 'mono' ? 'Knock the logo out to a single contrasting color' : 'Use the logo as-is'}
                     >
@@ -1207,83 +1264,128 @@ function KitEditor({
                 onChange={(e) => onUploadLogo(e.target.files?.[0])}
               />
             </div>
-          </section>
+          </div>
+        </details>
 
-          <section className="bk-reveal" style={{ animationDelay: '0.2s', marginTop: 20 }}>
-            <div className="section-label">Style descriptor</div>
+        <details className={`mo-rcpt${voiceOk ? '' : ' warn'}`} id="rcpt-voice">
+          <summary>
+            <span className="ok">{voiceOk ? '✓' : '!'}</span>
+            <span>
+              <span className="tt">Voice &amp; style</span>
+              <div className="tm">
+                {voiceOk ? `“${voice.trim().slice(0, 56)}${voice.trim().length > 56 ? '…' : ''}”` : 'Empty — the copywriter deserves better'}
+              </div>
+            </span>
+            <span className="edit">{voiceOk ? 'Edit' : 'Write it'}</span>
+          </summary>
+          <div className="bodyy">
+            <div className="section-label" style={{ marginTop: 12 }}>Style descriptor</div>
             <input
               value={styleDescriptor}
               placeholder="e.g. minimal, high-contrast, generous whitespace"
               onChange={(e) => setStyleDescriptor(e.target.value)}
+              style={{ width: '100%' }}
             />
-            <div className="section-label">Brand voice</div>
+            <div className="section-label" style={{ marginTop: 12 }}>Brand voice</div>
             <textarea
               value={voice}
               rows={3}
               placeholder="How the brand talks — confident, plain-spoken; addresses operators directly; avoids hype"
               onChange={(e) => setVoice(e.target.value)}
+              style={{ width: '100%' }}
             />
-            <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+            <p style={{ fontSize: 12, color: 'var(--mo-faint)', marginTop: 6 }}>
               Grounds the recipe&rsquo;s voice and the captions in the brand&rsquo;s own register.
             </p>
-          </section>
-        </div>
+          </div>
+        </details>
+
+        {kit.homepageScreenshot?.url && (
+          <details className="mo-rcpt" id="rcpt-evidence" style={{ gridColumn: '1 / -1' }}>
+            <summary>
+              <span className="ok">✓</span>
+              <span>
+                <span className="tt">Source evidence</span>
+                <div className="tm">The site the kit was read from</div>
+              </span>
+              <span className="edit">View</span>
+            </summary>
+            <div className="bodyy">
+              <img className="shot" src={kit.homepageScreenshot.url} alt="homepage" style={{ marginTop: 12 }} />
+            </div>
+          </details>
+        )}
       </div>
 
-      {/* Unsaved edits × the recipe: the consequence of saving, shown first. */}
-      {kitDiff && (
-        <section className="bk-diff" aria-label="What saving will change">
-          <div className="bk-diff-copy">
-            <span className="bk-diff-lbl">Unsaved edits</span>
-            <p className="bk-diff-note">Saving updates every post to this.</p>
-            <p className="bk-diff-changed">
-              {kitDiff.changed.filter((c) => !c.startsWith('repaired ')).join(' · ') || 'recipe tokens'}
-            </p>
-          </div>
-          <div className="bk-diff-pair">
-            <figure>
-              <ScaledSlide format="1080x1350" displayWidth={150}>
-                <SlideRenderer slide={previewSlide} brandKit={savedRenderKit} format="1080x1350" forExport />
-              </ScaledSlide>
-              <figcaption>Now</figcaption>
-            </figure>
-            <span className="bk-diff-arrow" aria-hidden>
-              →
-            </span>
-            <figure>
-              <ScaledSlide format="1080x1350" displayWidth={150}>
-                <SlideRenderer
-                  slide={previewSlide}
-                  brandKit={{ ...renderKit, recipe: kitDiff.after }}
-                  format="1080x1350"
-                  forExport
-                />
-              </ScaledSlide>
-              <figcaption>After save</figcaption>
-            </figure>
-          </div>
-        </section>
-      )}
-
-      {/* actions — sticky at the foot */}
-      <div className="bk-actions">
-        <div className="row">
-          <button className="btn primary" onClick={() => save(true)} disabled={busy !== null || !colorsValid}>
-            {busy === 'save' ? 'Saving…' : isDraft ? 'Approve brand kit' : 'Save changes'}
-          </button>
-          {isDraft && (
-            <button className="btn" onClick={() => save(false)} disabled={busy !== null || !colorsValid}>
-              Save draft
-            </button>
-          )}
-          {hasApproved && isDraft && (
-            <span className="muted" style={{ fontSize: 12 }}>Approving replaces the current kit.</span>
-          )}
+      {/* ── Approve — the forecast: consequences you can see, then the button ── */}
+      <section className="mo-tile mo-kfc" aria-label="Approve">
+        <div className="mo-th">
+          <span className="t">{isDraft ? 'Approve — what changes' : 'Save — what changes'}</span>
+          {kitDiff && <span className="b">now → after save</span>}
         </div>
-        {/* Re-analysis takes 20-40s. The first-time panel is gated on there
-            being no kit yet, so this path — the one you take most often —
-            showed nothing at all but a disabled button. */}
-        {busy === 'analyze' ? (
+        {kitDiff ? (
+          <>
+            <p className="note">
+              Your unsaved edits ({kitDiff.changed.filter((c) => !c.startsWith('repaired ')).join(' · ') || 'recipe tokens'})
+              re-render <b>every one of {businessName}&rsquo;s {projects.length} post{projects.length === 1 ? '' : 's'}</b>.
+              {recentPosts.length > 0 ? ' The sample, and your most recent posts, as they would look:' : ''}
+            </p>
+            <div className="grid">
+              <div className="cell">
+                <div className="art">
+                  <ScaledSlide format="1080x1350" displayWidth={150}>
+                    <SlideRenderer slide={previewSlide} brandKit={savedRenderKit} format="1080x1350" forExport />
+                  </ScaledSlide>
+                </div>
+                <div className="cap">Now</div>
+              </div>
+              <span className="pairarrow" aria-hidden>→</span>
+              <div className="cell">
+                <div className="art">
+                  <ScaledSlide format="1080x1350" displayWidth={150}>
+                    <SlideRenderer slide={previewSlide} brandKit={forecastKit} format="1080x1350" forExport />
+                  </ScaledSlide>
+                </div>
+                <div className="cap">After save</div>
+              </div>
+              {recentPosts.map(({ project, first }) => (
+                <div className="cell" key={project._id}>
+                  <div className="art">
+                    <ScaledSlide format={project.format} displayWidth={150}>
+                      <SlideRenderer slide={first!} brandKit={forecastKit} format={project.format} forExport />
+                    </ScaledSlide>
+                  </div>
+                  <div className="cap">{project.title}</div>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="note">
+              {isDraft
+                ? `Approving makes this kit the one every new ${businessName} post composes against${hasApproved ? ' — it replaces the current approved kit' : ''}.`
+                : 'No unsaved edits — the kit below is exactly what every post composes against.'}
+              {recentPosts.length > 0 ? ' Your most recent posts, under this kit:' : ''}
+            </p>
+            {recentPosts.length > 0 && (
+              <div className="grid">
+                {recentPosts.map(({ project, first }) => (
+                  <div className="cell" key={project._id}>
+                    <div className="art">
+                      <ScaledSlide format={project.format} displayWidth={150}>
+                        <SlideRenderer slide={first!} brandKit={forecastKit} format={project.format} forExport />
+                      </ScaledSlide>
+                    </div>
+                    <div className="cap">{project.title}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {busy === 'analyze' && (
           <WorkingPanel
             active
             bare
@@ -1292,19 +1394,31 @@ function KitEditor({
             title="Re-reading your brand"
             sub="Your approved kit stays exactly as it is — this arrives as a draft you can compare and approve. ~20–40s."
           />
-        ) : (
-          <div className="row">
-            {onReanalyze && (
-              <button className="btn ghost sm" onClick={onReanalyze} disabled={busy !== null}>
-                Re-analyze website
-              </button>
-            )}
-            <button className="btn ghost sm" onClick={onManual} disabled={busy !== null}>
-              Start fresh
-            </button>
-          </div>
         )}
-      </div>
+
+        <div className="acts">
+          <button className="mo-btn-compose" onClick={() => save(true)} disabled={busy !== null || !colorsValid}>
+            {busy === 'save' ? 'Saving…' : isDraft ? '✓ Approve the kit' : 'Save changes'}
+          </button>
+          {isDraft && (
+            <button className="mo-btn" onClick={() => save(false)} disabled={busy !== null || !colorsValid}>
+              Save draft
+            </button>
+          )}
+          {onReanalyze && (
+            <button className="mo-btn sm" onClick={onReanalyze} disabled={busy !== null}>
+              Re-analyze website
+            </button>
+          )}
+          <button className="mo-btn sm" onClick={onManual} disabled={busy !== null}>
+            Start fresh
+          </button>
+          <span className="prov">
+            {hasApproved && isDraft ? 'Approving replaces the current kit. ' : ''}
+            {provenanceChips(kit.provenance).join(' · ')}
+          </span>
+        </div>
+      </section>
     </>
   );
 }

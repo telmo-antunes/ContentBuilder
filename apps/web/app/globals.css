@@ -2529,3 +2529,101 @@ input[type='color'] {
 @media (prefers-reduced-motion: reduce) { .mo-btn-compose::after { animation: none; } }
 .mo-fcast .park { font-size: 13px; font-weight: 600; color: var(--mo-muted); background: none; border: none; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; font-family: inherit; }
 .mo-fcast .park:disabled { opacity: 0.5; cursor: default; }
+
+/* ═══ MOMENTUM · The Brand Kit — "The Passport" (batch-5 pick) ══════════════
+   The Studio's linear shape applied to the kit: readiness bar → check chips →
+   the recipe hero tile → details as receipts → Approve as a forecast of real
+   posts. Scoped under .mo-kit; legacy inner controls (.bk-*, WorkingPanel)
+   are re-skinned at the end so nothing reads as a different app. */
+.mo-kit .htitle { display: flex; align-items: center; gap: 12px; }
+.mo-kit .htitle .klogo { width: 34px; height: 34px; border-radius: 9px; background: var(--mo-bg); border: 1px solid var(--mo-line); display: grid; place-items: center; overflow: hidden; flex: none; }
+.mo-kit .htitle .klogo img { width: 100%; height: 100%; object-fit: contain; }
+.mo-kit .htitle .klogo span { font-family: var(--mo-disp); font-weight: 600; font-size: 15px; color: var(--mo-muted); }
+
+/* Recipe hero tile */
+.mo-krec { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 24px; }
+@media (max-width: 900px) { .mo-krec { grid-template-columns: 1fr; } }
+.mo-krec .samplewrap { border-radius: 14px; overflow: hidden; box-shadow: 0 12px 30px -12px rgb(22 24 31 / 40%); width: max-content; position: relative; }
+.mo-krec .samplewrap .live { position: absolute; top: 10px; right: 10px; z-index: 2; font-size: 9.5px; font-weight: 700; color: var(--mo-green); background: rgb(255 255 255 / 92%); border-radius: 999px; padding: 3px 9px; }
+.mo-kfact { display: grid; grid-template-columns: 92px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 10px 4px; border-bottom: 1px solid var(--mo-line); font-size: 13px; }
+.mo-kfact:last-of-type { border-bottom: none; }
+.mo-kfact .l { font-size: 10.5px; font-weight: 600; color: var(--mo-faint); text-transform: uppercase; letter-spacing: 0.08em; }
+.mo-kfact .v { color: var(--mo-ink); min-width: 0; }
+.mo-kfact .v.warn { color: var(--mo-amber); }
+.mo-kfact .v .sw { width: 14px; height: 14px; border-radius: 4px; display: inline-block; vertical-align: -2px; margin-right: 4px; box-shadow: inset 0 0 0 1px rgb(22 24 31 / 12%); }
+.mo-kfact .go { font-size: 12px; font-weight: 600; color: var(--mo-indigo); background: none; border: none; cursor: pointer; font-family: inherit; white-space: nowrap; }
+.mo-kfact .go:hover { text-decoration: underline; }
+.mo-krec .quote { font-size: 13px; color: var(--mo-muted); font-style: italic; margin: 0 0 10px; }
+
+/* Receipts — details tiles that expand into the full editors. */
+.mo-krcpts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-bottom: 14px; }
+@media (max-width: 900px) { .mo-krcpts { grid-template-columns: 1fr; } }
+.mo-rcpt { background: var(--mo-card); border: 1px solid var(--mo-line); border-radius: 16px; box-shadow: var(--mo-shadow); overflow: hidden; }
+.mo-rcpt.warn { border-color: rgb(232 150 15 / 35%); }
+.mo-rcpt summary { display: flex; align-items: center; gap: 12px; padding: 14px 16px; cursor: pointer; list-style: none; }
+.mo-rcpt summary::-webkit-details-marker { display: none; }
+.mo-rcpt summary .ok { width: 22px; height: 22px; border-radius: 50%; background: var(--mo-green-bg); color: var(--mo-green); display: grid; place-items: center; font-size: 11px; flex: none; }
+.mo-rcpt.warn summary .ok { background: var(--mo-amber-bg); color: var(--mo-amber); }
+.mo-rcpt summary .tt { font-size: 13px; font-weight: 600; color: var(--mo-ink); }
+.mo-rcpt summary .tm { font-size: 11.5px; color: var(--mo-faint); margin-top: 2px; }
+.mo-rcpt summary .sws { display: flex; gap: 3px; margin-left: auto; }
+.mo-rcpt summary .sws i { width: 13px; height: 13px; border-radius: 3px; box-shadow: inset 0 0 0 1px rgb(22 24 31 / 12%); }
+.mo-rcpt summary .edit { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--mo-indigo); flex: none; }
+.mo-rcpt summary .sws + .edit { margin-left: 10px; }
+.mo-rcpt .bodyy { padding: 4px 16px 16px; border-top: 1px solid var(--mo-line); }
+.mo-rcpt[open] summary { border-bottom: 0; }
+
+/* Approve tile — the forecast */
+.mo-kfc .note { font-size: 12.5px; color: var(--mo-muted); margin: 0 0 12px; }
+.mo-kfc .note b { color: var(--mo-ink); }
+.mo-kfc .grid { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+.mo-kfc .cell { border: 1px solid var(--mo-line); border-radius: 12px; padding: 9px; text-align: center; }
+.mo-kfc .cell .cap { font-size: 10.5px; color: var(--mo-faint); margin-top: 6px; max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mo-kfc .cell .art { border-radius: 8px; overflow: hidden; }
+.mo-kfc .pairarrow { align-self: center; color: var(--mo-faint); font-size: 16px; }
+.mo-kfc .acts { display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--mo-line); padding-top: 14px; margin-top: 14px; flex-wrap: wrap; }
+.mo-kfc .prov { margin-left: auto; font-size: 11.5px; color: var(--mo-faint); text-align: right; max-width: 46ch; }
+
+/* Legacy controls inside the kit pick up Momentum clothes. */
+.mo-kit .btn { background: var(--mo-card); border: 1px solid var(--mo-line-strong); color: var(--mo-ink); border-radius: 10px; }
+.mo-kit .btn:hover { border-color: var(--mo-indigo); background: var(--mo-card); color: var(--mo-ink); }
+.mo-kit .btn.primary { background: var(--mo-ink); border-color: var(--mo-ink); color: var(--mo-card); }
+.mo-kit .btn.ghost { background: transparent; border-color: transparent; color: var(--mo-muted); }
+.mo-kit input, .mo-kit select, .mo-kit textarea { border: 1px solid var(--mo-line-strong); background: var(--mo-card); color: var(--mo-ink); border-radius: 10px; font: inherit; font-size: 13px; padding: 8px 11px; }
+.mo-kit input:focus, .mo-kit select:focus, .mo-kit textarea:focus { outline: none; border-color: var(--mo-indigo); box-shadow: 0 0 0 3px var(--mo-indigo-bg); }
+.mo-kit .field label, .mo-kit .section-label { color: var(--mo-muted); }
+.mo-kit .bk-knobs, .mo-kit .bk-refine { border-top: 1px solid var(--mo-line); margin-top: 14px; padding-top: 12px; }
+.mo-kit .bk-knobs-lbl { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--mo-faint); }
+.mo-kit .bk-knobs, .mo-kit .bk-refine-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+.mo-kit .bk-knobs label, .mo-kit .bk-refine-row label { font-size: 11.5px; color: var(--mo-muted); display: flex; flex-direction: column; gap: 4px; }
+.mo-kit .bk-refine-ask { flex: 1; min-width: 220px; }
+.mo-kit .bk-refine-hint { font-size: 11.5px; color: var(--mo-faint); margin: 8px 0 0; }
+.mo-kit .bk-cands-lead { font-size: 12.5px; color: var(--mo-muted); }
+.mo-kit .bk-cands-row { display: flex; gap: 14px; flex-wrap: wrap; }
+.mo-kit .bk-cand { background: var(--mo-card-2); border: 1px solid var(--mo-line); border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 8px; max-width: 270px; }
+.mo-kit .bk-cand-slide { border-radius: 10px; overflow: hidden; width: max-content; }
+.mo-kit .bk-cand-note strong { display: block; font-size: 13px; color: var(--mo-ink); }
+.mo-kit .bk-cand-note span { font-size: 11.5px; color: var(--mo-muted); }
+.mo-kit .bk-cand-facts { list-style: none; margin: 0; padding: 0; font-size: 11px; color: var(--mo-faint); display: flex; flex-direction: column; gap: 2px; }
+.mo-kit .bk-cands-dismiss { margin-top: 10px; }
+.mo-kit .bk-why { margin-top: 10px; font-size: 12.5px; color: var(--mo-muted); }
+.mo-kit .bk-why summary { cursor: pointer; font-weight: 600; }
+.mo-kit .bk-why dt { font-weight: 600; color: var(--mo-ink); text-transform: capitalize; margin-top: 6px; }
+.mo-kit .bk-why dd { margin: 0; }
+.mo-kit .bk-suggest { display: flex; align-items: center; gap: 12px; background: var(--mo-indigo-bg); border: 1px solid rgb(91 91 240 / 18%); border-radius: 14px; padding: 12px 16px; margin-top: 14px; color: var(--mo-ink); }
+.mo-kit .bk-suggest-msg { flex: 1; font-size: 13px; margin: 0; }
+.mo-kit .bk-palette { display: flex; flex-direction: column; gap: 10px; }
+.mo-kit .bk-color { display: flex; align-items: center; gap: 12px; }
+.mo-kit .bk-color-chip { width: 40px; height: 40px; border-radius: 10px; cursor: pointer; box-shadow: inset 0 0 0 1px rgb(22 24 31 / 14%); position: relative; flex: none; }
+.mo-kit .bk-color-chip .native { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.mo-kit .bk-color-meta { display: flex; align-items: center; gap: 10px; }
+.mo-kit .bk-color-role { font-size: 12.5px; font-weight: 600; color: var(--mo-ink); width: 88px; }
+.mo-kit .bk-color-hex { font-family: var(--mono, ui-monospace); font-size: 12px; width: 100px; }
+.mo-kit .chip { width: 22px; height: 22px; border-radius: 6px; display: inline-block; cursor: pointer; box-shadow: inset 0 0 0 1px rgb(22 24 31 / 14%); }
+.mo-kit .bk-type { display: flex; flex-direction: column; gap: 16px; }
+.mo-kit .bk-spec .role { font-size: 11px; color: var(--mo-faint); margin-bottom: 4px; }
+.mo-kit .bk-spec .aa { font-size: 54px; line-height: 1.1; color: var(--mo-ink); }
+.mo-kit .bk-spec .pan { font-size: 14px; color: var(--mo-muted); margin-bottom: 8px; }
+.mo-kit .bk-logo-stage { border-radius: 12px; min-height: 110px; display: grid; place-items: center; padding: 14px; }
+.mo-kit .bk-logo-stage img { max-height: 90px; max-width: 80%; object-fit: contain; }
+.mo-kit .shot { border-radius: 12px; width: 100%; border: 1px solid var(--mo-line); }
