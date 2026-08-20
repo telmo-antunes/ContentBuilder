@@ -13,7 +13,7 @@ export default function DeckScroller({
   children,
   stacked = false,
 }: {
-  /** Class of the scrolling strip itself (e.g. "studio-deck"). */
+  /** Class of the scrolling strip itself (e.g. "mo-strip"). */
   className: string;
   children: ReactNode;
   /**
@@ -50,7 +50,7 @@ export default function DeckScroller({
     const el = ref.current;
     if (!el) return;
     const card = el.firstElementChild as HTMLElement | null;
-    const gap = 16; // .studio-deck gap
+    const gap = 16; // .mo-strip gap
     const step = card ? card.offsetWidth + gap : Math.round(el.clientWidth * 0.8);
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     el.scrollBy({ left: dir * step, behavior: reduced ? 'auto' : 'smooth' });
