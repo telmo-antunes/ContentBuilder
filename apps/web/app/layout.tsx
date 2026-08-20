@@ -11,11 +11,11 @@ export const metadata: Metadata = {
 };
 
 // Runs before paint so the saved theme is applied with no flash of the wrong one.
-const themeInit = `(function(){try{var t=localStorage.getItem('cb-theme')||'dark';document.documentElement.dataset.theme=t;}catch(e){document.documentElement.dataset.theme='dark';}})();`;
+const themeInit = `(function(){try{var t=localStorage.getItem('cb-theme')||'light';document.documentElement.dataset.theme=t;}catch(e){document.documentElement.dataset.theme='light';}})();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" data-theme="dark" suppressHydrationWarning>
+    <html lang="en" data-theme="light" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
       </head>

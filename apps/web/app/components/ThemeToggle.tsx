@@ -11,10 +11,10 @@ type Theme = 'dark' | 'light';
  * inline script in the root layout, so this just mirrors + flips it.
  */
 export default function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>('dark');
+  const [theme, setTheme] = useState<Theme>('light');
 
   useEffect(() => {
-    const current = (document.documentElement.dataset.theme as Theme) || 'dark';
+    const current = (document.documentElement.dataset.theme as Theme) || 'light';
     setTheme(current);
   }, []);
 
