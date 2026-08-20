@@ -139,7 +139,9 @@ export default function SharePage() {
       <div className="pv-inner sh-inner">
         <header className="pv-head">
           <p className="pv-eyebrow">Ready to post</p>
-          <h1>{project.title}</h1>
+          <h1 className="sr-marquee" style={{ fontFamily: `'${project.brandKit?.fonts.render.heading ?? 'inherit'}', serif` }}>
+            {project.title}
+          </h1>
           <p className="pv-sub">
             {renders.length} {renders.length === 1 ? 'image' : 'images'} · exported and ready
           </p>

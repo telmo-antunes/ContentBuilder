@@ -27,6 +27,9 @@ export default function PreviewPage() {
   const [error, setError] = useState<string | null>(null);
   const [idx, setIdx] = useState(0);
   const [displayWidth, setDisplayWidth] = useState(340);
+  /** The wings need the stage's real width to center the current slide. */
+  const [outerW, setOuterW] = useState(0);
+  const outerRef = useRef<HTMLDivElement | null>(null);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
 
   const load = useCallback(() => {
@@ -60,6 +63,16 @@ export default function PreviewPage() {
     fit();
     window.addEventListener('resize', fit);
     return () => window.removeEventListener('resize', fit);
+  }, [project]);
+
+  useEffect(() => {
+    const el = outerRef.current;
+    if (!el) return;
+    const measure = () => setOuterW(el.clientWidth);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
   }, [project]);
 
   const go = useCallback(
@@ -130,71 +143,82 @@ export default function PreviewPage() {
 
       <div className="pv-inner">
         <header className="pv-head">
-          <p className="pv-eyebrow">{isStory ? 'Story' : 'Carousel'}</p>
-          <h1>{project.title}</h1>
-          <p className="pv-sub">
-            {total} {isStory ? 'frame' : 'slide'}{total === 1 ? '' : 's'} ·{' '}
-            <span className="pv-hint">swipe or use ← →</span>
+          <p className="pv-eyebrow">
+            {isStory ? 'Story' : 'Carousel'} · {total} {isStory ? 'frame' : 'slide'}
+            {total === 1 ? '' : 's'}
           </p>
-          <button
-            className="btn sm ghost pv-copylink"
-            onClick={() =>
-              void navigator.clipboard
-                ?.writeText(window.location.href)
-                .then(() => toast('Link copied — anyone on this Wi-Fi can open it', 'ok'))
-                .catch(() => toast('Could not copy the link', 'error'))
-            }
-          >
-            <Icon name="copy" size={13} /> Copy link
-          </button>
+          {/* The marquee is set in the BRAND's own display face — the theatre
+              belongs to the client's brand, not to the app. */}
+          <h1 className="sr-marquee" style={{ fontFamily: `'${project.brandKit?.fonts.render.heading ?? 'inherit'}', serif` }}>
+            {project.title}
+          </h1>
+          <p className="pv-sub">
+            <span className="pv-hint">swipe, tap a wing, or use ← →</span>
+          </p>
         </header>
 
-        {/* Swipeable stage: a track of all slides translated by index. */}
-        <div className="pv-stage" style={{ width: displayWidth }}>
+        {/* The stage: the current slide center-frame, its neighbours dimmed in
+            the wings. Swipe stays native; a wing click walks to that slide. */}
+        <div
+          className="sr-stage-outer"
+          ref={outerRef}
+          style={{ height: slideH }}
+          onTouchStart={(e) => {
+            const t = e.touches[0];
+            touchStart.current = t ? { x: t.clientX, y: t.clientY } : null;
+          }}
+          onTouchEnd={(e) => {
+            const s = touchStart.current;
+            const t = e.changedTouches[0];
+            if (!s || !t) return;
+            const dx = t.clientX - s.x;
+            const dy = t.clientY - s.y;
+            if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) go(dx < 0 ? 1 : -1);
+            touchStart.current = null;
+          }}
+        >
           <div
-            className="preview-stage-wrap"
-            style={{ width: displayWidth, height: slideH }}
-            onTouchStart={(e) => {
-              const t = e.touches[0];
-              touchStart.current = t ? { x: t.clientX, y: t.clientY } : null;
-            }}
-            onTouchEnd={(e) => {
-              const s = touchStart.current;
-              const t = e.changedTouches[0];
-              if (!s || !t) return;
-              const dx = t.clientX - s.x;
-              const dy = t.clientY - s.y;
-              if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) go(dx < 0 ? 1 : -1);
-              touchStart.current = null;
+            className="sr-track"
+            style={{
+              transform: `translateX(${Math.round((outerW - displayWidth) / 2 - idx * (displayWidth + 18))}px)`,
             }}
           >
-            <div
-              className="preview-track"
-              style={{ width: displayWidth * total, transform: `translateX(${-idx * displayWidth}px)` }}
-            >
-              {slides.map((s, i) => (
-                <div key={s.id} style={{ width: displayWidth, flex: '0 0 auto' }} aria-hidden={i !== idx}>
-                  <ScaledSlide format={project.format} displayWidth={displayWidth}>
-                    <SlideRenderer
-                      slide={s}
-                      brandKit={kit}
-                      format={project.format}
-                      photos={resolveSlidePhotos(s, project.media)}
-                      theme={s.overrides?.theme ?? theme}
-                      slideIndex={i}
-                      slideTotal={total}
-                      showCounter={Boolean(project.settings?.slideCounter)}
-                      forExport
-                    />
-                  </ScaledSlide>
-                </div>
-              ))}
-            </div>
-
-            {/* Tap zones (left / right half) for desktop clicking. */}
-            {idx > 0 && <button className="preview-tap left" onClick={() => go(-1)} aria-label={`Previous ${label.toLowerCase()}`} />}
-            {idx < total - 1 && <button className="preview-tap right" onClick={() => go(1)} aria-label={`Next ${label.toLowerCase()}`} />}
+            {slides.map((s, i) => (
+              <div
+                key={s.id}
+                className={`sr-item ${i === idx ? 'on' : 'dim'}`}
+                style={{ width: displayWidth }}
+                aria-hidden={i !== idx}
+                onClick={i === idx ? undefined : () => setIdx(i)}
+                role={i === idx ? undefined : 'button'}
+                aria-label={i === idx ? undefined : `Go to ${label.toLowerCase()} ${i + 1}`}
+              >
+                <ScaledSlide format={project.format} displayWidth={displayWidth}>
+                  <SlideRenderer
+                    slide={s}
+                    brandKit={kit}
+                    format={project.format}
+                    photos={resolveSlidePhotos(s, project.media)}
+                    theme={s.overrides?.theme ?? theme}
+                    slideIndex={i}
+                    slideTotal={total}
+                    showCounter={Boolean(project.settings?.slideCounter)}
+                    forExport
+                  />
+                </ScaledSlide>
+              </div>
+            ))}
           </div>
+          {idx > 0 && (
+            <button className="sr-arrow l" onClick={() => go(-1)} aria-label={`Previous ${label.toLowerCase()}`}>
+              ←
+            </button>
+          )}
+          {idx < total - 1 && (
+            <button className="sr-arrow r" onClick={() => go(1)} aria-label={`Next ${label.toLowerCase()}`}>
+              →
+            </button>
+          )}
         </div>
 
         <div className="pv-nav">
@@ -221,12 +245,29 @@ export default function PreviewPage() {
           <div className="pv-caption">
             <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
               <span className="pv-caption-lab">Caption</span>
-              <button
-                className="btn sm ghost"
-                onClick={() => void navigator.clipboard?.writeText(captionText)}
-              >
-                <Icon name="copy" size={13} /> Copy
-              </button>
+              <div className="cap-btns">
+                <button
+                  className="btn sm ghost"
+                  onClick={() =>
+                    void navigator.clipboard
+                      ?.writeText(captionText)
+                      .then(() => toast('Caption copied', 'ok'))
+                  }
+                >
+                  <Icon name="copy" size={13} /> Copy caption
+                </button>
+                <button
+                  className="btn sm ghost"
+                  onClick={() =>
+                    void navigator.clipboard
+                      ?.writeText(window.location.href)
+                      .then(() => toast('Link copied — anyone on this Wi-Fi can open it', 'ok'))
+                      .catch(() => toast('Could not copy the link', 'error'))
+                  }
+                >
+                  <Icon name="link" size={13} /> Copy link
+                </button>
+              </div>
             </div>
             <p>{captionText}</p>
           </div>
