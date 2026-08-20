@@ -2,97 +2,61 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import type { ReactNode } from 'react';
 import ThemeToggle from './ThemeToggle';
 
 /** Routes shared with people OUTSIDE the tool — no internal chrome. */
 const PUBLIC_PREFIXES = ['/preview', '/share', '/render'];
 
-const NAV: { href: string; label: string; icon: ReactNode; match: (p: string) => boolean }[] = [
+const NAV: { href: string; label: string; match: (p: string) => boolean }[] = [
   {
     href: '/',
-    label: 'Studio',
-    // Studio owns the home Desk (which now includes the brand rail) plus the
-    // brand rooms and existing projects reached from it — but NOT the New-post
-    // route (that's its own nav item), so exactly one icon is ever active.
+    label: 'Home',
+    // Home owns the Desk plus the brand rooms and existing projects reached
+    // from it — but NOT the New-post route (its own tab), so exactly one tab
+    // is ever active.
     match: (p) =>
       p === '/' ||
       p.startsWith('/businesses') ||
       (p.startsWith('/projects') && p !== '/projects/new'),
-    icon: (
-      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6">
-        <path d="M4 11.5L12 5l8 6.5" />
-        <path d="M6 10.5V19h12v-8.5" />
-      </svg>
-    ),
   },
-  {
-    href: '/projects/new',
-    label: 'New project',
-    match: (p) => p === '/projects/new',
-    icon: (
-      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6">
-        <path d="M12 3.5l1.7 4.9 4.9 1.6-4.9 1.7L12 16.5l-1.7-4.8L5.4 10l4.9-1.6L12 3.5z" />
-        <path d="M18 16l.9 2.6L21.5 19l-2.6.9L18 22.5l-.9-2.6L14.5 19l2.6-.4L18 16z" strokeOpacity=".6" />
-      </svg>
-    ),
-  },
-  {
-    href: '/whats-new',
-    label: 'What the AI learned',
-    match: (p) => p.startsWith('/whats-new'),
-    icon: (
-      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6">
-        <path d="M5 4.5h9l5 5V19a.5.5 0 01-.5.5h-13A.5.5 0 015 19V5a.5.5 0 010-.5z" />
-        <path d="M13.5 4.5V10h5.5" strokeOpacity=".6" />
-        <path d="M8.5 13.5h7M8.5 16.5h4.5" />
-      </svg>
-    ),
-  },
-  {
-    href: '/settings',
-    label: 'Settings',
-    match: (p) => p.startsWith('/settings'),
-    icon: (
-      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6">
-        <circle cx="12" cy="12" r="3.2" />
-        <path d="M12 2.5v3M12 18.5v3M21.5 12h-3M5.5 12h-3M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1M18.7 18.7l-2.1-2.1M7.4 7.4L5.3 5.3" />
-      </svg>
-    ),
-  },
+  { href: '/projects/new', label: 'New post', match: (p) => p === '/projects/new' },
+  { href: '/whats-new', label: 'AI learnings', match: (p) => p.startsWith('/whats-new') },
+  { href: '/settings', label: 'Settings', match: (p) => p.startsWith('/settings') },
 ];
 
 /**
- * The app's left rail. Hidden on public/client-facing routes so a shared
- * preview link never exposes the internal navigation, DB status, or settings.
+ * The app's top bar (Momentum): worded tabs instead of guessable icons, the
+ * primary action always in reach. Hidden on public/client-facing routes so a
+ * shared preview link never exposes the internal navigation or settings.
  */
 export default function AppChrome() {
   const pathname = usePathname() || '/';
   if (PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))) return null;
   return (
-    <aside className="rail">
-      <Link href="/" className="rail-mark" title="ContentBuilder">
-        C
+    <header className="mo-top">
+      <Link href="/" className="mo-top-mark">
+        <i>C</i> ContentBuilder
       </Link>
-      <nav className="rail-nav">
+      <nav className="mo-top-tabs" aria-label="Main">
         {NAV.map((n) => {
           const active = n.match(pathname);
           return (
             <Link
               key={n.href}
               href={n.href}
-              className={`rail-link${active ? ' active' : ''}`}
-              title={n.label}
-              aria-label={n.label}
+              className={active ? 'active' : undefined}
               aria-current={active ? 'page' : undefined}
             >
-              {n.icon}
+              {n.label}
             </Link>
           );
         })}
       </nav>
-      <div className="rail-sp" />
+      <div className="mo-top-sp" />
       <ThemeToggle />
-    </aside>
+      <Link className="mo-top-cta" href="/projects/new">
+        ＋ New post
+      </Link>
+    </header>
   );
 }
