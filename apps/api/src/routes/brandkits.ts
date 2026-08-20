@@ -346,9 +346,23 @@ async function kitEvidence(kit: KitDoc): Promise<RecipeEvidence> {
   };
 }
 
+/**
+ * THE RECIPE BEING REPLACED HAS TO BE HANDED OVER.
+ *
+ * `authorRecipe` has always taken a `previous` so it can notice a re-author
+ * that returns fewer role fragments than the recipe it replaces — and no caller
+ * ever passed one, so the check could not fire. detailmasters lost its
+ * `statement` fragment exactly that way: the commonest role in the corpus fell
+ * back to a per-slide model call, and the line written to catch it was
+ * unreachable. It now carries such a fragment forward as well as reporting it,
+ * which is worth strictly more when the argument actually arrives.
+ */
 async function authorRecipeForKit(kit: KitDoc, opts?: { verify?: boolean }): Promise<void> {
   const evidence = await kitEvidence(kit);
-  const recipe = await authorRecipe(evidence, { verify: opts?.verify });
+  const recipe = await authorRecipe(evidence, {
+    verify: opts?.verify,
+    previous: kit.get('recipe') as BrandRecipe | undefined,
+  });
   kit.set('recipe', recipe);
   await kit.save();
 }
@@ -446,7 +460,15 @@ brandKitRouter.post(
       const evidence = await kitEvidence(kit);
       const directions = CANDIDATE_DIRECTIONS.slice(0, count);
       const settled = await Promise.allSettled(
-        directions.map((d) => authorRecipe(evidence, { direction: d.nudge })),
+        // Every candidate replaces the SAME current recipe, so each is held to
+        // it: a candidate that drops a role the brand already has an
+        // arrangement for carries it rather than losing it.
+        directions.map((d) =>
+          authorRecipe(evidence, {
+            direction: d.nudge,
+            previous: kit.get('recipe') as BrandRecipe | undefined,
+          }),
+        ),
       );
       const candidates: RecipeCandidate[] = [];
       const failures: unknown[] = [];
