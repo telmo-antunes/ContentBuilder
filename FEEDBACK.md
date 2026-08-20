@@ -57,6 +57,73 @@ Add the next one here, following the shape in [How to add an entry](#how-to-add-
 
 ## Resolved
 
+### The Dynatós overflow was the legibility floor, not the display type
+
+- **Kind:** Defect
+- **Severity:** cost me a fix
+- **First seen:** 2026-08-20 — after the Dynatós re-author
+- **What happened:** a loaded `list` slide overflowed by 63px on 4:5 and 112px
+  on 1:1, and all three stress fixtures overflowed. Measuring element by element
+  said the display type was not the cause: the panel was **722px of a 1154px
+  usable frame**, because the brand authored its rows at **32px/24px** and they
+  render at **41px/34px** — `enforceTypeFloor` raises anything under 15pt. Same
+  for the eyebrow (28→34), body (34→44) and handle (26→34). So the sizes that
+  overflow are the ones held UP by the floor, and lowering the authored value
+  changes nothing; the floor puts it back on the next paint.
+- **Why it matters:** the obvious fix — shrink the type — is the one that cannot
+  work, and it took a per-element measurement to see that.
+- **Fixed:** `npm run recipe:tighten` — 19 documented edits against spacing
+  calibrated for type that is now bigger than it was written for, plus the
+  display sizes the floor does not govern (headline 114→108, headline.sm 82→78,
+  stat 204→196). The 1:1 override needed its own pass: it is the shortest canvas
+  (928px usable vs 1154) and authors rows smaller still, so the same floored
+  rows have 226px less to sit in.
+
+  | | before | after |
+  |---|---|---|
+  | stress fixture, all three formats | overflows | **clean** |
+  | `list` loaded, 4:5 and 1:1 | OVERFLOW | **clean** |
+  | `feature` loaded + photo, 1:1 | OVERFLOW | **clean** |
+  | `statement` + photo, all three | OVERFLOW | OVERFLOW *(unchanged)* |
+  | `cover` + photo, 9:16 | COLLIDE | COLLIDE *(unchanged)* |
+  | `stat` slack, 4:5 | 51% | 53% *(worse)* |
+  | `feature` slack, 4:5, no photo | 52% | 55% *(worse)* |
+
+- **The honest cost:** tightening a slide that already fitted only opens a hole,
+  so slack got ~2.5pp worse on the two roles that were already over the 50%
+  limit before any of this. Worth it — an overflow clips content, slack is a gap
+  the ladder's grow rung can close — but it is a trade, not a free win. A first
+  pass cut the display type twice as hard (114→104, 204→178) and made slack
+  worse still for no extra overflow benefit, which is why the final numbers are
+  gentle.
+- **Still open, and not a type-scale problem:** `statement` overflows on every
+  format once it carries a picture, and 9:16 `cover` collides. Both predate the
+  tightening. `statement`'s cause is the photo slot `fillRecipeFragmentGaps`
+  ADDED to it competing with a 3-line 108px headline — the gap filler adds a
+  hole whenever the role allows one and never measures whether the result still
+  fits. Compose's ladder repairs both at deck time; the recipe should not need
+  it to.
+
+### `ROLE_PARTS` can over-stuff a fragment, and nothing measures the result
+
+- **Kind:** Gap
+- **Severity:** minor
+- **First seen:** 2026-08-20 — Dynatós `list`
+- **What happened:** `fillRecipeFragmentGaps` gave `list` holes for `tagline`,
+  `body` and `handle` on top of the eyebrow, headline and 4-row panel the author
+  wrote. Each hole is conditional, so a rows-only list slide is fine — but a
+  copywriter who fills all of them gets a slide no canvas can hold at floored
+  type. The filler re-validates STRUCTURE through `checkFragment` and never
+  measures the result.
+- **Why it matters:** the same filler runs for every brand, and a role's part
+  list is a guess about density that nothing checks.
+- **Direction:** either drop `tagline` from `list`'s parts (a list's rows ARE
+  its content, so a tagline competing with them is redundant), or have the
+  filler measure the fully-loaded fragment and stop adding holes once it stops
+  fitting. The second is the real fix and needs a renderer where there is not
+  one today.
+
+
 ### `authorRecipe`'s regression check was unreachable code
 
 - **Kind:** Defect
