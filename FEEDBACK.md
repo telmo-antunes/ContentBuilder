@@ -57,6 +57,45 @@ Add the next one here, following the shape in [How to add an entry](#how-to-add-
 
 ## Resolved
 
+### The three "over capacity" fragments are a 1-in-93 case, and fixing them would cost the brand
+
+- **Kind:** Gap
+- **Severity:** minor
+- **First seen:** 2026-08-20 — before rebuilding the smoke-odour deck
+- **What happened:** three of detailmasters' stored fragments do not hold their
+  worst-case copy — `cover`+photo (109px over), `statement`+photo (58px over)
+  and `list` (552px over). Measured element by element, the cause is the same
+  every time: at the **full 60-character budget** this brand's headline runs to
+  **four lines / 441px**, and a photo slot is a further **459px** — 900px of a
+  1162px frame before the eyebrow, body and sign-off are counted. `list` is the
+  outlier for a different reason: five rows at the 42-character row budget wrap
+  to two lines each, so the panel alone is 1136px.
+- **Why the obvious fix is the wrong one:** the levers are the headline size
+  (this brand's signature, on every slide of every deck) or removing holes
+  (which trades deterministic composition for a model call on those slides).
+  Both cost more than the fault does. Measured across all 93 stored headlines:
+
+  ```
+  n=93  min=3  p25=27  median=34  p75=43  p95=53  max=74
+  at or above the 60-char budget:  1
+  ```
+
+  **One headline in 93** reaches the budget the worst case assumes. At the
+  median 34 characters the headline is two lines, not four — 220px of headroom,
+  which is more than either overage. And the corpus gate reports 86 of 86
+  shipped slides clean.
+- **Done instead:** `npm run fragments:check --workspace=apps/api -- --gate` —
+  the same shape as the corpus gate, asking the different question. The corpus
+  re-measures slides that actually shipped; this asks what a fragment could be
+  asked to hold on a deck nobody has composed yet. Baselined at the 7 known
+  faults (13 of 20 measurements hold), so the state cannot get quietly worse
+  while the brand stays as its designer intended.
+- **The pattern worth noticing:** every one of the 7 is either `+photo` or
+  `list`. Not brand sloppiness — the worst case pairs a full-budget headline
+  with a picture that takes a third of the canvas, and few compositions survive
+  both at once.
+
+
 ### The gap filler adds a hole without ever asking whether it still fits
 
 - **Kind:** Defect

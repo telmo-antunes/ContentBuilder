@@ -19,7 +19,8 @@
     "layout:corpus": "tsx src/scripts/slackDistribution.ts",
     "ai:share": "tsx src/scripts/aiShare.ts",
     "fragments:carry": "tsx src/scripts/carryFragments.ts",
-    "recipe:tighten": "tsx src/scripts/tightenDynatos.ts"
+    "recipe:tighten": "tsx src/scripts/tightenDynatos.ts",
+    "fragments:check": "tsx src/scripts/checkFragments.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.106.0",
