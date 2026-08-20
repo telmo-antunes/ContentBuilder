@@ -67,11 +67,25 @@ function visibleText(html: string): string {
   const scaffolds = new Set(
     (await BusinessModel.find({ name: /^__/ }).select('_id').lean()).map((b) => String(b._id)),
   );
-  const kits = (await BrandKitModel.find({ recipe: { $exists: true } }).lean()).filter(
-    (k) => !scaffolds.has(String(k.businessId)),
-  );
+  /**
+   * THE LIVE KIT, not just any kit. A business accumulates kits — detailmasters
+   * has five, all approved — and compose reads exactly one: newest approved.
+   * Measuring against an arbitrary one compares today's slides to a recipe that
+   * never composed them, which is how `list` first read as 0% fragment when its
+   * fragment substitutes cleanly in every shape a list slide comes in.
+   */
   const recipeByBusiness = new Map<string, BrandRecipe>();
-  for (const k of kits) if (k.recipe) recipeByBusiness.set(String(k.businessId), k.recipe as BrandRecipe);
+  for (const b of await BusinessModel.find({ name: { $not: /^__/ } }).select('_id').lean()) {
+    if (scaffolds.has(String(b._id))) continue;
+    const kit = await BrandKitModel.findOne({
+      businessId: b._id,
+      status: 'approved',
+      recipe: { $exists: true },
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+    if (kit?.recipe) recipeByBusiness.set(String(b._id), kit.recipe as BrandRecipe);
+  }
   /**
    * The wordmark is not a stored field — it lives in the markup, and
    * `findBrandMark` is what the renderer itself uses to find it. Its words plus
@@ -114,6 +128,8 @@ function visibleText(html: string): string {
     html: string;
     hasFragment: boolean;
     fromFragment: boolean;
+    /** True when the slide SAYS which path made it, rather than being guessed. */
+    known: boolean;
     charsAi: number;
     charsBrand: number;
   }
@@ -125,7 +141,9 @@ function visibleText(html: string): string {
       if (String(p.title ?? '').startsWith('__')) continue;
       const recipe = recipeByBusiness.get(String(p.businessId)) ?? fallback;
       const at = new Date(p.updatedAt ?? p.createdAt ?? 0).getTime();
-      for (const s of (p.slides ?? []) as Array<{ authored?: { html?: string; role?: string } }>) {
+      for (const s of (p.slides ?? []) as Array<{
+        authored?: { html?: string; role?: string; source?: string };
+      }>) {
         const html = s.authored?.html;
         if (!html) continue;
         const role = s.authored?.role ?? '?';
@@ -140,13 +158,27 @@ function visibleText(html: string): string {
           else charsAi += word.length;
         }
 
+        /**
+         * ASK THE SLIDE FIRST. Slides composed since the path became a stored
+         * field simply say which one made them. Older ones are guessed from
+         * their markup — and the guess is weak in a way worth naming: a
+         * fragment fill and a model compose that followed the same recipe order
+         * are indistinguishable, `balanceVertical` moves the spacers of both,
+         * and repeated rows make the skeletons differ in length in opposite
+         * directions. The share of guessed slides is printed so the number is
+         * read with the right confidence.
+         */
         const frag = recipe.fragments?.[role];
+        const stored = s.authored?.source;
         all.push({
           at,
           role,
           html,
           hasFragment: Boolean(frag),
-          fromFragment: Boolean(frag && isSubsequence(skeleton(html), skeleton(frag))),
+          fromFragment: stored
+            ? stored === 'fragment'
+            : Boolean(frag && isSubsequence(skeleton(html), skeleton(frag))),
+          known: Boolean(stored),
           charsAi,
           charsBrand,
         });
@@ -172,6 +204,10 @@ function visibleText(html: string): string {
     console.log(`  WORDS      model-written ${ai} chars ${pct(ai, brand)}   brand-constant ${brand} ${pct(brand, ai)}`);
     console.log(`  STRUCTURE  code-substituted fragment ${frag} ${pct(frag, n - frag)}   model-composed ${n - frag} ${pct(n - frag, frag)}`);
     console.log(`             (of the model-composed, ${noFrag} had no fragment for their role to use)`);
+    const known = cohort.filter((s) => s.known).length;
+    console.log(
+      `             ${known}/${n} slides state their path; the other ${n - known} are inferred from markup`,
+    );
     const byRole = new Map<string, { n: number; frag: number }>();
     for (const s of cohort) {
       const v = byRole.get(s.role) ?? { n: 0, frag: 0 };

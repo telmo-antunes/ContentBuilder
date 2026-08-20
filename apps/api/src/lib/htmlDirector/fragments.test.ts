@@ -11,6 +11,7 @@ import {
   fragmentVerbatimGaps,
   substituteFragment,
   validateRecipeFragments,
+  carryForwardFragments,
   readsAsReasoning,
   firstSlideBody,
 } from './fragments';
@@ -313,6 +314,51 @@ describe('the convention the author prompt states', () => {
       .map((l) => l.trim())
       .join('\n');
     expect(checkFragment(detailMastersRecipe, 'list', example)).toHaveProperty('html');
+  });
+});
+
+describe('carrying a fragment the re-author dropped', () => {
+  it('carries a role the new recipe lost and the old one still fits', () => {
+    const previous = withFragments({ cover: COVER, statement: STATEMENT, list: LIST });
+    const next = withFragments({ cover: COVER, list: LIST });
+
+    const out = carryForwardFragments(next, previous);
+
+    expect(out.carried).toEqual(['statement']);
+    expect(out.unusable).toEqual([]);
+    expect(out.recipe.fragments?.statement).toContain('{{headline}}');
+    // And the carried arrangement actually composes a slide.
+    expect(
+      fill(out.recipe, input({ role: 'statement', parts: { headline: 'Fragrance never fixes.' } })),
+    ).toContain('Fragrance never fixes.');
+  });
+
+  it('never overwrites a fragment the new recipe authored for itself', () => {
+    const previous = withFragments({ statement: STATEMENT });
+    const mine = '<div class="headline">{{headline}}</div>';
+    const next = withFragments({ statement: mine });
+
+    const out = carryForwardFragments(next, previous);
+
+    expect(out.carried).toEqual([]);
+    expect(out.recipe.fragments?.statement).toBe(mine);
+  });
+
+  it('reports rather than carries a fragment the new vocabulary cannot serve', () => {
+    const previous = withFragments({ statement: '<div class="nonesuch">{{headline}}</div>' });
+    const next = withFragments({ cover: COVER });
+
+    const out = carryForwardFragments(next, previous);
+
+    expect(out.carried).toEqual([]);
+    expect(out.unusable.map((d) => d.role)).toEqual(['statement']);
+    expect(out.recipe.fragments?.statement).toBeUndefined();
+  });
+
+  it('leaves the recipe untouched when there is nothing to carry', () => {
+    const next = withFragments({ cover: COVER });
+    expect(carryForwardFragments(next, null).recipe).toBe(next);
+    expect(carryForwardFragments(next, withFragments({ cover: COVER })).recipe).toBe(next);
   });
 });
 

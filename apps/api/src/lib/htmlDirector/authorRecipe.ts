@@ -48,7 +48,12 @@ import { aiJson, cachedSystem, modelFor, withOpusReasoning, type AiJsonResult, t
 import { sanitizeRecipeCss } from '../cssSanitize';
 import { PROMPT_VERSION } from '../promptVersion';
 import { getStorage } from '../../storage';
-import { FRAGMENT_CONVENTION, fillRecipeFragmentGaps, validateRecipeFragments } from './fragments';
+import {
+  FRAGMENT_CONVENTION,
+  carryForwardFragments,
+  fillRecipeFragmentGaps,
+  validateRecipeFragments,
+} from './fragments';
 import { dynatosRecipe, detailMastersRecipe, halftonePressRecipe } from './recipes';
 import { checkRecipeLayout } from './verifyRecipe';
 import { renderCheckEnabledByDefault } from './renderCheck';
@@ -635,24 +640,39 @@ function gate(recipe: BrandRecipe, label: string, previous?: BrandRecipe): Brand
   for (const d of fragments.dropped) {
     console.warn(`[recipe:${label}] dropped the "${d.role}" reference fragment — ${d.reason}`);
   }
+  /**
+   * A fragment the replaced recipe had and this one does not is CARRIED, not
+   * merely reported. Warning about the regression and storing the recipe anyway
+   * is what cost every `statement` slide a model call for three weeks.
+   *
+   * BEFORE the gap fill, so a carried fragment is held to exactly the same
+   * standard as an authored one — it gains the holes its role turns out to need
+   * and a photo slot if its role should have one.
+   */
+  const carry = carryForwardFragments(fragments.recipe, previous);
+  for (const d of carry.unusable) {
+    console.warn(
+      `[recipe:${label}] REGRESSION: the recipe being replaced had a "${d.role}" fragment, this one does not, ` +
+        `and the old one no longer fits this recipe (${d.reason}) — that role costs a model call per slide`,
+    );
+  }
+  if (carry.carried.length) {
+    console.warn(
+      `[recipe:${label}] carried the "${carry.carried.join('", "')}" fragment(s) forward from the recipe being replaced`,
+    );
+  }
   // A fragment with one fewer hole than its role turns out to need sends every
   // such slide to the composer — a real model call for an arrangement this
   // brand already wrote down. The gaps are filled with the brand's own classes,
   // in its own composition order, so that call is never paid again.
-  const filled = fillRecipeFragmentGaps(fragments.recipe);
+  const filled = fillRecipeFragmentGaps(carry.recipe);
   for (const r of filled.repairs) {
     console.warn(`[recipe:${label}] "${r.role}" fragment gained a hole for: ${r.added.join(', ')}`);
   }
   /**
-   * FRAGMENT COVERAGE, named role by role — and compared against whatever this
-   * recipe is REPLACING.
-   *
-   * A re-author once came back with six of seven fragments; `statement` was
-   * simply absent, nothing in the response said so, and it was found by diffing
-   * the two by hand. A role with no fragment falls back to a per-slide model
-   * call: slower, less predictable, and the exact path that once rendered the
-   * model's own reasoning onto a slide. That is a downgrade wearing an
-   * upgrade's version number, so it is worth saying out loud.
+   * FRAGMENT COVERAGE, named role by role. A role with no fragment falls back to
+   * a per-slide model call: slower, less predictable, and the exact path that
+   * once rendered the model's own reasoning onto a slide.
    */
   const roles = Object.keys(filled.recipe.fragments ?? {});
   const missing = SLIDE_ROLES.filter((r) => !roles.includes(r));
@@ -660,13 +680,6 @@ function gate(recipe: BrandRecipe, label: string, previous?: BrandRecipe): Brand
     console.warn(
       `[recipe:${label}] ${roles.length}/${SLIDE_ROLES.length} reference fragment(s): ${roles.join(', ')}` +
         (missing.length ? ` — no fragment for ${missing.join(', ')}, those roles cost a model call per slide` : ''),
-    );
-  }
-  const had = Object.keys(previous?.fragments ?? {});
-  const lost = had.filter((r) => !roles.includes(r));
-  if (lost.length) {
-    console.warn(
-      `[recipe:${label}] REGRESSION: the recipe being replaced had a "${lost.join('", "')}" fragment and this one does not`,
     );
   }
   return filled.recipe;

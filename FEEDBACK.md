@@ -57,6 +57,52 @@ Add the next one here, following the shape in [How to add an entry](#how-to-add-
 
 ## Resolved
 
+### The commonest role lost its fragment on a re-author, and only a warning noticed
+
+- **Kind:** Defect
+- **Severity:** cost me a fix
+- **First seen:** 2026-08-20 — measuring the AI/code split across the corpus
+- **What happened:** detailmasters' live recipe (kit `6a7b7882`, authored
+  2026-08-11) has fragments for `cover, quote, feature, stat, list, cta` — and
+  none for `statement`. The kit it replaced had all seven. `statement` is the
+  commonest role in the corpus (n=18 all-time, n=10 in the recent cohort), so
+  every one of those slides has paid a per-slide model call since, for an
+  arrangement the brand had already written down. `authorRecipe` DID notice —
+  it logs `REGRESSION: the recipe being replaced had a "statement" fragment and
+  this one does not` — and stored the degraded recipe anyway. Checked against
+  the live recipe's own component classes, the old fragment is **accepted**
+  unchanged; nothing about it had gone stale.
+- **Why it matters:** a warning that does not change the outcome is a warning
+  nobody reads three weeks later. The regression was real, detected, logged,
+  and shipped.
+- **Fixed:** `carryForwardFragments` carries any fragment the replaced recipe
+  had into the new one when `checkFragment` still accepts it, before the gap
+  fill so a carried fragment is held to the same standard as an authored one.
+  `npm run fragments:carry --workspace=apps/api -- --write` applies the same
+  rule to kits already stored; it restored `statement` (which then gained a
+  photo slot) and all four of its shapes render clean — slack 6.8%–31.9%
+  against a 50% limit, no overflow, no collision.
+
+### `list` read as 0% fragment when its fragment was working perfectly
+
+- **Kind:** Defect
+- **Severity:** minor
+- **First seen:** 2026-08-20 — the first AI/code split measurement
+- **What happened:** the split was inferred by matching each stored slide's
+  tag/class skeleton against its role's fragment. That cannot work: repeated
+  `{{#rows}}` make the slide LONGER than the fragment, absent parts make it
+  SHORTER, `balanceVertical` moves the spacers of both, and a model compose that
+  follows the recipe's order is byte-comparable to a fill. `list` reported 0%
+  while `substituteFragment` in fact fills it cleanly in all four shapes a list
+  slide comes in (full house, no body, rows without notes, no eyebrow).
+- **Why it matters:** the measurement was about to be used to decide where to
+  spend effort, and it pointed at a role that had no problem.
+- **Fixed:** the compose path is now STORED on the slide (`authored.source`:
+  `fragment` | `ai`) rather than reconstructed from markup. `npm run ai:share`
+  prefers it and prints how many slides in each cohort state their path versus
+  are inferred, so the number is read with the right confidence.
+
+
 ### Two headlines a deck out still stop mid-sentence — the rule was right
 
 *Resolved 2026-08-19 (PR #89).* The question was whether `"Spotless car. Same smell"` is the deck's punchy style or a truncation, because the two want opposite fixes. Measured across every stored headline rather than argued:
