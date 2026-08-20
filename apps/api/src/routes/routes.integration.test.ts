@@ -596,6 +596,40 @@ describe('recipe candidates', () => {
     expect(fresh?.recipeCandidates).toHaveLength(2);
   });
 
+  /**
+   * THE ARGUMENT THAT WAS NEVER PASSED.
+   *
+   * `authorRecipe` takes a `previous` so it can notice — and now carry — a role
+   * fragment the re-author drops. Neither route supplied one, so the check was
+   * unreachable and detailmasters lost its `statement` fragment in silence. The
+   * defect was pure wiring, which is where this asserts.
+   */
+  it('hands the author the recipe each route is replacing', async () => {
+    const biz = await seedBusiness();
+    const kit = await seedApprovedKit(String(biz._id));
+    const standing = fakeRecipe('Standing');
+    await BrandKitModel.updateOne({ _id: kit._id }, { $set: { recipe: standing } });
+
+    authorRecipeMock.mockImplementation(async () => fakeRecipe('Fresh'));
+    expectStatus(await request(app()).post(`/brandkits/${kit._id}/recipe`), 200);
+    expect(authorRecipeMock.mock.calls[0]?.[1]?.previous?.signature?.name).toBe('Standing');
+
+    // A SECOND kit for the candidates half: the route above has already stored
+    // its result on the first one, so 'Standing' is no longer what a run there
+    // would be replacing.
+    const other = await seedApprovedKit(String(biz._id));
+    await BrandKitModel.updateOne({ _id: other._id }, { $set: { recipe: standing } });
+
+    authorRecipeMock.mockReset();
+    let n = 0;
+    authorRecipeMock.mockImplementation(async () => fakeRecipe(`Take ${++n}`));
+    expectStatus(await request(app()).post(`/brandkits/${other._id}/recipe/candidates`).send({}), 200);
+    expect(authorRecipeMock).toHaveBeenCalledTimes(2);
+    // Every candidate replaces the SAME standing recipe, so each is held to it.
+    for (const call of authorRecipeMock.mock.calls)
+      expect(call[1]?.previous?.signature?.name).toBe('Standing');
+  });
+
   it('caps the run at three candidates', async () => {
     const { res } = await seedAndAuthor(3);
     expectStatus(res, 200);

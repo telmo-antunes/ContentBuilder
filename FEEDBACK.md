@@ -57,6 +57,52 @@ Add the next one here, following the shape in [How to add an entry](#how-to-add-
 
 ## Resolved
 
+### `authorRecipe`'s regression check was unreachable code
+
+- **Kind:** Defect
+- **Severity:** cost me a fix
+- **First seen:** 2026-08-20 — before re-authoring the Dynatós recipe
+- **What happened:** `authorRecipe` takes a `previous` — the recipe this one is
+  replacing — so it can notice a re-author that returns fewer role fragments
+  than what it replaces. **No caller ever passed one.** Both places that
+  re-author a kit (`POST /brandkits/:id/recipe` and the candidates flow) called
+  it without. So the REGRESSION warning could not fire even in the case it was
+  written for, which is exactly how detailmasters lost `statement` in silence —
+  and the carry-forward added in #90 had the same dependency, so it would have
+  been dead on arrival too.
+- **Why it matters:** two guards against the same class of loss, both
+  unreachable, and the loss they guard against had already happened once.
+- **Fixed:** both call sites pass the kit's current recipe; for candidates,
+  every candidate replaces the same standing recipe so each is held to it. The
+  regression test asserts the wiring rather than the logic — it fails on the
+  previous commit and passes on this one.
+
+### Dynatós had no fragments at all, and its type scale overflows a loaded slide
+
+- **Kind:** Gap
+- **Severity:** minor
+- **First seen:** 2026-08-20 — Dynatós Program re-author
+- **What happened:** Dynatós' live recipe (2026-07-01) predated fragments
+  entirely — 0 of 7 roles — so every slide it composed cost a model call, and
+  there was nothing to carry forward. Re-authored on the production path with
+  `previous` wired: **7/7 fragments**, 13 components. Every fragment renders
+  clean with typical copy (slack 14.1%–52.4%). Loaded with every part its role
+  allows, `list` **overflows** — and `checkRecipeLayout`'s all-nine-elements
+  stress fixture overflows too. **The recipe it replaced overflows the same
+  fixture**, so the type scale is a pre-existing property of this brand, not
+  something the re-author introduced. The render-verify pass looked at real
+  samples and returned `good`; its fixtures are lighter than the stress one.
+- **Why it matters:** a deck built on it still ships — compose's ladder repairs
+  an overflow — but it starts from a failing layout, so every such deck spends
+  repair rungs it should not need.
+- **Direction:** the type scale wants tightening for this brand specifically;
+  no floor caps a MAXIMUM size, only minimums. Worth doing when Dynatós is next
+  posted rather than speculatively.
+- **Verified:** the corpus gate is clean against the new recipe — 86 slides, 0
+  overflowing or colliding, 0 over the slack limit — so no existing Dynatós
+  slide was broken by the swap.
+
+
 ### Every corpus-gate run since the first one was still resident, holding a Chrome
 
 - **Kind:** Defect
