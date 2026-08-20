@@ -13,6 +13,7 @@ import {
   MAX_SLIDE_DIRECTION_CHARS,
   defaultFormatFor,
   parseBrief,
+  slideCountFor,
 } from '@contentbuilder/shared';
 import {
   listBusinesses,
@@ -37,21 +38,26 @@ function hostOf(url: string): string {
   }
 }
 
-/** The composer's shape while it loads: centered hero, two form cards. */
+/** The composer's shape while it loads: title, then the three beats. */
 function ComposerSkeleton() {
   return (
-    <div className="create-wrap" role="status" aria-label="Loading">
-      <div className="create-hero" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
-        <Skeleton shape="line" w={90} h={10} />
-        <Skeleton shape="block" w={340} h={44} />
-        <Skeleton shape="line" w={280} h={12} />
-      </div>
-      <Skeleton shape="block" h={150} style={{ marginBottom: 14 }} />
-      <Skeleton shape="block" h={240} />
+    <div className="mo-page mo-compose" role="status" aria-label="Loading">
+      <Skeleton shape="line" w={120} h={12} style={{ marginBottom: 14 }} />
+      <Skeleton shape="block" w={380} h={34} style={{ marginBottom: 22 }} />
+      <Skeleton shape="block" h={72} style={{ borderRadius: 20, marginBottom: 22 }} />
+      <Skeleton shape="block" h={280} style={{ borderRadius: 20, marginBottom: 22 }} />
+      <Skeleton shape="block" h={160} style={{ borderRadius: 20 }} />
     </div>
   );
 }
 
+/**
+ * THE COMPOSER — the batch-4 hybrid: Three Beats' wizard rhythm as the spine
+ * (who's it for → what should it say → compose), The Brief's writing desk as
+ * the middle beat with the parser's findings as live margin notes, and The
+ * Forecast as the final beat — the deck the AI intends, shown right where you
+ * decide to spend the compose.
+ */
 function NewProjectForm() {
   const router = useRouter();
   const params = useSearchParams();
@@ -64,18 +70,25 @@ function NewProjectForm() {
   const ideaFrom = params.get('ideaFrom');
   const [loadingIdea, setLoadingIdea] = useState(Boolean(ideaFrom));
 
-  const [businessId, setBusinessId] = useState(params.get('businessId') ?? '');
+  const preselected = params.get('businessId');
+  const [businessId, setBusinessId] = useState(preselected ?? '');
   const [title, setTitle] = useState('');
   const [type, setType] = useState<AssetType>('carousel');
   const [format, setFormat] = useState<Format>('1080x1350');
   const [idea, setIdea] = useState('');
   /**
    * The slide plan. Empty means "you decide" — how many slides the deck needs
-   * is derived from the brief, which is what replaced the manual slide-count
-   * stepper. Adding rows pins it: one slide per row, in this order.
+   * is derived from the brief. Adding rows pins it: one slide per row, in order.
    */
   const [plan, setPlan] = useState<string[]>([]);
   const [aiReady, setAiReady] = useState(false);
+  /**
+   * Beat 1 collapses to a receipt once answered. Arriving with a brand in hand
+   * (the Desk's "For Dynatós" buttons, or a parked idea) starts it collapsed —
+   * the question was answered before the page opened.
+   */
+  const [whoOpen, setWhoOpen] = useState(() => !preselected && !ideaFrom);
+  const [planOpen, setPlanOpen] = useState(false);
 
   const load = useCallback(() => {
     setError(null);
@@ -122,23 +135,33 @@ function NewProjectForm() {
   // across renders that only touched the textarea the plan doesn't feed.
   const filledPlan = useMemo(() => plan.map((p) => p.trim()).filter(Boolean), [plan]);
   /**
-   * What the machine will make of this brief — computed from the SAME parser the
-   * API runs, so the summary under the box is a promise, not a guess. Shows the
-   * page it will read and the words it will keep before a compose is spent.
+   * What the machine will make of this brief — computed from the SAME parser
+   * the API runs, so every margin note and forecast card is a promise, not a
+   * guess.
    */
   const brief = useMemo(() => parseBrief(idea, filledPlan), [idea, filledPlan]);
+  /** How many slides the material is worth — the ghost storyboard's honest count. */
+  const count = useMemo(
+    () =>
+      slideCountFor({
+        planLength: brief.plan.length || undefined,
+        ideaChars: brief.idea.length || undefined,
+      }),
+    [brief],
+  );
 
   const ideaTooLong = idea.length > MAX_DRAFT_PARAGRAPH_CHARS;
+  const briefReady = idea.trim().length > 0 || filledPlan.length > 0;
   const canSubmit =
-    Boolean(businessId && title.trim() && format) &&
-    canCompose &&
-    (idea.trim().length > 0 || filledPlan.length > 0) &&
-    !ideaTooLong &&
-    !loadingIdea;
+    Boolean(businessId && title.trim() && format) && canCompose && briefReady && !ideaTooLong && !loadingIdea;
+  const whoDone = Boolean(businessId && title.trim());
 
   const setPlanAt = (i: number, value: string) =>
     setPlan((rows) => rows.map((r, j) => (j === i ? value.slice(0, MAX_SLIDE_DIRECTION_CHARS) : r)));
-  const addPlanRow = () => setPlan((rows) => (rows.length >= MAX_PLAN_SLIDES ? rows : [...rows, '']));
+  const addPlanRow = () => {
+    setPlanOpen(true);
+    setPlan((rows) => (rows.length >= MAX_PLAN_SLIDES ? rows : [...rows, '']));
+  };
   const removePlanRow = (i: number) => setPlan((rows) => rows.filter((_, j) => j !== i));
   const movePlanRow = (i: number, by: -1 | 1) =>
     setPlan((rows) => {
@@ -196,283 +219,428 @@ function NewProjectForm() {
     }
   };
 
+  const park = async () => {
+    setBusy(true);
+    try {
+      if (ideaFrom) {
+        await updateProject(ideaFrom, { title: title.trim(), idea: idea.trim(), plan: filledPlan, type, format });
+      } else {
+        await createProject({
+          businessId,
+          title: title.trim(),
+          type,
+          format,
+          idea: idea.trim(),
+          plan: filledPlan,
+          stage: 'idea',
+        });
+      }
+      router.push('/');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : String(err), 'error');
+      setBusy(false);
+    }
+  };
+
   if (loadingIdea) return <ComposerSkeleton />;
 
   if (businesses && businesses.length === 0) {
     return (
-      <div style={{ maxWidth: 640 }}>
-        <p className="muted">
-          <Link href="/">← Studio</Link>
+      <div className="mo-page mo-compose">
+        <p className="mo-crumb">
+          <Link href="/">Home</Link> / New post
         </p>
-        <h1>New project</h1>
-        <div className="empty">
-          No brand has an approved kit yet. Add a brand and approve its kit first.
-          <div style={{ marginTop: 12 }}>
-            <Link className="btn" href="/">
-              Go to your studio
-            </Link>
-          </div>
+        <h1>What are we making today?</h1>
+        <div className="mo-tile" style={{ maxWidth: 520 }}>
+          <p style={{ margin: '0 0 12px', fontSize: 14, color: 'var(--mo-muted)' }}>
+            No brand has an approved kit yet — composing needs a recipe to compose against. Set up a
+            brand and approve its kit first.
+          </p>
+          <Link className="mo-go" href="/start" style={{ display: 'inline-block' }}>
+            ＋ Set up a brand
+          </Link>
         </div>
       </div>
     );
   }
 
+  /** The forecast's ghost slides: the plan's beats, or the derived count. */
+  const ghosts: Array<{ gist: string; locked: boolean }> = brief.plan.length
+    ? brief.plan.map((beat) => ({
+        gist: beat,
+        locked: brief.locks.some((l) => beat.includes(l)),
+      }))
+    : Array.from({ length: count.target }, () => ({ gist: '', locked: false }));
+
   return (
-    <div className="create-wrap">
-      <p className="muted" style={{ marginBottom: 10 }}>
-        <Link href="/">← Studio</Link>
+    <div className="mo-page mo-compose">
+      <p className="mo-crumb">
+        <Link href="/">Home</Link> / {ideaFrom ? 'Parked idea' : 'New post'}
       </p>
-      <header className="create-hero">
-        <p className="eyebrow">
-          {ideaFrom ? 'Parked idea' : 'New post'}
-          {selectedBiz ? ` · ${selectedBiz.name}` : ''}
-        </p>
-        <h1>
-          {ideaFrom ? (
-            <>
-              Ready to <span className="it">make</span> this one?
-            </>
-          ) : (
-            <>
-              What are we <span className="it">making</span> today?
-            </>
-          )}
-        </h1>
-        <p className="lede">
-          {ideaFrom
-            ? 'Your saved prompt, as you left it. Edit anything, then compose it into slides.'
-            : 'Pick a brand, describe the idea, and the AI composes it into on-brand slides using the brand’s recipe.'}
-        </p>
-      </header>
+      <h1>
+        {ideaFrom ? (
+          <>
+            Ready to <span className="g">make this one</span>?
+          </>
+        ) : (
+          <>
+            What are we <span className="g">making today</span>?
+          </>
+        )}
+      </h1>
 
       {error && <ErrorState message={error} onRetry={load} />}
 
       <form onSubmit={submit}>
-        <div className="card" style={{ marginBottom: 14 }}>
-          <div className="grid-2">
-            <div className="field" style={{ margin: 0 }}>
-              <label htmlFor="np-biz">Brand</label>
-              {/* A parked idea already belongs to a brand — offering a picker
-                  that can't persist the change would be a lie. */}
-              <select
-                id="np-biz"
-                value={businessId}
-                disabled={Boolean(ideaFrom)}
-                onChange={(e) => setBusinessId(e.target.value)}
-              >
-                {!businesses && <option>Loading…</option>}
-                {businesses?.map((b) => (
-                  <option key={b._id} value={b._id}>
-                    {b.name}
-                  </option>
-                ))}
-              </select>
+        {/* ── Beat 1: who's it for ── */}
+        <div className={`mo-beat${whoDone && !whoOpen ? ' done' : ' on'}`}>
+          <div className="snum">{whoDone && !whoOpen ? '✓' : '1'}</div>
+          <span className="rail-ln" aria-hidden />
+          <div className="bcard">
+            <div className="bh">
+              <span className="t">Who&rsquo;s it for</span>
+              {!whoOpen && selectedBiz && (
+                <span className="sum">
+                  <span
+                    className="k"
+                    style={{
+                      background: `linear-gradient(135deg, ${selectedBiz.kit?.colors.background ?? 'var(--mo-faint)'} 60%, ${selectedBiz.kit?.colors.primary ?? 'var(--mo-line-strong)'})`,
+                    }}
+                  />
+                  <b>{selectedBiz.name}</b> · {type} · {FORMAT_LABELS[format]}
+                  {title.trim() && <> · “{title.trim()}”</>}
+                </span>
+              )}
+              {!whoOpen && (
+                <button type="button" className="edit" onClick={() => setWhoOpen(true)}>
+                  Edit
+                </button>
+              )}
             </div>
-            <div className="field" style={{ margin: 0 }}>
-              <label htmlFor="np-title">Project title</label>
-              <input
-                id="np-title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="3 traits of resilient founders"
-                required
-              />
-            </div>
-          </div>
-          <div className="grid-2" style={{ marginTop: 12 }}>
-            <div className="field" style={{ margin: 0 }}>
-              <label>Type</label>
-              <div className="row">
-                {ASSET_TYPES.map((t) => (
+            {whoOpen && (
+              <div className="mo-who">
+                <div>
+                  <span className="lab">Brand — the recipe the deck composes against</span>
+                  {/* A parked idea already belongs to a brand — offering a
+                      picker that can't persist the change would be a lie. */}
+                  <div className="mo-brandrow">
+                    {!businesses && <span style={{ fontSize: 13, color: 'var(--mo-faint)' }}>Loading…</span>}
+                    {businesses?.map((b) => (
+                      <button
+                        type="button"
+                        key={b._id}
+                        className={b._id === businessId ? 'on' : undefined}
+                        disabled={Boolean(ideaFrom)}
+                        onClick={() => setBusinessId(b._id)}
+                      >
+                        <span
+                          className="k"
+                          style={{
+                            background: `linear-gradient(135deg, ${b.kit?.colors.background ?? 'var(--mo-faint)'} 60%, ${b.kit?.colors.primary ?? 'var(--mo-line-strong)'})`,
+                          }}
+                        />
+                        {b.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="row2">
+                  <div>
+                    <span className="lab">Type</span>
+                    <div className="mo-toggle">
+                      {ASSET_TYPES.map((t) => (
+                        <button type="button" key={t} className={type === t ? 'on' : undefined} onClick={() => setType(t)}>
+                          {t === 'carousel' ? 'Carousel' : 'Story'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="lab">Format</span>
+                    <select value={format} onChange={(e) => setFormat(e.target.value as Format)}>
+                      {formats.map((f) => (
+                        <option key={f} value={f}>
+                          {FORMAT_LABELS[f]}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <span className="lab">Title</span>
+                    <input
+                      type="text"
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      placeholder="3 traits of resilient founders"
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="next">
                   <button
                     type="button"
-                    key={t}
-                    className={`btn sm ${type === t ? 'primary' : ''}`}
-                    onClick={() => setType(t)}
+                    className="mo-btn prim"
+                    disabled={!whoDone}
+                    onClick={() => setWhoOpen(false)}
                   >
-                    {t === 'carousel' ? 'Carousel' : 'Story'}
+                    Looks right →
                   </button>
-                ))}
+                </div>
               </div>
-            </div>
-            <div className="field" style={{ margin: 0 }}>
-              <label htmlFor="np-format">Format</label>
-              <select id="np-format" value={format} onChange={(e) => setFormat(e.target.value as Format)}>
-                {formats.map((f) => (
-                  <option key={f} value={f}>
-                    {FORMAT_LABELS[f]}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
-
-        <div className="card" style={{ marginBottom: 14 }}>
-          {aiReady && selectedBiz && !profileReady && (
-            <p className="muted" style={{ fontSize: 12, marginTop: 0, marginBottom: 10 }}>
-              <Icon name="sparkle" size={12} /> AI compose unlocks once you{' '}
-              <Link href={`/businesses/${selectedBiz._id}`}>complete {selectedBiz.name}&apos;s profile</Link>.
-            </p>
-          )}
-
-          <div className="row" style={{ marginBottom: 6, justifyContent: 'space-between' }}>
-            <label htmlFor="np-idea" className="section-label" style={{ margin: 0 }}>
-              What&apos;s the post about?
-            </label>
-            <span className="muted" style={{ fontSize: 12 }}>
-              {filledPlan.length
-                ? `${filledPlan.length} slide${filledPlan.length === 1 ? '' : 's'} — your plan`
-                : 'Slide count: automatic'}
-            </span>
-          </div>
-          <textarea
-            id="np-idea"
-            value={idea}
-            onChange={(e) => setIdea(e.target.value)}
-            placeholder={
-              'e.g. Create a carousel based on this blog post https://…\n' +
-              'or: Three small habits that quietly build discipline over a year.\n' +
-              'Paste a link and it gets read. Put "an exact line" in quotes to use it word for word.'
-            }
-            style={{ minHeight: 140 }}
-          />
-          <div className="row" style={{ justifyContent: 'space-between', marginTop: 6 }}>
-            <span className="muted" style={{ fontSize: 12, maxWidth: 560 }}>
-              Describe the idea in your own words — the AI writes it in your brand voice and lays it
-              out in your brand&apos;s design system.
-            </span>
-            <span
-              className="muted"
-              style={{ fontSize: 12, color: ideaTooLong ? 'var(--danger)' : undefined }}
-            >
-              {idea.length}/{MAX_DRAFT_PARAGRAPH_CHARS}
-            </span>
-          </div>
-
-          {/* What the machine understood, before a compose is spent on it. */}
-          {(brief.urls.length > 0 || brief.locks.length > 0) && (
-            <div className="brief-read">
-              {brief.urls.map((u) => (
-                <span className="brief-chip" key={u} title={u}>
-                  <Icon name="link" size={11} /> will read {hostOf(u)}
-                </span>
-              ))}
-              {brief.locks.map((l) => (
-                <span className="brief-chip lock" key={l} title={l}>
-                  <Icon name="quote" size={11} /> word for word: “{l.length > 42 ? `${l.slice(0, 42)}…` : l}”
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* ── The slide plan ─────────────────────────────────────────────── */}
-        <div className="card" style={{ marginBottom: 14 }}>
-          <div className="row" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
-            <label className="section-label" style={{ margin: 0 }}>
-              Plan the slides <span className="muted" style={{ fontWeight: 400 }}>— optional</span>
-            </label>
-            <button
-              type="button"
-              className="btn sm"
-              onClick={addPlanRow}
-              disabled={plan.length >= MAX_PLAN_SLIDES}
-            >
-              <Icon name="plus" size={12} /> Add slide
-            </button>
-          </div>
-          <p className="muted" style={{ fontSize: 12, marginTop: 0, marginBottom: plan.length ? 12 : 0 }}>
-            Leave this empty and the deck is shaped for you — as many slides as the material earns.
-            Add rows to say what each slide is about, in order. Anything you put in{' '}
-            <b>&ldquo;double quotes&rdquo;</b> is used word for word, exactly as you typed it.
-          </p>
-
-          {plan.map((row, i) => (
-            <div className="plan-row" key={i}>
-              <span className="plan-num">{i + 1}</span>
-              <textarea
-                value={row}
-                onChange={(e) => setPlanAt(i, e.target.value)}
-                placeholder={
-                  i === 0
-                    ? 'The hook. e.g. Open on the promise: "How often should you actually reapply?"'
-                    : 'What this slide says. e.g. The signs of wear, as a list of three.'
-                }
-                rows={2}
-              />
-              <div className="plan-tools">
-                <button type="button" className="icon-btn" aria-label="Move up" disabled={i === 0} onClick={() => movePlanRow(i, -1)}>
-                  <Icon name="arrow-up" size={13} />
-                </button>
-                <button
-                  type="button"
-                  className="icon-btn"
-                  aria-label="Move down"
-                  disabled={i === plan.length - 1}
-                  onClick={() => movePlanRow(i, 1)}
-                >
-                  <Icon name="arrow-down" size={13} />
-                </button>
-                <button type="button" className="icon-btn" aria-label="Remove slide" onClick={() => removePlanRow(i)}>
-                  <Icon name="close" size={13} />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="row">
-          <button
-            className="btn"
-            type="button"
-            disabled={busy || !businessId || !title.trim()}
-            title="Save the prompt and compose it later from the desk"
-            onClick={async () => {
-              setBusy(true);
-              try {
-                if (ideaFrom) {
-                  await updateProject(ideaFrom, {
-                    title: title.trim(),
-                    idea: idea.trim(),
-                    plan: filledPlan,
-                    type,
-                    format,
-                  });
-                } else {
-                  await createProject({
-                    businessId,
-                    title: title.trim(),
-                    type,
-                    format,
-                    idea: idea.trim(),
-                    plan: filledPlan,
-                    stage: 'idea',
-                  });
-                }
-                router.push('/');
-              } catch (err) {
-                toast(err instanceof Error ? err.message : String(err), 'error');
-                setBusy(false);
-              }
-            }}
-          >
-            {ideaFrom ? 'Keep as idea' : 'Save as idea'}
-          </button>
-          <button className="btn primary" type="submit" disabled={!canSubmit || busy}>
-            {busy ? (
-              'Composing…'
-            ) : (
-              <>
-                <Icon name="sparkle" /> Compose with AI
-              </>
             )}
-          </button>
-          {!aiReady && (
-            <span className="muted" style={{ fontSize: 13 }}>
-              Set an Anthropic key + model to enable “Compose with AI”.
-            </span>
-          )}
+          </div>
+        </div>
+
+        {/* ── Beat 2: the writing desk ── */}
+        <div className={`mo-beat${briefReady ? ' done' : ' on'}`}>
+          <div className="snum">{briefReady ? '✓' : '2'}</div>
+          <span className="rail-ln" aria-hidden />
+          <div className="bcard">
+            <div className="bh">
+              <span className="t">What should it say?</span>
+              <span className="sum">links become sources · “quotes” become locks</span>
+            </div>
+            <div className="mo-paper">
+              <div>
+                <div className="writing">
+                  <textarea
+                    id="np-idea"
+                    value={idea}
+                    onChange={(e) => setIdea(e.target.value)}
+                    placeholder={
+                      'Write it the way you’d brief a designer.\n' +
+                      'Paste a link and it gets read. Put "an exact line" in quotes to use it word for word.'
+                    }
+                  />
+                  <div className="foot">
+                    <span>The AI writes it in the brand voice, in the brand&rsquo;s design system.</span>
+                    <span className={`cnt${ideaTooLong ? ' over' : ''}`}>
+                      {idea.length} / {MAX_DRAFT_PARAGRAPH_CHARS}
+                    </span>
+                  </div>
+                </div>
+
+                {/* The slide plan, folded into the writing beat as an outline. */}
+                <div className="mo-plan">
+                  <div className="ph">
+                    <button
+                      type="button"
+                      className="ph"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, font: 'inherit', color: 'inherit', display: 'inline-flex', gap: 9 }}
+                      onClick={() => setPlanOpen((v) => !v)}
+                      aria-expanded={planOpen}
+                    >
+                      Slide-by-slide plan
+                      <span className="b">
+                        {filledPlan.length ? `${filledPlan.length} beat${filledPlan.length === 1 ? '' : 's'}` : 'optional'}
+                      </span>
+                      <span aria-hidden>{planOpen ? '▾' : '▸'}</span>
+                    </button>
+                    <button type="button" className="add" onClick={addPlanRow} disabled={plan.length >= MAX_PLAN_SLIDES}>
+                      ＋ Add a slide
+                    </button>
+                  </div>
+                  {planOpen && (
+                    <>
+                      <p className="hint">
+                        Leave it empty and the deck is shaped for you. Add rows to fix one slide per
+                        line, in this order — anything in <b>&ldquo;double quotes&rdquo;</b> is used word for word.
+                      </p>
+                      {plan.map((row, i) => (
+                        <div className="mo-planrow" key={i}>
+                          <span className="n">{i + 1}</span>
+                          <textarea
+                            value={row}
+                            onChange={(e) => setPlanAt(i, e.target.value)}
+                            placeholder={
+                              i === 0
+                                ? 'The hook. e.g. Open on the promise: "How often should you actually reapply?"'
+                                : 'What this slide says. e.g. The signs of wear, as a list of three.'
+                            }
+                            rows={2}
+                          />
+                          <div className="ctl">
+                            <button type="button" aria-label="Move up" disabled={i === 0} onClick={() => movePlanRow(i, -1)}>
+                              <Icon name="arrow-up" size={12} />
+                            </button>
+                            <button
+                              type="button"
+                              aria-label="Move down"
+                              disabled={i === plan.length - 1}
+                              onClick={() => movePlanRow(i, 1)}
+                            >
+                              <Icon name="arrow-down" size={12} />
+                            </button>
+                            <button type="button" aria-label="Remove slide" onClick={() => removePlanRow(i)}>
+                              <Icon name="close" size={12} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* The margin: the parser's understanding, next to the writing. */}
+              <aside className="mo-notes" aria-label="What the AI heard">
+                {brief.urls.map((u) => (
+                  <div className="mo-note" key={u}>
+                    <span className="t">Will read</span>
+                    <b>{hostOf(u)}</b> — the deck&rsquo;s claims come from here.
+                  </div>
+                ))}
+                {brief.locks.map((l) => (
+                  <div className="mo-note q" key={l}>
+                    <span className="t">Word for word</span>
+                    <b>“{l.length > 60 ? `${l.slice(0, 60)}…` : l}”</b> — locked; the copywriter can&rsquo;t touch it.
+                  </div>
+                ))}
+                {briefReady && (
+                  <div className="mo-note n">
+                    <span className="t">Heard</span>
+                    {count.fixed ? (
+                      <>
+                        <b>{count.target} slides</b> — fixed by your plan.
+                      </>
+                    ) : (
+                      <>
+                        <b>
+                          ~{count.min}–{count.max} slides
+                        </b>{' '}
+                        — the material decides.
+                      </>
+                    )}
+                  </div>
+                )}
+                {aiReady && selectedBiz && !profileReady && (
+                  <div className="mo-note warn">
+                    <span className="t">Before composing</span>
+                    Complete <Link href={`/businesses/${selectedBiz._id}`}>{selectedBiz.name}&rsquo;s profile</Link> —
+                    the copywriter needs to know who it&rsquo;s talking to.
+                  </div>
+                )}
+                {!briefReady && brief.urls.length === 0 && (
+                  <div className="mo-note idle">
+                    <span className="t">The margin</span>
+                    As you write, what the AI understands appears here — sources, locked lines, the
+                    slide count it hears.
+                  </div>
+                )}
+              </aside>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Beat 3: the forecast, then the spend ── */}
+        <div className={`mo-beat${canSubmit ? ' on' : ' locked'}`}>
+          <div className="snum">3</div>
+          <div className="bcard">
+            <div className="bh">
+              <span className="t">Compose</span>
+              {!briefReady && <span className="sum">unlocks when the brief has something to say</span>}
+            </div>
+            {briefReady && (
+              <div className="mo-fcast">
+                {brief.urls.length > 0 && (
+                  <div>
+                    <div className="lab" style={{ marginBottom: 8 }}>It will read</div>
+                    {brief.urls.map((u) => (
+                      <div className="mo-fsrc" key={u} style={{ marginBottom: 8 }}>
+                        <span
+                          className="fav"
+                          style={{
+                            background: selectedBiz?.kit?.colors.background ?? 'var(--mo-ink)',
+                            color: selectedBiz?.kit?.colors.primary ?? '#fff',
+                          }}
+                        >
+                          {hostOf(u).charAt(0).toUpperCase()}
+                        </span>
+                        <span>
+                          <b>{hostOf(u)}</b>
+                          <span>fetched live at compose — failures are reported, never skipped silently</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {brief.locks.length > 0 && (
+                  <div>
+                    <div className="lab" style={{ marginBottom: 8 }}>Kept word for word</div>
+                    {brief.locks.map((l) => (
+                      <div className="mo-flock" key={l} style={{ marginBottom: 8 }}>
+                        <Icon name="quote" size={12} />
+                        <em>“{l}”</em>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div>
+                  <div className="lab" style={{ marginBottom: 8 }}>
+                    The deck it intends · {count.fixed ? `${count.target} slides` : `~${count.target} slides`}
+                  </div>
+                  <div className="mo-ghostrow">
+                    {ghosts.map((g, i) => (
+                      <div className="mo-ghost" key={i}>
+                        <div className={`art${g.locked ? ' q' : ''}`}>
+                          <span className="role">{brief.plan.length ? `beat ${i + 1}` : 'auto'}</span>
+                          {g.gist && <span className="what">{g.gist}</span>}
+                        </div>
+                        <div className="cap">
+                          {String(i + 1).padStart(2, '0')}
+                          {g.locked ? ' · locked' : ''}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                {selectedBiz && (
+                  <div className="mo-frecipe">
+                    <span className="sw" style={{ background: selectedBiz.kit?.colors.background ?? 'var(--mo-faint)' }} />
+                    <span className="sw" style={{ background: selectedBiz.kit?.colors.primary ?? 'var(--mo-line-strong)' }} />
+                    <b>{selectedBiz.name}&rsquo;s recipe</b> · approved — every slide composes against it
+                  </div>
+                )}
+                {canSubmit ? (
+                  <div className="mo-verdict ok">
+                    <i /> Everything checks out — Compose is ready.
+                  </div>
+                ) : (
+                  <div className="mo-verdict warn">
+                    <i />
+                    {!aiReady ? (
+                      <>Set an Anthropic key + model in Settings to enable composing.</>
+                    ) : !profileReady && selectedBiz ? (
+                      <>
+                        <Link href={`/businesses/${selectedBiz._id}`}>Complete {selectedBiz.name}&rsquo;s profile</Link>
+                        &nbsp;to unlock composing.
+                      </>
+                    ) : ideaTooLong ? (
+                      <>The brief is over the {MAX_DRAFT_PARAGRAPH_CHARS}-character limit — tighten it a little.</>
+                    ) : !whoDone ? (
+                      <>Give the post a title in step 1.</>
+                    ) : (
+                      <>Almost there.</>
+                    )}
+                  </div>
+                )}
+                <div className="acts">
+                  <button className="mo-btn-compose" type="submit" disabled={!canSubmit || busy}>
+                    {busy ? 'Composing…' : <>✦ Compose with AI</>}
+                  </button>
+                  <button
+                    className="park"
+                    type="button"
+                    disabled={busy || !businessId || !title.trim()}
+                    title="Save the prompt and compose it later from the desk"
+                    onClick={() => void park()}
+                  >
+                    {ideaFrom ? 'Keep as idea' : 'Save as idea instead'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </form>
     </div>
