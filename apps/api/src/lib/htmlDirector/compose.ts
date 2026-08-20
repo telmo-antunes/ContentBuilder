@@ -35,6 +35,9 @@ import {
   type RecipeEmphasisWrap,
   assignArchetypes,
   planInversion,
+  BASE_BUDGETS,
+  EXPLAIN_ROLES,
+  type ComposeBudgets,
 } from '@contentbuilder/shared';
 import { aiJson, aiMessage, modelFor, textOf, type AiJsonResult, type AiJsonTool } from '../ai';
 import { config } from '../../config';
@@ -393,19 +396,6 @@ async function mapPool<T, R>(
 // ── Copy budgets (the numbers PARSE_SYSTEM states, enforced in code) ────────
 
 /** Per-part copy budgets, in characters, for one canvas. */
-export interface ComposeBudgets {
-  eyebrow: number;
-  headline: number;
-  body: number;
-  /**
-   * What a body may run to on a slide whose job is to EXPLAIN — see
-   * {@link EXPLAIN_ROLES}. Always >= `body`.
-   */
-  explainBody: number;
-  cta: number;
-  /** One enumeration row's `text`. */
-  rowText: number;
-}
 
 /**
  * The 4:5 post budgets — the exact numbers PARSE_SYSTEM promises.
@@ -416,24 +406,7 @@ export interface ComposeBudgets {
  * a kicker (uppercase, letter-spaced, it fills about two thirds of the canvas
  * width at the reference type scale) and stops eating whole words.
  */
-const BASE_BUDGETS: ComposeBudgets = {
-  eyebrow: 26,
-  headline: 60,
-  body: 90,
-  explainBody: 150,
-  cta: 24,
-  rowText: 42,
-};
 
-/**
- * The roles whose job is to EXPLAIN. A cover hooks, a stat lands a number and a
- * quote carries a voice — each wants one short line under it. A `statement` or a
- * `feature` is where a deck makes its actual argument, and 90 characters is
- * under two rendered lines: every explanatory deck so far had its point
- * hand-authored back into panel rows afterwards, on five of eight slides in the
- * worst case.
- */
-const EXPLAIN_ROLES = new Set<SlideRole>(['statement', 'feature']);
 
 /**
  * A slide's body budget. Every other part is per-format; the body is also

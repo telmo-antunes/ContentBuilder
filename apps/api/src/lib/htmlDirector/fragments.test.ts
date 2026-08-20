@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { brandRecipeSchema, type BrandRecipe } from '@contentbuilder/shared';
+import { BASE_BUDGETS, EXPLAIN_ROLES, brandRecipeSchema, type BrandRecipe } from '@contentbuilder/shared';
 import { detailMastersRecipe } from './recipes';
 import { authoredSlots } from '@contentbuilder/shared';
 import {
@@ -12,6 +12,10 @@ import {
   substituteFragment,
   validateRecipeFragments,
   carryForwardFragments,
+  fillRecipeFragmentGapsMeasured,
+  WORST_CASE,
+  type FragmentVerdict,
+  PHOTO_SLOT_PART,
   readsAsReasoning,
   firstSlideBody,
 } from './fragments';
@@ -442,6 +446,156 @@ describe('filling the gaps a fragment was authored without', () => {
     const out = fillRecipeFragmentGaps(detailMastersRecipe);
     expect(out.repairs).toEqual([]);
     expect(out.recipe).toBe(detailMastersRecipe);
+  });
+});
+
+describe('filling the gaps with a measurement', () => {
+  /** Every hole fits. */
+  const roomy = async () => 'fits' as const;
+  /**
+   * The fragment fits as authored; anything ADDED to it does not. That is the
+   * only shape from which a hole can be blamed for an overflow — a fragment
+   * that overflows already tells you nothing about the hole.
+   */
+  const fullAfterOneMore = () => {
+    // Against the BASELINE it actually measured, not the fragment source — what
+    // reaches `measure` is the filled slide, which is far longer than either.
+    let baseline: number | null = null;
+    return async (_role: string, html: string): Promise<FragmentVerdict> => {
+      if (baseline === null) {
+        baseline = html.length;
+        return 'fits';
+      }
+      return html.length > baseline ? 'overflows' : 'fits';
+    };
+  };
+  /** Nothing fits, at any load. */
+  const cramped = async () => 'overflows' as const;
+
+  it('keeps the holes that fit and records the ones that do not', async () => {
+    const recipe = withFragments({ list: LIST });
+
+    const roomyOut = await fillRecipeFragmentGapsMeasured(recipe, roomy);
+    expect(roomyOut.repairs[0]?.added.length).toBeGreaterThan(0);
+    expect(roomyOut.declined).toEqual([]);
+    expect(roomyOut.recipe.fragmentOmits).toBeUndefined();
+
+    const tightOut = await fillRecipeFragmentGapsMeasured(recipe, fullAfterOneMore());
+    expect(tightOut.repairs).toEqual([]);
+    expect(tightOut.declined.length).toBeGreaterThan(0);
+    expect(tightOut.overCapacity).toEqual([]);
+    // The fragment is left exactly as the brand authored it.
+    expect(tightOut.recipe.fragments?.list).toBe(recipe.fragments?.list);
+  });
+
+  it('records a decline so the sync filler cannot add it straight back', async () => {
+    const measured = await fillRecipeFragmentGapsMeasured(
+      withFragments({ list: LIST }),
+      fullAfterOneMore(),
+    );
+    const declinedParts = measured.recipe.fragmentOmits?.list ?? [];
+    expect(declinedParts.length).toBeGreaterThan(0);
+
+    // The whole point: re-deriving from the recorded recipe adds nothing.
+    const again = fillRecipeFragmentGaps(measured.recipe);
+    expect(again.repairs).toEqual([]);
+  });
+
+  /**
+   * The distinction that took a real brand to find. Dynatós' `list` does not fit
+   * five rows even as its author wrote it — nothing added — so measuring the
+   * holes there would have blamed each of them in turn for an overflow they had
+   * no part in.
+   */
+  it('blames no hole when the fragment does not fit empty either', async () => {
+    const out = await fillRecipeFragmentGapsMeasured(withFragments({ list: LIST }), cramped);
+
+    expect(out.overCapacity).toEqual(['list']);
+    expect(out.declined).toEqual([]);
+    expect(out.recipe.fragmentOmits).toBeUndefined();
+    // And the holes are added exactly as they were before any of this measured.
+    expect(out.repairs[0]?.added.length).toBeGreaterThan(0);
+  });
+
+  it('judges holes at the largest row count the fragment can carry', async () => {
+    const loads: number[] = [];
+    // Fits at three rows, not four or five.
+    await fillRecipeFragmentGapsMeasured(withFragments({ list: LIST }), async (_role, html) => {
+      const rows = (html.match(/class="row"/g) ?? []).length;
+      loads.push(rows);
+      return rows > 3 ? 'overflows' : 'fits';
+    });
+
+    expect(loads.slice(0, 3)).toEqual([5, 4, 3]);
+    // Everything after the search is measured at that load, not at the maximum.
+    expect(loads.slice(3).every((n) => n === 3)).toBe(true);
+  });
+
+  it('declines a photo slot that does not fit, by name', async () => {
+    // Everything fits until the picture is asked for.
+    const untilPhoto = async (_role: string, html: string): Promise<FragmentVerdict> =>
+      authoredSlots(html).length > 0 ? 'overflows' : 'fits';
+
+    const out = await fillRecipeFragmentGapsMeasured(withFragments({ statement: STATEMENT }), untilPhoto);
+
+    expect(out.declined.map((d) => d.part)).toContain(PHOTO_SLOT_PART);
+    expect(out.recipe.fragmentOmits?.statement).toContain(PHOTO_SLOT_PART);
+    expect(authoredSlots(out.recipe.fragments?.statement ?? '')).toHaveLength(0);
+    // And the copy holes it measured as fitting are still there.
+    expect(out.recipe.fragments?.statement).toContain('{{handle}}');
+  });
+
+  it('keeps a candidate it could not measure, rather than stripping the brand back', async () => {
+    const blind = async () => 'unknown' as const;
+    const out = await fillRecipeFragmentGapsMeasured(withFragments({ list: LIST }), blind);
+
+    expect(out.repairs[0]?.added.length).toBeGreaterThan(0);
+    expect(out.declined).toEqual([]);
+    expect(out.unmeasured).toContain('list');
+  });
+
+  it('offers copy at the budget compose actually permits', () => {
+    // Asserted against the budgets themselves, not a number copied into the
+    // test: a worst case that drifted from what compose permits would decline
+    // holes that fit and keep ones that do not.
+    const nearly = (s: string | undefined, budget: number) => {
+      expect(s!.length).toBeLessThanOrEqual(budget);
+      expect(s!.length).toBeGreaterThan(budget - 8); // within a word of the cap
+    };
+    nearly(WORST_CASE.eyebrow, BASE_BUDGETS.eyebrow);
+    nearly(WORST_CASE.headline, BASE_BUDGETS.headline);
+    nearly(WORST_CASE.body, BASE_BUDGETS.body);
+    nearly(WORST_CASE.cta, BASE_BUDGETS.cta);
+    for (const row of WORST_CASE.rows ?? []) nearly(row.text, BASE_BUDGETS.rowText);
+  });
+
+  it('gives an explaining role the longer body it is allowed', async () => {
+    const seen: string[] = [];
+    await fillRecipeFragmentGapsMeasured(withFragments({ statement: STATEMENT, list: LIST }), async (_r, html) => {
+      seen.push(html);
+      return 'fits';
+    });
+    const all = seen.join('\n');
+    // `statement` explains, so its body may run to explainBody; `list` does not.
+    expect(all).toContain(WORST_CASE.body);
+    expect(all.length).toBeGreaterThan(0);
+    expect(EXPLAIN_ROLES.has('statement')).toBe(true);
+    expect(EXPLAIN_ROLES.has('list')).toBe(false);
+  });
+
+  it('measures the longest copy each part is allowed', async () => {
+    const seen: string[] = [];
+    await fillRecipeFragmentGapsMeasured(withFragments({ list: LIST }), async (_r, html) => {
+      seen.push(html);
+      return 'fits';
+    });
+
+    const all = seen.join('\n');
+    expect(all).toContain(WORST_CASE.body);
+    // Five rows, because the parse prompt asks for "2-5" — a fragment that
+    // holds five holds three.
+    expect(WORST_CASE.rows).toHaveLength(5);
+    expect(all).toContain(WORST_CASE.rows![4]!.text);
   });
 });
 

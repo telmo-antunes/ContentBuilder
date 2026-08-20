@@ -41,6 +41,7 @@
  * producing a slide that lost copy.
  */
 import {
+  EXPLAIN_ROLES,
   RECIPE_REVEAL_ORDER,
   RECIPE_STRUCTURAL_CLASSES,
   SLIDE_ROLES,
@@ -49,6 +50,7 @@ import {
   recipeEmphasisWrap,
   recipePatternVariant,
   type BrandRecipe,
+  type SlideRole,
 } from '@contentbuilder/shared';
 import { sanitizeAuthoredHtml } from '../htmlSanitize';
 import type { ComposeParts, ComposeSlideInput } from './prompt';
@@ -554,8 +556,9 @@ export function fillFragmentGaps(
   fragment: string,
   wanted: readonly FragmentPart[],
 ): { html: string; added: string[] } {
+  const omitted = new Set(recipe.fragmentOmits?.[role] ?? []);
   const missing = wanted.filter(
-    (p) => !fragment.includes(`{{${p}}}`) && definesClass(recipe, PART_CLASS[p]),
+    (p) => !omitted.has(p) && !fragment.includes(`{{${p}}}`) && definesClass(recipe, PART_CLASS[p]),
   );
   if (!missing.length) return { html: fragment, added: [] };
 
@@ -630,6 +633,9 @@ const PHOTO_HOLE_ROLES = new Set(['cover', 'statement', 'feature']);
 /** `<figure class="cb-shot" data-cb-slot="hero"></figure>`, per the convention. */
 const PHOTO_HOLE = '<figure class="cb-shot" data-cb-slot="hero"></figure>';
 
+/** How the picture names itself in `repairs` and in `fragmentOmits`. */
+export const PHOTO_SLOT_PART = 'photo slot';
+
 /**
  * Give a fragment somewhere to put a picture, if its role should have one and
  * it does not already.
@@ -646,6 +652,8 @@ export function ensurePhotoHole(
   fragment: string,
 ): { html: string; added: boolean } {
   if (!PHOTO_HOLE_ROLES.has(role)) return { html: fragment, added: false };
+  if ((recipe.fragmentOmits?.[role] ?? []).includes(PHOTO_SLOT_PART))
+    return { html: fragment, added: false };
   if (authoredSlots(fragment).length > 0) return { html: fragment, added: false };
 
   const handleAt = fragment.lastIndexOf('<div class="handle"');
@@ -680,13 +688,261 @@ export function fillRecipeFragmentGaps(recipe: BrandRecipe): {
     // Copy holes first, then the photo slot: the slot is positioned relative to
     // the sign-off line, which the copy pass may itself have added.
     const withPhoto = ensurePhotoHole(recipe, role, out.html);
-    const added = [...out.added, ...(withPhoto.added ? ['photo slot'] : [])];
+    const added = [...out.added, ...(withPhoto.added ? [PHOTO_SLOT_PART] : [])];
     if (!added.length) continue;
     next[role] = withPhoto.html;
     repairs.push({ role, added });
   }
   if (!repairs.length) return { recipe, repairs: [] };
   return { recipe: { ...recipe, fragments: next }, repairs };
+}
+
+/**
+ * THE WORST CASE A ROLE CAN REACH, as copy.
+ *
+ * A hole is only worth having if the slide still fits with it FILLED, and the
+ * fill that matters is the longest one the copywriter is allowed to write —
+ * these strings are the compose budgets (`BASE_BUDGETS`) at their limit, which
+ * `fragments.test.ts` asserts rather than trusts.
+ *
+ * Five rows because the parse prompt asks for "2–5"; a fragment that holds five
+ * holds three.
+ */
+const WORST_ROWS = [
+  { text: 'The first one you always end up skipping.', note: 'and always regret' },
+  { text: 'The second one that always looks small.', note: 'until the month ends' },
+  { text: 'The third that nobody ever warns you of.', note: 'because it is boring' },
+  { text: 'The fourth one that undoes all the rest.', note: 'if you let it slide' },
+  { text: 'The fifth you only ever need once a year', note: 'on the worst day' },
+];
+
+/**
+ * THE WORST CASE A ROLE CAN REACH, as copy.
+ *
+ * A hole is only worth having if the slide still fits with it FILLED, and the
+ * fill that decides it is the longest one the copywriter is allowed to write.
+ * Every string here sits at its `BASE_BUDGETS` limit (within a word), which
+ * `fragments.test.ts` asserts against the budgets themselves rather than
+ * against a number copied down here — a worst case that had drifted from what
+ * compose actually permits would decline holes that fit and keep ones that do
+ * not.
+ *
+ * The parts with no budget — tagline, quote, stat, attribution, handle, a row's
+ * note — are set to a plausible long value instead, since nothing clamps them.
+ *
+ * Five rows because the parse prompt asks for "2–5"; a fragment that holds five
+ * holds three.
+ */
+export const WORST_CASE: ComposeParts = {
+  eyebrow: 'The one that decides this.',
+  headline: 'The work you skip is the work that everybody ends up seeing.',
+  body: 'It compounds quietly, long before anybody notices that it has begun to happen at all.',
+  cta: 'Get the eight-week block',
+  tagline: 'One year, one decision, repeated until it stops being a decision at all',
+  quote: 'You do not rise to the level of your goals, you fall to the level of your systems',
+  attribution: 'A lesson learned twice over',
+  stat: '3.4x',
+  handle: '@thelongestbrandhandle',
+  rows: WORST_ROWS,
+};
+
+/**
+ * A `statement` and a `feature` are where a deck makes its argument, so compose
+ * lets their body run to `explainBody` rather than `body`. The worst case has to
+ * follow, or those two roles are measured against copy shorter than they may
+ * actually be given.
+ */
+const WORST_EXPLAIN_BODY =
+  'It compounds quietly, long before anybody notices that it has, and it keeps compounding long after the one week when you very nearly stopped doing it.';
+
+/**
+ * The worst case NARROWED to what this candidate can actually hold.
+ *
+ * `substituteFragment` refuses a fill that would lose copy — correctly, since a
+ * slide silently missing its stat is worse than one composed by the model — so
+ * handing a `list` candidate the quote and the stat declines every measurement
+ * and the filler measures nothing at all. Only the parts the markup has a hole
+ * for are offered, plus the rows when it has a repeated unit.
+ */
+function worstCaseFor(role: string, html: string): ComposeParts {
+  const parts: ComposeParts = {};
+  for (const part of FRAGMENT_PARTS) {
+    if (!html.includes(`{{${part}}}`)) continue;
+    const value = WORST_CASE[part];
+    if (value !== undefined) (parts as Record<string, unknown>)[part] = value;
+  }
+  if (parts.body && EXPLAIN_ROLES.has(role as SlideRole)) parts.body = WORST_EXPLAIN_BODY;
+  if (html.includes(ROWS_OPEN)) parts.rows = WORST_CASE.rows;
+  return parts;
+}
+
+/** What a measured fill needs to know about a candidate fragment. */
+export type FragmentVerdict = 'fits' | 'overflows' | 'unknown';
+
+export interface MeasuredFill {
+  recipe: BrandRecipe;
+  repairs: FragmentRepair[];
+  /** Holes a role could have had, that measured as not fitting. */
+  declined: Array<{ role: string; part: string; rows: number }>;
+  /** Fragments whose candidate could not be measured at all. */
+  unmeasured: string[];
+  /**
+   * Roles whose fragment does not fit even EMPTY of the holes in question, at
+   * the fewest rows the parse will emit. Nothing can be attributed to a hole
+   * here, so the holes are kept and the capacity is reported instead.
+   */
+  overCapacity: string[];
+}
+
+/** The parse prompt asks for "2–5" rows, so those are the loads worth trying. */
+const ROW_COUNTS = [5, 4, 3, 2] as const;
+
+/**
+ * FILL THE GAPS, BUT MEASURE FIRST.
+ *
+ * `fillRecipeFragmentGaps` adds a hole for every part a role allows and
+ * re-validates the STRUCTURE — that the markup still sanitises, still names
+ * known classes, still keeps the placeholder convention. It never asked whether
+ * the result still FITS, and the answer is sometimes no: Dynatós' `list` was
+ * given a tagline and a body on top of its five-row panel and overflowed every
+ * canvas once a copywriter filled them, and `statement` was given a photo slot
+ * that overflows against its own 3-line display headline.
+ *
+ * So each candidate hole is added, filled with the longest copy its part is
+ * allowed, and rendered. A hole that overflows is reverted and RECORDED in
+ * `fragmentOmits`, because the sync filler is idempotent by design and would
+ * otherwise add it straight back on the next read.
+ *
+ * Order matters and is the composition order the sync filler already uses, so
+ * the parts a brand puts first get first claim on the space.
+ *
+ * Best-effort: a candidate that cannot be measured is KEPT, matching how the
+ * filler behaved before this existed — an unavailable renderer must not quietly
+ * strip a brand's fragments back.
+ */
+export async function fillRecipeFragmentGapsMeasured(
+  recipe: BrandRecipe,
+  measure: (role: string, html: string) => Promise<FragmentVerdict>,
+): Promise<MeasuredFill> {
+  const fragments = recipe.fragments;
+  if (!fragments || !Object.keys(fragments).length)
+    return { recipe, repairs: [], declined: [], unmeasured: [], overCapacity: [] };
+
+  const next: Record<string, string> = { ...fragments };
+  const omits: Record<string, string[]> = { ...(recipe.fragmentOmits ?? {}) };
+  const repairs: FragmentRepair[] = [];
+  const declined: MeasuredFill['declined'] = [];
+  const unmeasured: string[] = [];
+  const overCapacity: string[] = [];
+
+  for (const [role, fragment] of Object.entries(fragments)) {
+    const wanted = ROLE_PARTS[role];
+    if (!wanted || typeof fragment !== 'string') continue;
+
+    let kept = fragment;
+    const added: string[] = [];
+
+    /** Render one candidate at a given row count, or undefined if unfillable. */
+    const shoot = async (candidate: string, rows: number, part?: string) => {
+      const parts = worstCaseFor(role, candidate);
+      // Only a fragment with a repeated unit takes rows. Handing them to one
+      // without means copy that cannot be placed, which `substituteFragment`
+      // rightly refuses — and every such role then reads as unmeasurable.
+      if (parts.rows) parts.rows = WORST_ROWS.slice(0, rows);
+      const filled = substituteFragment({ ...recipe, fragments: { ...next, [role]: candidate } }, {
+        role: role as ComposeSlideInput['role'],
+        parts,
+        format: '1080x1350',
+        photo: part === PHOTO_SLOT_PART || authoredSlots(candidate).length > 0,
+      });
+      if (!('html' in filled)) return undefined;
+      return measure(role, filled.html);
+    };
+
+    /**
+     * THE LOAD TO JUDGE HOLES AT.
+     *
+     * Measuring only at the maximum conflates two different faults. Dynatós'
+     * `list` does not fit five rows even as its author wrote it — no eyebrow,
+     * no handle, nothing added — so every candidate hole would have measured as
+     * "overflows" and been blamed for an overflow it had no part in. The largest
+     * row count the fragment carries EMPTY is the only load at which a hole's
+     * effect is its own.
+     */
+    // `null`, not 0 — a fragment with no repeated unit legitimately measures at
+    // a load of zero rows, and treating that as "found nothing" marked every
+    // rowless role over capacity.
+    let load: number | null = null;
+    const counts = kept.includes(ROWS_OPEN) ? ROW_COUNTS : ([0] as const);
+    for (const rows of counts) {
+      const verdict = await shoot(kept, rows);
+      if (verdict === undefined) continue;
+      if (verdict === 'unknown') {
+        if (!unmeasured.includes(role)) unmeasured.push(role);
+        load = rows;
+        break;
+      }
+      if (verdict === 'fits') {
+        load = rows;
+        break;
+      }
+    }
+    if (load === null) {
+      // Not even the fewest rows fit. Nothing here is a hole's fault, so the
+      // holes are added exactly as they were before this measured anything.
+      overCapacity.push(role);
+      const blind = fillFragmentGaps({ ...recipe, fragmentOmits: omits }, role, kept, wanted);
+      const withSlot = ensurePhotoHole({ ...recipe, fragmentOmits: omits }, role, blind.html);
+      const addedBlind = [...blind.added, ...(withSlot.added ? [PHOTO_SLOT_PART] : [])];
+      if (addedBlind.length) {
+        next[role] = withSlot.html;
+        repairs.push({ role, added: addedBlind });
+      }
+      continue;
+    }
+
+    /** Try one candidate: keep it if the loaded slide still fits. */
+    const consider = async (candidate: string, part: string): Promise<boolean> => {
+      if (candidate === kept) return false;
+      const verdict = await shoot(candidate, load, part);
+      // A candidate that cannot even be filled is not one to measure.
+      if (verdict === undefined) return false;
+      if (verdict === 'overflows') {
+        declined.push({ role, part, rows: load });
+        omits[role] = [...new Set([...(omits[role] ?? []), part])];
+        return false;
+      }
+      if (verdict === 'unknown' && !unmeasured.includes(role)) unmeasured.push(role);
+      kept = candidate;
+      added.push(part);
+      return true;
+    };
+
+    // One part at a time, so a decline names the hole that did not fit rather
+    // than the whole batch.
+    for (const part of wanted) {
+      const step = fillFragmentGaps({ ...recipe, fragmentOmits: omits }, role, kept, [part]);
+      if (!step.added.length) continue;
+      await consider(step.html, step.added[0]!);
+    }
+    const withPhoto = ensurePhotoHole({ ...recipe, fragmentOmits: omits }, role, kept);
+    if (withPhoto.added) await consider(withPhoto.html, PHOTO_SLOT_PART);
+
+    if (added.length) {
+      next[role] = kept;
+      repairs.push({ role, added });
+    }
+  }
+
+  const changed =
+    repairs.length || declined.length || Object.keys(omits).length !== Object.keys(recipe.fragmentOmits ?? {}).length;
+  return {
+    recipe: changed ? { ...recipe, fragments: next, ...(Object.keys(omits).length ? { fragmentOmits: omits } : {}) } : recipe,
+    repairs,
+    declined,
+    unmeasured,
+    overCapacity,
+  };
 }
 
 // ── Substitution ────────────────────────────────────────────────────────────
