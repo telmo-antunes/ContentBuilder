@@ -25,6 +25,7 @@
  * Needs the web server up: the probe renders through `${WEB_URL}/render`.
  */
 import { connectDb, disconnectDb } from '../db';
+import { closeBrowser } from '../lib/browser';
 import { maxSlackFor, openRenderProbe } from '../lib/htmlDirector/renderCheck';
 import { config } from '../config';
 import type { BrandRecipe } from '@contentbuilder/shared';
@@ -237,6 +238,7 @@ async function writeBaseline(labels: string[]): Promise<void> {
   }
 })().catch(async (e) => {
   console.error('FAILED', e);
+  await closeBrowser().catch(() => {});
   await disconnectDb().catch(() => {});
   process.exit(1);
 });

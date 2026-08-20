@@ -14,6 +14,7 @@
  * Needs the web server up: the probe renders through `${WEB_URL}/render`.
  */
 import { connectDb, disconnectDb } from '../db';
+import { closeBrowser } from '../lib/browser';
 import { maxSlackFor, openRenderProbe } from '../lib/htmlDirector/renderCheck';
 import type { BrandRecipe } from '@contentbuilder/shared';
 
@@ -114,9 +115,18 @@ function slideWithBody(recipe: BrandRecipe, body: string, shape: Shape): string 
   }
   console.log('\n  · fits   H fits but leaves a hole over 15% of the frame   X overflows   ? unmeasured');
 
+  /**
+ * The probe's browser is process-wide and memoised, so closing the probe's PAGES
+ * is not enough to let node exit: the launch keeps the event loop alive and the
+ * script simply never returns. Fifteen of these were still resident across old
+ * sessions — the oldest for a day and six hours, each holding a Chrome — which
+ * is why `pgrep` for this script matches runs that finished long ago.
+ */
+  await closeBrowser().catch(() => {});
   await disconnectDb();
 })().catch(async (e) => {
   console.error('FAILED', e);
+  await closeBrowser().catch(() => {});
   await disconnectDb().catch(() => {});
   process.exit(1);
 });

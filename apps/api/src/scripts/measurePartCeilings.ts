@@ -16,6 +16,7 @@
  * Needs the web server up: the probe renders through `${WEB_URL}/render`.
  */
 import { connectDb, disconnectDb } from '../db';
+import { closeBrowser } from '../lib/browser';
 import { openRenderProbe } from '../lib/htmlDirector/renderCheck';
 import { composeBudgetsFor } from '../lib/htmlDirector/compose';
 import type { BrandRecipe } from '@contentbuilder/shared';
@@ -110,9 +111,18 @@ function slide(recipe: BrandRecipe, part: Part, len: number, budgets: ReturnType
     }
   }
   console.log('\n  · fits   c collides   X overflows   (worst of every recipe at that length)');
+  /**
+ * The probe's browser is process-wide and memoised, so closing the probe's PAGES
+ * is not enough to let node exit: the launch keeps the event loop alive and the
+ * script simply never returns. Fifteen of these were still resident across old
+ * sessions — the oldest for a day and six hours, each holding a Chrome — which
+ * is why `pgrep` for this script matches runs that finished long ago.
+ */
+  await closeBrowser().catch(() => {});
   await disconnectDb();
 })().catch(async (e) => {
   console.error('FAILED', e);
+  await closeBrowser().catch(() => {});
   await disconnectDb().catch(() => {});
   process.exit(1);
 });

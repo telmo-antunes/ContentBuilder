@@ -57,6 +57,28 @@ Add the next one here, following the shape in [How to add an entry](#how-to-add-
 
 ## Resolved
 
+### Every corpus-gate run since the first one was still resident, holding a Chrome
+
+- **Kind:** Defect
+- **Severity:** cost me a fix
+- **First seen:** 2026-08-20 — waiting on `layout:corpus --gate` and finding it
+  had "already been running" for a day
+- **What happened:** the gate printed its report and then never exited. Fifteen
+  runs were still resident across old sessions — the oldest at **1 day 6 hours**
+  — and between them they held **504 Puppeteer Chrome processes**. The probe's
+  `close()` releases its page pool, but `getBrowser()` is memoised process-wide,
+  so the launched browser keeps node's event loop alive forever. Four scripts
+  open a probe (`slackDistribution`, `verifyDeck`, `measureBodyCeiling`,
+  `measurePartCeilings`) and none of them called `closeBrowser()`.
+- **Why it matters:** every `pgrep` for the script matched runs that finished
+  long ago, so "is the gate still going?" could not be answered — and 504 idle
+  Chromes is most of a laptop.
+- **Fixed:** all four scripts close the browser on both the success and the
+  failure path. The gate now exits on its own: **86 slides, 0 overflowing or
+  colliding, 0 over the slack limit, clean against 0 known faults** — and zero
+  Chromes left behind.
+
+
 ### The commonest role lost its fragment on a re-author, and only a warning noticed
 
 - **Kind:** Defect
