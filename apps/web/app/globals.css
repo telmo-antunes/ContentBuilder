@@ -565,57 +565,6 @@ input[type='color'] {
   display: block;
 }
 
-/* ── Business page project grid (UI-B) ─────────────────────────────────────── */
-.project-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-  gap: 14px;
-}
-.project-card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  overflow: hidden;
-  transition: border-color 0.15s ease, transform 0.15s ease;
-}
-.project-card:hover {
-  border-color: var(--accent);
-  transform: translateY(-1px);
-}
-.project-card-thumb {
-  display: flex;
-  justify-content: center;
-  padding: 12px 12px 0;
-}
-/* Always visible at reduced prominence — a hover-only reveal is invisible on
-   touch and undiscoverable everywhere. Hover/focus brings it to full weight. */
-.project-card-menu {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  opacity: 0.55;
-  transition: opacity 0.15s ease;
-}
-.project-card:hover .project-card-menu,
-.project-card:focus-within .project-card-menu {
-  opacity: 1;
-}
-.project-card-body {
-  padding: 10px 12px 12px;
-}
-.project-card-title {
-  font-weight: 600;
-  font-size: 14px;
-  line-height: 1.3;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
 /* ── Toasts (UI-D) ─────────────────────────────────────────────────────────── */
 .toast-stack {
   position: fixed;
@@ -685,16 +634,18 @@ input[type='color'] {
   top: -24vmax;
   left: -16vmax;
   background: radial-gradient(circle at 34% 34%, var(--b1, var(--accent)), transparent 66%);
-  animation: bk-float-b 26s ease-in-out infinite alternate;
+  animation: pv-float-a 26s ease-in-out infinite alternate;
 }
+@keyframes pv-float-a { from { transform: translate(0, 0) scale(1.1); } to { transform: translate(-12%, 5%) scale(0.92); } }
 .pv-aur.b {
   width: 56vmax;
   height: 56vmax;
   bottom: -26vmax;
   right: -18vmax;
   background: radial-gradient(circle at 62% 62%, var(--b3, var(--accent-2)), transparent 64%);
-  animation: bk-float-c 30s ease-in-out infinite alternate;
+  animation: pv-float-b 30s ease-in-out infinite alternate;
 }
+@keyframes pv-float-b { from { transform: translate(0, 0) scale(1); } to { transform: translate(7%, -10%) scale(1.22); } }
 .pv-grain {
   position: absolute;
   inset: 0;
@@ -746,22 +697,6 @@ input[type='color'] {
 }
 .pv-sub .pv-hint {
   color: var(--faint);
-}
-.pv-stage {
-  position: relative;
-  animation: fade-up var(--dur-3) var(--ease-out) both;
-  animation-delay: 60ms;
-}
-/* A soft brand-tinted glow lifts the post off the ground. */
-.pv-stage::before {
-  content: '';
-  position: absolute;
-  inset: -8% -6%;
-  z-index: -1;
-  border-radius: 30px;
-  background: radial-gradient(60% 60% at 50% 46%, var(--b1, var(--accent)), transparent 72%);
-  opacity: 0.26;
-  filter: blur(46px);
 }
 .pv-nav {
   display: flex;
@@ -846,7 +781,7 @@ input[type='color'] {
 }
 @media (prefers-reduced-motion: reduce) {
   .pv-aur { animation: none; }
-  .pv-head, .pv-stage { animation: none; }
+  .pv-head { animation: none; }
 }
 /* Send-to-phone hand-off — shares the .pv-shell brand-tinted family. */
 .sh-inner { gap: 4px; }
@@ -880,122 +815,6 @@ input[type='color'] {
   width: min(460px, 90vw);
   text-align: center;
 }
-/* Clip the track and animate slide changes with the shared motion tokens. */
-.preview-stage-wrap {
-  position: relative;
-  overflow: hidden;
-  border-radius: 16px;
-  box-shadow: var(--shadow), 0 40px 80px -40px rgba(0, 0, 0, 0.7);
-  border: 1px solid var(--border);
-  background: var(--panel-2);
-}
-.preview-track {
-  display: flex;
-  height: 100%;
-  transition: transform var(--dur-3) var(--ease-out);
-  will-change: transform;
-}
-/* Invisible half-width tap zones for click-to-advance on desktop. */
-.preview-tap {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 45%;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-}
-.preview-tap.left {
-  left: 0;
-}
-.preview-tap.right {
-  right: 0;
-}
-
-/* ── Studio — the design-first review workspace ─────────────────────────────
-   The prototype's Studio, realised: editorial masthead → recipe strip → live
-   carousel deck → a right inspector (refine intents + brand tokens). */
-.studio { display: grid; grid-template-columns: minmax(0, 1fr) 322px; align-items: start; gap: 0; }
-@media (max-width: 900px) {
-  .studio { grid-template-columns: 1fr; }
-  .studio-inspector { border-left: none; border-top: 1px solid var(--border); position: static; padding-left: 0; margin-top: 8px; }
-  .studio-main { padding-right: 0; }
-}
-.studio-main { min-width: 0; padding: 2px 28px 40px 0; }
-.studio-eyebrow { font-size: 11px; letter-spacing: 0.28em; text-transform: uppercase; color: var(--accent-2); font-weight: 600; }
-.studio-mast h1 { font-family: var(--display); font-size: clamp(30px, 4.2vw, 56px); line-height: 1.04; letter-spacing: -0.015em; margin: 12px 0 0; text-wrap: balance; }
-.studio-mast h1 .it { font-style: italic; font-weight: 400; color: var(--accent-2); }
-.studio-meta { display: flex; gap: 26px; margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--border); flex-wrap: wrap; }
-.studio-meta .k { font-size: 9.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--faint); margin-bottom: 6px; }
-.studio-meta .v { font-size: 14px; color: var(--text); font-family: var(--display); }
-.studio-meta .v.ok { color: var(--accent); }
-.studio-recipe { margin-top: 24px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); padding: 16px 18px; }
-.studio-recipe .rh { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
-.studio-recipe .rh .lab { font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); font-weight: 700; }
-.studio-recipe .rh a { margin-left: auto; font-size: 11.5px; }
-.studio-rgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
-@media (max-width: 900px) { .studio-rgrid { grid-template-columns: repeat(2, 1fr); } }
-.studio-rgrid .k { font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); margin-bottom: 8px; }
-.studio-rgrid .v { font-size: 12px; color: var(--muted); line-height: 1.5; }
-.studio-sw { display: inline-block; width: 16px; height: 16px; border-radius: 4px; border: 1px solid var(--border-strong); vertical-align: middle; margin-right: 3px; }
-/* "Looks empty" is a softer badge than "Overflows": the slide renders fine, it
-   just has nothing in it. Same chip, quieter, so a real fit failure still reads
-   first when both could apply. */
-.studio-pcard .ovf.soft { opacity: .82; font-weight: 500; }
-
-/* An UNRELATED picture is a softer complaint than a contradiction: the deck is
-   not wrong, nobody chose the photograph. Same shape, quieter edge, so the two
-   read as different kinds of question rather than the same alarm twice. */
-.studio-warn.soft { border-left-color: var(--line); }
-.studio-warn.soft strong { opacity: .85; }
-
-/* Image/copy contradiction panel — questions for the reviewer, not errors.
-   Styled as a card rather than an alert: most decks come back clean, and a
-   panel that looks like a failure when it says "nothing flagged" trains people
-   to skip it. */
-.studio-card { border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; margin: 30px 0 4px; }
-.studio-cardhead { display: flex; align-items: center; gap: 12px; }
-.studio-cardhead h2 { font-family: var(--display); font-size: 20px; margin: 0; flex: 1; }
-.studio-note { font-size: 13px; color: var(--faint); margin: 10px 0 0; }
-.studio-warn { margin: 12px 0 0; padding: 11px 13px; border-radius: 9px; font-size: 13px; line-height: 1.5;
-  background: rgba(196, 148, 68, 0.08); border-left: 3px solid var(--accent); }
-.studio-warn div { margin-top: 5px; color: var(--faint); }
-
-.studio-sec { display: flex; align-items: baseline; gap: 12px; margin: 30px 0 4px; }
-.studio-sec h2 { font-family: var(--display); font-size: 20px; margin: 0; }
-.studio-sec .count { font-size: 12px; color: var(--faint); }
-.studio-sec .live { margin-left: auto; font-size: 11px; color: var(--accent); display: flex; align-items: center; gap: 7px; }
-.studio-sec .live::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px rgba(106, 166, 155, 0.2); }
-.studio-deck { display: flex; gap: 16px; overflow-x: auto; padding: 8px 2px 18px; scroll-snap-type: x proximity; }
-/* PHONE VIEW — the deck stacked at handset width, which is the only size that
-   tells you whether seven slides look the same as each other. Scrolls with the
-   page rather than sideways, the way a reader actually moves through a post. */
-.studio-deck.stacked { flex-direction: column; align-items: center; overflow-x: visible; gap: 28px; scroll-snap-type: none; }
-.studio-deck.stacked .studio-pcard { width: auto; }
-/* The plan entry a slide was composed against — quiet, and only ever present
-   when the post was composed against a plan. */
-.studio-beat {
-  margin: 8px 2px 0; max-width: 100%; font-size: 12px; line-height: 1.45;
-  color: var(--muted); border-left: 2px solid var(--line); padding-left: 8px;
-}
-/* Edge fades: the strip itself signals hidden cards. Classes are toggled by
-   DeckScroller as it scrolls; mask keeps whatever is behind it intact. Shared
-   by the Studio deck and the home brand rail. */
-.studio-deck.fade-r,
-.brand-rail.fade-r {
-  mask-image: linear-gradient(to right, #000 calc(100% - 56px), transparent);
-  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 56px), transparent);
-}
-.studio-deck.fade-l,
-.brand-rail.fade-l {
-  mask-image: linear-gradient(to right, transparent, #000 56px);
-  -webkit-mask-image: linear-gradient(to right, transparent, #000 56px);
-}
-.studio-deck.fade-l.fade-r,
-.brand-rail.fade-l.fade-r {
-  mask-image: linear-gradient(to right, transparent, #000 56px, #000 calc(100% - 56px), transparent);
-  -webkit-mask-image: linear-gradient(to right, transparent, #000 56px, #000 calc(100% - 56px), transparent);
-}
 .deck-wrap { position: relative; }
 .deck-arrow {
   position: absolute; top: 50%; transform: translateY(-50%); z-index: 5;
@@ -1009,24 +828,8 @@ input[type='color'] {
 .deck-arrow:hover { border-color: var(--accent); background: var(--panel-3); }
 .deck-arrow.prev { left: -8px; }
 .deck-arrow.next { right: -8px; }
-.studio-pcard { flex: 0 0 auto; cursor: pointer; border-radius: 12px; transition: transform var(--dur-2) var(--ease); position: relative; scroll-snap-align: start; }
-.studio-pcard:hover { transform: translateY(-4px); }
-.studio-pcard.sel { outline: 2px solid var(--accent-2); outline-offset: 4px; box-shadow: 0 0 0 1px var(--accent-2), 0 18px 40px -22px rgba(0, 0, 0, 0.6); }
-.studio-pcard .num { position: absolute; top: 8px; left: 8px; z-index: 3; font-size: 10px; font-weight: 600; color: var(--text); background: var(--topbar-bg); backdrop-filter: blur(4px); border: 1px solid var(--border); border-radius: 6px; padding: 2px 7px; }
-.studio-inspector { border-left: 1px solid var(--border); padding: 4px 0 40px 24px; position: sticky; top: 12px; align-self: start; }
-.studio-inspector h5 { font-family: var(--display); font-size: 16px; margin: 16px 0 3px; }
-.studio-inspector .intents { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
-.studio-tok { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
-.studio-tok:last-child { border-bottom: none; }
-.studio-tok .lab { color: var(--muted); }
-.studio-tok .val { color: var(--text); display: flex; align-items: center; gap: 8px; font-variant-numeric: tabular-nums; }
-.studio-divln { height: 1px; background: var(--border); margin: 16px 0; }
-
 /* ── Authored-slide editor (surgical copy/order/accent, recipe kept intact) ── */
-.studio-pcard.editing { outline: 2px dashed var(--accent); outline-offset: 4px; }
 .aed { margin-top: 16px; }
-.aed-head { display: flex; align-items: baseline; justify-content: space-between; }
-.aed-head h5 { font-family: var(--display); font-size: 16px; }
 .aed-list { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
 .aed-row { border: 1px solid var(--border); border-radius: 10px; padding: 9px 10px; background: var(--panel); }
 .aed-rowtop { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
@@ -1073,31 +876,6 @@ input[type='color'] {
 .aed-itemdel:hover { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); }
 .aed-actions { display: flex; gap: 8px; margin-top: 14px; }
 
-/* ── The brand rail — the directory folded into the Desk home ───────────── */
-/* Section header: an h2 baseline row (the workspace's .bk-sec-h, in the
-   quieter home register). */
-.sec-h { display: flex; align-items: baseline; gap: 12px; margin: 32px 0 14px; }
-.sec-h h2 { font-family: var(--display); font-size: 20px; margin: 0; letter-spacing: -0.01em; }
-.sec-h .aside { margin-left: auto; font-size: 12px; color: var(--faint); }
-/* A horizontal strip of brand cards (scrolled by DeckScroller). */
-.brand-rail { display: flex; gap: 16px; overflow-x: auto; padding: 4px 2px 14px; scroll-snap-type: x proximity; }
-.brand-rail .brand-card { flex: 0 0 auto; width: 300px; scroll-snap-align: start; }
-.brand-rail .newbrand-card { flex: 0 0 auto; width: 150px; min-height: 0; align-self: stretch; }
-/* A brand card: kit colours beside the meta column. */
-.brand-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); padding: 12px; transition: transform var(--dur-2) var(--ease), border-color var(--dur-2) var(--ease); position: relative; display: flex; flex-direction: row; gap: 14px; align-items: center; }
-.brand-card:hover { transform: translateY(-4px); border-color: var(--border-strong); box-shadow: var(--shadow-sm); }
-.brand-card .bc-top { display: flex; align-items: center; gap: 11px; padding-right: 24px; }
-.brand-card .nm { font-family: var(--display); font-size: 15.5px; color: var(--text); letter-spacing: 0.01em; line-height: 1.2; }
-.brand-card .nm a { color: inherit; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.brand-card .nm a:hover { color: var(--accent); }
-.brand-card .cat { font-size: 11.5px; color: var(--faint); margin-top: 0; }
-.brand-card .dots { display: inline-flex; border-radius: 5px; overflow: hidden; border: 1px solid var(--border); margin-top: 10px; align-self: flex-start; }
-.brand-card .dots span { width: 20px; height: 16px; display: block; }
-.brand-card .bc-foot { margin-top: 4px; padding-top: 0; display: flex; align-items: center; gap: 8px; row-gap: 6px; flex-wrap: wrap; }
-.brand-card .bc-menu { position: absolute; top: 12px; right: 10px; }
-.newbrand-card { border: 1px dashed var(--border-strong); border-radius: var(--radius); background: transparent; display: grid; place-items: center; min-height: 152px; padding: 0; cursor: pointer; color: var(--muted); font-family: inherit; font-size: inherit; transition: color var(--dur-2), border-color var(--dur-2), background var(--dur-2); text-align: center; }
-.newbrand-card:hover { color: var(--accent-2); border-color: var(--accent-2); background: var(--panel); }
-
 /* ── App shell: the Momentum top bar ────────────────────────────────────────
    The chrome moved from a left icon rail to a horizontal bar with WORDED tabs
    (Momentum direction, batch 2): four destinations never needed a persistent
@@ -1141,49 +919,7 @@ input[type='color'] {
   .mo-top-tabs { order: 3; width: 100%; overflow-x: auto; }
 }
 
-/* ═══ Brand Kit — the atelier (editorial, alive) ═══════════════════════════ */
-.bk-rise { opacity: 0; transform: translateY(16px); animation: bk-rise 0.7s var(--ease-out) forwards; }
-@keyframes bk-rise { to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) { .bk-rise { animation: none; opacity: 1; transform: none; } .bk-blob { animation: none !important; } }
-
-/* the living brand hero — rendered in the brand's OWN colors; a compact
-   editorial band, not a billboard */
-.bk-hero {
-  position: relative; border-radius: 22px; overflow: hidden; isolation: isolate;
-  min-height: 240px; display: flex; align-items: flex-end;
-  padding: clamp(26px, 4vw, 52px); margin: 6px 0 30px; border: 1px solid var(--border);
-  box-shadow: var(--shadow);
-}
-.bk-blob { position: absolute; border-radius: 50%; filter: blur(74px); opacity: 0.6; z-index: 0; will-change: transform; pointer-events: none; }
-.bk-blob.a { width: 46%; height: 70%; left: -6%; top: -20%; animation: bk-float-a 19s ease-in-out infinite alternate; }
-.bk-blob.b { width: 52%; height: 80%; right: -8%; top: 10%; animation: bk-float-b 23s ease-in-out infinite alternate; }
-.bk-blob.c { width: 40%; height: 60%; left: 30%; bottom: -24%; animation: bk-float-c 27s ease-in-out infinite alternate; }
-@keyframes bk-float-a { from { transform: translate(0,0) scale(1); } to { transform: translate(10%,8%) scale(1.18); } }
-@keyframes bk-float-b { from { transform: translate(0,0) scale(1.1); } to { transform: translate(-12%,5%) scale(0.92); } }
-@keyframes bk-float-c { from { transform: translate(0,0) scale(1); } to { transform: translate(7%,-10%) scale(1.22); } }
-.bk-hero-grain {
-  position: absolute; inset: 0; z-index: 1; opacity: 0.06; mix-blend-mode: overlay; pointer-events: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-.bk-hero-inner { position: relative; z-index: 2; width: 100%; display: flex; align-items: flex-end; justify-content: space-between; gap: 28px; flex-wrap: wrap; }
-.bk-hero-id { min-width: 0; }
-.bk-hero-logo { height: 52px; max-width: 260px; object-fit: contain; margin-bottom: 20px; display: block; }
-.bk-hero-eyebrow { font-size: 11px; letter-spacing: 0.3em; text-transform: uppercase; font-weight: 700; opacity: 0.85; }
-.bk-hero-meta { display: flex; gap: 10px; align-items: center; margin-top: 16px; flex-wrap: wrap; }
-.bk-hero-pill { font-size: 11px; letter-spacing: 0.06em; padding: 5px 11px; border-radius: var(--radius-pill); font-weight: 600; display: inline-flex; align-items: center; gap: 6px; backdrop-filter: blur(6px); }
-.bk-hero-sample { perspective: 1200px; flex: 0 0 auto; }
-.bk-hero-sample .tilt { transition: transform 0.22s var(--ease-out); will-change: transform; border-radius: 14px; overflow: hidden; box-shadow: 0 30px 60px -24px rgba(0,0,0,0.6); }
-
-/* section rhythm */
-.bk-sec { margin: 34px 0; }
-.bk-sec-h { display: flex; align-items: baseline; gap: 12px; margin-bottom: 16px; }
-.bk-sec-h h2 { font-family: var(--display); font-size: clamp(17px, 1.8vw, 21px); margin: 0; letter-spacing: -0.01em; }
-.bk-sec-h .n { font-family: var(--display); font-style: italic; color: var(--accent-2); font-size: 13px; opacity: 0.7; }
-.bk-sec-h .aside { margin-left: auto; font-size: 12px; color: var(--faint); }
-.bk-cols { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; align-items: start; }
-@media (max-width: 900px) { .bk-cols { grid-template-columns: 1fr; } }
-.bk-sticky { position: sticky; top: 16px; }
-
+/* ═══ Brand Kit editor internals — reskinned in place by .mo-kit (Passport) ═══ */
 /* type specimens rendered in the actual fonts */
 .bk-type { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 @media (max-width: 640px) { .bk-type { grid-template-columns: 1fr; } }
@@ -1194,47 +930,9 @@ input[type='color'] {
 .bk-spec .fam { font-size: 12px; color: var(--faint); margin-top: 12px; }
 .bk-spec select { margin-top: 10px; }
 
-/* the recipe — the centrepiece; the signature line reads as a caption, not a
-   billboard — the grid leads */
-.bk-recipe { position: relative; border: 1px solid var(--border-strong); border-radius: var(--radius-lg); padding: clamp(18px, 2vw, 26px); overflow: hidden; background:
-    radial-gradient(120% 90% at 90% -10%, var(--glow-1), transparent 50%),
-    radial-gradient(80% 70% at -10% 110%, var(--glow-2), transparent 50%), var(--panel); }
-.bk-recipe-top { display: flex; align-items: center; gap: 12px; }
-.bk-recipe-top .lbl { font-size: 11px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--accent); font-weight: 700; }
-.bk-recipe-quote { font-family: var(--display); font-style: italic; font-size: clamp(15px, 1.5vw, 18px); line-height: 1.4; letter-spacing: -0.01em; margin: 18px 0 4px; max-width: 60ch; }
-.bk-recipe-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 20px; margin-top: 22px; padding-top: 20px; border-top: 1px solid var(--border); }
-.bk-recipe-grid .k { font-size: 9.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--faint); margin-bottom: 9px; }
-.bk-recipe-grid .v { font-size: 13px; color: var(--ink-dim, var(--text)); line-height: 1.5; }
-.bk-bigsw { display: inline-block; width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--border-strong); vertical-align: middle; margin: 0 4px 4px 0; }
-.bk-shimmer { position: relative; overflow: hidden; }
-.bk-shimmer::after { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, rgba(255,255,255,0.08) 50%, transparent 70%); animation: bk-shimmer 1.4s linear infinite; }
-@keyframes bk-shimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
-
 /* logo showcase */
 .bk-logo-stage { border-radius: 16px; min-height: 150px; display: grid; place-items: center; border: 1px solid var(--border); position: relative; overflow: hidden; }
 .bk-logo-stage img { max-height: 88px; max-width: 76%; object-fit: contain; }
-
-.bk-actions { position: sticky; bottom: 0; z-index: 15; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 30px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--topbar-bg); backdrop-filter: saturate(140%) blur(12px); flex-wrap: wrap; }
-
-/* ═══ Brand Kit — a compact editorial header, then dense, organised content ══ */
-.bk-sheen { position: absolute; inset: 0; z-index: 0; pointer-events: none; mix-blend-mode: overlay;
-  background: conic-gradient(from 210deg at 32% 18%, transparent, rgba(255,255,255,0.05), transparent 42%, rgba(255,255,255,0.03), transparent 70%); }
-.bk-vignette { position: absolute; inset: 0; z-index: 1; pointer-events: none;
-  box-shadow: inset 0 -90px 120px -60px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,255,255,0.03); }
-.bk-hero-wm { position: absolute; z-index: 0; font-family: var(--display); font-weight: 800; line-height: 0.7;
-  font-size: min(46vh, 300px); right: -1%; bottom: -14%; opacity: 0.06; pointer-events: none; user-select: none;
-  transform: translate(calc(var(--mx,0) * 14px), calc(var(--my,0) * 8px)); transition: transform 0.5s var(--ease-out); }
-.bk-accent-line { display: none; }
-.bk-hero-name2 { font-family: var(--display); font-weight: 700; font-size: clamp(30px, 4vw, 52px); line-height: 1; letter-spacing: -0.02em; margin: 10px 0 0; }
-.bk-word { display: inline-block; }
-@media (prefers-reduced-motion: reduce) {
-  .bk-hero-wm, .bk-hero-sample .tilt { transform: none !important; }
-}
-
-/* scroll-triggered reveals — subtle */
-.bk-reveal { opacity: 0; transform: translateY(14px); transition: opacity 0.5s var(--ease-out), transform 0.5s var(--ease-out); }
-.bk-reveal.in { opacity: 1; transform: none; }
-@media (prefers-reduced-motion: reduce) { .bk-reveal { opacity: 1; transform: none; transition: none; } }
 
 /* palette: one compact control per colour (chip + editable hex) */
 .bk-palette { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
@@ -1245,51 +943,6 @@ input[type='color'] {
 .bk-color-meta { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .bk-color-role { font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); font-weight: 700; }
 .bk-color-hex { width: 104px; max-width: 100%; font-family: ui-monospace, monospace; font-size: 12.5px; padding: 5px 8px; }
-
-/* ═══ Studio — the project review/edit workspace ══════════════════════════ */
-/* the studio masthead becomes a cinematic band tinted by the brand recipe */
-.studio-mast { position: relative; }
-.st-hero { position: relative; border-radius: 20px; overflow: hidden; isolation: isolate; padding: clamp(24px, 3.4vw, 44px); margin-bottom: 26px; border: 1px solid var(--border); background: linear-gradient(160deg, var(--panel), var(--bg-2)); }
-.st-hero .aur { position: absolute; border-radius: 50%; filter: blur(72px); opacity: 0.5; z-index: 0; }
-.st-hero .aur.x { width: 44%; height: 130%; right: -6%; top: -30%; animation: bk-float-b 24s ease-in-out infinite alternate; }
-.st-hero .aur.y { width: 34%; height: 110%; left: 20%; bottom: -40%; animation: bk-float-c 28s ease-in-out infinite alternate; }
-.st-hero .gr { position: absolute; inset: 0; z-index: 1; opacity: 0.05; mix-blend-mode: overlay;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='150' height='150'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
-.st-hero > * { position: relative; z-index: 2; }
-/* ═══ Brand rail card internals ════════════════════════════════════════════ */
-.bc-fallback { flex: 0 0 auto; align-self: center; width: 84px; height: 105px; border-radius: 10px; overflow: hidden; border: 1px solid var(--border); box-shadow: var(--shadow-sm); display: grid; grid-template-rows: repeat(5, 1fr); }
-.bc-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 6px; padding-right: 18px; }
-.bc-meta .bc-top { flex-direction: column; align-items: flex-start; gap: 2px; }
-
-/* ═══ Create — the centered composer ══════════════════════════════════════ */
-.create-wrap { max-width: 740px; margin: 0 auto; }
-.create-hero { text-align: center; margin: 4px 0 28px; }
-.create-hero .eyebrow { font-size: 11px; letter-spacing: 0.28em; text-transform: uppercase; color: var(--accent-2); font-weight: 600; }
-.create-hero h1 { font-family: var(--display); font-size: clamp(30px, 4.6vw, 54px); line-height: 1.02; letter-spacing: -0.02em; margin: 12px 0 0; }
-.create-hero h1 .it { font-style: italic; font-weight: 400; color: var(--accent-2); }
-.create-hero .lede { color: var(--muted); font-size: 15px; line-height: 1.6; max-width: 54ch; margin: 14px auto 0; }
-
-/* What the brief was understood to mean — the links it will read, the copy it
-   will keep word for word. Shown before a compose is spent, so a mis-parsed
-   brief is caught by the eye rather than by the result. */
-.brief-read { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
-.brief-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 4px 10px;
-  border: 1px solid var(--border); border-radius: 999px; background: var(--panel-2); color: var(--muted);
-  font-size: 12px; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.brief-chip .icon { flex: 0 0 auto; color: var(--accent-2); }
-.brief-chip.lock { color: var(--text); border-color: color-mix(in srgb, var(--accent-2) 40%, var(--border)); }
-
-/* The slide plan — one row per slide, in deck order. */
-.plan-row { display: grid; grid-template-columns: 26px 1fr auto; align-items: start; gap: 10px; margin-bottom: 8px; }
-.plan-row textarea { min-height: 0; resize: vertical; font-size: 13px; line-height: 1.5; }
-.plan-num { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 30px;
-  font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
-.plan-tools { display: inline-flex; gap: 2px; padding-top: 3px; }
-.plan-tools .icon-btn { width: 26px; height: 26px; border: 1px solid transparent; background: transparent; color: var(--faint);
-  border-radius: 7px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
-  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease); }
-.plan-tools .icon-btn:hover:not(:disabled) { background: var(--panel-2); color: var(--text); }
-.plan-tools .icon-btn:disabled { opacity: 0.25; cursor: default; }
 
 /* ── Video export: a determinate 0→100% loader ─────────────────────────────── */
 .vid-prog { border: 1px solid var(--border); border-radius: 14px; background: var(--panel); padding: 14px 16px; margin-bottom: 18px; }
@@ -1410,25 +1063,6 @@ input[type='color'] {
   .work-aura, .work-dot, .work-tick.now, .work-swatches span, .work-slide, .work-ln, .work-label { animation: none; }
 }
 
-/* motion: brand cards + studio deck lift + settle */
-.brand-card, .studio-pcard { transition: transform 0.24s var(--ease-out), box-shadow 0.24s var(--ease-out), border-color 0.24s var(--ease-out); }
-
-/* Overflow warning on a studio slide card — a composition taller than its canvas. */
-.studio-pcard .ovf {
-  position: absolute; top: 8px; right: 8px; z-index: 4;
-  font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
-  color: var(--on-warn-strong); background: var(--warn);
-  border-radius: 6px; padding: 3px 7px; box-shadow: var(--shadow-sm);
-}
-/* An unfilled image slot ships as a blank panel — quieter than the overflow
-   warning because it's a reminder, not a fault. */
-.studio-pcard .needsphoto {
-  position: absolute; top: 8px; left: 8px; z-index: 4;
-  font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
-  color: var(--text); background: var(--panel); border: 1px solid var(--border-strong);
-  border-radius: 6px; padding: 3px 7px; box-shadow: var(--shadow-sm);
-}
-
 /* Recipe: "why this design" + the live tuning knobs. */
 .bk-why { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 12px; }
 .bk-why summary { cursor: pointer; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent-2); font-weight: 700; }
@@ -1439,15 +1073,6 @@ input[type='color'] {
 .bk-knobs-lbl { font-size: 9.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--faint); font-weight: 700; padding-bottom: 8px; }
 .bk-knobs label { display: flex; flex-direction: column; gap: 4px; font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); font-weight: 700; }
 .bk-knobs select { font-size: 12.5px; padding: 5px 8px; min-width: 128px; }
-
-/* ===== Brand-kit pack ===== */
-/* Recipe directions: 2–3 candidate design systems, chosen by eye. */
-.bk-recipe-cta { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.bk-count { display: inline-flex; border: 1px solid var(--border); border-radius: 9px; overflow: hidden; }
-.bk-count button { border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 11.5px; font-weight: 700; padding: 4px 10px; cursor: pointer; transition: background var(--dur-2) var(--ease), color var(--dur-2) var(--ease); }
-.bk-count button + button { border-left: 1px solid var(--border); }
-.bk-count button.on { background: var(--panel-2); color: var(--text); }
-.bk-count button:disabled { opacity: 0.5; cursor: default; }
 .bk-cands { margin-top: 16px; }
 .bk-cands-lead { color: var(--muted); font-size: 13px; line-height: 1.55; margin: 0 0 14px; max-width: 70ch; }
 .bk-cands-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; align-items: stretch; }
@@ -1460,17 +1085,6 @@ input[type='color'] {
 .bk-cand-facts li { font-size: 10.5px; letter-spacing: 0.05em; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px; }
 .bk-cand > .btn { align-self: flex-start; margin-top: auto; }
 .bk-cands-dismiss { margin-top: 12px; }
-/* Kit-edit diff: what saving does to every post, shown before it happens. */
-.bk-diff { display: flex; align-items: center; justify-content: space-between; gap: 18px; flex-wrap: wrap; margin-top: 26px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--panel); }
-.bk-diff-copy { min-width: 200px; }
-.bk-diff-lbl { font-size: 9.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent-2); font-weight: 700; }
-.bk-diff-note { margin: 4px 0 0; font-size: 13.5px; color: var(--text); }
-.bk-diff-changed { margin: 3px 0 0; font-size: 11.5px; color: var(--faint); }
-.bk-diff-pair { display: flex; align-items: center; gap: 12px; }
-.bk-diff-pair figure { margin: 0; text-align: center; }
-.bk-diff-pair figcaption { margin-top: 6px; font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); font-weight: 700; }
-.bk-diff-arrow { color: var(--faint); font-size: 17px; }
-@media (max-width: 640px) { .bk-diff { justify-content: center; } }
 
 /* Learned preference: repeated slide tweaks distilled into one quiet, dismissible nudge. */
 .bk-suggest {
@@ -1498,23 +1112,6 @@ input[type='color'] {
 .bk-refine-row .btn { margin-bottom: 1px; }
 .bk-refine-hint { margin: 8px 0 0; font-size: 11.5px; line-height: 1.5; color: var(--faint); max-width: 68ch; }
 
-/* Studio: instant adjustments + the arrangement picker. */
-.studio-klbl { font-size: 9.5px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--faint); margin-bottom: 10px; }
-.studio-variants { margin-top: 18px; }
-
-/* ===== Studio pack ===== */
-/* Deck reorder: chevrons surface on the selected / hovered card only. */
-.studio-pcard .mv { position: absolute; bottom: 10px; right: 8px; z-index: 4; display: none; gap: 4px; }
-.studio-pcard.sel .mv, .studio-pcard:hover .mv, .studio-pcard:focus-within .mv { display: flex; }
-.studio-pcard .mv button {
-  display: grid; place-items: center; width: 24px; height: 24px; padding: 0;
-  border-radius: 7px; border: 1px solid var(--border-strong); cursor: pointer;
-  color: var(--text); background: var(--topbar-bg); backdrop-filter: blur(4px);
-  transition: border-color var(--dur-2) var(--ease), color var(--dur-2) var(--ease);
-}
-.studio-pcard .mv button:hover:not(:disabled) { border-color: var(--accent-2); color: var(--accent-2); }
-.studio-pcard .mv button:disabled { opacity: 0.35; cursor: default; }
-
 /* Post-export "send to phone" strip — the entry point to /share. */
 .sendphone {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
@@ -1530,16 +1127,6 @@ input[type='color'] {
   border: none; background: none; color: var(--faint); cursor: pointer; border-radius: 6px;
 }
 .sendphone-x:hover { color: var(--text); }
-
-/* Caption editor card — under the deck, over the same panel vocabulary. */
-.capcard { margin-top: 22px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); padding: 14px 16px 12px; }
-.capcard-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
-.capcard-head .lab { font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); font-weight: 700; }
-.capcard-unsaved { font-size: 10.5px; color: var(--warn); }
-.capcard-text, .capcard-tags { width: 100%; font-size: 13px; line-height: 1.55; }
-.capcard-text { resize: vertical; min-height: 66px; }
-.capcard-tags { margin-top: 8px; color: var(--accent-2); }
-.capcard-hint { font-size: 10.5px; color: var(--faint); margin: 8px 0 0; line-height: 1.45; }
 
 /* Version-history drawer — a right-hand panel over a scrim. */
 .vh-scrim {
@@ -1601,11 +1188,6 @@ input[type='color'] {
   font-size: 9px; color: #fff; background: linear-gradient(transparent, rgba(0, 0, 0, 0.72));
   padding: 8px 5px 3px; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-
-/* "Copy link" on the interactive preview's masthead. */
-.pv-copylink { margin-top: 10px; }
-/* ===== end Studio pack ===== */
-
 /* ===== On-canvas edit ===== */
 /* Direct copy editing on the inspector preview. These rules dress the LIVE
    slide DOM (decorations only — nothing here is ever serialised back), inside
@@ -1633,35 +1215,6 @@ input[type='color'] {
 .aed-row.sync { border-color: var(--accent-2); }
 /* ===== end On-canvas edit ===== */
 
-/* ===== Settled-frame guides ===== */
-/* A photo's ambient motion HOLDS at the end of its move — the keyframes run
-   `both`, and the video exporter seeks every cb-amb-* animation to its end for
-   the hold frames. So the framing that ships is the one the motion settles
-   into, which for a push-in is tighter than the box you see at rest. This draws
-   that settled frame on the focal picker: a brass hairline around what survives,
-   everything outside it scrimmed away. Deliberately static — it has to track
-   the dot instantly while you drag, so there is no animation here for
-   prefers-reduced-motion to turn off. */
-.fp-settled {
-  position: absolute;
-  pointer-events: none;
-  border: 1px solid var(--accent-2);
-  border-radius: 3px;
-  /* One spread shadow dims everything outside the rect; .fp-box clips it. */
-  box-shadow: 0 0 0 9999px color-mix(in srgb, var(--bg) 66%, transparent);
-}
-/* Corner ticks on the diagonal — enough to read as a frame, not as a box. */
-.fp-settled::before,
-.fp-settled::after {
-  content: '';
-  position: absolute;
-  width: 9px;
-  height: 9px;
-  border: 0 solid var(--accent-2);
-}
-.fp-settled::before { top: -1px; left: -1px; border-width: 2px 0 0 2px; }
-.fp-settled::after { right: -1px; bottom: -1px; border-width: 0 2px 2px 0; }
-/* ===== end Settled-frame guides ===== */
 .sv-row { display: flex; gap: 10px; flex-wrap: wrap; }
 .sv-card {
   padding: 0; border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
@@ -1673,7 +1226,6 @@ input[type='color'] {
 
 /* ═══ Slide photos — slots, background, floating images ═══════════════════ */
 .sp { display: flex; flex-direction: column; gap: 6px; }
-
 
 /* ── Slide photos: cards that open, with written labels ─────────────────── */
 .spc-group { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); font-weight: 700; margin: 14px 0 6px; }
@@ -1720,58 +1272,6 @@ input[type='color'] {
   border: 2px solid #fff; background: var(--accent); box-shadow: 0 0 0 1px rgba(0,0,0,0.5); pointer-events: none;
 }
 .fp-hint { font-size: 10.5px; color: var(--faint); margin: 6px 0 0; line-height: 1.4; }
-
-/* ═══ The Desk — the home screen as a workspace ════════════════════════════ */
-.desk-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; flex-wrap: wrap; }
-.desk-head .eyebrow { font-size: 11px; letter-spacing: 0.28em; text-transform: uppercase; color: var(--accent-2); font-weight: 600; margin: 0; }
-.desk-head h1 { font-family: var(--display); font-size: clamp(26px, 3.4vw, 40px); line-height: 1.04; letter-spacing: -0.015em; margin: 10px 0 0; }
-.desk-head h1 .it { font-style: italic; color: var(--accent-2); }
-
-.desk-board { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-top: 28px; align-items: start; }
-@media (max-width: 1100px) { .desk-board { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 640px) { .desk-board { grid-template-columns: 1fr; } }
-
-.desk-col { background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px; padding: 12px; min-height: 150px; }
-.desk-col h2 {
-  font-family: var(--body); font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
-  color: var(--faint); font-weight: 700; margin: 0 0 12px; display: flex; justify-content: space-between; align-items: center;
-}
-.desk-col h2 em { font-style: normal; color: var(--border-strong); font-size: 11px; }
-.desk-empty { font-size: 11.5px; color: var(--faint); line-height: 1.5; margin: 0; padding: 6px 2px 10px; }
-
-/* Thumb spans both rows so the meta line reclaims the menu column's width —
-   four columns leave a card barely 230px wide, and the brand name has to fit. */
-.dcard {
-  display: grid; align-items: center; column-gap: 10px; row-gap: 2px;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  grid-template-areas:
-    'thumb title menu'
-    'thumb meta  meta';
-  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
-  padding: 8px; margin-bottom: 8px;
-  transition: transform var(--dur-2) var(--ease), border-color var(--dur-2) var(--ease), opacity var(--dur-2) var(--ease);
-}
-.dcard:hover { transform: translateY(-2px); border-color: var(--border-strong); }
-.dcard.busy { opacity: 0.55; }
-.dcard-thumb {
-  grid-area: thumb; width: 44px; height: 55px; border-radius: 6px; overflow: hidden;
-  border: 1px solid var(--border); background: var(--panel-2); display: grid; place-items: center;
-}
-.dcard-idea { color: var(--faint); font-size: 15px; }
-.dcard-t {
-  grid-area: title; align-self: end;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-  font-family: var(--display); font-size: 13.5px; line-height: 1.2; color: var(--text); text-decoration: none;
-}
-.dcard-t:hover { color: var(--accent); }
-/* One line, no wrap: the brand truncates before the status is ever pushed to a
-   second row (which would leave the "·" dangling at the end of the first). */
-.dcard-s { grid-area: meta; align-self: start; font-size: 10.5px; color: var(--faint); display: flex; gap: 5px; flex-wrap: nowrap; align-items: baseline; white-space: nowrap; }
-.dcard-brand { color: var(--muted); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.dcard-sep, .dcard-s > :last-child { flex: 0 0 auto; }
-.dcard-sep { color: var(--border-strong); }
-/* In flow, not absolute — an overlaid button would sit on top of the title. */
-.dcard-menu { grid-area: menu; align-self: start; margin: -2px -2px 0 0; }
 
 /* ── Prompt versions ────────────────────────────────────────────────────────
    "The AI got better since this was made." Styled as a QUIET NOTICE, not an
@@ -1820,169 +1320,9 @@ input[type='color'] {
 .pu-rel > li > ul { margin: 5px 0 0; padding-left: 17px; display: grid; gap: 3px; }
 .pu-rel > li > ul li { font-size: 12px; line-height: 1.55; color: var(--faint); }
 
-/* The changelog page. Reading width, no cards — this is a document. */
-.wn { display: grid; gap: 26px; padding-bottom: 40px; }
-.wn-head h1 { margin: 0 0 10px; }
-.wn-head p { margin: 0; max-width: 68ch; font-size: 13.5px; line-height: 1.7; color: var(--faint); }
-.wn-filter { display: flex; gap: 6px; margin-top: 14px; }
-.wn-tp { padding-top: 20px; border-top: 1px solid var(--border); }
-.wn-tp-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-.wn-tp-head h2 { margin: 0; font-size: 17px; }
-.wn-affects { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); font-weight: 600; }
-.wn-role { margin: 6px 0 14px; max-width: 68ch; font-size: 12.5px; line-height: 1.6; color: var(--faint); }
-
-/* A slide the newer prompts would change, marked on its own card. */
-.pu-chip {
-  display: inline-flex; align-items: center; gap: 5px;
-  padding: 2px 8px; border-radius: 999px;
-  font-size: 10.5px; font-weight: 600; letter-spacing: 0.02em;
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 11%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
-}
-
 /* On the review screen the strip is one voice among several (overflow, needs
    photo) — give it the deck's rhythm rather than the brand page's inset. */
 .studio-pu { margin: 10px 0 2px; }
-/* "Improvable": the same shape and corner language as Needs photo / Overflows,
-   in the accent that means information rather than the amber that means
-   something is wrong. Bottom-left, so it never collides with either. */
-.studio-pcard .stale {
-  position: absolute; bottom: 8px; left: 8px; z-index: 4;
-  display: inline-flex; align-items: center; gap: 4px;
-  font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
-  color: var(--accent); background: var(--panel);
-  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border-strong));
-  border-radius: 6px; padding: 3px 7px; box-shadow: var(--shadow-sm);
-}
-
-/* ── Guided setup (/start) ──────────────────────────────────────────────────
-   One road from a brand's name to its first post. Reading width, one card at a
-   time, nothing competing for attention — the opposite of the Desk, which is a
-   board you scan. */
-.ob { max-width: 760px; margin: 0 auto; padding-bottom: 48px; }
-.ob-head h1 { margin: 0 0 14px; }
-
-/* The rail is a MAP, not a progress bar: all four stops always visible, so you
-   can see how much is left before you commit to the first one. */
-.ob-rail { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 22px; padding: 0; }
-.ob-rail li {
-  display: flex; align-items: center; gap: 7px;
-  padding: 5px 13px 5px 6px; border-radius: 999px;
-  font-size: 11.5px; font-weight: 600; letter-spacing: 0.01em;
-  color: var(--faint); border: 1px solid var(--border); background: var(--panel);
-}
-.ob-rail-dot {
-  display: grid; place-items: center; width: 19px; height: 19px; border-radius: 50%;
-  font-size: 10.5px; font-weight: 700; font-variant-numeric: tabular-nums;
-  background: color-mix(in srgb, var(--faint) 16%, transparent); color: var(--faint);
-}
-.ob-rail li.done { color: var(--text); }
-.ob-rail li.done .ob-rail-dot { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--accent); }
-.ob-rail li.now {
-  color: var(--text);
-  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
-  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
-}
-.ob-rail li.now .ob-rail-dot { background: var(--accent); color: var(--on-accent, #0b0f1a); }
-
-.ob-card {
-  border: 1px solid var(--border); border-radius: 14px;
-  background: var(--panel); padding: 22px;
-  animation: bk-suggest-in 0.3s var(--ease) both;
-}
-.ob-title { margin: 0 0 8px; font-size: 21px; }
-.ob-blurb { margin: 0 0 20px; max-width: 62ch; font-size: 13.5px; line-height: 1.65; color: var(--faint); }
-.ob-hint { margin: 8px 0 0; max-width: 62ch; font-size: 12px; line-height: 1.6; color: var(--faint); }
-.ob-card .field { margin-bottom: 16px; }
-.ob-card textarea { width: 100%; resize: vertical; }
-.ob-source {
-  display: inline-flex; align-items: center; gap: 7px; margin: 0 0 16px;
-  font-size: 12.5px; color: var(--accent);
-}
-
-/* What was read off the site, before committing to a design pass. */
-.ob-readout { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; margin-bottom: 20px; }
-.ob-readout dl { flex: 1 1 260px; margin: 0; display: grid; gap: 12px; }
-.ob-readout dt { font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); font-weight: 700; }
-.ob-readout dd { margin: 4px 0 0; font-size: 12.5px; line-height: 1.55; color: var(--text); }
-.ob-sw { display: flex; gap: 6px; }
-.ob-sw span { width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--border-strong); }
-
-/* Two directions, side by side, as live renders — you pick a picture, not a word. */
-.ob-cands { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 4px; }
-.ob-cand { display: flex; flex-direction: column; gap: 9px; align-items: flex-start; }
-.ob-cand strong { font-size: 13px; }
-.ob-cand-note { font-size: 11.5px; line-height: 1.5; color: var(--faint); max-width: 230px; }
-
-.ob-starters { display: flex; flex-direction: column; gap: 6px; margin: -6px 0 18px; }
-.ob-starters > span { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); font-weight: 700; margin-bottom: 2px; }
-.ob-starter {
-  text-align: left; font-size: 12.5px; line-height: 1.5; color: var(--text);
-  padding: 9px 12px; border-radius: 9px; cursor: pointer;
-  border: 1px solid var(--border); background: transparent;
-  transition: border-color 0.18s var(--ease), background 0.18s var(--ease);
-}
-.ob-starter:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); background: color-mix(in srgb, var(--accent) 5%, transparent); }
-
-.ob-formats { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 20px; }
-.ob-formats select { min-width: 168px; }
-
-.ob-foot { margin-top: 18px; font-size: 12.5px; }
-.ob-foot a { color: var(--faint); text-decoration: none; }
-.ob-foot a:hover { color: var(--text); text-decoration: underline; }
-
-/* "Finish setting up" — shown wherever an unfinished brand appears. */
-.ob-resume {
-  display: flex; align-items: center; gap: 11px; flex-wrap: wrap;
-  margin-top: 12px; padding: 10px 14px; border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
-  background: color-mix(in srgb, var(--accent) 6%, var(--panel));
-}
-.ob-resume > svg { color: var(--accent); flex: 0 0 auto; }
-.ob-resume p { flex: 1 1 240px; margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--text); }
-
-/* An unfinished brand on the Desk rail: a way onward, not a status label. */
-.bc-finish {
-  display: inline-flex; align-items: center; gap: 5px;
-  padding: 3px 9px; border-radius: 999px; text-decoration: none;
-  font-size: 10.5px; font-weight: 700; letter-spacing: 0.03em;
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
-  transition: background 0.18s var(--ease);
-}
-.bc-finish:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); }
-
-/* A caution inside a setup step — the analysis came back thin. Amber, because
-   unlike the accent-coloured notices this one says something is wrong. */
-.ob-warn {
-  display: flex; align-items: flex-start; gap: 8px;
-  margin: 0 0 16px; padding: 10px 13px; border-radius: 10px;
-  font-size: 12.5px; line-height: 1.55; color: var(--text);
-  background: color-mix(in srgb, var(--warn) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--warn) 34%, var(--border));
-}
-.ob-warn > svg { color: var(--warn); flex: 0 0 auto; margin-top: 2px; }
-
-/* Direct one slide — the per-slide half of the brief language, in the Studio. */
-.slide-direction { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
-.slide-direction label { display: block; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
-  color: var(--faint); font-weight: 600; margin-bottom: 6px; }
-.slide-direction textarea { min-height: 0; resize: vertical; font-size: 13px; line-height: 1.5; }
-.slide-direction p { font-size: 11.5px; line-height: 1.5; margin: 6px 0 0; }
-
-/* What a deck was written from — the article behind the claims on its slides. */
-.studio-sources { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 14px; }
-.studio-sources .lab { font-size: 10.5px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--faint); font-weight: 600; }
-.studio-sources a { display: inline-flex; align-items: center; gap: 7px; max-width: 46ch; padding: 5px 11px;
-  border: 1px solid var(--border); border-radius: 999px; background: var(--panel); color: var(--muted);
-  font-size: 12px; text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  transition: color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease); }
-.studio-sources a:hover { color: var(--text); border-color: var(--accent-2); }
-.studio-sources a .icon { flex: 0 0 auto; color: var(--accent-2); }
-.studio-sources a .by { color: var(--faint); }
-.studio-sources a .by::before { content: "·"; margin-right: 6px; }
 
 /* ═══ What a brand has taught the copywriter ═══════════════════════════════ */
 .lessons { margin: 14px 0 18px; }
@@ -2321,8 +1661,6 @@ input[type='color'] {
 .mo-fcard .mv button { width: 24px; height: 24px; border-radius: 7px; background: rgb(22 24 31 / 78%); color: #fff; border: none; display: grid; place-items: center; cursor: pointer; }
 .mo-fcard .mv button:disabled { opacity: 0.4; cursor: default; }
 .mo-fcard .beat { font-size: 10.5px; color: var(--mo-faint); margin-top: 7px; line-height: 1.35; max-width: 100%; }
-/* Stacked (phone view) keeps the same anatomy, centered. */
-.mo-line-wrap .deckscroller.stacked .mo-fcard { align-self: center; }
 
 /* ── The detail sheet ── */
 .mo-sheet { background: var(--mo-card); border: 1px solid var(--mo-line); border-radius: 20px; box-shadow: var(--mo-shadow); padding: 20px; margin-top: 14px; display: grid; grid-template-columns: 300px minmax(0, 1.15fr) minmax(0, 1fr); gap: 24px; }
@@ -2386,9 +1724,8 @@ input[type='color'] {
 .mo-studio .sv-card { background: var(--mo-card); border: 1px solid var(--mo-line-strong); border-radius: 12px; transition: transform 0.25s var(--mo-spring), border-color var(--dur-1) var(--ease); }
 .mo-studio .sv-card:hover { transform: translateY(-3px); border-color: var(--mo-indigo); }
 .mo-studio .vh { background: var(--mo-card); color: var(--mo-ink); }
-.mo-studio-drawer .vh { background: var(--mo-card); color: var(--mo-ink); }
 
-/* The Studio's strip — same scroller contract as .studio-deck, Momentum skin. */
+/* The Studio's strip — the DeckScroller contract (.fade-l/.fade-r/.stacked), Momentum skin. */
 .mo-strip { display: flex; gap: 16px; overflow-x: auto; padding: 8px 2px 14px; scroll-snap-type: x proximity; }
 .mo-strip > * { scroll-snap-align: start; }
 .mo-strip.stacked { flex-direction: column; align-items: center; overflow-x: visible; gap: 28px; scroll-snap-type: none; }
@@ -2409,8 +1746,9 @@ input[type='color'] {
 .mo-studio .btn.primary:hover { background: var(--mo-ink); }
 .mo-studio .btn.danger { color: var(--mo-red); border-color: rgb(226 90 74 / 35%); }
 .mo-studio .btn.ghost { background: transparent; border-color: transparent; color: var(--mo-muted); }
-.mo-studio .spc-card, .mo-studio .spc-field { border-color: var(--mo-line); }
-.mo-studio .spc-label, .mo-studio .spc-hint, .mo-studio .spc-sub { color: var(--mo-muted); }
+.mo-studio .spc-field { border-color: var(--mo-line); }
+.mo-studio .spc-label,
+.mo-studio .spc-hint { color: var(--mo-muted); }
 .mo-studio .spc-seg { background: var(--mo-bg); border-color: var(--mo-line-strong); }
 .mo-studio .spc-opt.on { background: var(--mo-card); color: var(--mo-ink); }
 .mo-studio input, .mo-studio select { border-color: var(--mo-line-strong); background: var(--mo-card); color: var(--mo-ink); }
@@ -2458,7 +1796,8 @@ input[type='color'] {
 .mo-toggle { display: flex; border: 1px solid var(--mo-line-strong); border-radius: 12px; overflow: hidden; }
 .mo-toggle button { flex: 1; text-align: center; font-size: 13px; font-weight: 600; padding: 10px; color: var(--mo-faint); background: var(--mo-card); border: none; cursor: pointer; font-family: inherit; }
 .mo-toggle button.on { background: var(--mo-ink); color: var(--mo-card); }
-.mo-compose select, .mo-compose input[type='text'], .mo-compose .mo-input { width: 100%; border: 1px solid var(--mo-line-strong); border-radius: 12px; background: var(--mo-card); color: var(--mo-ink); font: inherit; font-size: 13.5px; padding: 10px 13px; }
+.mo-compose select,
+.mo-compose input[type='text'] { width: 100%; border: 1px solid var(--mo-line-strong); border-radius: 12px; background: var(--mo-card); color: var(--mo-ink); font: inherit; font-size: 13.5px; padding: 10px 13px; }
 .mo-compose select:focus, .mo-compose input:focus, .mo-compose textarea:focus { outline: none; border-color: var(--mo-indigo); box-shadow: 0 0 0 3px var(--mo-indigo-bg); }
 .mo-who .next { display: flex; justify-content: flex-end; }
 
