@@ -16,7 +16,9 @@
     "prompt:hashes": "tsx src/scripts/promptHashes.ts",
     "media:orphans": "tsx src/scripts/sweepOrphanedMedia.ts",
     "scaffolds:orphans": "tsx src/scripts/sweepRenderScaffolds.ts",
-    "layout:corpus": "tsx src/scripts/slackDistribution.ts"
+    "layout:corpus": "tsx src/scripts/slackDistribution.ts",
+    "ai:share": "tsx src/scripts/aiShare.ts",
+    "fragments:carry": "tsx src/scripts/carryFragments.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.106.0",

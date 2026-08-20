@@ -493,6 +493,50 @@ function topLevel(html: string): Array<{ start: number; end: number; classes: st
     .sort((a, b) => a.start - b.start);
 }
 
+/**
+ * CARRY A LOST FRAGMENT FORWARD.
+ *
+ * A re-author is not obliged to return every role. One came back with six of
+ * seven — `statement` simply absent, nothing in the response saying so — and
+ * the finalisation logged a REGRESSION line and shipped the recipe anyway. The
+ * warning was correct and useless: `statement` is the commonest role in the
+ * corpus, and every one of its slides has cost a per-slide model call since,
+ * for an arrangement the brand had already written down.
+ *
+ * A fragment is markup in the brand's OWN component classes, so the question of
+ * whether the old one still serves is not a matter of taste — it is whether the
+ * new recipe still defines those classes, which `checkFragment` already answers.
+ * Passes, and it is carried; fails, and the vocabulary really did change, so the
+ * role falls back to the model and the warning stands.
+ *
+ * Deterministic: no model call, no judgement, no AI spend.
+ */
+export function carryForwardFragments(
+  next: BrandRecipe,
+  previous?: BrandRecipe | null,
+): { recipe: BrandRecipe; carried: string[]; unusable: DroppedFragment[] } {
+  const had = previous?.fragments;
+  if (!had || !Object.keys(had).length) return { recipe: next, carried: [], unusable: [] };
+
+  const have = next.fragments ?? {};
+  const carried: string[] = [];
+  const unusable: DroppedFragment[] = [];
+  const merged: Record<string, string> = { ...have };
+
+  for (const [role, fragment] of Object.entries(had)) {
+    if (have[role] || typeof fragment !== 'string') continue;
+    const checked = checkFragment(next, role, fragment);
+    if ('reason' in checked) unusable.push({ role, reason: checked.reason });
+    else {
+      merged[role] = checked.html;
+      carried.push(role);
+    }
+  }
+
+  if (!carried.length) return { recipe: next, carried, unusable };
+  return { recipe: { ...next, fragments: merged }, carried, unusable };
+}
+
 export interface FragmentRepair {
   role: string;
   /** The parts a hole was added for. */

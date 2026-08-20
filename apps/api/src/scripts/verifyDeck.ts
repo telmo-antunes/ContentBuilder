@@ -5,6 +5,7 @@
  *   npx tsx src/scripts/verifyDeck.ts <projectId>
  */
 import { connectDb, disconnectDb } from '../db';
+import { closeBrowser } from '../lib/browser';
 import { config } from '../config';
 import { layoutFaults } from '../lib/htmlDirector/renderCheck';
 
@@ -60,9 +61,18 @@ import { layoutFaults } from '../lib/htmlDirector/renderCheck';
     await page.close().catch(() => {});
   }
   console.log(bad ? `\n${bad} slide(s) need attention` : '\nevery slide renders clean, with its photograph');
+  /**
+ * The probe's browser is process-wide and memoised, so closing the probe's PAGES
+ * is not enough to let node exit: the launch keeps the event loop alive and the
+ * script simply never returns. Fifteen of these were still resident across old
+ * sessions — the oldest for a day and six hours, each holding a Chrome — which
+ * is why `pgrep` for this script matches runs that finished long ago.
+ */
+  await closeBrowser().catch(() => {});
   await disconnectDb();
 })().catch(async (e) => {
   console.error('FAILED', e);
+  await closeBrowser().catch(() => {});
   await disconnectDb().catch(() => {});
   process.exit(1);
 });

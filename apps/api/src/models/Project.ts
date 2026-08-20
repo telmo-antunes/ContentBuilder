@@ -84,6 +84,21 @@ const slideSchema = new Schema(
           archetype: { type: String, required: false },
           /** Prompt versions that wrote + arranged this slide. */
           pv: { type: Schema.Types.Mixed, required: false },
+          /**
+           * WHICH PATH BUILT THIS SLIDE — 'fragment' (deterministic
+           * substitution, no model call) or 'ai' (composed for this slide
+           * alone).
+           *
+           * Was telemetry that the route threw away, which left the only record
+           * of the split in the markup itself — and the markup cannot answer it.
+           * A fragment fill and a model compose that happened to follow the same
+           * recipe order are byte-comparable, `balanceVertical` moves the
+           * spacers of both, and repeated rows make the two skeletons different
+           * lengths in opposite directions. Inferring it read `list` as 0%
+           * fragment when its fragment substitutes cleanly in every shape a list
+           * slide comes in. Stored, it is simply known.
+           */
+          source: { type: String, enum: ['fragment', 'ai'], required: false },
         },
         { _id: false },
       ),

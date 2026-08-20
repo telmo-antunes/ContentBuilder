@@ -2166,7 +2166,7 @@ export async function composeProject(
   });
   const out: Array<{
     role: SlideRole;
-    authored: { html: string; bg?: string; role?: string; archetype?: string };
+    authored: { html: string; bg?: string; role?: string; archetype?: string; source?: ComposePath };
     imageQuery?: string;
     source: ComposePath;
   }> = [];
@@ -2174,12 +2174,12 @@ export async function composeProject(
   for (let i = 0; i < inputs.length; i += 1) {
     const a = authored[i]!;
     if (a.html) {
-      // `source` is telemetry, not part of the slide: `authored` keeps exactly
-      // the shape the Project schema stores.
+      // `source` is BOTH: telemetry for the caller and a stored field, because
+      // the finished markup cannot be asked which path made it.
       const { source, ...slide } = a;
       out.push({
         role: inputs[i]!.role,
-        authored: slide,
+        authored: { ...slide, source },
         ...(inputs[i]!.imageQuery ? { imageQuery: inputs[i]!.imageQuery } : {}),
         source,
       });
