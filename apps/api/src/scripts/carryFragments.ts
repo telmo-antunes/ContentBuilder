@@ -36,7 +36,7 @@ const write = process.argv.includes('--write');
       recipe: { $exists: true },
     })
       .sort({ createdAt: 1 })
-      .lean()) as Array<{ _id: unknown; createdAt: Date; recipe: BrandRecipe }>;
+      .lean()) as unknown as Array<{ _id: unknown; createdAt: Date; recipe: BrandRecipe }>;
     if (!kits.length) continue;
 
     const live = kits[kits.length - 1]!;

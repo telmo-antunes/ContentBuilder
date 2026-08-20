@@ -38,7 +38,7 @@ function skeleton(html: string): string[] {
   let m: RegExpExecArray | null;
   while ((m = re.exec(html))) {
     const cls = /class="([^"]*)"/i.exec(m[2] ?? '')?.[1] ?? '';
-    out.push(`${m[1].toLowerCase()}.${cls.split(/\s+/).filter(Boolean).sort().join('.')}`);
+    out.push(`${(m[1] ?? '').toLowerCase()}.${cls.split(/\s+/).filter(Boolean).sort().join('.')}`);
   }
   return out;
 }
@@ -77,14 +77,14 @@ function visibleText(html: string): string {
   const recipeByBusiness = new Map<string, BrandRecipe>();
   for (const b of await BusinessModel.find({ name: { $not: /^__/ } }).select('_id').lean()) {
     if (scaffolds.has(String(b._id))) continue;
-    const kit = await BrandKitModel.findOne({
+    const kit = (await BrandKitModel.findOne({
       businessId: b._id,
       status: 'approved',
       recipe: { $exists: true },
     })
       .sort({ createdAt: -1 })
-      .lean();
-    if (kit?.recipe) recipeByBusiness.set(String(b._id), kit.recipe as BrandRecipe);
+      .lean()) as { recipe?: BrandRecipe } | null;
+    if (kit?.recipe) recipeByBusiness.set(String(b._id), kit.recipe);
   }
   /**
    * The wordmark is not a stored field — it lives in the markup, and
