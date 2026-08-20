@@ -52,11 +52,12 @@ import {
   FRAGMENT_CONVENTION,
   carryForwardFragments,
   fillRecipeFragmentGaps,
+  fillRecipeFragmentGapsMeasured,
   validateRecipeFragments,
 } from './fragments';
 import { dynatosRecipe, detailMastersRecipe, halftonePressRecipe } from './recipes';
 import { checkRecipeLayout } from './verifyRecipe';
-import { renderCheckEnabledByDefault } from './renderCheck';
+import { openRenderProbe, renderCheckEnabledByDefault } from './renderCheck';
 import { LAYER_REMIT, RECIPE_LAYERS } from './refineLayer';
 import { verifyRecipeByRender } from './verifyRecipe';
 
@@ -686,6 +687,42 @@ function gate(recipe: BrandRecipe, label: string, previous?: BrandRecipe): Brand
 }
 
 /**
+ * Re-derive the fragment holes against a real render, and report what changed.
+ *
+ * One probe for the whole recipe: a scaffold per candidate would cost a
+ * throwaway business, kit and project each, and the fragments of one brand all
+ * measure against the same stylesheet anyway.
+ */
+async function measureFragmentGaps(recipe: BrandRecipe, label: string): Promise<BrandRecipe> {
+  const roles = Object.keys(recipe.fragments ?? {});
+  if (!roles.length) return recipe;
+
+  const probe = await openRenderProbe(recipe, '1080x1350', [{ html: '<div></div>', role: 'statement' }]);
+  try {
+    const out = await fillRecipeFragmentGapsMeasured(recipe, async (_role, html) => {
+      const [verdict] = await probe.measure([{ index: 0, html }]);
+      if (!verdict || verdict.state === 'unknown') return 'unknown';
+      return verdict.state === 'overflows' ? 'overflows' : 'fits';
+    });
+
+    for (const r of out.repairs)
+      console.warn(`[recipe:${label}] "${r.role}" fragment gained a hole for: ${r.added.join(', ')}`);
+    for (const d of out.declined)
+      console.warn(
+        `[recipe:${label}] "${d.role}" does NOT get a "${d.part}" hole — the slide overflows with it filled, ` +
+          `so that slide composes through the model when the copy needs it`,
+      );
+    if (out.unmeasured.length)
+      console.warn(
+        `[recipe:${label}] could not measure the candidate hole(s) for: ${out.unmeasured.join(', ')} — kept as filled`,
+      );
+    return out.recipe;
+  } finally {
+    await probe.close().catch(() => {});
+  }
+}
+
+/**
  * THE HOMEPAGE SCREENSHOT, sized for a prompt.
  *
  * The stored capture is a full 1366×900 PNG — several times more tokens than
@@ -873,6 +910,29 @@ export async function authorRecipe(
    */
   // Gated on the same switch compose uses, so a unit test never reaches for a
   // browser: `try/catch` protects against a THROW, and this one would HANG.
+  /**
+   * MEASURE THE GAP FILL. `gate` has already added a hole for every part each
+   * role allows, checking only that the markup still VALIDATES — and a fragment
+   * can validate perfectly and still overflow the moment a copywriter fills what
+   * it was given. Dynatós' `list` was handed a tagline and a body on top of its
+   * panel and overflowed every canvas; its `statement` was handed a photo slot
+   * that overflows against its own display headline.
+   *
+   * So the holes are re-derived here WITH a renderer: each is filled with the
+   * longest copy its part allows and measured, and one that does not fit is
+   * reverted and recorded. Same switch as the layout check below, so a unit test
+   * never reaches for a browser.
+   */
+  if (opts?.checkLayout ?? renderCheckEnabledByDefault()) try {
+    const measured = await measureFragmentGaps(recipe, 'authored');
+    recipe = measured;
+  } catch (err) {
+    console.warn(
+      '[recipe] could not measure the fragment gaps — keeping them as filled:',
+      err instanceof Error ? err.message : err,
+    );
+  }
+
   if (opts?.checkLayout ?? renderCheckEnabledByDefault()) try {
     const layout = await checkRecipeLayout(recipe);
     if (layout.faults.length) {

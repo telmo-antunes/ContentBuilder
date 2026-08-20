@@ -57,6 +57,69 @@ Add the next one here, following the shape in [How to add an entry](#how-to-add-
 
 ## Resolved
 
+### The gap filler adds a hole without ever asking whether it still fits
+
+- **Kind:** Defect
+- **Severity:** cost me a fix
+- **First seen:** 2026-08-20 — traced from the Dynatós overflows
+- **What happened:** `fillRecipeFragmentGaps` adds a hole for every part a role
+  allows and re-validates the STRUCTURE — sanitises, known classes, placeholder
+  convention — and stops there. A fragment can validate perfectly and still
+  overflow the moment a copywriter fills what it was handed. It gave Dynatós'
+  `list` a tagline and a body on top of its panel, and gave `statement` a photo
+  slot that overflows against that brand's own display headline. Both were the
+  faults I could not fix by tightening the type scale.
+- **Why it matters:** the same filler runs for every brand on every read, and a
+  role's part list is a guess about density that nothing checked.
+- **Fixed:** `fillRecipeFragmentGapsMeasured` — each candidate hole is added,
+  filled with the longest copy its part is allowed, and rendered. One that
+  overflows is reverted and recorded in `fragmentOmits`, because the sync filler
+  is idempotent by design and would add it straight back on the next read. Run
+  against Dynatós' fragments as its author wrote them, it declines exactly the
+  holes that caused the bugs:
+
+  ```
+  KEPT     statement: body, handle
+  DECLINED statement: photo slot   (measured at 0 rows)
+  DECLINED list: body              (measured at 4 rows)
+  DECLINED list: tagline           (measured at 4 rows)
+  DECLINED list: handle            (measured at 4 rows)
+  ```
+
+- **The distinction it took a real brand to find:** measuring only at the
+  maximum load conflates two different faults. Dynatós' `list` does not fit
+  **five** rows even as its author wrote it — nothing added — so every candidate
+  hole would have measured as "overflows" and been blamed for an overflow it had
+  no part in. The filler now finds the largest row count the fragment carries
+  EMPTY (5 → 2) and judges holes at that load; a fragment that fits at none is
+  reported as over capacity and keeps its holes, because nothing there is
+  attributable to a hole.
+- **Two bugs found by disbelieving the output:** every rowless role first read
+  as over capacity, because rows were being handed to fragments with no repeated
+  unit and `substituteFragment` rightly refused to lose that copy. Then they
+  read as over capacity again, because a rowless fragment legitimately measures
+  at a load of **zero** rows and `if (!load)` treats that as "found nothing".
+  The `bare <role> fits` line I had printed alongside is what made both visible.
+- **Note for stored recipes:** the filler decides holes it would ADD, so a
+  recipe already carrying them keeps them. Dynatós is covered by the tightening
+  in #92; a future brand gets the measurement instead.
+
+### The copy budgets lived where only one of their two users could reach them
+
+- **Kind:** Friction
+- **Severity:** minor
+- **First seen:** 2026-08-20 — writing the measured filler's worst case
+- **What happened:** `BASE_BUDGETS` and `EXPLAIN_ROLES` were defined in
+  `compose.ts`, which imports `fragments.ts` — so the filler could not import
+  them back without a cycle, and its worst-case copy was eyeballed instead. A
+  worst case that had drifted from what compose actually permits would decline
+  holes that fit and keep holes that do not.
+- **Fixed:** both moved to `packages/shared/src/copyBudgets.ts`, one definition
+  for both users. The worst-case strings sit at their budget limits (within a
+  word) and the test asserts that against the budgets themselves rather than
+  against numbers copied into the test.
+
+
 ### The Dynatós overflow was the legibility floor, not the display type
 
 - **Kind:** Defect

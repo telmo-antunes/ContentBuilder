@@ -260,6 +260,25 @@ export const brandRecipeSchema = z.object({
    */
   fragments: z.record(z.string(), z.string().max(4000)).optional().catch(undefined),
 
+  /**
+   * HOLES A ROLE DELIBERATELY DOES NOT GET, keyed by role — `['tagline']`, or
+   * `['photo slot']` for the picture.
+   *
+   * The gap filler adds a hole for every part a role allows, which is a guess
+   * about density that nothing used to check: it gave a `list` fragment a
+   * tagline and a body on top of a five-row panel, and a copywriter who filled
+   * all of them got a slide no canvas could hold at legible type. The filler now
+   * MEASURES the fully-loaded fragment and keeps only the holes that still fit
+   * — and that verdict has to be recorded, because the filler is deterministic
+   * and idempotent by design and would otherwise re-derive the same hole on the
+   * very next read.
+   *
+   * A declined hole is not a lost part: the role simply composes that slide
+   * through the model when the copy genuinely needs it, which is the fallback
+   * that was always there.
+   */
+  fragmentOmits: z.record(z.string(), z.array(z.string()).max(12)).optional().catch(undefined),
+
   /** Per-format vertical tuning, keyed by format string ('1080x1920' story,
    *  '1080x1080' square). The base stylesheet targets 1080×1350; each entry
    *  appends an override so the OTHER canvases are on-brand too. Optional and
