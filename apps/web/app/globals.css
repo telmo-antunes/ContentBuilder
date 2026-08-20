@@ -2241,3 +2241,176 @@ input[type='color'] {
 .mo-dcard .t { font-size: 13px; font-weight: 600; color: var(--mo-ink); padding-right: 20px; }
 .mo-dcard .s { font-size: 11.5px; color: var(--mo-faint); }
 .mo-dcard .menu { position: absolute; top: 8px; right: 8px; }
+
+/* ═══ MOMENTUM · The Studio — "The Line" (batch-3 pick) ═════════════════════
+   The review page as one straight top-to-bottom flow: readiness, checks, the
+   deck, the selected slide's sheet, the caption. No side inspector — selecting
+   a slide opens a full-width detail sheet beneath the strip that always leads
+   with what that slide needs. Scoped under .mo-studio; re-skins the surviving
+   inner components (.aed, .expm, .vh, .spc) to Momentum tokens at the end. */
+
+.mo-studio .mo-crumb { font-size: 12.5px; color: var(--mo-faint); margin: 0 0 10px; }
+.mo-studio .mo-crumb a { color: var(--mo-muted); font-weight: 500; }
+.mo-studio .mo-crumb a:hover { color: var(--mo-ink); text-decoration: none; }
+.mo-shead { display: flex; align-items: flex-end; justify-content: space-between; gap: 30px; padding: 8px 2px 18px; }
+.mo-shead h1 { font-family: var(--mo-disp); font-weight: 600; font-size: clamp(22px, 2.6vw, 30px); letter-spacing: -0.03em; line-height: 1.12; margin: 0; color: var(--mo-ink); text-wrap: balance; }
+.mo-shead .meta { display: flex; gap: 14px; margin-top: 10px; font-size: 12.5px; color: var(--mo-muted); flex-wrap: wrap; }
+.mo-shead .meta b { color: var(--mo-ink); font-weight: 600; }
+.mo-shead .side { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 12px; }
+.mo-shead .actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.mo-ship { width: 250px; }
+.mo-ship .lbl { display: flex; justify-content: space-between; gap: 14px; font-size: 12px; color: var(--mo-muted); margin-bottom: 7px; }
+.mo-ship .lbl b { color: var(--mo-ink); font-variant-numeric: tabular-nums; }
+.mo-ship .hint { font-size: 11.5px; color: var(--mo-faint); margin-top: 6px; text-align: right; }
+.mo-ship .hint b { color: var(--mo-amber); font-weight: 600; }
+.mo-ship .hint b.done { color: var(--mo-green); }
+
+/* Momentum buttons for this page (the global .btn is still Atelier). */
+.mo-btn { display: inline-flex; align-items: center; gap: 7px; font-weight: 600; font-size: 13px; color: var(--mo-ink); background: var(--mo-card); border: 1px solid var(--mo-line-strong); border-radius: 11px; padding: 9px 14px; cursor: pointer; font-family: inherit; transition: transform 0.3s var(--mo-spring), border-color var(--dur-1) var(--ease), box-shadow 0.3s var(--ease); }
+.mo-btn:hover { transform: translateY(-2px); border-color: var(--mo-indigo); text-decoration: none; box-shadow: 0 8px 18px -8px rgb(91 91 240 / 25%); }
+.mo-btn:disabled { opacity: 0.55; cursor: default; transform: none; box-shadow: none; }
+.mo-btn.prim { color: var(--mo-card); background: var(--mo-ink); border-color: var(--mo-ink); }
+.mo-btn.sm { font-size: 12px; padding: 7px 11px; border-radius: 9px; }
+
+/* ── The checks strip ── */
+.mo-checks { display: flex; gap: 8px; padding: 0 2px 16px; flex-wrap: wrap; align-items: center; }
+.mo-chk { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; border-radius: 999px; padding: 7px 13px; cursor: pointer; border: 1px solid transparent; background: none; font-family: inherit; transition: transform 0.25s var(--mo-spring), box-shadow 0.25s var(--ease); }
+.mo-chk:hover { transform: translateY(-2px); box-shadow: var(--mo-shadow); }
+.mo-chk i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+.mo-chk.warn { color: var(--mo-amber); background: var(--mo-amber-bg); border-color: rgb(232 150 15 / 18%); }
+.mo-chk.warn i { animation: mo-pip 2.2s ease-in-out infinite; }
+.mo-chk.bad { color: var(--mo-red); background: var(--mo-red-bg); border-color: rgb(226 90 74 / 17%); }
+.mo-chk.ok { color: var(--mo-green); background: var(--mo-green-bg); border-color: rgb(31 169 122 / 15%); cursor: default; }
+.mo-chk.ok:hover { transform: none; box-shadow: none; }
+.mo-chk.info { color: var(--mo-indigo); background: var(--mo-indigo-bg); border-color: rgb(91 91 240 / 15%); }
+.mo-chk .go { text-decoration: underline; text-underline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .mo-chk.warn i { animation: none; } }
+
+/* ── Context strip: sources + recipe, demoted to one quiet line ── */
+.mo-context { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--mo-muted); padding: 0 2px 14px; }
+.mo-context .lab { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--mo-faint); font-weight: 600; }
+.mo-context a { color: var(--mo-muted); font-weight: 500; }
+.mo-context a:hover { color: var(--mo-ink); }
+.mo-context .sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; vertical-align: -2px; box-shadow: inset 0 0 0 1px rgb(22 24 31 / 12%); margin-right: 3px; }
+.mo-context .sep { color: var(--mo-line-strong); }
+
+/* ── The deck tile ── */
+.mo-line-wrap { background: var(--mo-card); border: 1px solid var(--mo-line); border-radius: 20px; box-shadow: var(--mo-shadow); padding: 20px; }
+.mo-line-h { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.mo-line-h .t { font-family: var(--mo-disp); font-weight: 600; font-size: 15px; color: var(--mo-ink); }
+.mo-line-h .b { font-family: var(--mono, ui-monospace); font-size: 10px; color: var(--mo-muted); background: var(--mo-bg); border: 1px solid var(--mo-line); border-radius: 999px; padding: 2px 9px; }
+.mo-line-h .live { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; color: var(--mo-green); }
+.mo-line-h .live i { width: 6px; height: 6px; border-radius: 50%; background: var(--mo-green); animation: mo-pip 2s ease-in-out infinite; }
+.mo-line-h .views { margin-left: auto; }
+.mo-line-hint { font-size: 12px; color: var(--mo-faint); margin: -8px 0 12px; }
+
+.mo-fcard { flex: none; cursor: pointer; padding: 0; border: none; background: none; text-align: left; font-family: inherit; }
+.mo-fcard .top { display: flex; align-items: center; gap: 6px; margin-bottom: 7px; min-height: 20px; flex-wrap: wrap; }
+.mo-fcard .idx { font-family: var(--mono, ui-monospace); font-size: 10px; color: var(--mo-faint); }
+.mo-flag { font-size: 10px; font-weight: 700; border-radius: 999px; padding: 2px 8px; display: inline-flex; align-items: center; gap: 4px; }
+.mo-flag.warn { color: var(--mo-amber); background: var(--mo-amber-bg); }
+.mo-flag.bad { color: var(--mo-red); background: var(--mo-red-bg); }
+.mo-flag.ok { color: var(--mo-green); background: var(--mo-green-bg); }
+.mo-flag.info { color: var(--mo-indigo); background: var(--mo-indigo-bg); }
+.mo-fcard .artwrap { position: relative; border-radius: 12px; overflow: hidden; box-shadow: 0 6px 18px -8px rgb(22 24 31 / 35%); border: 2px solid transparent; transition: transform 0.3s var(--mo-spring), border-color var(--dur-1) var(--ease), box-shadow 0.3s var(--ease); }
+.mo-fcard:hover .artwrap { transform: translateY(-4px); }
+.mo-fcard.sel .artwrap { border-color: var(--mo-indigo); box-shadow: 0 10px 26px -10px rgb(91 91 240 / 45%); }
+.mo-fcard.editing .artwrap { border-color: var(--mo-coral); }
+.mo-fcard .mv { position: absolute; bottom: 8px; right: 8px; display: flex; gap: 4px; opacity: 0; transition: opacity var(--dur-1) var(--ease); z-index: 3; }
+.mo-fcard:hover .mv { opacity: 1; }
+.mo-fcard .mv button { width: 24px; height: 24px; border-radius: 7px; background: rgb(22 24 31 / 78%); color: #fff; border: none; display: grid; place-items: center; cursor: pointer; }
+.mo-fcard .mv button:disabled { opacity: 0.4; cursor: default; }
+.mo-fcard .beat { font-size: 10.5px; color: var(--mo-faint); margin-top: 7px; line-height: 1.35; max-width: 100%; }
+/* Stacked (phone view) keeps the same anatomy, centered. */
+.mo-line-wrap .deckscroller.stacked .mo-fcard { align-self: center; }
+
+/* ── The detail sheet ── */
+.mo-sheet { background: var(--mo-card); border: 1px solid var(--mo-line); border-radius: 20px; box-shadow: var(--mo-shadow); padding: 20px; margin-top: 14px; display: grid; grid-template-columns: 300px minmax(0, 1.15fr) minmax(0, 1fr); gap: 24px; }
+@media (max-width: 1100px) { .mo-sheet { grid-template-columns: 300px minmax(0, 1fr); } .mo-sheet .mo-scol3 { grid-column: 1 / -1; } }
+@media (max-width: 760px) { .mo-sheet { grid-template-columns: 1fr; } }
+.mo-sheet .colh { font-family: var(--mo-disp); font-weight: 600; font-size: 13.5px; color: var(--mo-ink); margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
+.mo-sheet .colh .n { font-family: var(--mono, ui-monospace); font-size: 10px; color: var(--mo-muted); font-weight: 400; }
+.mo-fix { border: 1px solid rgb(232 150 15 / 22%); background: var(--mo-amber-bg); border-radius: 14px; padding: 13px 14px; margin-bottom: 10px; }
+.mo-fix.bad { border-color: rgb(226 90 74 / 20%); background: var(--mo-red-bg); }
+.mo-fix.info { border-color: rgb(91 91 240 / 18%); background: var(--mo-indigo-bg); }
+.mo-fix .t { font-size: 13px; font-weight: 600; color: var(--mo-ink); }
+.mo-fix .d { font-size: 12px; color: var(--mo-muted); margin: 4px 0 0; line-height: 1.5; }
+.mo-fix .d b { color: var(--mo-ink); }
+.mo-fix .row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.mo-allclear { display: flex; align-items: center; gap: 10px; color: var(--mo-muted); font-size: 13px; padding: 4px 0 10px; }
+.mo-allclear .tick { width: 24px; height: 24px; border-radius: 50%; background: var(--mo-green-bg); color: var(--mo-green); display: grid; place-items: center; flex: none; }
+.mo-qrow { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.mo-direct label { display: block; font-size: 12px; font-weight: 600; color: var(--mo-ink); margin-bottom: 7px; }
+.mo-direct textarea { width: 100%; border: 1px solid var(--mo-line-strong); border-radius: 12px; background: var(--mo-card); color: var(--mo-ink); font: inherit; font-size: 12.5px; padding: 10px 12px; resize: vertical; }
+.mo-direct textarea:focus { outline: none; border-color: var(--mo-indigo); box-shadow: 0 0 0 3px var(--mo-indigo-bg); }
+.mo-direct .muted { font-size: 11.5px; color: var(--mo-faint); margin-top: 6px; }
+.mo-sheet .preview-frame { border-radius: 14px; overflow: hidden; box-shadow: 0 10px 26px -10px rgb(22 24 31 / 40%); }
+.mo-variants { margin: 4px 0 16px; }
+.mo-variants .sv-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.mo-tokens { margin-top: 14px; }
+.mo-tokens summary { font-size: 12px; font-weight: 600; color: var(--mo-muted); cursor: pointer; }
+.mo-tokens .tk { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--mo-muted); padding: 6px 0; border-bottom: 1px solid var(--mo-line); }
+.mo-tokens .tk .v { color: var(--mo-ink); display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono, ui-monospace); font-size: 11px; }
+.mo-tokens .tk .sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; box-shadow: inset 0 0 0 1px rgb(22 24 31 / 12%); }
+
+/* ── Caption tile ── */
+.mo-captile { background: var(--mo-card); border: 1px solid var(--mo-line); border-radius: 20px; box-shadow: var(--mo-shadow); padding: 20px; margin-top: 14px; display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 24px; }
+@media (max-width: 900px) { .mo-captile { grid-template-columns: 1fr; } }
+.mo-captile textarea, .mo-captile input { width: 100%; border: 1px solid var(--mo-line-strong); border-radius: 12px; background: var(--mo-card); color: var(--mo-ink); font: inherit; font-size: 13.5px; padding: 11px 13px; }
+.mo-captile textarea:focus, .mo-captile input:focus { outline: none; border-color: var(--mo-indigo); box-shadow: 0 0 0 3px var(--mo-indigo-bg); }
+.mo-captile textarea { resize: vertical; margin-bottom: 8px; }
+.mo-captile .side { display: flex; flex-direction: column; gap: 10px; }
+.mo-captile .side .st { font-size: 12.5px; color: var(--mo-muted); }
+.mo-captile .side .row { display: flex; gap: 8px; flex-wrap: wrap; }
+.mo-captile .hint { font-size: 11.5px; color: var(--mo-faint); margin: 2px 0 0; }
+.mo-cap-unsaved { font-size: 11px; font-weight: 700; color: var(--mo-amber); background: var(--mo-amber-bg); border-radius: 999px; padding: 2px 9px; }
+
+/* ── Re-skin the surviving inner components inside the Studio ── */
+.mo-studio .expw { position: relative; }
+.mo-studio .expm { background: var(--mo-card); border: 1px solid var(--mo-line-strong); border-radius: 14px; box-shadow: var(--mo-shadow-hover); }
+.mo-studio .expm-opt { color: var(--mo-ink); }
+.mo-studio .expm-opt:hover { background: var(--mo-card-2); }
+.mo-studio .expm-opt em, .mo-studio .expm-sec span { color: var(--mo-muted); }
+.mo-studio .expm-warn { color: var(--mo-amber); background: var(--mo-amber-bg); }
+.mo-studio .expfreeze { background: var(--mo-indigo-bg); border: 1px solid rgb(91 91 240 / 20%); color: var(--mo-ink); border-radius: 12px; }
+.mo-studio .vid-prog { background: var(--mo-card); border: 1px solid var(--mo-line); border-radius: 14px; box-shadow: var(--mo-shadow); }
+.mo-studio .vid-prog-bar { background: rgb(22 24 31 / 8%); }
+.mo-studio .vid-prog-bar span { background: var(--mo-grad); }
+.mo-studio .sendphone { background: var(--mo-green-bg); border: 1px solid rgb(31 169 122 / 20%); border-radius: 12px; color: var(--mo-ink); }
+.mo-studio .aed { border-top: none; padding-top: 0; }
+.mo-studio .aed-row { background: var(--mo-card-2); border: 1px solid var(--mo-line); border-radius: 12px; }
+.mo-studio .aed-row.sync { border-color: var(--mo-indigo); box-shadow: 0 0 0 3px var(--mo-indigo-bg); }
+.mo-studio .aed-tag { color: var(--mo-faint); }
+.mo-studio .aed-text, .mo-studio .aed-emph { background: var(--mo-card); border: 1px solid var(--mo-line-strong); color: var(--mo-ink); border-radius: 9px; }
+.mo-studio .aed-struct { color: var(--mo-faint); }
+.mo-studio .sv-card { background: var(--mo-card); border: 1px solid var(--mo-line-strong); border-radius: 12px; transition: transform 0.25s var(--mo-spring), border-color var(--dur-1) var(--ease); }
+.mo-studio .sv-card:hover { transform: translateY(-3px); border-color: var(--mo-indigo); }
+.mo-studio .vh { background: var(--mo-card); color: var(--mo-ink); }
+.mo-studio-drawer .vh { background: var(--mo-card); color: var(--mo-ink); }
+
+/* The Studio's strip — same scroller contract as .studio-deck, Momentum skin. */
+.mo-strip { display: flex; gap: 16px; overflow-x: auto; padding: 8px 2px 14px; scroll-snap-type: x proximity; }
+.mo-strip > * { scroll-snap-align: start; }
+.mo-strip.stacked { flex-direction: column; align-items: center; overflow-x: visible; gap: 28px; scroll-snap-type: none; }
+.mo-strip.fade-r { -webkit-mask-image: linear-gradient(90deg, #000 92%, transparent); mask-image: linear-gradient(90deg, #000 92%, transparent); }
+.mo-strip.fade-l { -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%); mask-image: linear-gradient(90deg, transparent, #000 8%); }
+.mo-strip.fade-l.fade-r { -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent); mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent); }
+.mo-studio .deck-arrow { background: var(--mo-card); border: 1px solid var(--mo-line-strong); color: var(--mo-ink); box-shadow: var(--mo-shadow); }
+.mo-studio .deck-arrow:hover { border-color: var(--mo-indigo); background: var(--mo-card); }
+.mo-studio .mo-btn.prim.ready { background: var(--mo-grad); border-color: transparent; }
+
+/* Generic Atelier controls inside the Studio pick up Momentum clothes, so the
+   photo panel (and any other legacy control that lands here) doesn't read as a
+   different app. Scoped: the rest of the site keeps its own look until its
+   page converts. */
+.mo-studio .btn { background: var(--mo-card); border: 1px solid var(--mo-line-strong); color: var(--mo-ink); border-radius: 10px; }
+.mo-studio .btn:hover { border-color: var(--mo-indigo); background: var(--mo-card); color: var(--mo-ink); }
+.mo-studio .btn.primary { background: var(--mo-ink); border-color: var(--mo-ink); color: var(--mo-card); }
+.mo-studio .btn.primary:hover { background: var(--mo-ink); }
+.mo-studio .btn.danger { color: var(--mo-red); border-color: rgb(226 90 74 / 35%); }
+.mo-studio .btn.ghost { background: transparent; border-color: transparent; color: var(--mo-muted); }
+.mo-studio .spc-card, .mo-studio .spc-field { border-color: var(--mo-line); }
+.mo-studio .spc-label, .mo-studio .spc-hint, .mo-studio .spc-sub { color: var(--mo-muted); }
+.mo-studio .spc-seg { background: var(--mo-bg); border-color: var(--mo-line-strong); }
+.mo-studio .spc-opt.on { background: var(--mo-card); color: var(--mo-ink); }
+.mo-studio input, .mo-studio select { border-color: var(--mo-line-strong); background: var(--mo-card); color: var(--mo-ink); }

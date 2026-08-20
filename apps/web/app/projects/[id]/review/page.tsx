@@ -167,6 +167,9 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
   const [videoSeconds, setVideoSeconds] = useState(VIDEO_SECONDS_DEFAULT);
   const [exportOpen, setExportOpen] = useState(false);
   const videoCancelRef = useRef(false);
+  /** The detail sheet + caption tile, so check chips can jump to their fix. */
+  const sheetRef = useRef<HTMLElement | null>(null);
+  const capRef = useRef<HTMLElement | null>(null);
 
   /**
    * Persist a slide's photos. Applied to local state FIRST so the preview moves
@@ -754,27 +757,18 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
     return <ErrorState message={error} onRetry={load} />;
   }
   if (!project) {
-    // The Studio's shape while it loads: masthead, deck strip, inspector.
+    // The Line's shape while it loads: header + ship bar, checks, strip, sheet.
     return (
-      <div role="status" aria-label="Loading the studio">
-        <Skeleton shape="line" w={140} h={12} style={{ marginBottom: 18 }} />
-        <div className="studio">
-          <div className="studio-main">
-            <Skeleton shape="block" h={180} style={{ borderRadius: 20, marginBottom: 26 }} />
-            <Skeleton shape="line" w={180} h={16} style={{ margin: '30px 0 16px' }} />
-            <div className="row" style={{ gap: 16, flexWrap: 'nowrap', overflow: 'hidden' }}>
-              {[0, 1, 2].map((i) => (
-                <Skeleton key={i} shape="block" w={296} h={370} style={{ flex: '0 0 auto' }} />
-              ))}
-            </div>
-          </div>
-          <aside className="studio-inspector">
-            <Skeleton shape="line" w={100} h={10} />
-            <Skeleton shape="block" w={288} h={360} style={{ marginTop: 12 }} />
-            <Skeleton shape="line" w={180} h={12} style={{ marginTop: 16 }} />
-            <Skeleton shape="line" w={140} h={12} style={{ marginTop: 10 }} />
-          </aside>
+      <div className="mo-page mo-studio" role="status" aria-label="Loading the studio">
+        <Skeleton shape="line" w={140} h={12} style={{ marginBottom: 14 }} />
+        <Skeleton shape="block" w={420} h={34} style={{ marginBottom: 20 }} />
+        <div className="row" style={{ gap: 8, marginBottom: 18 }}>
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} shape="block" w={170} h={30} style={{ borderRadius: 999 }} />
+          ))}
         </div>
+        <Skeleton shape="block" h={420} style={{ borderRadius: 20, marginBottom: 14 }} />
+        <Skeleton shape="block" h={260} style={{ borderRadius: 20 }} />
       </div>
     );
   }
@@ -805,31 +799,139 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
       ? contrastRatio(recipe.tokens.ink, recipe.tokens.ground)
       : null;
 
+  /**
+   * THE CHECKS — everything the page already measures, promoted from scattered
+   * badges to the strip that drives the ship bar. Each chip names one thing and
+   * clicking it selects the offending slide and brings its sheet into view.
+   */
+  type ChipTone = 'warn' | 'bad' | 'info';
+  const chips: Array<{ key: string; tone: ChipTone; label: string; hint?: string; slide?: number }> = [];
+  slides.forEach((s, i) => {
+    const n = i + 1;
+    if (unfilledSlots(s) > 0) {
+      chips.push({
+        key: `photo-${s.id}`,
+        tone: 'warn',
+        label: `Slide ${n} needs a photo`,
+        hint: 'An image slot the composer left is still empty — it exports as a blank panel.',
+        slide: i,
+      });
+    }
+    if (overflow[s.id]) {
+      chips.push({
+        key: `ovf-${s.id}`,
+        tone: 'warn',
+        label: `Slide ${n} overflows`,
+        hint: "This slide's content is taller than the canvas — shorten the copy or shrink the headline.",
+        slide: i,
+      });
+    } else if (layout[s.id]?.collide) {
+      chips.push({
+        key: `col-${s.id}`,
+        tone: 'warn',
+        label: `Slide ${n}: elements touching`,
+        hint: 'Two elements on this slide are touching — the type has nowhere to breathe.',
+        slide: i,
+      });
+    } else if (layout[s.id] !== undefined && layout[s.id]!.slack > maxSlackFor(s.authored?.role)) {
+      chips.push({
+        key: `slack-${s.id}`,
+        tone: 'warn',
+        label: `Slide ${n} looks empty`,
+        hint: `${Math.round(layout[s.id]!.slack * 100)}% of this slide is empty — give it something to say, or a photograph.`,
+        slide: i,
+      });
+    }
+    if (staleSlides[s.id]) {
+      chips.push({
+        key: `stale-${s.id}`,
+        tone: 'info',
+        label: `Slide ${n} improvable`,
+        hint: `A newer prompt would fix: ${staleSlides[s.id]!.join('; ')}.`,
+        slide: i,
+      });
+    }
+  });
+  for (const c of pairing?.contradictions ?? []) {
+    chips.push({
+      key: `pair-${c.slide}-${c.question}`,
+      tone: 'bad',
+      label: `Slide ${c.slide}: words ≠ picture`,
+      hint: `Says “${c.says}”, shows “${c.shows}”. ${c.question}`,
+      slide: c.slide - 1,
+    });
+  }
+  for (const u of pairing?.unrelated ?? []) {
+    chips.push({
+      key: `unrel-${u.slide}-${u.question}`,
+      tone: 'warn',
+      label: `Slide ${u.slide}: picture unrelated`,
+      hint: `About “${u.about}”, shows “${u.shows}”. ${u.question}`,
+      slide: u.slide - 1,
+    });
+  }
+  const capOk = Boolean((project.caption?.text ?? '').trim() || capText.trim());
+  // Advisory chips (improvable) don't gate shipping — only warn/bad do.
+  const issues = chips.filter((c) => c.tone !== 'info');
+  const cleanSlideCount = slides.filter((_, i) => !issues.some((c) => c.slide === i)).length;
+  const pairingRan = pairing !== null;
+  const pairingClean = pairingRan && issues.every((c) => !c.key.startsWith('pair-') && !c.key.startsWith('unrel-'));
+  const totalChecks = slides.length + 1 + (pairingRan ? 1 : 0);
+  const passedChecks = cleanSlideCount + (capOk ? 1 : 0) + (pairingClean ? 1 : 0);
+  const checksLeft = issues.length + (capOk ? 0 : 1);
+  const shipPct = totalChecks === 0 ? 100 : Math.round((100 * passedChecks) / totalChecks);
+
+  const selectSlide = (i: number) => {
+    if (editId && slides[i]?.id !== editId) cancelEdit();
+    setSel(i);
+    sheetRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  };
+
+  /** The selected slide's own blockers, for the sheet's fix-first column. */
+  const selIssues = selected ? issues.filter((c) => c.slide === sel) : [];
+  const selAdvice = selected ? chips.filter((c) => c.tone === 'info' && c.slide === sel) : [];
+
   return (
-    <div>
-      {/* top bar */}
-      <div className="row" style={{ alignItems: 'center', marginBottom: 18 }}>
-        <Link href={`/businesses/${project.businessId}`} style={{ fontSize: 13 }}>
-          ← {project.brandKit ? 'Back to brand' : 'Back'}
-        </Link>
-        <div className="row" style={{ marginLeft: 'auto', gap: 8 }}>
-          {slides.length > 0 && (
-            <>
-              <a className="btn" href={`/preview/${projectId}`} target="_blank" rel="noopener noreferrer">
-                <Icon name="play" /> Preview
+    <div className="mo-page mo-studio">
+      <p className="mo-crumb">
+        <Link href="/">Home</Link>
+        {' / '}
+        <Link href={`/businesses/${project.businessId}`}>{project.brandKit ? 'Brand' : 'Back'}</Link>
+        {' / '}
+        {project.type === 'story' ? 'Story' : 'Carousel'}
+      </p>
+
+      <header className="mo-shead">
+        <div>
+          <h1>{project.title}</h1>
+          <div className="meta">
+            <span><b>{slides.length}</b> slide{slides.length === 1 ? '' : 's'}</span>
+            <span>Format <b>{FORMAT_LABELS[project.format as Format] ?? project.format}</b></span>
+            {project.settings?.audience && <span>Audience <b>{project.settings.audience}</b></span>}
+            {project.settings?.dmKeyword && <span>DM keyword <b>{project.settings.dmKeyword}</b></span>}
+            <span>{authored ? <b style={{ color: 'var(--mo-green)' }}>On-brand ✓</b> : 'Draft'}</span>
+            <span>Updated <b>{timeAgo(project.updatedAt)}</b></span>
+          </div>
+        </div>
+        {slides.length > 0 && (
+          <div className="side">
+            <div className="actions">
+              <a className="mo-btn sm" href={`/preview/${projectId}`} target="_blank" rel="noopener noreferrer">
+                <Icon name="play" size={13} /> Preview
               </a>
-              <button className="btn" onClick={share}>
-                Share
+              <button className="mo-btn sm" onClick={share}>Share</button>
+              <button
+                className="mo-btn sm"
+                onClick={openHistory}
+                title="Snapshots of this project — save one or restore an earlier state"
+              >
+                <Icon name="history" size={13} /> History
               </button>
-              <button className="btn" onClick={openHistory} title="Snapshots of this project — save one or restore an earlier state">
-                <Icon name="history" /> History
-              </button>
-              {/* ONE export affordance. Two buttons sat side by side competing
-                  for the same job; the format is a choice you make once you've
-                  decided to export, not a permanent pair of controls. */}
+              {/* ONE export affordance — the format is a choice made after
+                  deciding to export, not a permanent pair of buttons. */}
               <div className="expw">
                 <button
-                  className="btn primary"
+                  className={`mo-btn prim${checksLeft === 0 ? ' ready' : ''}`}
                   onClick={() => setExportOpen((v) => !v)}
                   disabled={exporting !== null}
                   aria-expanded={exportOpen}
@@ -841,7 +943,7 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                     `Rendering… ${videoPct}%`
                   ) : (
                     <>
-                      <Icon name="download" /> Export
+                      <Icon name="download" size={13} /> Export
                     </>
                   )}
                 </button>
@@ -908,10 +1010,31 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                   </>
                 )}
               </div>
-            </>
-          )}
-        </div>
-      </div>
+            </div>
+            <div className="mo-ship" aria-label={`Ready to ship: ${shipPct}%`}>
+              <div className="lbl">
+                <span>Ready to ship</span>
+                <b>{shipPct}%</b>
+              </div>
+              <div className="mo-pbar">
+                <i style={{ width: `${shipPct}%` }} />
+              </div>
+              <div className="hint">
+                {checksLeft > 0 ? (
+                  <>
+                    <b>
+                      {checksLeft} check{checksLeft === 1 ? '' : 's'} left
+                    </b>{' '}
+                    — clear them and Export lights up
+                  </>
+                ) : (
+                  <b className="done">All clear — ready to export</b>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </header>
 
       {frozen && (
         <div className="expfreeze" role="status">
@@ -930,7 +1053,7 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
             </span>
             <span className="row" style={{ gap: 12, alignItems: 'baseline' }}>
               {videoJob && (
-                <button className="btn sm ghost" onClick={() => void cancelVideo()}>
+                <button className="mo-btn sm" onClick={() => void cancelVideo()}>
                   <Icon name="close" size={12} /> Cancel
                 </button>
               )}
@@ -966,7 +1089,7 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
             on the same Wi-Fi.
           </span>
           <button
-            className="btn sm ghost"
+            className="mo-btn sm"
             onClick={() =>
               void navigator.clipboard
                 .writeText(phoneShare)
@@ -983,364 +1106,625 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
       )}
 
       {slides.length === 0 ? (
-        <div className="empty">
+        <div className="mo-tile" style={{ maxWidth: 520 }}>
           This project has no slides yet. Start a{' '}
           <Link href="/projects/new">new AI-composed project</Link>.
         </div>
       ) : (
-        <div className="studio">
-          {/* ── main ── */}
-          <div className="studio-main">
-            <header className="studio-mast">
-              <div className="st-hero">
-                <span className="aur x" style={{ background: recipe?.tokens.accent ?? kit.colors.accent }} />
-                <span
-                  className="aur y"
-                  style={{ background: recipe?.tokens.groundAlt ?? recipe?.tokens.ground ?? kit.colors.primary }}
-                />
-                <span className="gr" />
-                <p className="studio-eyebrow">Studio · {project.type === 'story' ? 'story' : 'carousel'}</p>
-                <h1>{project.title}</h1>
-                <div className="studio-meta">
-                  <div>
-                    <div className="k">Format</div>
-                    <div className="v">{FORMAT_LABELS[project.format as Format] ?? project.format}</div>
-                  </div>
-                  <div>
-                    <div className="k">Slides</div>
-                    <div className="v">{slides.length}</div>
-                  </div>
-                  {/* Who this post addresses — a care guide composed in the
-                      studio-owner voice is wrong on every slide, and this is
-                      where that gets noticed before export rather than after
-                      posting. */}
-                  {project.settings?.audience && (
-                    <div>
-                      <div className="k">Audience</div>
-                      <div className="v">{project.settings.audience}</div>
-                    </div>
-                  )}
-                  {project.settings?.dmKeyword && (
-                    <div>
-                      <div className="k">DM keyword</div>
-                      <div className="v">{project.settings.dmKeyword}</div>
-                    </div>
-                  )}
-                  <div>
-                    <div className="k">Status</div>
-                    <div className={`v${authored ? ' ok' : ''}`}>
-                      {authored ? (
-                        <>
-                          On-brand <Icon name="check" size={12} />
-                        </>
-                      ) : (
-                        'Draft'
-                      )}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="k">Updated</div>
-                    <div className="v">{timeAgo(project.updatedAt)}</div>
-                  </div>
-                </div>
-              </div>
-            </header>
-
-            {/* WHAT THIS DECK WAS WRITTEN FROM. A slide can make a claim about
-                dwell times or pH; the article that produced it is the only way
-                to check one, and until now nothing but the prompt ever saw it. */}
-            {project.sources?.length ? (
-              <section className="studio-sources">
-                <span className="lab">Written from</span>
-                {project.sources.map((s) => (
-                  <a key={s.url} href={s.url} target="_blank" rel="noreferrer noopener" title={s.url}>
-                    <Icon name="link" size={12} />
-                    {s.title || s.url}
-                    {s.byline ? <span className="by">{s.byline}</span> : null}
-                  </a>
-                ))}
-              </section>
-            ) : null}
-
-            {recipe && (
-              <section className="studio-recipe">
-                <div className="rh">
-                  <span className="lab">Brand recipe</span>
-                  <span className="muted" style={{ fontSize: 11 }}>drives every slide</span>
-                  <Link href={`/businesses/${project.businessId}/brand-kit`}>Edit recipe →</Link>
-                </div>
-                <div className="studio-rgrid">
-                  <div>
-                    <div className="k">Palette</div>
-                    <div className="v">
-                      <span className="studio-sw" style={{ background: recipe.tokens.ground }} />
-                      <span className="studio-sw" style={{ background: recipe.tokens.accent }} />
-                      {recipe.tokens.ink && <span className="studio-sw" style={{ background: recipe.tokens.ink }} />}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="k">Type</div>
-                    {/* BOTH faces. Showing only the display family made a
-                        reviewer conclude no body face was set — it is
-                        (`bodyFamily`), and it is what every line of body copy
-                        on every slide renders in. A panel that names half the
-                        typography reads as the whole of it. */}
-                    <div className="v">
-                      {recipe.tokens.displayFamily}
-                      <span style={{ opacity: 0.55 }}> · {recipe.tokens.bodyFamily}</span>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="k">Signature</div>
-                    <div className="v">{recipe.signature.name}</div>
-                  </div>
-                  <div>
-                    <div className="k">Voice</div>
-                    {/* When an audience is set, the recipe's base voice is NOT
-                        what drove the slides — a hard reader instruction was
-                        layered on top at compose. Showing the base voice
-                        unlabelled here made the page contradict its own
-                        audience chip, and a reviewer could not tell which was
-                        in force. */}
-                    {project.settings?.audience ? (
-                      <div className="v">
-                        Addressing a {project.settings.audience}
-                        <span style={{ opacity: 0.55 }}>
-                          {' '}
-                          — overrides the recipe's base register ("
-                          {(recipe.voice.description || '').slice(0, 60)}
-                          {(recipe.voice.description || '').length > 60 ? '…' : ''}")
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="v">{recipe.voice.description || '—'}</div>
-                    )}
-                  </div>
-                </div>
-              </section>
+        <>
+          {/* ── The checks strip: status, navigation, and to-do in one line ── */}
+          <div className="mo-checks" role="list" aria-label="Checks">
+            {chips.map((c) => (
+              <button
+                key={c.key}
+                role="listitem"
+                className={`mo-chk ${c.tone}`}
+                title={c.hint}
+                onClick={() => c.slide !== undefined && selectSlide(c.slide)}
+              >
+                <i />
+                {c.label}
+                {c.slide !== undefined && <span className="go">{c.tone === 'bad' ? 'Look →' : 'Fix →'}</span>}
+              </button>
+            ))}
+            {capOk ? (
+              <span className="mo-chk ok">
+                <i />
+                Caption written
+              </span>
+            ) : (
+              <button
+                className="mo-chk warn"
+                onClick={() => capRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+              >
+                <i />
+                Caption is empty <span className="go">Write it →</span>
+              </button>
             )}
+            {pairingRan && pairingClean ? (
+              <span className="mo-chk ok">
+                <i />
+                Pictures agree with the words
+              </span>
+            ) : !pairingRan ? (
+              <button className="mo-chk info" disabled={pairBusy} onClick={() => void checkImageCopy()}>
+                <i />
+                {pairBusy ? 'Looking at the pictures…' : 'Check the pictures against the words'}
+              </button>
+            ) : null}
+          </div>
 
-            <section className="studio-card">
-              <div className="studio-cardhead">
-                <h2>Do the pictures agree with the words?</h2>
-                <button className="btn" onClick={() => void checkImageCopy()} disabled={pairBusy}>
-                  {pairBusy ? 'Looking…' : 'Check images'}
+          {/* ── Where this deck came from, demoted to one quiet line ── */}
+          {(project.sources?.length || recipe) && (
+            <div className="mo-context">
+              {project.sources?.length ? (
+                <>
+                  <span className="lab">Written from</span>
+                  {project.sources.map((s) => (
+                    <a key={s.url} href={s.url} target="_blank" rel="noreferrer noopener" title={s.url}>
+                      {s.title || s.url}
+                      {s.byline ? ` — ${s.byline}` : ''}
+                    </a>
+                  ))}
+                  {recipe && <span className="sep">·</span>}
+                </>
+              ) : null}
+              {recipe && (
+                <>
+                  <span className="lab">Recipe</span>
+                  <span>
+                    <span className="sw" style={{ background: recipe.tokens.ground }} />
+                    <span className="sw" style={{ background: recipe.tokens.accent }} />
+                    {recipe.signature.name} · {recipe.tokens.displayFamily}
+                  </span>
+                  {/* When an audience is set, a hard reader instruction was
+                      layered over the recipe's base voice at compose. */}
+                  {project.settings?.audience ? (
+                    <span title={`Overrides the recipe's base register ("${recipe.voice.description ?? ''}")`}>
+                      voice: addressing a {project.settings.audience}
+                    </span>
+                  ) : recipe.voice.description ? (
+                    <span title={recipe.voice.description}>
+                      voice: {recipe.voice.description.slice(0, 48)}
+                      {recipe.voice.description.length > 48 ? '…' : ''}
+                    </span>
+                  ) : null}
+                  <Link href={`/businesses/${project.businessId}/brand-kit`}>Edit recipe →</Link>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Written by an older copywriter or composer. No apply button: a
+              recompose rewrites copy that may have been hand-edited since. */}
+          <PromptUpdates status={project.promptUpdates} className="studio-pu" />
+
+          {/* ── The deck: the spine of the line ── */}
+          <section className="mo-line-wrap" aria-label="The deck">
+            <div className="mo-line-h">
+              <span className="t">{project.type === 'story' ? 'The story' : 'The carousel'}</span>
+              <span className="b">{slides.length} slides</span>
+              <span className="live">
+                <i />
+                rendered live
+              </span>
+              <div className="views">
+                <button
+                  className={`mo-btn sm${phoneView ? '' : ' prim'}`}
+                  onClick={() => setPhoneView(false)}
+                  aria-pressed={!phoneView}
+                >
+                  Strip
+                </button>
+                <button
+                  className={`mo-btn sm${phoneView ? ' prim' : ''}`}
+                  onClick={() => setPhoneView(true)}
+                  aria-pressed={phoneView}
+                  title="Stack the deck at the width of a phone — the size it will actually be read at"
+                  style={{ marginLeft: 6 }}
+                >
+                  <Icon name="phone" size={12} /> Phone
                 </button>
               </div>
-              {pairing && pairing.contradictions.length === 0 && !pairing.unrelated?.length && (
-                <p className="studio-note">
-                  Nothing flagged across {pairing.checked} illustrated slide{pairing.checked === 1 ? '' : 's'}.
-                </p>
-              )}
-              {pairing?.contradictions.map((c) => (
-                <div key={`${c.slide}-${c.question}`} className="studio-warn">
-                  <strong>Slide {c.slide}</strong> — says “{c.says}”, shows “{c.shows}”.
-                  <div>{c.question}</div>
-                </div>
-              ))}
-              {/* A different complaint from a contradiction, and shown as one: a
-                  contradiction says the deck is WRONG, this says nobody chose
-                  the picture. Pool auto-fill is where these come from. */}
-              {pairing?.unrelated?.map((u) => (
-                <div key={`u-${u.slide}-${u.question}`} className="studio-warn soft">
-                  <strong>Slide {u.slide}</strong> — about “{u.about}”, shows “{u.shows}”.
-                  <div>{u.question}</div>
-                </div>
-              ))}
-            </section>
-
-            <div className="studio-sec">
-              <h2>{project.type === 'story' ? 'The story' : 'The carousel'}</h2>
-              <span className="count">{slides.length} slides</span>
-              <span className="live">Rendered live</span>
             </div>
-            <p className="muted" style={{ fontSize: 12.5, margin: '6px 0 4px' }}>
-              Click a slide to select it, then edit it on the right — copy, order, and the brand&apos;s accent, all kept in the recipe&apos;s own design.
+            <p className="mo-line-hint">
+              {phoneView
+                ? `${PHONE_W}px wide — scroll the deck as a reader would`
+                : 'Click a slide to open its sheet below — the words, the pictures, and everything it needs.'}
             </p>
 
-            {/* Written by an older copywriter or composer. No apply button: a
-                recompose rewrites copy that may have been hand-edited since,
-                so the offer is to go and recompose deliberately. */}
-            <PromptUpdates status={project.promptUpdates} className="studio-pu" />
-
-            <div className="row" style={{ gap: 8, marginBottom: 10, alignItems: 'center' }}>
-              <button
-                className={`btn sm${phoneView ? ' on' : ''}`}
-                onClick={() => setPhoneView((v) => !v)}
-                title="Stack the deck at the width of a phone — the size it will actually be read at"
-                aria-pressed={phoneView}
-              >
-                <Icon name="phone" size={12} /> {phoneView ? 'Strip view' : 'Phone view'}
-              </button>
-              {phoneView && (
-                <span className="hint" style={{ opacity: 0.6 }}>
-                  {PHONE_W}px wide — scroll the deck as a reader would
-                </span>
-              )}
-            </div>
-
-            <DeckScroller className="studio-deck" stacked={phoneView}>
-              {workingSlides.map((slide, i) => (
-                <div
-                  key={slide.id}
-                  className={`studio-pcard${i === sel ? ' sel' : ''}${slide.id === editId ? ' editing' : ''}`}
-                  onClick={() => {
-                    if (editId && slide.id !== editId) cancelEdit(); // discard unsaved edits when switching
-                    setSel(i);
-                  }}
-                >
-                  <span className="num">{i + 1}</span>
-                  {workingSlides.length > 1 && (
-                    <span className="mv">
-                      <button
-                        title="Move this slide left"
-                        aria-label={`Move slide ${i + 1} left`}
-                        disabled={i === 0 || saving}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void moveSlide(i, -1);
-                        }}
-                      >
-                        <Icon name="chevron-left" size={13} />
-                      </button>
-                      <button
-                        title="Move this slide right"
-                        aria-label={`Move slide ${i + 1} right`}
-                        disabled={i === workingSlides.length - 1 || saving}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void moveSlide(i, 1);
-                        }}
-                      >
-                        <Icon name="chevron-right" size={13} />
-                      </button>
-                    </span>
-                  )}
-                  {unfilledSlots(slide) > 0 && (
-                    <span className="needsphoto" title="This slide has an image slot you haven't filled — it exports as a blank panel.">
-                      <Icon name="image" size={11} /> Needs photo
-                    </span>
-                  )}
-                  {overflow[slide.id] && (
-                    <span className="ovf" title="This slide's content is taller than the canvas — shorten the copy.">
-                      <Icon name="warning" size={11} /> Overflows
-                    </span>
-                  )}
-                  {/* Two more readings from the same measurement. Shown only
-                      when they fire, and never alongside an overflow: a slide
-                      that does not fit has one problem worth naming first. */}
-                  {!overflow[slide.id] && layout[slide.id]?.collide && (
-                    <span className="ovf" title="Two elements on this slide are touching — the type has nowhere to breathe.">
-                      <Icon name="warning" size={11} /> Touching
-                    </span>
-                  )}
-                  {!overflow[slide.id] &&
-                    !layout[slide.id]?.collide &&
-                    layout[slide.id] !== undefined &&
-                    layout[slide.id]!.slack > maxSlackFor(slide.authored?.role) && (
-                      <span
-                        className="ovf soft"
-                        title={`A ${Math.round(layout[slide.id]!.slack * 100)}% band of this slide is empty — past the ${Math.round(maxSlackFor(slide.authored?.role) * 100)}% a ${slide.authored?.role ?? 'display'} slide is allowed. Give it something to say, or a photograph.`}
-                      >
-                        <Icon name="warning" size={11} /> Looks empty
-                      </span>
-                    )}
-                  {/* Made by an older copywriter or composer, and the app can
-                      say what a newer one would do differently HERE. Advisory
-                      only — recomposing rewrites copy you may have edited. */}
-                  {staleSlides[slide.id] && (
-                    <span className="stale" title={`A newer prompt would fix: ${staleSlides[slide.id]!.join('; ')}.`}>
-                      <Icon name="sparkle" size={11} /> Improvable
-                    </span>
-                  )}
-                  <ScaledSlide format={project.format} displayWidth={phoneView ? PHONE_W : cardW}>
-                    <SlideRenderer
-                      onOverflow={(o, signals) => {
-                        setOverflow((m) => (m[slide.id] === o ? m : { ...m, [slide.id]: o }));
-                        if (!signals) return;
-                        setLayout((m) => {
-                          const was = m[slide.id];
-                          if (was && was.collide === signals.collide && was.slack === signals.slack) return m;
-                          return { ...m, [slide.id]: { collide: signals.collide, slack: signals.slack } };
-                        });
-                      }}
-                      slide={slide}
-                      brandKit={kit}
-                      format={project.format}
-                      photos={resolveSlidePhotos(slide, project.media)}
-                      /**
-                       * Phone view renders the way the EXPORT does.
-                       *
-                       * `editing` draws the "Add photo" affordance in an
-                       * unfilled slot, which fills space the export leaves
-                       * empty: the same slide measured 9.7% slack here and 65%
-                       * through the export path. So the one view whose job is to
-                       * show the deck as a reader meets it was showing a slide
-                       * the reader never sees, in exactly the respect that
-                       * decides whether it looks empty.
-                       *
-                       * The strip keeps the affordance — that is where photos
-                       * are attached — and the toggle is one click away.
-                       */
-                      editing={!phoneView}
-                      theme={slide.overrides?.theme ?? project.settings?.theme ?? 'editorial'}
-                      forExport
-                    />
-                  </ScaledSlide>
-                  {/* WHAT THIS SLIDE WAS ASKED TO DO.
-                      Three slides once drifted from their source post and
-                      nothing here could show it — noticing meant holding the
-                      post and the deck open in two tabs and comparing by hand.
-                      A plan FIXES the deck at one slide per entry, in order, so
-                      `plan[i]` is this slide's brief. Shown only when the post
-                      was composed against one; a free-form idea has no beat to
-                      quote, and inventing one would be worse than saying
-                      nothing. */}
-                  {project.plan?.[i] && (
-                    <p className="studio-beat" title="The plan entry this slide was composed against">
-                      {project.plan[i]}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </DeckScroller>
-
-            {/* The caption that ships with the post — editable here, rendered on
-                the preview and copied to the clipboard on the phone hand-off. */}
-            <section className="capcard">
-              <div className="capcard-head">
-                <span className="lab">Caption</span>
-                {capDirty && <span className="capcard-unsaved">Unsaved changes</span>}
-                <div className="row" style={{ marginLeft: 'auto', gap: 8 }}>
-                  <button
-                    className="btn sm"
-                    disabled={capBusy !== null || !aiReady}
-                    title={
-                      aiReady
-                        ? 'Write a fresh caption from the slides, in the brand voice'
-                        : 'AI is not configured — set ANTHROPIC_API_KEY to enable this'
-                    }
-                    onClick={() => void regenCaption()}
+            <DeckScroller className="mo-strip" stacked={phoneView}>
+              {workingSlides.map((slide, i) => {
+                const slideChips = issues.filter((c) => c.slide === i);
+                const advice = chips.filter((c) => c.tone === 'info' && c.slide === i);
+                return (
+                  <div
+                    key={slide.id}
+                    role="button"
+                    tabIndex={0}
+                    className={`mo-fcard${i === sel ? ' sel' : ''}${slide.id === editId ? ' editing' : ''}`}
+                    onClick={() => selectSlide(i)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        selectSlide(i);
+                      }
+                    }}
                   >
-                    {capBusy === 'regen' ? (
-                      'Writing…'
-                    ) : (
+                    <div className="top">
+                      <span className="idx">
+                        {String(i + 1).padStart(2, '0')}
+                        {slide.authored?.role ? ` · ${slide.authored.role}` : ''}
+                      </span>
+                      {slideChips.length === 0 && advice.length === 0 && (
+                        <span className="mo-flag ok">Clean</span>
+                      )}
+                      {slideChips.slice(0, 2).map((c) => (
+                        <span key={c.key} className={`mo-flag ${c.tone}`} title={c.hint}>
+                          {c.label.replace(/^Slide \d+:? /, '')}
+                        </span>
+                      ))}
+                      {advice.length > 0 && slideChips.length === 0 && (
+                        <span className="mo-flag info" title={advice[0]!.hint}>
+                          Improvable
+                        </span>
+                      )}
+                    </div>
+                    <div className="artwrap">
+                      {workingSlides.length > 1 && !phoneView && (
+                        <span className="mv">
+                          <button
+                            title="Move this slide left"
+                            aria-label={`Move slide ${i + 1} left`}
+                            disabled={i === 0 || saving}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void moveSlide(i, -1);
+                            }}
+                          >
+                            <Icon name="chevron-left" size={13} />
+                          </button>
+                          <button
+                            title="Move this slide right"
+                            aria-label={`Move slide ${i + 1} right`}
+                            disabled={i === workingSlides.length - 1 || saving}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void moveSlide(i, 1);
+                            }}
+                          >
+                            <Icon name="chevron-right" size={13} />
+                          </button>
+                        </span>
+                      )}
+                      <ScaledSlide format={project.format} displayWidth={phoneView ? PHONE_W : cardW}>
+                        <SlideRenderer
+                          onOverflow={(o, signals) => {
+                            setOverflow((m) => (m[slide.id] === o ? m : { ...m, [slide.id]: o }));
+                            if (!signals) return;
+                            setLayout((m) => {
+                              const was = m[slide.id];
+                              if (was && was.collide === signals.collide && was.slack === signals.slack) return m;
+                              return { ...m, [slide.id]: { collide: signals.collide, slack: signals.slack } };
+                            });
+                          }}
+                          slide={slide}
+                          brandKit={kit}
+                          format={project.format}
+                          photos={resolveSlidePhotos(slide, project.media)}
+                          /**
+                           * Phone view renders the way the EXPORT does: no
+                           * editing affordances filling empty slots, so a slide
+                           * that will look empty in the file looks empty here.
+                           */
+                          editing={!phoneView}
+                          theme={slide.overrides?.theme ?? project.settings?.theme ?? 'editorial'}
+                          forExport
+                        />
+                      </ScaledSlide>
+                    </div>
+                    {/* The plan entry this slide was composed against. */}
+                    {project.plan?.[i] && (
+                      <p className="beat" style={{ maxWidth: phoneView ? PHONE_W : cardW }} title="The plan entry this slide was composed against">
+                        {project.plan[i]}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </DeckScroller>
+          </section>
+
+          {/* ── The detail sheet: everything about the selected slide ── */}
+          {selectedWorking && (
+            <section className="mo-sheet" ref={sheetRef} aria-label={`Slide ${sel + 1} details`}>
+              <div>
+                <h3 className="colh">
+                  Slide {sel + 1} of {slides.length} <span className="n">selected</span>
+                </h3>
+                <CanvasCopyEditor
+                  enabled={editId === selectedWorking.id}
+                  els={editEls}
+                  html={editingHtml ?? ''}
+                  epoch={playing}
+                  active={canvasEl}
+                  onActivate={setCanvasEl}
+                  onCommit={(key, text) => patchEl(key, { text })}
+                >
+                  <div className="preview-frame">
+                    <ScaledSlide
+                      format={project.format}
+                      displayWidth={inspectorW}
+                      overlay={
+                        editId === selectedWorking.id ? undefined : (
+                          <FreeImageOverlay
+                            photos={(selectedWorking.photos ?? []).filter((p) => p.placement === 'free')}
+                            canvasW={dimensionsFor(project.format).width}
+                            canvasH={dimensionsFor(project.format).height}
+                            scale={inspectorScale}
+                            selectedId={freeSel}
+                            onSelect={setFreeSel}
+                            onCommit={(id, frame: BlockFrame) =>
+                              void savePhotos(
+                                selectedWorking.id,
+                                (selectedWorking.photos ?? []).map((p) => (p.id === id ? { ...p, frame } : p)),
+                              )
+                            }
+                          />
+                        )
+                      }
+                    >
+                      <SlideRenderer
+                        // Remounting on `playing` restarts the CSS reveal, so
+                        // the button replays the exact motion a video exports.
+                        key={playing ? `motion-${playing}` : 'still'}
+                        slide={selectedWorking}
+                        brandKit={kit}
+                        format={project.format}
+                        photos={resolveSlidePhotos(selectedWorking, project.media)}
+                        editing
+                        theme={selectedWorking.overrides?.theme ?? project.settings?.theme ?? 'editorial'}
+                        forExport
+                        motion={playing !== null}
+                      />
+                    </ScaledSlide>
+                  </div>
+                </CanvasCopyEditor>
+                {authored && (
+                  <button
+                    className="mo-btn sm"
+                    style={{ width: '100%', justifyContent: 'center', marginTop: 10 }}
+                    onClick={() => setPlaying(Date.now())}
+                    title="Play the motion this slide will have in a video export"
+                  >
+                    <Icon name="play" size={12} /> Play motion
+                  </button>
+                )}
+                {recipe && (
+                  <details className="mo-tokens">
+                    <summary>Brand tokens</summary>
+                    <div className="tk">
+                      <span>Ground</span>
+                      <span className="v">
+                        <span className="sw" style={{ background: recipe.tokens.ground }} />
+                        {recipe.tokens.ground}
+                      </span>
+                    </div>
+                    <div className="tk">
+                      <span>Accent</span>
+                      <span className="v">
+                        <span className="sw" style={{ background: recipe.tokens.accent }} />
+                        {recipe.tokens.accent}
+                      </span>
+                    </div>
+                    <div className="tk">
+                      <span>Display</span>
+                      <span className="v">{recipe.tokens.displayFamily}</span>
+                    </div>
+                    <div className="tk">
+                      <span>Body</span>
+                      <span className="v">{recipe.tokens.bodyFamily}</span>
+                    </div>
+                    {contrast !== null && (
+                      <div className="tk">
+                        <span>Contrast</span>
+                        <span className="v" style={{ color: contrast >= 4.5 ? 'var(--mo-green)' : 'var(--mo-amber)' }}>
+                          {contrast.toFixed(1)} : 1
+                        </span>
+                      </div>
+                    )}
+                  </details>
+                )}
+              </div>
+
+              {editId && selectedWorking.id === editId ? (
+                /* ── Edit mode: the words, in the recipe's own markup ── */
+                <div className="mo-scol2 aed" style={{ gridColumn: '2 / -1' }}>
+                  <h3 className="colh">
+                    The words <span className="n">click a line here or type straight on the slide</span>
+                  </h3>
+                  <div className="aed-list">
+                    {editEls.map((el, i) => (
+                      <div
+                        className={`aed-row${el.key === canvasEl ? ' sync' : ''}`}
+                        key={el.key}
+                        data-aed-key={el.key}
+                        onClick={(e) => {
+                          const t = e.target as HTMLElement;
+                          if (/^(TEXTAREA|INPUT|BUTTON|SELECT)$/.test(t.tagName) || t.closest('button')) return;
+                          if (el.kind === 'text') setCanvasEl(el.key);
+                        }}
+                      >
+                        <div className="aed-rowtop">
+                          <span className="aed-tag">{el.label}</span>
+                          <div className="aed-ctl">
+                            <button title="Move up" aria-label="Move up" disabled={i === 0} onClick={() => moveEl(el.key, -1)}><Icon name="arrow-up" size={12} /></button>
+                            <button title="Move down" aria-label="Move down" disabled={i === editEls.length - 1} onClick={() => moveEl(el.key, 1)}><Icon name="arrow-down" size={12} /></button>
+                            <button title="Remove" aria-label="Remove" className="del" onClick={() => removeEl(el.key)}><Icon name="close" size={12} /></button>
+                          </div>
+                        </div>
+                        {el.kind === 'text' ? (
+                          <>
+                            <textarea
+                              className="aed-text"
+                              rows={Math.min(4, Math.max(1, Math.ceil(el.text.length / 30)))}
+                              value={el.text}
+                              onChange={(e) => patchEl(el.key, { text: e.target.value })}
+                            />
+                            {canEmphasize(el) && (
+                              <input
+                                className="aed-emph"
+                                placeholder="accent phrase (the brand signature) — optional"
+                                value={el.emphasis ?? ''}
+                                onChange={(e) => patchEl(el.key, { emphasis: e.target.value || undefined })}
+                              />
+                            )}
+                          </>
+                        ) : el.kind === 'list' ? (
+                          <div className="aed-rows">
+                            {(el.rows ?? []).map((r, ri) => (
+                              <div className="aed-item" key={r.key}>
+                                <span className="aed-itemnum">{ri + 1}</span>
+                                <div className="aed-itemfields">
+                                  <textarea
+                                    className="aed-text"
+                                    rows={1}
+                                    placeholder="the item"
+                                    value={r.text}
+                                    onChange={(e) => patchRow(el.key, r.key, { text: e.target.value })}
+                                  />
+                                  <input
+                                    className="aed-emph"
+                                    placeholder="supporting detail — optional"
+                                    value={r.note ?? ''}
+                                    onChange={(e) => patchRow(el.key, r.key, { note: e.target.value || undefined })}
+                                  />
+                                </div>
+                                <button
+                                  className="aed-itemdel"
+                                  title="Remove this item"
+                                  aria-label="Remove this item"
+                                  onClick={() => removeRow(el.key, r.key)}
+                                >
+                                  <Icon name="close" size={11} />
+                                </button>
+                              </div>
+                            ))}
+                            <button className="mo-btn sm" onClick={() => addRow(el.key)}>
+                              Add an item
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="aed-struct">{el.label} — kept exactly as designed</div>
+                        )}
+                      </div>
+                    ))}
+                    {editEls.length === 0 && (
+                      <p className="muted" style={{ fontSize: 12 }}>Nothing left on this slide — cancel to restore it.</p>
+                    )}
+                  </div>
+                  <div className="aed-actions">
+                    <button className="mo-btn prim sm" disabled={saving} onClick={() => saveEdit(slides)}>
+                      {saving ? 'Saving…' : 'Save slide'}
+                    </button>
+                    <button className="mo-btn sm" disabled={saving} onClick={cancelEdit}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* ── Fix-first: what this slide needs, then its pictures ── */}
+                  <div className="mo-scol2">
+                    <h3 className="colh">What this slide needs</h3>
+                    {selIssues.length === 0 && selAdvice.length === 0 && (
+                      <div className="mo-allclear">
+                        <span className="tick"><Icon name="check" size={12} /></span>
+                        Nothing — this slide is clean. The tools on the right are for taste.
+                      </div>
+                    )}
+                    {selIssues.map((c) => (
+                      <div key={c.key} className={`mo-fix${c.tone === 'bad' ? ' bad' : ''}`}>
+                        <div className="t">{(() => { const t = c.label.replace(/^Slide \d+:?\s*/, ''); return t.charAt(0).toUpperCase() + t.slice(1); })()}</div>
+                        <div className="d">{c.hint}</div>
+                        {c.key.startsWith('ovf-') || c.key.startsWith('col-') ? (
+                          <div className="row">
+                            <button
+                              className="mo-btn sm prim"
+                              disabled={working !== null}
+                              onClick={() => applyTweak(selectedWorking.id, 'smaller-headline')}
+                            >
+                              Smaller headline
+                            </button>
+                            <button className="mo-btn sm" onClick={() => startEdit(selectedWorking)}>
+                              Tighten the words
+                            </button>
+                          </div>
+                        ) : c.key.startsWith('slack-') ? (
+                          <div className="row">
+                            <button
+                              className="mo-btn sm"
+                              disabled={working !== null}
+                              onClick={() => applyTweak(selectedWorking.id, 'bigger-headline')}
+                            >
+                              Bigger headline
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
+                    {selAdvice.map((c) => (
+                      <div key={c.key} className="mo-fix info">
+                        <div className="t">A newer prompt would improve this slide</div>
+                        <div className="d">{c.hint}</div>
+                      </div>
+                    ))}
+
+                    {/* Photos: fill the composer's slots, set a background, or
+                        drop images anywhere on the canvas. */}
+                    {selected?.authored?.html && (
                       <>
-                        <Icon name="sparkle" size={13} /> Regenerate
+                        <h3 className="colh" style={{ marginTop: 16 }}>Pictures</h3>
+                        <SlidePhotoPanel
+                          slide={selected}
+                          media={project.media}
+                          businessId={String(project.businessId)}
+                          format={project.format}
+                          busy={working !== null || saving}
+                          selectedFreeId={freeSel}
+                          ambient={recipeAmbient(recipe)}
+                          onSelectFree={setFreeSel}
+                          onChange={(photos, uploaded) => void savePhotos(selected.id, photos, uploaded)}
+                        />
                       </>
                     )}
-                  </button>
-                  <button
-                    className="btn sm primary"
-                    disabled={capBusy !== null || !capDirty}
-                    onClick={() => void saveCaption()}
-                  >
-                    {capBusy === 'save' ? 'Saving…' : 'Save caption'}
-                  </button>
-                </div>
-              </div>
+                  </div>
+
+                  {/* ── Taste tools: adjust, alternatives, direction ── */}
+                  <div className="mo-scol3">
+                    <h3 className="colh">Quick adjustments</h3>
+                    <div className="mo-qrow">
+                      <button
+                        className="mo-btn sm"
+                        disabled={working !== null || !selected?.authored?.html}
+                        onClick={() => selected && applyTweak(selected.id, 'bigger-headline')}
+                      >
+                        Bigger headline
+                      </button>
+                      <button
+                        className="mo-btn sm"
+                        disabled={working !== null || !selected?.authored?.html}
+                        onClick={() => selected && applyTweak(selected.id, 'smaller-headline')}
+                      >
+                        Smaller headline
+                      </button>
+                      <button
+                        className="mo-btn sm"
+                        disabled={working !== null || !recipe?.surfaces?.inverse || !selected?.authored?.html}
+                        title={
+                          recipe?.surfaces?.inverse
+                            ? 'Flip this slide to the brand’s light surface'
+                            : 'This brand has no inverse surface yet'
+                        }
+                        onClick={() =>
+                          selected &&
+                          applyTweak(selected.id, selected.authored?.bg === 'inverse' ? 'un-invert' : 'invert')
+                        }
+                      >
+                        {selected?.authored?.bg === 'inverse' ? 'Un-invert' : 'Invert colors'}
+                      </button>
+                      <button
+                        className="mo-btn sm"
+                        disabled={!selected?.authored?.html}
+                        onClick={() => selected && startEdit(selected)}
+                      >
+                        <Icon name="edit" size={12} /> Edit the words
+                      </button>
+                      <button
+                        className="mo-btn sm"
+                        disabled={!selected?.authored?.html || working !== null}
+                        title={
+                          direction.trim()
+                            ? 'Rewrite this slide from your direction'
+                            : 'Re-arrange this slide only — the copy is kept'
+                        }
+                        onClick={() => selected && askVariants(selected.id, direction)}
+                      >
+                        {working === 'variants' ? 'Thinking…' : (
+                          <>
+                            <Icon name="sparkle" size={12} /> {direction.trim() ? 'Rewrite' : 'Other arrangements'}
+                          </>
+                        )}
+                      </button>
+                      <button
+                        className="mo-btn sm"
+                        disabled={!selected?.authored?.html || working !== null}
+                        title="Keep this exact layout — write new copy for it"
+                        onClick={() => selected && askRewrite(selected.id, direction)}
+                      >
+                        {working === 'rewrite' ? 'Writing…' : 'New words'}
+                      </button>
+                    </div>
+
+                    {/* Candidates: nothing saved until one is picked. */}
+                    {variants && variants.length > 0 && (
+                      <div className="mo-variants">
+                        <h3 className="colh">
+                          Pick one <span className="n">{variantKind === 'copy' ? 'new words' : 'same words, new arrangement'}</span>
+                        </h3>
+                        <div className="sv-row">
+                          {variants.map((v, i) => (
+                            <button
+                              key={i}
+                              className="sv-card"
+                              disabled={working !== null}
+                              onClick={() => selected && applyVariant(selected.id, v, slides)}
+                              title="Apply this one"
+                            >
+                              <ScaledSlide format={project.format} displayWidth={124}>
+                                <SlideRenderer
+                                  slide={{ authored: v }}
+                                  brandKit={kit}
+                                  format={project.format}
+                                  photos={selected ? resolveSlidePhotos(selected, project.media) : undefined}
+                                  forExport
+                                />
+                              </ScaledSlide>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Direct THIS slide. Empty = rearrange what is already there. */}
+                    <div className="mo-direct">
+                      <label htmlFor="slide-direction">Direct this slide</label>
+                      <textarea
+                        id="slide-direction"
+                        value={direction}
+                        rows={3}
+                        maxLength={MAX_SLIDE_DIRECTION_CHARS}
+                        placeholder={'What should this slide say? Put "an exact line" in quotes to use it word for word.'}
+                        onChange={(e) => setDirection(e.target.value)}
+                      />
+                      <p className="muted">
+                        {direction.trim()
+                          ? 'The copywriter rewrites this slide only — the rest of the deck is untouched.'
+                          : 'Leave empty to keep the copy and only try other arrangements.'}
+                      </p>
+                    </div>
+                  </div>
+                </>
+              )}
+            </section>
+          )}
+
+          {/* ── The caption: the last thing before export ── */}
+          <section className="mo-captile" ref={capRef} aria-label="Caption">
+            <div>
+              <h3 className="colh" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                Caption
+                {capDirty && <span className="mo-cap-unsaved">Unsaved</span>}
+              </h3>
               <textarea
-                className="capcard-text"
                 rows={Math.min(8, Math.max(3, Math.ceil((capText.length + 1) / 60)))}
                 maxLength={2400}
                 placeholder="Write the caption that goes with this post…"
@@ -1351,7 +1735,6 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                 }}
               />
               <input
-                className="capcard-tags"
                 placeholder="#hashtags separated by spaces or commas"
                 value={capTags}
                 onChange={(e) => {
@@ -1359,379 +1742,46 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                   setCapDirty(true);
                 }}
               />
-              <p className="capcard-hint">
+              <p className="hint">
                 Shown under the interactive preview, and copied to the clipboard with the images on
                 the phone hand-off page.
               </p>
-            </section>
-          </div>
-
-          {/* ── inspector ── */}
-          <aside className="studio-inspector">
-            <p className="studio-eyebrow">Slide {sel + 1} of {slides.length}</p>
-            {selectedWorking && (
-              <>
-                {/* In Edit mode the preview IS the editing surface: the copy on
-                    the slide is directly editable in place, so the photo drag
-                    overlay (which owns every pointer event) steps aside. */}
-                <CanvasCopyEditor
-                  enabled={editId === selectedWorking.id}
-                  els={editEls}
-                  html={editingHtml ?? ''}
-                  epoch={playing}
-                  active={canvasEl}
-                  onActivate={setCanvasEl}
-                  onCommit={(key, text) => patchEl(key, { text })}
+            </div>
+            <div className="side">
+              <h3 className="colh">&nbsp;</h3>
+              <span className="st">
+                {project.caption?.text
+                  ? 'Written against the brand voice.'
+                  : 'No caption yet — the post ships silent without one.'}
+              </span>
+              <div className="row">
+                <button
+                  className="mo-btn sm"
+                  disabled={capBusy !== null || !aiReady}
+                  title={
+                    aiReady
+                      ? 'Write a fresh caption from the slides, in the brand voice'
+                      : 'AI is not configured — set ANTHROPIC_API_KEY to enable this'
+                  }
+                  onClick={() => void regenCaption()}
                 >
-                <div style={{ marginTop: 12, borderRadius: 12, overflow: 'hidden', border: '1px solid var(--border)' }}>
-                  <ScaledSlide
-                    format={project.format}
-                    displayWidth={inspectorW}
-                    overlay={
-                      editId === selectedWorking.id ? undefined : (
-                        <FreeImageOverlay
-                          photos={(selectedWorking.photos ?? []).filter((p) => p.placement === 'free')}
-                          canvasW={dimensionsFor(project.format).width}
-                          canvasH={dimensionsFor(project.format).height}
-                          scale={inspectorScale}
-                          selectedId={freeSel}
-                          onSelect={setFreeSel}
-                          onCommit={(id, frame: BlockFrame) =>
-                            void savePhotos(
-                              selectedWorking.id,
-                              (selectedWorking.photos ?? []).map((p) => (p.id === id ? { ...p, frame } : p)),
-                            )
-                          }
-                        />
-                      )
-                    }
-                  >
-                    <SlideRenderer
-                      // Remounting on `playing` restarts the CSS reveal, so the
-                      // button replays the exact motion the video will export.
-                      key={playing ? `motion-${playing}` : 'still'}
-                      slide={selectedWorking}
-                      brandKit={kit}
-                      format={project.format}
-                      photos={resolveSlidePhotos(selectedWorking, project.media)}
-                      editing
-                      theme={selectedWorking.overrides?.theme ?? project.settings?.theme ?? 'editorial'}
-                      forExport
-                      motion={playing !== null}
-                    />
-                  </ScaledSlide>
-                </div>
-                </CanvasCopyEditor>
-                {authored && (
-                  <button
-                    className="btn sm ghost"
-                    style={{ width: '100%', justifyContent: 'center', marginTop: 8 }}
-                    onClick={() => setPlaying(Date.now())}
-                    title="Play the motion this slide will have in a video export"
-                  >
-                    <Icon name="play" /> Play motion
-                  </button>
-                )}
-              </>
-            )}
-
-            {editId && selectedWorking?.id === editId ? (
-              <div className="aed">
-                <div className="aed-head">
-                  <h5 style={{ margin: 0 }}>Edit slide</h5>
-                  <span className="muted" style={{ fontSize: 11 }}>copy · order · accent</span>
-                </div>
-                <p className="muted" style={{ fontSize: 11.5, marginTop: 2 }}>
-                  Click any text on the slide above to edit it in place — Enter commits, Escape
-                  reverts. Edits stay in the brand&apos;s design; the styling never changes.
-                </p>
-                <div className="aed-list">
-                  {editEls.map((el, i) => (
-                    <div
-                      className={`aed-row${el.key === canvasEl ? ' sync' : ''}`}
-                      key={el.key}
-                      data-aed-key={el.key}
-                      onClick={(e) => {
-                        // Row → canvas sync: clicking the row (not its form
-                        // fields or buttons) focuses the element on the slide.
-                        const t = e.target as HTMLElement;
-                        if (/^(TEXTAREA|INPUT|BUTTON|SELECT)$/.test(t.tagName) || t.closest('button')) return;
-                        if (el.kind === 'text') setCanvasEl(el.key);
-                      }}
-                    >
-                      <div className="aed-rowtop">
-                        <span className="aed-tag">{el.label}</span>
-                        <div className="aed-ctl">
-                          <button title="Move up" aria-label="Move up" disabled={i === 0} onClick={() => moveEl(el.key, -1)}><Icon name="arrow-up" size={12} /></button>
-                          <button title="Move down" aria-label="Move down" disabled={i === editEls.length - 1} onClick={() => moveEl(el.key, 1)}><Icon name="arrow-down" size={12} /></button>
-                          <button title="Remove" aria-label="Remove" className="del" onClick={() => removeEl(el.key)}><Icon name="close" size={12} /></button>
-                        </div>
-                      </div>
-                      {el.kind === 'text' ? (
-                        <>
-                          <textarea
-                            className="aed-text"
-                            rows={Math.min(4, Math.max(1, Math.ceil(el.text.length / 30)))}
-                            value={el.text}
-                            onChange={(e) => patchEl(el.key, { text: e.target.value })}
-                          />
-                          {canEmphasize(el) && (
-                            <input
-                              className="aed-emph"
-                              placeholder="accent phrase (the brand signature) — optional"
-                              value={el.emphasis ?? ''}
-                              onChange={(e) => patchEl(el.key, { emphasis: e.target.value || undefined })}
-                            />
-                          )}
-                        </>
-                      ) : el.kind === 'list' ? (
-                        /* An enumeration: one editable line per item, plus its
-                           optional half-line of detail. This used to read
-                           "kept exactly as designed" and could not be touched. */
-                        <div className="aed-rows">
-                          {(el.rows ?? []).map((r, ri) => (
-                            <div className="aed-item" key={r.key}>
-                              <span className="aed-itemnum">{ri + 1}</span>
-                              <div className="aed-itemfields">
-                                <textarea
-                                  className="aed-text"
-                                  rows={1}
-                                  placeholder="the item"
-                                  value={r.text}
-                                  onChange={(e) => patchRow(el.key, r.key, { text: e.target.value })}
-                                />
-                                <input
-                                  className="aed-emph"
-                                  placeholder="supporting detail — optional"
-                                  value={r.note ?? ''}
-                                  onChange={(e) => patchRow(el.key, r.key, { note: e.target.value || undefined })}
-                                />
-                              </div>
-                              <button
-                                className="aed-itemdel"
-                                title="Remove this item"
-                                aria-label="Remove this item"
-                                onClick={() => removeRow(el.key, r.key)}
-                              >
-                                <Icon name="close" size={11} />
-                              </button>
-                            </div>
-                          ))}
-                          <button className="btn sm" onClick={() => addRow(el.key)}>
-                            Add an item
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="aed-struct">{el.label} — kept exactly as designed</div>
-                      )}
-                    </div>
-                  ))}
-                  {editEls.length === 0 && (
-                    <p className="muted" style={{ fontSize: 12 }}>Nothing left on this slide — cancel to restore it.</p>
+                  {capBusy === 'regen' ? 'Writing…' : (
+                    <>
+                      <Icon name="sparkle" size={13} /> Regenerate
+                    </>
                   )}
-                </div>
-                <div className="aed-actions">
-                  <button className="btn primary sm" disabled={saving} onClick={() => saveEdit(slides)}>
-                    {saving ? 'Saving…' : 'Save slide'}
-                  </button>
-                  <button className="btn ghost sm" disabled={saving} onClick={cancelEdit}>Cancel</button>
-                </div>
+                </button>
+                <button
+                  className="mo-btn sm prim"
+                  disabled={capBusy !== null || !capDirty}
+                  onClick={() => void saveCaption()}
+                >
+                  {capBusy === 'save' ? 'Saving…' : 'Save caption'}
+                </button>
               </div>
-            ) : (
-              <>
-                {recipe && (
-                  <>
-                    <div className="studio-divln" />
-                    <div className="k" style={{ fontSize: 9.5, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 10 }}>
-                      Brand tokens
-                    </div>
-                    <div className="studio-tok">
-                      <span className="lab">Ground</span>
-                      <span className="val"><span className="studio-sw" style={{ background: recipe.tokens.ground, margin: 0 }} />{recipe.tokens.ground}</span>
-                    </div>
-                    <div className="studio-tok">
-                      <span className="lab">Accent</span>
-                      <span className="val"><span className="studio-sw" style={{ background: recipe.tokens.accent, margin: 0 }} />{recipe.tokens.accent}</span>
-                    </div>
-                    <div className="studio-tok">
-                      <span className="lab">Display</span>
-                      <span className="val">{recipe.tokens.displayFamily}</span>
-                    </div>
-                    <div className="studio-tok">
-                      <span className="lab">Body</span>
-                      <span className="val">{recipe.tokens.bodyFamily}</span>
-                    </div>
-                    {contrast !== null && (
-                      <div className="studio-tok">
-                        <span className="lab">Contrast</span>
-                        <span className="val" style={{ color: contrast >= 4.5 ? 'var(--accent)' : 'var(--warn)' }}>
-                          {contrast.toFixed(1)} : 1 <Icon name={contrast >= 4.5 ? 'check' : 'warning'} size={12} />
-                        </span>
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {/* Your own photography: fill the AI's placeholders, set a
-                    background, or drop images anywhere on the canvas. */}
-                {selected?.authored?.html && (
-                  <>
-                    <div className="studio-divln" />
-                    <div className="k studio-klbl">Images</div>
-                    <SlidePhotoPanel
-                      slide={selected}
-                      media={project.media}
-                      businessId={String(project.businessId)}
-                      format={project.format}
-                      busy={working !== null || saving}
-                      selectedFreeId={freeSel}
-                      ambient={recipeAmbient(recipe)}
-                      onSelectFree={setFreeSel}
-                      onChange={(photos, uploaded) => void savePhotos(selected.id, photos, uploaded)}
-                    />
-                  </>
-                )}
-
-                {/* Instant, reversible tweaks — deterministic, no AI, no waiting. */}
-                {selected?.authored?.html && (
-                  <>
-                    <div className="studio-divln" />
-                    <div className="k studio-klbl">Adjust</div>
-                    <div className="intents">
-                      <button
-                        className="btn sm"
-                        disabled={working !== null}
-                        onClick={() => applyTweak(selected.id, 'bigger-headline')}
-                      >
-                        Bigger headline
-                      </button>
-                      <button
-                        className="btn sm"
-                        disabled={working !== null}
-                        onClick={() => applyTweak(selected.id, 'smaller-headline')}
-                      >
-                        Smaller headline
-                      </button>
-                      <button
-                        className="btn sm"
-                        disabled={working !== null || !recipe?.surfaces?.inverse}
-                        title={
-                          recipe?.surfaces?.inverse
-                            ? 'Flip this slide to the brand’s light surface'
-                            : 'This brand has no inverse surface yet'
-                        }
-                        onClick={() =>
-                          applyTweak(
-                            selected.id,
-                            selected.authored?.bg === 'inverse' ? 'un-invert' : 'invert',
-                          )
-                        }
-                      >
-                        {selected.authored?.bg === 'inverse' ? 'Un-invert' : 'Invert'}
-                      </button>
-                    </div>
-                  </>
-                )}
-
-                {/* Candidates: same copy, different arrangement. Nothing saved until picked. */}
-                {variants && variants.length > 0 && (
-                  <div className="studio-variants">
-                    <div className="k studio-klbl">Pick an arrangement</div>
-                    <div className="sv-row">
-                      {variants.map((v, i) => (
-                        <button
-                          key={i}
-                          className="sv-card"
-                          disabled={working !== null}
-                          onClick={() => selected && applyVariant(selected.id, v, slides)}
-                          title="Apply this arrangement"
-                        >
-                          <ScaledSlide format={project.format} displayWidth={124}>
-                            <SlideRenderer
-                              slide={{ authored: v }}
-                              brandKit={kit}
-                              format={project.format}
-                              photos={selected ? resolveSlidePhotos(selected, project.media) : undefined}
-                              forExport
-                            />
-                          </ScaledSlide>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div className="row" style={{ gap: 8, marginTop: 18 }}>
-                  <button
-                    className="btn"
-                    style={{ flex: 1, justifyContent: 'center' }}
-                    disabled={!selected?.authored?.html}
-                    onClick={() => selected && startEdit(selected)}
-                  >
-                    <Icon name="edit" /> Edit
-                  </button>
-                  <button
-                    className="btn"
-                    style={{ flex: 1, justifyContent: 'center' }}
-                    disabled={!selected?.authored?.html || working !== null}
-                    title={
-                      direction.trim()
-                        ? 'Rewrite this slide from your direction'
-                        : 'Re-arrange this slide only — the copy is kept'
-                    }
-                    onClick={() => selected && askVariants(selected.id, direction)}
-                  >
-                    {working === 'variants' ? (
-                      'Thinking…'
-                    ) : (
-                      <>
-                        <Icon name="sparkle" /> {direction.trim() ? 'Rewrite' : 'Alternatives'}
-                      </>
-                    )}
-                  </button>
-                </div>
-                {/* The two halves of the same idea, side by side: one keeps the
-                    words and changes the layout, the other keeps the layout and
-                    changes the words. */}
-                <div className="row" style={{ marginTop: 8 }}>
-                  <button
-                    className="btn"
-                    style={{ flex: 1, justifyContent: 'center' }}
-                    disabled={!selected?.authored?.html || working !== null}
-                    title="Keep this exact layout — write new copy for it"
-                    onClick={() => selected && askRewrite(selected.id, direction)}
-                  >
-                    {working === 'rewrite' ? (
-                      'Writing…'
-                    ) : (
-                      <>
-                        <Icon name="edit" /> New words
-                      </>
-                    )}
-                  </button>
-                </div>
-
-                {/* Direct THIS slide. Empty = rearrange what is already there. */}
-                <div className="slide-direction">
-                  <label htmlFor="slide-direction">Direct this slide</label>
-                  <textarea
-                    id="slide-direction"
-                    value={direction}
-                    rows={2}
-                    maxLength={MAX_SLIDE_DIRECTION_CHARS}
-                    placeholder={'What should this slide say? Put "an exact line" in quotes to use it word for word.'}
-                    onChange={(e) => setDirection(e.target.value)}
-                  />
-                  <p className="muted">
-                    {direction.trim()
-                      ? 'The copywriter rewrites this slide only — the rest of the deck is untouched.'
-                      : 'Leave empty to keep the copy and only try other arrangements.'}
-                  </p>
-                </div>
-              </>
-            )}
-          </aside>
-        </div>
+            </div>
+          </section>
+        </>
       )}
 
       {/* Version history — snapshots of the deck, restorable at any time. */}
@@ -1766,7 +1816,7 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                 }}
               />
               <button
-                className="btn sm primary"
+                className="mo-btn sm prim"
                 disabled={histBusy !== null}
                 onClick={() => void saveSnapshot()}
               >
@@ -1793,7 +1843,7 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                       </span>
                     </div>
                     <button
-                      className="btn sm"
+                      className="mo-btn sm"
                       disabled={histBusy !== null}
                       onClick={() => void restoreVersion(v._id)}
                     >
