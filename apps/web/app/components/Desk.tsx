@@ -661,7 +661,7 @@ function BrandTile({
             </div>
           </div>
           {step !== 'done' ? (
-            <Link className="cta" href={`/start?b=${biz._id}`}>
+            <Link className="cta" href={`/businesses/${biz._id}`}>
               {step === 'post' ? 'Write the first post →' : 'Finish setup →'}
             </Link>
           ) : (
