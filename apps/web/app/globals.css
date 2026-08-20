@@ -2249,9 +2249,9 @@ input[type='color'] {
    with what that slide needs. Scoped under .mo-studio; re-skins the surviving
    inner components (.aed, .expm, .vh, .spc) to Momentum tokens at the end. */
 
-.mo-studio .mo-crumb { font-size: 12.5px; color: var(--mo-faint); margin: 0 0 10px; }
-.mo-studio .mo-crumb a { color: var(--mo-muted); font-weight: 500; }
-.mo-studio .mo-crumb a:hover { color: var(--mo-ink); text-decoration: none; }
+.mo-page .mo-crumb { font-size: 12.5px; color: var(--mo-faint); margin: 0 0 10px; }
+.mo-page .mo-crumb a { color: var(--mo-muted); font-weight: 500; }
+.mo-page .mo-crumb a:hover { color: var(--mo-ink); text-decoration: none; }
 .mo-shead { display: flex; align-items: flex-end; justify-content: space-between; gap: 30px; padding: 8px 2px 18px; }
 .mo-shead h1 { font-family: var(--mo-disp); font-weight: 600; font-size: clamp(22px, 2.6vw, 30px); letter-spacing: -0.03em; line-height: 1.12; margin: 0; color: var(--mo-ink); text-wrap: balance; }
 .mo-shead .meta { display: flex; gap: 14px; margin-top: 10px; font-size: 12.5px; color: var(--mo-muted); flex-wrap: wrap; }
@@ -2695,3 +2695,92 @@ input[type='color'] {
 .mo-open label { display: block; font-size: 11.5px; font-weight: 600; color: var(--mo-muted); margin-bottom: 6px; }
 .mo-open input, .mo-open select { width: 100%; }
 .mo-open .hint { font-size: 11.5px; color: var(--mo-faint); margin-top: 6px; }
+
+/* ═══ MOMENTUM · Batch 7 — The Screening Room + The Ledger ═════════════════
+   The finale: the public preview becomes a brand-tinted theatre (wings, a
+   stretching dot rail, a caption card with the two real actions); settings
+   becomes ledger lines with effective values and cost bars; what's-new
+   becomes a timeline rail. */
+
+/* ── The Ledger (settings) ── */
+.mo-ledger .lgrow { display: grid; grid-template-columns: 190px minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 13px 24px; border-bottom: 1px solid var(--mo-line); font-size: 13px; }
+.mo-ledger .lgrow:last-child { border-bottom: none; }
+.mo-ledger .lgrow .l { font-size: 12px; font-weight: 600; color: var(--mo-ink); }
+.mo-ledger .lgrow .l small { display: block; font-weight: 400; color: var(--mo-faint); font-size: 11px; margin-top: 2px; }
+.mo-ledger .lgrow .v { font-family: var(--mono, ui-monospace); font-size: 12px; color: var(--mo-ink); }
+.mo-ledger .lgrow .v .def { color: var(--mo-faint); }
+.mo-ledger .lgrow .side { display: flex; align-items: center; gap: 10px; }
+.mo-ledger .lgrow .mo-drow-body { grid-column: 1 / -1; }
+.mo-ledger .lgrow .mo-drow-body input { width: 100%; max-width: 420px; font-family: var(--mono, ui-monospace); font-size: 12px; }
+.mo-ubars { padding: 16px 24px; border-top: 1px solid var(--mo-line); background: var(--mo-card-2); }
+.mo-ubars .uh { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.mo-ubars .uh .t { font-family: var(--mo-disp); font-weight: 600; font-size: 14px; color: var(--mo-ink); }
+.mo-ubars .uh .tot { margin-left: auto; font-size: 12.5px; color: var(--mo-muted); }
+.mo-ubars .uh .tot b { color: var(--mo-ink); font-variant-numeric: tabular-nums; }
+.mo-ubar { display: flex; align-items: center; gap: 12px; margin-bottom: 9px; font-size: 12px; }
+.mo-ubar .m { width: 190px; font-family: var(--mono, ui-monospace); font-size: 11px; color: var(--mo-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mo-ubar .track { flex: 1; height: 9px; border-radius: 99px; background: rgb(22 24 31 / 5%); overflow: hidden; }
+[data-theme='dark'] .mo-ubar .track { background: rgb(236 237 242 / 8%); }
+.mo-ubar .track i { display: block; height: 100%; border-radius: 99px; background: var(--mo-grad); min-width: 3px; }
+.mo-ubar .c { width: 72px; text-align: right; font-variant-numeric: tabular-nums; color: var(--mo-ink); font-weight: 600; }
+.mo-ubars details { margin-top: 10px; font-size: 12.5px; color: var(--mo-muted); }
+.mo-ubars summary { cursor: pointer; font-weight: 600; }
+.mo-ubars table { width: 100%; font-size: 12.5px; border-collapse: collapse; margin-top: 8px; }
+.mo-ubars th { text-align: left; color: var(--mo-faint); font-weight: 600; padding: 4px 8px 4px 0; }
+.mo-ubars td { padding: 5px 8px 5px 0; border-top: 1px solid var(--mo-line); color: var(--mo-ink); }
+.mo-ubars .foot { font-size: 11px; color: var(--mo-faint); margin-top: 10px; }
+
+/* ── The timeline rail (what's-new) ── */
+.mo-log { max-width: 860px; }
+.mo-log .lh { margin-bottom: 8px; }
+.mo-log .lh p { font-size: 14px; color: var(--mo-muted); max-width: 68ch; margin: 8px 0 0; }
+.mo-log .filters { display: flex; gap: 6px; margin: 16px 0 22px; }
+.mo-log .filters button { font-size: 11.5px; font-weight: 600; border: 1px solid var(--mo-line-strong); border-radius: 999px; padding: 6px 13px; color: var(--mo-muted); background: var(--mo-card); cursor: pointer; font-family: inherit; }
+.mo-log .filters button.on { background: var(--mo-ink); color: var(--mo-card); border-color: var(--mo-ink); }
+.mo-lrow { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 0 16px; position: relative; }
+.mo-lrow .rl { position: absolute; left: 21px; top: 44px; bottom: -4px; border-left: 2px solid var(--mo-line-strong); }
+.mo-lrow:last-child .rl { display: none; }
+.mo-lrow .dot { width: 44px; height: 44px; border-radius: 50%; background: var(--mo-card); border: 1.5px solid var(--mo-line-strong); display: grid; place-items: center; z-index: 1; font-family: var(--mo-disp); font-weight: 600; font-size: 13px; color: var(--mo-muted); }
+.mo-lcard { background: var(--mo-card); border: 1px solid var(--mo-line); border-radius: 16px; box-shadow: var(--mo-shadow); padding: 14px 18px; margin-bottom: 18px; }
+.mo-lcard .t { font-size: 14px; font-weight: 600; color: var(--mo-ink); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mo-lcard .vtag { font-family: var(--mono, ui-monospace); font-size: 10px; color: var(--mo-indigo); background: var(--mo-indigo-bg); border-radius: 999px; padding: 2px 8px; }
+.mo-lcard .aff { font-size: 11px; color: var(--mo-faint); margin-left: auto; }
+.mo-lcard .role { font-size: 12.5px; color: var(--mo-muted); margin: 5px 0 10px; }
+/* ReleaseList inside a timeline card. */
+.mo-lcard .pu-rel { border-top: 1px solid var(--mo-line); padding-top: 8px; }
+
+/* ── The Screening Room (public preview/share) ── */
+.pv-shell .pv-head h1.sr-marquee { font-size: clamp(20px, 4.5vw, 30px); line-height: 1.2; letter-spacing: 0.005em; }
+.sr-stage-outer { position: relative; overflow: hidden; width: 100%; }
+.sr-track { display: flex; gap: 18px; transition: transform 0.45s cubic-bezier(0.3, 0.9, 0.3, 1); will-change: transform; }
+@media (prefers-reduced-motion: reduce) { .sr-track { transition: none; } }
+.sr-item { flex: 0 0 auto; position: relative; transition: opacity 0.45s var(--ease), transform 0.45s cubic-bezier(0.3, 0.9, 0.3, 1); border-radius: 14px; overflow: hidden; }
+.sr-item.dim { opacity: 0.4; transform: scale(0.93); cursor: pointer; }
+.sr-item.dim:hover { opacity: 0.6; }
+.sr-item.on { box-shadow: 0 26px 60px -22px rgb(0 0 0 / 70%); }
+.sr-arrow { position: absolute; top: 50%; transform: translateY(-50%); width: 38px; height: 38px; border-radius: 50%; background: rgb(255 255 255 / 10%); border: 1px solid rgb(255 255 255 / 22%); color: currentColor; display: grid; place-items: center; cursor: pointer; z-index: 3; backdrop-filter: blur(4px); transition: background var(--dur-1) var(--ease), transform 0.25s var(--mo-spring); }
+.sr-arrow:hover { background: rgb(255 255 255 / 20%); transform: translateY(-50%) scale(1.08); }
+.sr-arrow.l { left: 8px; }
+.sr-arrow.r { right: 8px; }
+.pv-dots .pv-dot.active { width: 18px; border-radius: 99px; }
+.pv-dots .pv-dot { transition: width 0.3s var(--mo-spring), background var(--dur-1) var(--ease); }
+.pv-caption .cap-btns { display: flex; gap: 8px; }
+
+/* The theatre is ALWAYS dark. Public pages render in the brand's world, not
+   the operator's theme — with light now the app default, the Atelier tokens
+   these surfaces consume must be pinned to their dark values here. */
+.pv-shell {
+  color: var(--text);
+  --bg: #17140e;
+  --bg-2: #1c180f;
+  --panel: #201c13;
+  --panel-2: #262217;
+  --panel-3: #302a1d;
+  --border: #342f22;
+  --border-strong: #47402e;
+  --text: #ece6d8;
+  --muted: #a69c86;
+  --faint: #8b8270;
+  --glow-1: rgb(106 166 155 / 10%);
+  --glow-2: rgb(183 147 85 / 8%);
+}
