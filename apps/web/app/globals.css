@@ -634,16 +634,18 @@ input[type='color'] {
   top: -24vmax;
   left: -16vmax;
   background: radial-gradient(circle at 34% 34%, var(--b1, var(--accent)), transparent 66%);
-  animation: bk-float-b 26s ease-in-out infinite alternate;
+  animation: pv-float-a 26s ease-in-out infinite alternate;
 }
+@keyframes pv-float-a { from { transform: translate(0, 0) scale(1.1); } to { transform: translate(-12%, 5%) scale(0.92); } }
 .pv-aur.b {
   width: 56vmax;
   height: 56vmax;
   bottom: -26vmax;
   right: -18vmax;
   background: radial-gradient(circle at 62% 62%, var(--b3, var(--accent-2)), transparent 64%);
-  animation: bk-float-c 30s ease-in-out infinite alternate;
+  animation: pv-float-b 30s ease-in-out infinite alternate;
 }
+@keyframes pv-float-b { from { transform: translate(0, 0) scale(1); } to { transform: translate(7%, -10%) scale(1.22); } }
 .pv-grain {
   position: absolute;
   inset: 0;
@@ -1186,8 +1188,6 @@ input[type='color'] {
   font-size: 9px; color: #fff; background: linear-gradient(transparent, rgba(0, 0, 0, 0.72));
   padding: 8px 5px 3px; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-/* ===== end Studio pack ===== */
-
 /* ===== On-canvas edit ===== */
 /* Direct copy editing on the inspector preview. These rules dress the LIVE
    slide DOM (decorations only — nothing here is ever serialised back), inside
@@ -1213,7 +1213,8 @@ input[type='color'] {
 }
 /* The inspector row mirroring the element selected on canvas. */
 .aed-row.sync { border-color: var(--accent-2); }
-/* ===== end Settled-frame guides ===== */
+/* ===== end On-canvas edit ===== */
+
 .sv-row { display: flex; gap: 10px; flex-wrap: wrap; }
 .sv-card {
   padding: 0; border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
@@ -1724,7 +1725,7 @@ input[type='color'] {
 .mo-studio .sv-card:hover { transform: translateY(-3px); border-color: var(--mo-indigo); }
 .mo-studio .vh { background: var(--mo-card); color: var(--mo-ink); }
 
-/* The Studio's strip — same scroller contract as .studio-deck, Momentum skin. */
+/* The Studio's strip — the DeckScroller contract (.fade-l/.fade-r/.stacked), Momentum skin. */
 .mo-strip { display: flex; gap: 16px; overflow-x: auto; padding: 8px 2px 14px; scroll-snap-type: x proximity; }
 .mo-strip > * { scroll-snap-align: start; }
 .mo-strip.stacked { flex-direction: column; align-items: center; overflow-x: visible; gap: 28px; scroll-snap-type: none; }
