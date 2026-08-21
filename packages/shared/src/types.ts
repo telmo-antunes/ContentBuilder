@@ -270,6 +270,13 @@ export interface Project {
    * the brand ground). Shown on the review page as info chips.
    */
   composeNotes?: Array<{ slide?: number; note: string }>;
+  /**
+   * The recipe this deck shipped under, pinned at first export — render paths
+   * use it over the kit's live recipe so a recipe swap never re-skins a deck
+   * that was already reviewed. Absent on unshipped decks.
+   */
+  recipeSnapshot?: unknown;
+  recipeSnapshotAt?: string;
   /** The pages this post was written from, when the brief cited any. */
   sources?: Array<{ url: string; title?: string; byline?: string; published?: string; chars?: number }>;
   exportedAt?: string;

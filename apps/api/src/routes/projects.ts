@@ -1328,6 +1328,19 @@ projectsRouter.post(
     // stage by itself. "Posted" stays manual — we can't see Instagram.
     project.set('stage', 'shipped');
     project.set('exportedAt', new Date());
+    // PIN THE RECIPE at first export. Decks render live against the brand's
+    // recipe, so replacing the recipe silently re-skinned every deck already
+    // reviewed and shipped — an approved cta slide came back re-centred with a
+    // different button. What shipped should keep looking like what shipped;
+    // future decks pick up the new recipe by composing under it.
+    if (!project.get('recipeSnapshot')) {
+      const kit = await approvedKitFor(String(project.get('businessId')));
+      const recipe = (kit as { recipe?: unknown } | null)?.recipe;
+      if (recipe) {
+        project.set('recipeSnapshot', recipe);
+        project.set('recipeSnapshotAt', new Date());
+      }
+    }
     // An export is the strongest signal in the product: this deck, in this
     // state, was good enough to ship.
     await observeOutcome(String(project._id), project.get('slides') as never, { exported: true });

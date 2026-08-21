@@ -53,7 +53,7 @@ export default async function RenderPage({
   const slide = ordered[idx] ?? ordered[0];
   if (!slide) return <div data-render-error>no slide</div>;
 
-  const kit = toRenderKit(project.brandKit);
+  const kit = toRenderKit(project.brandKit, project.recipeSnapshot as Parameters<typeof toRenderKit>[1]);
   // The user's own photos ride the same path, so PNG + MP4 exports carry them.
   const photos = resolveSlidePhotos(slide, project.media);
 

@@ -233,6 +233,15 @@ const projectSchema = new Schema(
       ],
       required: false,
     },
+    /**
+     * THE RECIPE THIS DECK SHIPPED UNDER, pinned at first export. Decks render
+     * live against the brand's recipe, which is right while they are being
+     * made and wrong forever after: replacing the recipe re-skinned every deck
+     * already reviewed. When present, every render path uses this instead of
+     * the kit's live recipe.
+     */
+    recipeSnapshot: { type: Schema.Types.Mixed, required: false },
+    recipeSnapshotAt: { type: Date, required: false },
     createdAt: { type: Date, default: () => new Date() },
     updatedAt: { type: Date, default: () => new Date() },
   },
