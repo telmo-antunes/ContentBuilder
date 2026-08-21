@@ -25,6 +25,7 @@ import {
   recipeMotionCss,
   recipeMotionTiming,
   slideAlignFor,
+  isSlideSurface,
   statCountUp,
   type BrandRecipe,
   type Format,
@@ -75,7 +76,7 @@ export function AuthoredSlide({
   onOverflow,
 }: {
   recipe: BrandRecipe;
-  authored: { html: string; bg?: string; role?: string; archetype?: string; align?: string };
+  authored: { html: string; bg?: string; role?: string; archetype?: string; align?: string; surface?: string };
   /** The target canvas — selects the recipe's per-format vertical tuning. */
   format: Format;
   logoUrl?: string;
@@ -523,6 +524,9 @@ export function AuthoredSlide({
         // recipe, for this role) explicitly deviates from the brand's global
         // alignment, so the app CSS stays inert everywhere else.
         data-align={slideAlignFor(recipe, authored.role, authored.align)}
+        // The deck's ground rhythm. Absent on a slide that keeps the brand's
+        // own ground, so the app layer stays inert there.
+        data-surface={isSlideSurface(authored.surface) ? authored.surface : undefined}
         dangerouslySetInnerHTML={slideHtmlObj}
       />
       {layer(over, 'over')}

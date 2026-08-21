@@ -35,6 +35,7 @@ import {
   type RecipeEmphasisWrap,
   assignArchetypes,
   archetypeFor,
+  planSurfaces,
   fragmentVariantsFor,
   planInversion,
   BASE_BUDGETS,
@@ -2287,7 +2288,7 @@ export async function composeProject(
 ): Promise<
   Array<{
     role: SlideRole;
-    authored: { html: string; bg?: string; role?: string; archetype?: string; align?: string };
+    authored: { html: string; bg?: string; role?: string; archetype?: string; align?: string; surface?: string };
     /** The parse step's stock-search phrase for this slide's picture, if any. */
     imageQuery?: string;
     /** The parse step's one-line reasoning for this slide's calls, if given. */
@@ -2400,7 +2401,7 @@ export async function composeProject(
   });
   const out: Array<{
     role: SlideRole;
-    authored: { html: string; bg?: string; role?: string; archetype?: string; align?: string; source?: ComposePath };
+    authored: { html: string; bg?: string; role?: string; archetype?: string; align?: string; surface?: string; source?: ComposePath };
     imageQuery?: string;
     rationale?: string;
     source: ComposePath;
@@ -2430,6 +2431,21 @@ export async function composeProject(
    * — it assembled the same brand's mark two different ways in one two-slide
    * post. The prompt asks for consistency; this guarantees it.
    */
+  /**
+   * THE GROUND CHANGES DOWN THE DECK. Decided here for the same reason the
+   * archetypes and the one inversion are: a composer looking at one slide
+   * cannot see that it is painting the fourth identical frame, and the
+   * art-director pass kept returning "seven identical black tiles" however
+   * much the LAYOUTS varied.
+   */
+  const surfaces = planSurfaces(
+    out.map((s) => ({ role: s.role, hasPhoto: authoredSlots(s.authored.html).length > 0 })),
+  );
+  out.forEach((s, i) => {
+    const surface = surfaces[i];
+    if (surface && surface !== 'base') s.authored.surface = surface;
+  });
+
   const marks = ensureBrandMark(out.map((s) => s.authored.html));
   if (marks.repaired) {
     out.forEach((s, i) => {
@@ -2460,11 +2476,31 @@ export async function composeProject(
     const copy = typeof parts?.cta === 'string' ? parts.cta.trim() : '';
     if (!copy) continue;
     const escaped = copy.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    // Prefer promoting the element that already holds the words.
+    const button = `<div class="cta">${copy}</div>`;
+    // 1. Promote the element that already holds the words.
     const holder = new RegExp(`<(\\w+)([^>]*)>\\s*${escaped}\\s*</\\1>`);
-    slide.authored.html = holder.test(html)
-      ? html.replace(holder, `<div class="cta">${copy}</div>`)
-      : `${html}\n<div class="cta">${copy}</div>`;
+    if (holder.test(html)) {
+      slide.authored.html = html.replace(holder, button);
+    } else {
+      /**
+       * 2. Or the words may be a BARE TEXT NODE — which is what the model
+       *    actually did: `Start free trial` sitting loose between the body and
+       *    the handle, wrapped in nothing. Appending a button then shipped the
+       *    call to action TWICE, which is worse than the missing button this
+       *    guard exists to fix. Only text outside a tag is replaced, so a
+       *    match inside an attribute cannot be mangled.
+       */
+      let replaced = false;
+      const rebuilt = html
+        .split(/(<[^>]*>)/)
+        .map((part) => {
+          if (replaced || part.startsWith('<') || !part.includes(copy)) return part;
+          replaced = true;
+          return part.replace(copy, button);
+        })
+        .join('');
+      slide.authored.html = replaced ? rebuilt : `${html}\n${button}`;
+    }
     console.warn('[compose] cta: the closing slide had no .cta element — the call to action was re-homed into one');
   }
 

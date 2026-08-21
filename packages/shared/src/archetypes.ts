@@ -355,6 +355,92 @@ export function slideAlignCss(): string {
   ].join('\n');
 }
 
+// ── Surfaces ─────────────────────────────────────────────────────────────────
+
+/**
+ * THE GROUND CHANGES DOWN THE DECK.
+ *
+ * Layout variety was solved twice over — six archetypes, rotating arrangements,
+ * per-role alignment — and the art-director pass kept returning the same
+ * blocking verdict anyway: "seven identical black tiles… a template loop
+ * rather than a carousel". It was right, and none of those levers could fix
+ * it, because every slide was painted on the SAME ground. At feed scale the
+ * ground is most of what the eye receives.
+ *
+ * `surfaces.inverse` existed for exactly this and is almost never authored —
+ * the live brand has `surfaces: null` — so nothing varied at all. These
+ * surfaces are therefore APP-OWNED and derived from tokens every recipe
+ * already carries: `--cb-ground`, `--cb-ground-alt` (documented as "raised
+ * surface" and otherwise unused) and the accent. Every stored brand gets the
+ * variation immediately, with no re-authoring and no AI spend, and any brand
+ * can restyle `.cb-slide[data-surface="…"]` to disagree.
+ *
+ * Deliberately three, and deliberately close together in tone: this is meant
+ * to read as one deck breathing, not as three different brands.
+ */
+export const SLIDE_SURFACES = ['base', 'raised', 'deep'] as const;
+export type SlideSurface = (typeof SLIDE_SURFACES)[number];
+
+export const isSlideSurface = (v: unknown): v is SlideSurface =>
+  typeof v === 'string' && (SLIDE_SURFACES as readonly string[]).includes(v);
+
+/**
+ * App-owned surface CSS, emitted after the brand sheet like every other layer
+ * here. `base` is deliberately absent: it means "whatever the brand painted",
+ * so a slide that does not deviate is untouched.
+ */
+export function slideSurfaceCss(): string {
+  return [
+    // Raised: the brand's own secondary ground, lifted toward the light.
+    `.cb-slide[data-surface="raised"]{background:` +
+      `radial-gradient(115% 70% at 50% -12%, color-mix(in srgb, var(--cb-accent) 12%, transparent), transparent 62%),` +
+      `linear-gradient(168deg, var(--cb-ground-alt, var(--cb-ground)), var(--cb-ground))}`,
+    // Deep: the bloom removed and the weight moved low — the quiet frame.
+    `.cb-slide[data-surface="deep"]{background:` +
+      `radial-gradient(120% 80% at 50% 118%, color-mix(in srgb, var(--cb-ink) 7%, transparent), transparent 58%),` +
+      `var(--cb-ground)}`,
+    // A photograph IS the surface; never paint over one.
+    `.cb-slide.photo[data-surface]{background:inherit}`,
+  ].join('\n');
+}
+
+/**
+ * WHICH SLIDE SITS ON WHICH GROUND.
+ *
+ * Decided across the whole deck, like the archetypes and the one inversion,
+ * because a per-slide call cannot see that it is painting the fourth identical
+ * frame. Three rules, each for a reason the deck taught:
+ *
+ *   · the COVER and the CLOSE keep the brand's own ground — the first frame is
+ *     the brand's handshake and the last one lands harder returning to it
+ *     (`planInversion` draws the same two exclusions);
+ *   · a slide carrying a PHOTOGRAPH keeps it — the picture is already the
+ *     variation, and tinting it competes;
+ *   · everything else alternates, never twice in a row, so the change is felt
+ *     while swiping rather than noticed as a pattern.
+ */
+export function planSurfaces(
+  slides: ReadonlyArray<{ role?: string; hasPhoto?: boolean }>,
+): SlideSurface[] {
+  const out: SlideSurface[] = [];
+  const varying: SlideSurface[] = ['raised', 'deep'];
+  let next = 0;
+  slides.forEach((s, i) => {
+    const isEnd = i === 0 || i === slides.length - 1;
+    const anchored = isEnd || s.role === 'cover' || s.role === 'cta' || s.hasPhoto;
+    if (anchored) {
+      out.push('base');
+      return;
+    }
+    const chosen = varying[next % varying.length]!;
+    next += 1;
+    // Never the same ground twice running, whatever the anchors did.
+    out.push(out[i - 1] === chosen ? (varying[next % varying.length] as SlideSurface) : chosen);
+    if (out[i] !== chosen) next += 1;
+  });
+  return out;
+}
+
 // ── Rhythm ───────────────────────────────────────────────────────────────────
 
 /**

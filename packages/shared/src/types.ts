@@ -215,6 +215,8 @@ export interface Slide {
     source?: 'fragment' | 'ai';
     /** Per-slide alignment deviation, applied by the app's data-align layer. */
     align?: 'flush-left' | 'center' | 'flush-right';
+    /** Per-slide ground, applied by the app's data-surface layer. */
+    surface?: 'base' | 'raised' | 'deep';
   };
 }
 
