@@ -26,6 +26,7 @@ import {
 } from '@contentbuilder/shared';
 import { composeProject, composeSlide, parseSlideCopy, parseSlideDirection } from '../lib/htmlDirector/compose';
 import { withSpendLedger, summarize, type SpendLedger } from '../lib/spend';
+import type { DeckCritique } from '../lib/htmlDirector/deckCritique';
 import { resolveBrief } from '../lib/sourceIngest';
 import { authoredShape, partsFromAuthored, rewriteAuthoredCopy } from '../lib/htmlDirector/reparse';
 import { addHeadlineVariant, removeHeadlineVariant } from '../lib/htmlDirector/renderCheck';
@@ -658,6 +659,7 @@ projectsRouter.post(
      * everything the post costs.
      */
     let ledger: SpendLedger | undefined;
+    let critique: DeckCritique | undefined;
     try {
       const run = await withSpendLedger(
         { projectId: String(project._id), ceilingUsd: config.ai.postCeilingUsd },
@@ -699,6 +701,9 @@ projectsRouter.post(
          * document mid-compose would race with the write at the end.
          * Best-effort by construction — a failed crumb must never fail a deck.
          */
+        onCritique: (c) => {
+          critique = c;
+        },
         onProgress: (p) => {
           void ProjectModel.updateOne(
             { _id: project._id },
@@ -797,6 +802,10 @@ projectsRouter.post(
     // than logged: a silent downgrade is worse than an expensive deck, so the
     // review page can say which steps the budget bought and which it refused.
     if (ledger) project.set('spend', summarize(ledger));
+    // The art-director read on the finished deck. Stored, not acted on: it is
+    // the one pass that can see what every measurable gate misses, and a human
+    // decides what to do about it.
+    if (critique) project.set('critique', critique);
     project.set('status', 'draft');
     // Keep the prompt AND the plan: it's what an Ideas card holds, it lets you
     // see what a finished post was actually asked to be, and re-composing later

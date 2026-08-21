@@ -40,8 +40,10 @@ import {
   BASE_BUDGETS,
   EXPLAIN_ROLES,
   type ComposeBudgets,
+  type Format,
 } from '@contentbuilder/shared';
 import { aiJson, aiMessage, cachedSystem, modelFor, textOf, type AiJsonResult, type AiJsonTool } from '../ai';
+import { critiqueDeck, type DeckCritique } from './deckCritique';
 import { config } from '../../config';
 import { sanitizeAuthoredHtml } from '../htmlSanitize';
 import { lintAuthored } from './lintAuthored';
@@ -273,6 +275,12 @@ export interface ComposeOptions {
    * like `record` — see the call site for why anything survives at all.
    */
   onCopyCheck?: (r: CopyCheckSummary) => void;
+  /**
+   * The art-director read on the FINISHED deck — what the measurable gates
+   * cannot see. Fires only when the deck was rendered and the budget allowed
+   * the look; absent is normal, not an error.
+   */
+  onCritique?: (c: DeckCritique) => void;
 }
 
 /** What the copy checks still object to after compose has done what it can. */
@@ -2345,6 +2353,8 @@ export async function composeProject(
     if (a && !a.bg) a.bg = 'inverse';
   }
 
+  /** The art-director read on the finished deck, when one was affordable. */
+  let critique: DeckCritique | null = null;
   if (opts?.renderCheck ?? (Boolean(opts?.renderProbe) || renderCheckEnabledByDefault())) {
     opts?.onProgress?.({ phase: 'checking-layout', done: 0, total: out.length });
     const checked = await renderCheckDeck(recipe, kept, out.map((s) => s.authored), o.format ?? '1080x1350', {
@@ -2359,6 +2369,20 @@ export async function composeProject(
        * spend a vision call — the eval, the tests — simply does not pass it.
        */
       repairByLooking: (args) => repairByLooking(recipe, args),
+      /**
+       * SOMEBODY LOOKS AT THE FINISHED DECK. Every check above judges one slide
+       * against something measurable; this is the pass that can see a deck of
+       * near-identical frames, a picture that is related but wrong, or a slide
+       * that restates the one before it. Budget-gated, and it repairs nothing —
+       * the verdict reaches the review page, where a person acts on it.
+       */
+      onShots: async (shots) => {
+        critique = await critiqueDeck(
+          recipe,
+          shots.map((b64) => (b64 ? Buffer.from(b64, 'base64') : null)),
+          (o.format ?? '1080x1350') as Format,
+        );
+      },
       /**
        * THE LOOP, CLOSED AT THE WRITING END.
        *
@@ -2402,6 +2426,7 @@ export async function composeProject(
      * run — but until now it was indistinguishable from a deck that passed
      * every gate. The only trace was a `console.warn` on the API's stdout.
      */
+    if (critique) opts?.onCritique?.(critique);
     opts?.onLayoutCheck?.({
       measured: checked.measured,
       unmeasured: checked.unmeasured,

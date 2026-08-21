@@ -1009,6 +1009,12 @@ export async function repairOverflow(
 // ── 3. The deck pass compose runs ───────────────────────────────────────────
 
 export interface DeckCheckOptions extends CheckOptions {
+  /**
+   * Hand the FINAL rendered deck to a caller that wants to look at it — the
+   * deck critique. Base64 PNGs in deck order, null where a slide would not
+   * photograph. Optional: without it nothing is captured and nothing is spent.
+   */
+  onShots?: (shots: Array<string | null>) => Promise<void>;
   /** Supplied by compose so step 3 reuses its model + options. */
   recompose?: (input: ComposeSlideInput, note: string) => Promise<string>;
   /**
@@ -1096,6 +1102,30 @@ export async function renderCheckDeck(
     return { ...nothing, ms: Date.now() - t0 };
   }
 
+  /**
+   * LOOK AT THE FINISHED DECK — once, on the FINAL markup.
+   *
+   * Deliberately reached from BOTH exits, including the "nothing to repair"
+   * one. That is the case that matters most: every gate in this file can pass
+   * on a deck that is plainly not good enough, and a clean measurement is
+   * exactly when nobody else is looking.
+   */
+  const lookAtDeck = async (finalSlides: readonly CheckSlide[]): Promise<void> => {
+    const shoot = probe.shoot;
+    if (!opts?.onShots || !shoot) return;
+    try {
+      const shots = await Promise.all(
+        finalSlides.map((s, i) => shoot(i, s.html).catch(() => null)),
+      );
+      await opts.onShots(shots);
+    } catch (err) {
+      // A critique is an improvement to the hand-off, never a gate on shipping.
+      console.warn(
+        `[render-check] deck review skipped: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  };
+
   try {
     const verdicts = await probe.measure(slides.map((s, index) => ({ index, html: s.html })));
     const measured = verdicts.filter((v) => v.state !== 'unknown').length;
@@ -1118,6 +1148,7 @@ export async function renderCheckDeck(
     );
 
     if (!overflowing.length && !faulty.length) {
+      await lookAtDeck(out);
       const ms = Date.now() - t0;
       console.warn(
         `[render-check] ${measured}/${slides.length} slide(s) measured in ${ms}ms — nothing to repair`,
@@ -1210,6 +1241,8 @@ export async function renderCheckDeck(
         .join(' → ');
       notes.push(`slide ${slideIndex + 1}: ${how || 'nothing to try'}${r.stillOverflows ? ' (STILL OVERFLOWS)' : ''}`);
     });
+
+    await lookAtDeck(out);
 
     const ms = Date.now() - t0;
     console.warn(

@@ -247,6 +247,8 @@ const projectSchema = new Schema(
      * breakdown, and any step the ceiling turned down. See lib/spend.ts.
      */
     spend: { type: Schema.Types.Mixed, required: false },
+    /** The art-director review of the last rendered deck. See lib/htmlDirector/deckCritique.ts. */
+    critique: { type: Schema.Types.Mixed, required: false },
     createdAt: { type: Date, default: () => new Date() },
     updatedAt: { type: Date, default: () => new Date() },
   },

@@ -879,6 +879,21 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
       ...(cn.slide ? { slide: cn.slide - 1 } : {}),
     });
   });
+  /**
+   * THE ART DIRECTOR'S FINDINGS. The only check here that judged the deck by
+   * LOOKING at it, so its findings are the ones no other chip can produce.
+   * A "blocking" read gates the ship bar exactly like a measured fault; the
+   * rest inform without blocking.
+   */
+  for (const [i, f] of (project.critique?.findings ?? []).entries()) {
+    chips.push({
+      key: `crit-${i}`,
+      tone: f.severity === 'blocking' ? 'bad' : f.severity === 'notable' ? 'warn' : 'info',
+      label: f.slide > 0 ? `Slide ${f.slide}: ${f.fault.slice(0, 44)}` : `Deck: ${f.fault.slice(0, 46)}`,
+      hint: `${f.fault} — ${f.fix}`,
+      ...(f.slide > 0 ? { slide: f.slide - 1 } : {}),
+    });
+  }
   for (const c of pairing?.contradictions ?? []) {
     chips.push({
       key: `pair-${c.slide}-${c.question}`,
