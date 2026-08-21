@@ -71,15 +71,6 @@ Rules that keep this file worth reading:
 - **Direction:** decide what concurrent composes should do rather than letting them collide. Cheapest honest fix: serialise the LOOK passes per process (a small queue around shoot), so a second deck waits instead of failing. Then record a skipped pass in `composeNotes` with its reason, so "no critique" is never indistinguishable from "critique found nothing" — which is the actual reporting bug underneath.
 
 
-### A cta headline shipped unfinished — third occurrence, and the re-parse had already fired
-
-- **Kind:** Defect
-- **Severity:** blocked shipping
-- **First seen:** 2026-08-21 — the prepaid-packages test deck, slide 7: `Your next quiet week is already` — the sentence simply stops.
-- **What happened:** `unfinishedProse` exists precisely for this and the spend ledger shows the parse ran TWICE, so the corrective re-parse fired and the deck shipped unfinished anyway. HANDOFF.md already records "two headlines have shipped past it"; this is the third. The check reports what survives and nothing refuses it.
-- **Why it matters:** it is the closing slide — the one carrying the offer — and no downstream gate can catch it: it fits, it does not collide, and the words are "verbatim" by every rule the composer follows.
-- **Direction:** stop treating an unfinished headline as advisory. After the corrective re-parse, a part still ending mid-thought should either be re-asked ONCE on its own (a single part, not the deck) or dropped to a shorter element the slide can carry — and if neither works, the slide should be marked, not shipped clean. The deck-critique cannot substitute: it reviews pixels and read this one as merely "floating".
-
 ### The brand's own name renders wrong in generated copy
 
 - **Kind:** Defect
@@ -172,6 +163,28 @@ Add the next one here, following the shape in [How to add an entry](#how-to-add-
 - **Direction (remaining):** more of the code's calls belong in the ledger — parse-slide drops, brand-mark normalisation, budget clamps, archetype assignments that demoted a slot. And the compose-path model (slide author) has judgment worth one line too. The pattern is established; each is a small addition.
 
 ## Resolved
+
+### A cta headline shipped unfinished — third occurrence, and the re-parse had already fired
+
+- **Kind:** Defect
+- **Severity:** blocked shipping
+- **First seen:** 2026-08-21 — the prepaid-packages deck, slide 7: `Your next quiet week is already` — the sentence simply stops.
+- **What happened:** `unfinishedProse` could SEE it every time and could never do anything about it. The corrective re-parse had already fired (the ledger shows two parse calls), the fault was logged to a terminal and returned in the compose RESPONSE — and nowhere else. Anyone opening the review page afterwards saw an all-clear ship bar above a headline that stops mid-sentence, because every other gate passes such a slide: it fits, nothing collides, and its words are "verbatim" by every rule the composer follows.
+- **Resolved:** 2026-08-22, in three parts, because asking the model again was already the thing that had failed twice:
+  1. `trimToFinished` — a deterministic repair that REMOVES words rather than inventing them, so what survives is still the copy that was written and approved. It keeps complete sentences and drops trailing words that leave a phrase open ("… week is already" → "… week"), refuses to leave a stub under three words, and never touches a part the user LOCKED — an unfinished lock is their sentence to finish.
+  2. The dangling-word list gained the degree/time adverbs that caused this one (`already`, `almost`, `barely`, `until`, `because`, …). Necessary, not sufficient — which is why it is the smallest of the three parts.
+  3. Whatever survives BOTH repairs is now stored on the project as `copyFaults` and blocks the ship bar with a chip naming the slide, the line and the reason. A fault that only exists in an HTTP response is a fault nobody sees.
+
+
+### A failed review left the PREVIOUS deck's critique on the project
+
+- **Kind:** Defect
+- **Severity:** blocked shipping (it reported a verdict about a deck that no longer existed)
+- **First seen:** 2026-08-22 — the prepaid-packages deck. The Anthropic account ran out of credits mid-compose; `[critique] review failed: 400 … credit balance is too low`. The review page then displayed a confident six-finding verdict — every word of it about a DIFFERENT, earlier deck — while the spend ledger read `skipped: []`, because the budget was not the reason.
+- **What happened:** `critiqueDeck` returned a bare `null` for six unrelated reasons (too few slides, a partial deck, no budget, the sheet failing, the model failing, an unreadable reply), and the route only wrote the field on success. So "nobody looked" and "somebody looked and it was fine" were the same state, and the stalest possible answer won.
+- **Why it matters:** the critique exists precisely because the measurable gates can pass on a bad deck. A stale pass is worse than no pass — it is the one check whose failure mode is a false all-clear.
+- **Resolved:** 2026-08-22 — the critique returns a named outcome (`ok` | `skipped` with a reason and detail), the route ALWAYS writes a fresh answer including "there isn't one", the reason is added to `composeNotes`, and the review page shows a "Deck not reviewed" chip whose text says plainly that nothing here claims the deck is fine — it says nobody looked.
+
 
 ### Replacing a recipe silently re-skinned every deck already reviewed
 

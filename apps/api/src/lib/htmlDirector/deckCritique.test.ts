@@ -17,16 +17,26 @@ vi.mock('../contactSheet', () => ({
   buildContactSheet: async (slides: readonly unknown[]) => Buffer.from(`sheet:${slides.length}`),
 }));
 
-const { critiqueDeck, CRITIQUE_ESTIMATE_USD } = await import('./deckCritique');
+const { critiqueDeck, CRITIQUE_ESTIMATE_USD, CRITIQUE_SKIP_TEXT } = await import('./deckCritique');
 const { withSpendLedger } = await import('../spend');
 const { detailMastersRecipe } = await import('./recipes');
 
 const shots = (n: number) => Array.from({ length: n }, (_, i) => Buffer.from(`slide${i}`));
 
+/** The review itself, when there is one — the tests below are about its content. */
+const reviewOf = async (...args: Parameters<typeof critiqueDeck>) => {
+  const out = await critiqueDeck(...args);
+  if (out.status !== 'ok') throw new Error(`expected a review, got skipped: ${out.reason}`);
+  return out.critique;
+};
+
 describe('the deck critique', () => {
   it('needs a sequence — one slide is not a deck', async () => {
     aiCalls.length = 0;
-    expect(await critiqueDeck(detailMastersRecipe, shots(1), '1080x1350')).toBeNull();
+    expect(await critiqueDeck(detailMastersRecipe, shots(1), '1080x1350')).toMatchObject({
+      status: 'skipped',
+      reason: 'too-few-slides',
+    });
     expect(aiCalls).toHaveLength(0);
   });
 
@@ -39,15 +49,15 @@ describe('the deck critique', () => {
         { slide: 2, fault: 'picture is related but wrong', fix: 'shoot the headliner', severity: 'notable' },
       ],
     });
-    const out = await critiqueDeck(detailMastersRecipe, shots(5), '1080x1350');
-    expect(out!.findings.map((f) => f.severity)).toEqual(['blocking', 'notable', 'minor']);
-    expect(out!.verdict).toBe('Holds together.');
+    const out = await reviewOf(detailMastersRecipe, shots(5), '1080x1350');
+    expect(out.findings.map((f) => f.severity)).toEqual(['blocking', 'notable', 'minor']);
+    expect(out.verdict).toBe('Holds together.');
   });
 
   it('accepts an empty verdict — a clean deck must be able to say so', async () => {
     reply = () => ({ verdict: 'Nothing wrong with it.', findings: [] });
-    const out = await critiqueDeck(detailMastersRecipe, shots(4), '1080x1350');
-    expect(out!.findings).toEqual([]);
+    const out = await reviewOf(detailMastersRecipe, shots(4), '1080x1350');
+    expect(out.findings).toEqual([]);
   });
 
   it('drops junk findings instead of surfacing them', async () => {
@@ -58,11 +68,11 @@ describe('the deck critique', () => {
         { slide: 'nonsense', fault: 'real fault', fix: 'do it', severity: 'invented' },
       ],
     });
-    const out = await critiqueDeck(detailMastersRecipe, shots(3), '1080x1350');
-    expect(out!.findings).toHaveLength(1);
+    const out = await reviewOf(detailMastersRecipe, shots(3), '1080x1350');
+    expect(out.findings).toHaveLength(1);
     // An unusable slide number becomes a deck-level finding; an unknown
     // severity settles at 'notable' rather than being trusted or dropped.
-    expect(out!.findings[0]).toMatchObject({ slide: 0, severity: 'notable' });
+    expect(out.findings[0]).toMatchObject({ slide: 0, severity: 'notable' });
   });
 
   it('refuses to review a deck that mostly failed to render', async () => {
@@ -72,7 +82,10 @@ describe('the deck critique', () => {
     reply = () => ({ verdict: 'ok', findings: [] });
     aiCalls.length = 0;
     const mostlyMissing = [Buffer.from('a'), Buffer.from('b'), null, null, null, null, null];
-    expect(await critiqueDeck(detailMastersRecipe, mostlyMissing, '1080x1350')).toBeNull();
+    expect(await critiqueDeck(detailMastersRecipe, mostlyMissing, '1080x1350')).toMatchObject({
+      status: 'skipped',
+      reason: 'partial-deck',
+    });
     expect(aiCalls).toHaveLength(0);
   });
 
@@ -89,17 +102,54 @@ describe('the deck critique', () => {
     reply = () => {
       throw new Error('vision unavailable');
     };
-    await expect(critiqueDeck(detailMastersRecipe, shots(3), '1080x1350')).resolves.toBeNull();
+    // …and it says WHY, rather than looking like a deck with no faults.
+    await expect(critiqueDeck(detailMastersRecipe, shots(3), '1080x1350')).resolves.toMatchObject({
+      status: 'skipped',
+      reason: 'model-failed',
+    });
   });
 
   it('asks the ceiling first, and stands down when the budget is spent', async () => {
     reply = () => ({ verdict: 'ok', findings: [] });
     aiCalls.length = 0;
     const { ledger } = await withSpendLedger({ ceilingUsd: CRITIQUE_ESTIMATE_USD / 2 }, async () => {
-      expect(await critiqueDeck(detailMastersRecipe, shots(4), '1080x1350')).toBeNull();
+      expect(await critiqueDeck(detailMastersRecipe, shots(4), '1080x1350')).toMatchObject({
+        status: 'skipped',
+        reason: 'no-budget',
+      });
     });
     expect(aiCalls).toHaveLength(0);
     // …and it says so, rather than downgrading silently.
     expect(ledger.skipped).toEqual(['deck-critique']);
+  });
+});
+
+describe('a silence always carries its cause', () => {
+  it('never answers with a bare null, whatever went wrong', async () => {
+    // The whole defect: six different reasons all returned `null`, the route
+    // then wrote nothing, and the project kept the PREVIOUS deck's review — so
+    // an out-of-credits error displayed a confident verdict about a deck that
+    // no longer existed.
+    reply = () => {
+      throw new Error('credit balance too low');
+    };
+    const out = await critiqueDeck(detailMastersRecipe, shots(4), '1080x1350');
+    expect(out).not.toBeNull();
+    expect(out.status).toBe('skipped');
+    if (out.status === 'skipped') {
+      expect(out.reason).toBe('model-failed');
+      expect(out.detail).toContain('credit balance');
+      // Every reason has reader-facing words; a code alone is not an answer.
+      expect(CRITIQUE_SKIP_TEXT[out.reason]).toBeTruthy();
+    }
+  });
+
+  it('distinguishes a CLEAN review from an absent one', async () => {
+    reply = () => ({ verdict: 'Nothing wrong with it.', findings: [] });
+    const clean = await critiqueDeck(detailMastersRecipe, shots(4), '1080x1350');
+    expect(clean.status).toBe('ok');
+    // Both have zero findings; only one of them means the deck is fine.
+    const absent = await critiqueDeck(detailMastersRecipe, shots(1), '1080x1350');
+    expect(absent.status).toBe('skipped');
   });
 });

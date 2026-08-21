@@ -249,6 +249,11 @@ const projectSchema = new Schema(
     spend: { type: Schema.Types.Mixed, required: false },
     /** The art-director review of the last rendered deck. See lib/htmlDirector/deckCritique.ts. */
     critique: { type: Schema.Types.Mixed, required: false },
+    /**
+     * Copy that still stops mid-thought after both repairs — the parse's own
+     * unfinished-prose check. Stored so the review page can block on it.
+     */
+    copyFaults: { type: Schema.Types.Mixed, required: false },
     createdAt: { type: Date, default: () => new Date() },
     updatedAt: { type: Date, default: () => new Date() },
   },

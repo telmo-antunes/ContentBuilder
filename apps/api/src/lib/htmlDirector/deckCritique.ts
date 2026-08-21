@@ -44,6 +44,38 @@ export interface DeckCritique {
   verdict: string;
 }
 
+/**
+ * WHY A DECK WAS NOT REVIEWED — because "it wasn't" and "it was, and it was
+ * fine" are opposite facts and used to be the same `null`.
+ *
+ * A clean critique and an absent one both left the review page showing no
+ * findings; worse, the project kept the PREVIOUS deck's review, so a run that
+ * died on an API error displayed a confident verdict about a deck that no
+ * longer existed. The spend ledger read `skipped: []` at the same time, because
+ * the budget was not the reason. Every silence now carries its cause.
+ */
+export type CritiqueSkipReason =
+  | 'too-few-slides'
+  | 'partial-deck'
+  | 'no-budget'
+  | 'sheet-failed'
+  | 'model-failed'
+  | 'unusable-reply';
+
+export type CritiqueOutcome =
+  | { status: 'ok'; critique: DeckCritique }
+  | { status: 'skipped'; reason: CritiqueSkipReason; detail?: string };
+
+/** What the review page says about each reason, in the reader's terms. */
+export const CRITIQUE_SKIP_TEXT: Record<CritiqueSkipReason, string> = {
+  'too-few-slides': 'too few slides rendered to review as a sequence',
+  'partial-deck': 'most of the deck would not render, so it was not reviewed',
+  'no-budget': 'the post’s spend ceiling was reached before the review',
+  'sheet-failed': 'the contact sheet could not be built',
+  'model-failed': 'the review call failed',
+  'unusable-reply': 'the review came back unreadable',
+};
+
 const SYSTEM = `You are an art director reviewing a finished Instagram carousel for a business that is promoting its own guide. You are shown the whole deck as one contact sheet, at the size a reader sees it, in order.
 
 WHAT YOU ARE FOR. Every mechanical check has already passed: nothing overflows, nothing collides, every picture is topically related to its words. You are here for what those checks cannot see — whether this is actually good, and whether it does its job.
@@ -114,10 +146,10 @@ export async function critiqueDeck(
   shots: ReadonlyArray<Buffer | null>,
   format: Format,
   opts?: { model?: string },
-): Promise<DeckCritique | null> {
+): Promise<CritiqueOutcome> {
   const usable = shots.filter((s): s is Buffer => Boolean(s));
   // One slide is not a sequence, and sequence is most of what this judges.
-  if (usable.length < 2) return null;
+  if (usable.length < 2) return { status: 'skipped', reason: 'too-few-slides' };
   /**
    * A PARTIAL DECK IS NOT A DECK. When slides fail to photograph, the sheet
    * silently becomes a different, shorter deck — and the review reads as a
@@ -129,9 +161,9 @@ export async function critiqueDeck(
   const missing = shots.length - usable.length;
   if (usable.length < Math.ceil(shots.length / 2)) {
     console.warn(`[critique] only ${usable.length}/${shots.length} slide(s) rendered — not reviewing a partial deck`);
-    return null;
+    return { status: 'skipped', reason: 'partial-deck', detail: `${usable.length}/${shots.length} slides rendered` };
   }
-  if (!affordsUsd(CRITIQUE_ESTIMATE_USD, 'deck-critique')) return null;
+  if (!affordsUsd(CRITIQUE_ESTIMATE_USD, 'deck-critique')) return { status: 'skipped', reason: 'no-budget' };
 
   let sheet: Buffer;
   try {
@@ -141,7 +173,7 @@ export async function critiqueDeck(
     );
   } catch (err) {
     console.warn(`[critique] could not build the contact sheet: ${err instanceof Error ? err.message : err}`);
-    return null;
+    return { status: 'skipped', reason: 'sheet-failed' };
   }
 
   const model = opts?.model ?? (await modelFor('recipe'));
@@ -181,7 +213,7 @@ export async function critiqueDeck(
       TOOL,
       { feature: 'deck-critique' },
     );
-    if (!json) return null;
+    if (!json) return { status: 'skipped', reason: 'unusable-reply' };
 
     const rawFindings = Array.isArray((json as { findings?: unknown }).findings)
       ? ((json as { findings: unknown[] }).findings as Array<Record<string, unknown>>)
@@ -202,9 +234,10 @@ export async function critiqueDeck(
     const verdict = typeof (json as { verdict?: unknown }).verdict === 'string'
       ? String((json as { verdict: string }).verdict).slice(0, 400)
       : '';
-    return { findings, verdict };
+    return { status: 'ok', critique: { findings, verdict } };
   } catch (err) {
-    console.warn(`[critique] review failed: ${err instanceof Error ? err.message : err}`);
-    return null;
+    const detail = err instanceof Error ? err.message : String(err);
+    console.warn(`[critique] review failed: ${detail}`);
+    return { status: 'skipped', reason: 'model-failed', detail: detail.slice(0, 200) };
   }
 }
