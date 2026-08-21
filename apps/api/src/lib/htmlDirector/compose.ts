@@ -44,6 +44,7 @@ import {
 } from '@contentbuilder/shared';
 import { aiJson, aiMessage, cachedSystem, modelFor, textOf, type AiJsonResult, type AiJsonTool } from '../ai';
 import { critiqueDeck, type DeckCritique } from './deckCritique';
+import { improveByLooking, slidesWorthDesigning } from './designPass';
 import { config } from '../../config';
 import { sanitizeAuthoredHtml } from '../htmlSanitize';
 import { lintAuthored } from './lintAuthored';
@@ -2369,6 +2370,20 @@ export async function composeProject(
        * spend a vision call — the eval, the tests — simply does not pass it.
        */
       repairByLooking: (args) => repairByLooking(recipe, args),
+      /**
+       * THE DESIGN PASS. The cover earns the swipe and the list is the slide
+       * people save; the rest are carried perfectly well by the brand's own
+       * fragments, for free. Budget-gated per slide, and every improvement is
+       * re-measured before it is kept.
+       */
+      designSlides: slidesWorthDesigning(out.map((s) => s.role)),
+      improveByLooking: (args) =>
+        improveByLooking(recipe, {
+          html: args.html,
+          image: args.image,
+          role: args.role,
+          label: `design-pass:${args.role ?? 'slide'}`,
+        }),
       /**
        * SOMEBODY LOOKS AT THE FINISHED DECK. Every check above judges one slide
        * against something measurable; this is the pass that can see a deck of

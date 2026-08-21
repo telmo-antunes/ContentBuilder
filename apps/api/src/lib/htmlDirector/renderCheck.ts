@@ -1015,6 +1015,19 @@ export interface DeckCheckOptions extends CheckOptions {
    * photograph. Optional: without it nothing is captured and nothing is spent.
    */
   onShots?: (shots: Array<string | null>) => Promise<void>;
+  /**
+   * THE DESIGN PASS: slides that get a look-and-improve even though nothing is
+   * wrong with them. Deck indices, most valuable first. The improvement is
+   * re-measured here and kept only if the slide still fits and still does not
+   * collide — the worst case of a design pass is the slide you already had.
+   */
+  designSlides?: readonly number[];
+  improveByLooking?: (args: {
+    html: string;
+    image: string;
+    role?: string;
+    index: number;
+  }) => Promise<{ html: string; change: string } | null>;
   /** Supplied by compose so step 3 reuses its model + options. */
   recompose?: (input: ComposeSlideInput, note: string) => Promise<string>;
   /**
@@ -1110,6 +1123,42 @@ export async function renderCheckDeck(
    * on a deck that is plainly not good enough, and a clean measurement is
    * exactly when nobody else is looking.
    */
+  /**
+   * Spend the design budget on the slides the deck rides on. Runs before the
+   * critique so the review is of what actually ships, and re-measures every
+   * improvement: a prettier slide that overflows is not an improvement.
+   */
+  const designPass = async (working: CheckSlide[]): Promise<string[]> => {
+    const improve = opts?.improveByLooking;
+    const shoot = probe.shoot;
+    if (!improve || !shoot || !opts?.designSlides?.length) return [];
+    const notes: string[] = [];
+    for (const i of opts.designSlides) {
+      const slide = working[i];
+      if (!slide) continue;
+      try {
+        const image = await shoot(i, slide.html);
+        if (!image) continue;
+        const better = await improve({ html: slide.html, image, role: slide.role, index: i });
+        if (!better) continue;
+        const verdict = (await probe.measure([{ index: i, html: better.html }]))[0] ?? UNKNOWN_VERDICT;
+        // 'unknown' is not agreement — an unmeasurable improvement is refused
+        // for the same reason an overflowing one is.
+        if (verdict.state !== 'fits' || verdict.collide) {
+          notes.push(`slide ${i + 1}: design pass rejected (${verdict.collide ? 'collides' : verdict.state})`);
+          continue;
+        }
+        working[i] = { ...slide, html: better.html };
+        notes.push(`slide ${i + 1}: design pass — ${better.change}`);
+      } catch (err) {
+        console.warn(
+          `[design-pass] slide ${i + 1} skipped: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+    return notes;
+  };
+
   const lookAtDeck = async (finalSlides: readonly CheckSlide[]): Promise<void> => {
     const shoot = probe.shoot;
     if (!opts?.onShots || !shoot) return;
@@ -1148,7 +1197,12 @@ export async function renderCheckDeck(
     );
 
     if (!overflowing.length && !faulty.length) {
+      const designNotes = await designPass(out);
       await lookAtDeck(out);
+      if (designNotes.length) {
+        const ms = Date.now() - t0;
+        return { ...nothing, measured, unmeasured, notes: designNotes, ms };
+      }
       const ms = Date.now() - t0;
       console.warn(
         `[render-check] ${measured}/${slides.length} slide(s) measured in ${ms}ms — nothing to repair`,
@@ -1242,6 +1296,7 @@ export async function renderCheckDeck(
       notes.push(`slide ${slideIndex + 1}: ${how || 'nothing to try'}${r.stillOverflows ? ' (STILL OVERFLOWS)' : ''}`);
     });
 
+    notes.push(...(await designPass(out)));
     await lookAtDeck(out);
 
     const ms = Date.now() - t0;
