@@ -7,6 +7,8 @@ import {
   assignArchetypes,
   isArchetype,
   slideArchetypeCss,
+  slideAlignCss,
+  SLIDE_ALIGNS,
   planInversion,
   type ArchetypeKey,
 } from './archetypes';
@@ -147,5 +149,46 @@ describe('planInversion', () => {
   it('is deterministic', () => {
     const keys = deck('showcase', 'statement', 'banner', 'list', 'pull', 'statement', 'cta');
     expect(planInversion(keys, true)).toBe(planInversion(keys, true));
+  });
+});
+
+// ── Alignment ────────────────────────────────────────────────────────────────
+
+describe('slideAlignCss', () => {
+  const css = slideAlignCss();
+
+  it('keys every rule off data-align, so slides without one are untouched', () => {
+    for (const line of css.split('\n')) {
+      expect(line).toContain('[data-align=');
+    }
+  });
+
+  it('covers all three alignments for frame and slot alike', () => {
+    for (const a of SLIDE_ALIGNS) {
+      expect(css).toContain(`[data-align="${a}"]{text-align`);
+      expect(css).toContain(`[data-align="${a}"] .cb-shot`);
+    }
+  });
+});
+
+describe('slideAlignFor (via recipe)', () => {
+  it('slide choice beats the recipe role override beats nothing', async () => {
+    const { slideAlignFor, brandRecipeSchema } = await import('./recipe');
+    // Validate the composition sub-schema (roles is new), then resolve
+    // against a recipe stub — slideAlignFor reads nothing else.
+    const composition = brandRecipeSchema.shape.composition.parse({
+      align: 'flush-left',
+      roles: { cta: 'center' },
+    });
+    const recipe = { composition } as Parameters<typeof slideAlignFor>[0];
+    // The slide's own deviation wins over the role override.
+    expect(slideAlignFor(recipe, 'cta', 'flush-right')).toBe('flush-right');
+    // No slide choice: the recipe's per-role override stands.
+    expect(slideAlignFor(recipe, 'cta')).toBe('center');
+    // No override anywhere: undefined keeps data-align off the DOM entirely —
+    // the brand's own global alignment (its stylesheet) is the one at work.
+    expect(slideAlignFor(recipe, 'list')).toBeUndefined();
+    // Junk from a stored document never reaches the DOM attribute.
+    expect(slideAlignFor(recipe, 'cta', 'sideways')).toBe('center');
   });
 });

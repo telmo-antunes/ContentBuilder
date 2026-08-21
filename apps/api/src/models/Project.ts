@@ -99,6 +99,12 @@ const slideSchema = new Schema(
            * slide comes in. Stored, it is simply known.
            */
           source: { type: String, enum: ['fragment', 'ai'], required: false },
+          /**
+           * This slide's alignment when it deviates from the brand default —
+           * the parse step's per-deck call (or a hand edit). Rendered as
+           * `data-align`; absent means the brand's global alignment stands.
+           */
+          align: { type: String, enum: ['flush-left', 'center', 'flush-right'], required: false },
         },
         { _id: false },
       ),

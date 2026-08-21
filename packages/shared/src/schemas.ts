@@ -134,6 +134,19 @@ export const slideSchema = z.object({
        * Absent means it predates versioning — behind everything.
        */
       pv: z.record(z.string(), z.number()).optional(),
+      /**
+       * WHICH PATH BUILT THIS SLIDE — 'fragment' or 'ai'. Stamped at compose;
+       * carried here so a client PATCH round-trips it instead of silently
+       * erasing the one record the markup itself cannot answer.
+       */
+      source: z.enum(['fragment', 'ai']).optional().catch(undefined),
+      /**
+       * This slide's OWN alignment, when it deviates from the brand's global
+       * one — chosen by the parse step (which sees the whole deck) or by hand.
+       * Rendered as `data-align` on the slide root; the app's alignment layer
+       * implements it (see shared/archetypes.ts). Absent = brand default.
+       */
+      align: z.enum(['flush-left', 'center', 'flush-right']).optional().catch(undefined),
     })
     .optional(),
 });
