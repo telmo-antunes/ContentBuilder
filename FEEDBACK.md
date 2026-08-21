@@ -51,6 +51,26 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
+### Every `shoot` hung: element screenshots never return on a backgrounded page
+
+- **Kind:** Defect
+- **Severity:** blocked shipping (it disabled both new look-passes entirely)
+- **First seen:** 2026-08-22 — every deck composed after the design pass and critique shipped: `could not photograph slide N: shoot exceeded 90000ms`, on every slide, on a fresh server with nothing else running.
+- **What happened:** `measure` and `shoot` take pages from the SAME pool. Every measure succeeded; every shoot hung. Timing the stages by hand on a freshly-opened page gave goto 330ms, screenshot 675ms, sharp 235ms — nothing wrong with the path, the recipe, the fonts or the browser. The difference is that a fresh page is frontmost: a screenshot goes through the compositor, which produces no frames for a backgrounded tab, so `elementHandle.screenshot()` on a pooled page can simply never return. `measure` never noticed because reading a DOM attribute does not need frames.
+- **Why it matters:** it silently switched off the two passes that were just built to raise quality — and cost 90s per attempt, ~13 minutes per deck, while looking like a slow render rather than a broken one.
+- **Resolved:** 2026-08-22 — `page.bringToFront()` before the capture.
+- **Worth remembering:** the misleading part was that this looked like three different bugs in turn (concurrency, a killed browser, a bad recipe). What settled it was timing the stages in isolation instead of reasoning about them.
+
+### Two composes at once starve each other's screenshots, silently
+
+- **Kind:** Defect
+- **Severity:** cost me a fix
+- **First seen:** 2026-08-22 — re-running the prepaid-packages deck while an earlier compose was still in flight.
+- **What happened:** every `shoot` hit its 90s ceiling — `could not photograph slide 1 … slide 4` — so the design pass and the deck critique were skipped and the deck shipped with neither. Timing each stage in isolation on the same recipe, seconds later, gave goto 330ms, screenshot 675ms, sharp 235ms: nothing wrong with the path, the recipe or the browser. The two composes were sharing one browser page pool, and `measure` (short, retried, one DOM read) starves `shoot` (long, one page held across goto + fonts + screenshot + resize).
+- **Why it matters:** it is silent and it costs exactly the passes that were bought to raise quality. Nothing in the response, the compose notes or the spend ledger says "your deck skipped its design pass because another deck was rendering" — the ledger even reads `skipped: []`, because the budget was not the reason.
+- **Direction:** decide what concurrent composes should do rather than letting them collide. Cheapest honest fix: serialise the LOOK passes per process (a small queue around shoot), so a second deck waits instead of failing. Then record a skipped pass in `composeNotes` with its reason, so "no critique" is never indistinguishable from "critique found nothing" — which is the actual reporting bug underneath.
+
+
 ### A cta headline shipped unfinished — third occurrence, and the re-parse had already fired
 
 - **Kind:** Defect

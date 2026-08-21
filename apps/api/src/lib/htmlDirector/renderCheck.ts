@@ -599,6 +599,17 @@ async function captureSlide(page: Page, url: string): Promise<string | null> {
   await new Promise((r) => setTimeout(r, SETTLE_MS));
   const el = await page.$('[data-slide-root]');
   if (!el) return null;
+  /**
+   * BRING THE PAGE TO FRONT BEFORE PHOTOGRAPHING IT.
+   *
+   * `measure` reads a DOM attribute and does not care whether its page is the
+   * active tab; a screenshot goes through the compositor, which does not
+   * produce frames for a backgrounded page — so an element screenshot on a
+   * pooled page can simply never return. Every `shoot` in a real deck hit its
+   * 90s ceiling this way while every `measure` on the SAME pool succeeded, and
+   * a capture on a freshly-opened (and therefore frontmost) page took 675ms.
+   */
+  await page.bringToFront();
   const png = Buffer.from(await el.screenshot({ type: 'png' }));
   const { default: sharp } = await import('sharp');
   const small = await sharp(png).resize(640, 640, { fit: 'inside' }).png().toBuffer();
