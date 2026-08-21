@@ -132,6 +132,7 @@ export function normalizeSlides(slides: SlideInput[]) {
     order: i,
     imageNeed: s.imageNeed ?? 'none',
     imageQuery: s.imageQuery,
+    rationale: s.rationale,
     photos: normalizePhotos(s),
     overrides: s.overrides,
     // Preserve AI-authored markup (recipe-driven slides) through every
@@ -728,6 +729,12 @@ projectsRouter.post(
      */
     const groundLuminance = hexLuminance(String(parsedRecipe.data.tokens?.ground ?? '')) ?? 0;
 
+    // The decision ledger: consequential calls the code takes on the deck's
+    // behalf, stored on the project and shown on the review page. A decision
+    // that only ever reached console.warn was invisible to the one person who
+    // could overrule it.
+    const composeNotes: Array<{ slide?: number; note: string }> = [];
+
     const anchors = await Promise.all(
       filled.photos.map(async (ps, i) => {
         const bgPhoto = ps.find((ph) => ph.placement === 'background');
@@ -742,6 +749,10 @@ projectsRouter.post(
             console.warn(
               `[compose] slide ${i + 1}: dropped a full-bleed photo whose tone fights the brand ground`,
             );
+            composeNotes.push({
+              slide: i + 1,
+              note: 'This composition wanted a full-bleed photograph, but the picture’s tone fights the brand ground — it was dropped rather than scrimmed harder. Attach a darker/quieter photo as the background to get the full-bleed look.',
+            });
             return undefined;
           }
           return await bleedAnchorFor(buffer);
@@ -759,8 +770,11 @@ projectsRouter.post(
       // The copywriter's own words for the picture this slide wants — what the
       // Studio's stock picker opens on, instead of an empty search box.
       ...(composed[i]!.imageQuery ? { imageQuery: composed[i]!.imageQuery } : {}),
+      // The model's one-line reasoning for this slide's calls — review insight.
+      ...(composed[i]!.rationale ? { rationale: composed[i]!.rationale } : {}),
     }));
     project.set('slides', slides);
+    project.set('composeNotes', composeNotes);
     project.set('status', 'draft');
     // Keep the prompt AND the plan: it's what an Ideas card holds, it lets you
     // see what a finished post was actually asked to be, and re-composing later

@@ -51,14 +51,15 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
-### A photo can be attached past the slot the markup is waiting for
+### The review check was slot-chauvinist — and it talked an agent into un-designing a full-bleed cover
 
 - **Kind:** Defect
-- **Severity:** cost me a fix
+- **Severity:** cost me a fix (twice — once in each direction)
 - **First seen:** 2026-08-21 — smoke-odour-removal rebuild (project 6a8574e6bfee5cbcc1fe0a34)
-- **What happened:** Slide 1's authored markup carried `<figure class="cb-shot" data-cb-slot="hero"></figure>`, but its photo was stored with `placement: "background"`. The render put the photo in a broken top band with a hard seam into dark, the review page flagged "Slide 1 needs a photo" even though the slide *had* one, and the deck was handed over in that state on 2026-08-20. Fixed by re-attaching the same asset as `{placement:'slot', slot:'hero'}`.
-- **Why it matters:** the review check reports the symptom ("needs a photo") rather than the cause (photo exists, wrong layer), so the person fixing it is sent to upload a photo that is already there. And nothing at attach time notices that a declared slot is empty while a photo floats on another layer.
-- **Direction:** when a slide's authored html declares an unfilled `data-cb-slot` and a photo is attached with `placement` background/free, either default it into the slot or say so at attach time. The review message should distinguish "no photo" from "photo on the wrong layer".
+- **What happened, corrected:** the first version of this entry had the diagnosis INVERTED. Slide 1's `placement: "background"` photo was not a wiring mistake — it was the `showcase` archetype working as designed (`placement: 'bleed'`: "a picture that carries the frame cannot do so from inside a card"). The defects were downstream: the composer's slot rules forced a `cb-shot` into bleed markup (prompt always demanded a hole; two guards appended `DEFAULT_SLOT`), and the review check counted only slot-placed photos — so a correctly-placed bleed photo read as "Slide 1 needs a photo". Chasing that chip, the deck was "fixed" from full-bleed into an inset card and went green by betraying the design intent.
+- **Why it matters:** three layers each acted correctly by their own lights and produced the wrong outcome together; the only visible signal (the chip) pointed at the wrong layer. Telmo spotted the result from the outside ("why does the AI never use background images?") — the system never could have, because the decision trail was invisible.
+- **Resolved:** 2026-08-21 — slot rules invert on bleed archetypes (no hole demanded, stray slots stripped, fragment no-slot refusal waived); the review check accepts a background photo as the slide's picture and gained a dedicated "needs its background photo" chip for bleed slides; prompts compose v3. The deck's cover was restored to full-bleed.
+- **Direction (remaining):** old decks that were slot-ified chasing the chip (like this one was, before restoration) won't self-heal — the check is now honest, but a re-compose is what re-decides placement.
 
 ### PATCH validation errors name neither the slide nor the field
 
@@ -100,6 +101,24 @@ Rules that keep this file worth reading:
 - **Direction:** warn on the review page when a cta slide or caption contains a DM keyword and `settings.dmKeyword` is unset; compose could refuse the mismatch the way it refuses an imageless deck.
 
 Add the next one here, following the shape in [How to add an entry](#how-to-add-an-entry).
+
+### Every deck is the same seven skeletons — coherence machinery has no variety counterweight
+
+- **Kind:** Gap
+- **Severity:** cost me a fix (Telmo: "designs and layouts are very simplistic, the lists are super bland, nothing unique from post to post")
+- **First seen:** 2026-08-21 — raised by Telmo against the smoke-odour deck and the account generally
+- **What happened:** three compounding causes, all structural. (1) Fragments compose by substitution — deliberately, for coherence and cost — so every deck of the same brand reuses the SAME per-role skeleton; 6-of-7-from-fragments means 6 slides that are layout-identical to the last post's. (2) The machinery for variety exists but is starved: `recipePatternVariant` rotates arrangements per role, but detailmasters' recipe authors ONE pattern and ONE fragment per role, so the rotation has nothing to rotate. (3) The list vocabulary is one panel of marker rows — no numbered/big-index/split treatments — so every list slide is the same quiet grid.
+- **Why it matters:** an account's followers see consecutive posts; the recipe guarantees they look like re-skins of each other. Coherence by construction became monotony by construction.
+- **Direction:** give the rotation something to rotate. (a) Author prompt: require 2–3 arrangements AND fragment variants per role (schema: `fragments[role]` → string | string[]), rotation seeded per project so consecutive decks differ mechanically. (b) A richer list vocabulary in the recipe contract (numbered rows, big-index, two-beat rows), taught by exemplars not prose. (c) The archetype set (6) and the one-inversion beat are good bones — the variety should come from the brand's own vocabulary, not from breaking coherence. Requires re-authoring stored recipes to benefit existing brands — a brand decision.
+
+### Decisions the system takes are invisible — first slice of a fix shipped
+
+- **Kind:** Gap
+- **Severity:** cost me a fix (the slot-chauvinism entry above is what invisibility costs)
+- **First seen:** 2026-08-21 — raised by Telmo: "can we get insights behind the LLM's reasoning on its decisions?"
+- **What happened:** consequential calls lived where nobody looks. The model's judgment (why a slide got no photo, why that role) was never captured at all; the code's judgment (a full-bleed photo dropped because its tone fights the brand ground) went to `console.warn` on a server nobody watches.
+- **Shipped this run:** (1) per-slide `rationale` — the parse step writes one line on its calls (role, image, align), stored on the slide, shown in the review sheet ("AI: …"); parse v3. (2) `composeNotes` — a decision ledger on the project for calls the code takes (first entry: the bleed-photo drop), rendered as info chips in the review checks strip.
+- **Direction (remaining):** more of the code's calls belong in the ledger — parse-slide drops, brand-mark normalisation, budget clamps, archetype assignments that demoted a slot. And the compose-path model (slide author) has judgment worth one line too. The pattern is established; each is a small addition.
 
 ## Resolved
 

@@ -53,6 +53,8 @@ const slideSchema = new Schema(
     photos: { type: [slidePhotoSchema], default: [] },
     /** The stock-search phrase the AI art director chose (prefills the editor's stock picker). */
     imageQuery: { type: String, required: false },
+    /** The parse step's one-line reasoning for this slide's calls — review-page insight. */
+    rationale: { type: String, required: false },
     overrides: {
       type: new Schema(
         {
@@ -215,6 +217,22 @@ const projectSchema = new Schema(
     /** Set automatically on export; `postedAt` is the manual "it went live" tick. */
     exportedAt: { type: Date, required: false },
     postedAt: { type: Date, required: false },
+    /**
+     * THE DECISION LEDGER for the last compose: consequential calls the CODE
+     * took on the deck's behalf (a full-bleed photo dropped for fighting the
+     * brand ground, and whatever joins it). These used to live in console.warn
+     * — a decision nobody can see is a decision nobody can improve, so the
+     * review page now shows them. Replaced wholesale on every compose.
+     */
+    composeNotes: {
+      type: [
+        new Schema(
+          { slide: { type: Number, required: false }, note: { type: String, required: true } },
+          { _id: false },
+        ),
+      ],
+      required: false,
+    },
     createdAt: { type: Date, default: () => new Date() },
     updatedAt: { type: Date, default: () => new Date() },
   },
