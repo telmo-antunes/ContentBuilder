@@ -18,6 +18,7 @@ import {
   fragmentVerbatimGaps,
   substituteFragment,
   validateRecipeFragments,
+  derivePatternsFromFragments,
   carryForwardFragments,
   fillRecipeFragmentGapsMeasured,
   WORST_CASE,
@@ -822,5 +823,40 @@ describe('the worked exemplar teaches by showing', () => {
       ).length;
       expect(patterns).toBe(variants);
     }
+  });
+});
+
+describe('derivePatternsFromFragments', () => {
+  const withFrags = (fragments: Record<string, string | string[]>, patterns: string[] = []) =>
+    brandRecipeSchema.parse({
+      ...detailMastersWithFragments,
+      fragments,
+      composition: { align: 'flush-left', patterns },
+    });
+
+  it('writes one pattern per variant, so the rotation has something to choose between', () => {
+    // The first run that produced variant ARRAYS returned zero patterns, which
+    // silently disables art direction — it chooses between arrangements.
+    const out = derivePatternsFromFragments(
+      withFrags({ statement: [STATEMENT, '<div class="headline">{{headline}}</div>'] }),
+    );
+    expect(out.added).toHaveLength(2);
+    expect(out.recipe.composition.patterns.every((p) => p.startsWith('statement:'))).toBe(true);
+  });
+
+  it('reads the element order out of the markup, so the two cannot disagree', () => {
+    const out = derivePatternsFromFragments(withFrags({ statement: STATEMENT }));
+    expect(out.added[0]).toBe('statement: eyebrow → headline → rule → body');
+  });
+
+  it('leaves a role the author described in its own words alone', () => {
+    const mine = 'statement: the brand’s own sentence';
+    const out = derivePatternsFromFragments(withFrags({ statement: STATEMENT }, [mine]));
+    expect(out.added).toEqual([]);
+    expect(out.recipe.composition.patterns).toEqual([mine]);
+  });
+
+  it('adds nothing when there are no fragments', () => {
+    expect(derivePatternsFromFragments(detailMastersRecipe).added).toEqual([]);
   });
 });

@@ -49,6 +49,8 @@ import {
   archetypeFor,
   authoredSlots,
   fragmentVariantFor,
+  fragmentVariantsFor,
+  SLOT_CLASS,
   recipeEmphasisWrap,
   recipePatternVariant,
   type BrandRecipe,
@@ -694,6 +696,63 @@ export function ensurePhotoHole(
  * Fill the gaps in every fragment a recipe has. Deterministic and idempotent —
  * a second run adds nothing — so it is safe to apply on read.
  */
+/**
+ * DERIVE THE MISSING PATTERNS FROM THE FRAGMENTS.
+ *
+ * A pattern line is a prose summary of a fragment's element order — the same
+ * information, written for a reader. The author is asked for both and, given a
+ * finite output budget, spends it on the markup: the run that first produced
+ * variant ARRAYS returned zero patterns, which silently disables the
+ * art-direction pass (it has nothing to choose between) and leaves the
+ * composer with no arrangement to follow.
+ *
+ * Deriving them is deterministic, free, and cannot disagree with the markup —
+ * it is READ from the markup. Only ever ADDS: a role the author described
+ * itself keeps its own words, which are better than anything generated here.
+ */
+export function derivePatternsFromFragments(recipe: BrandRecipe): {
+  recipe: BrandRecipe;
+  added: string[];
+} {
+  const fragments = recipe.fragments;
+  if (!fragments || !Object.keys(fragments).length) return { recipe, added: [] };
+
+  const existing = recipe.composition?.patterns ?? [];
+  const described = new Set(
+    existing
+      .map((p) => p.trim().toLowerCase().split(':')[0]?.trim())
+      .filter((r): r is string => Boolean(r)),
+  );
+
+  const added: string[] = [];
+  for (const role of SLIDE_ROLES) {
+    if (described.has(role)) continue;
+    const variants = fragmentVariantsFor(recipe, role);
+    if (!variants.length) continue;
+    for (const variant of variants) {
+      // The element order as the composer would read it: class names in the
+      // order they appear, with the photo slot named for what it is.
+      const steps: string[] = [];
+      for (const m of variant.matchAll(/class="([^"]+)"/g)) {
+        const cls = (m[1] ?? '').trim().split(/\s+/);
+        const head = cls[0];
+        if (!head || head === 'row') continue;
+        steps.push(head === SLOT_CLASS ? 'cb-shot' : cls.join('.'));
+      }
+      if (!steps.length) continue;
+      added.push(`${role}: ${steps.join(' → ')}`);
+    }
+  }
+  if (!added.length) return { recipe, added: [] };
+  return {
+    recipe: {
+      ...recipe,
+      composition: { ...recipe.composition, patterns: [...existing, ...added] },
+    },
+    added,
+  };
+}
+
 export function fillRecipeFragmentGaps(recipe: BrandRecipe): {
   recipe: BrandRecipe;
   repairs: FragmentRepair[];
