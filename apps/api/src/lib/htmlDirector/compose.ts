@@ -109,7 +109,18 @@ const partsSchema = z.object({
    * enumeration arrived as a run-on paragraph instead.
    */
   rows: z
-    .array(z.object({ text: z.string(), note: z.string().optional() }))
+    .array(
+      z.object({
+        text: z.string(),
+        note: z.string().optional(),
+        /**
+         * The row's VERDICT, when the material contrasts a right and a wrong
+         * way — 'do' rows get the accent tick, 'dont' rows go quiet with a
+         * cross. Only when the source frames it that way; most rows have none.
+         */
+        state: z.enum(['do', 'dont']).optional().catch(undefined),
+      }),
+    )
     .max(6)
     .optional(),
 });
@@ -971,6 +982,7 @@ RULES
 - USE "list" WHEN THE CONTENT ENUMERATES. If a slide is "four things", "three ways", "what you get" — anything that is a set of parallel items — give it role "list" and put the items in "rows" (2–5 of them), NOT in "body". Never write a paragraph that is secretly a list: "Cash in the bank. Repeat visits secured. Slow weeks funded." is three rows, not one body. If your headline announces a number, the slide almost certainly wants rows.
 - A "list" slide MUST carry rows. A list with no rows is an empty card — if you cannot fill it, the slide is not a list.
 - rows entries are {"text": "the item", "note": "optional half-line of detail"}. Keep text under 42 characters — these are scanned, not read.
+- WHEN THE MATERIAL IS A VERDICT, SAY SO STRUCTURALLY: if the source contrasts a way that works with a way that fails ("masking buys days, extraction wins the job"), give each row a "state" — "do" or "dont" — instead of burying the contrast in prose. The design renders the verdict (tick against cross, the winning row emphasised) so it lands at feed speed. Use it only when the contrast is the source's own; a plain enumeration takes no states.
 - parts keys (include only what a slide needs): eyebrow (2–4 word kicker), headline (the line — punchy), emphasis (the sub-phrase inside headline to accent), tagline (a short payoff line), body (1 short sentence — 2 on a statement or feature slide that is doing the explaining), rows (a list — see above), quote, attribution, stat (e.g. "40%"), cta (button text), handle.
 - ONE IDEA PER SLIDE, and one supporting element at most: a body sentence, OR rows, OR a stat. Never a paragraph and a list on the same poster, and never a big number beside the list that already makes its point.
 - "handle" is the brand's @name or web address and nothing else. It is set in the smallest, faintest type on the poster, so a sentence put there ships as an afterthought nobody can read. If you have something to say, it is a body, a tagline or a row.
@@ -1054,6 +1066,12 @@ const PARSE_TOOL: AiJsonTool = {
                     properties: {
                       text: { type: 'string', description: 'The item — scanned, not read.' },
                       note: { type: 'string', description: 'Optional half-line of detail.' },
+                      state: {
+                        type: 'string',
+                        enum: ['do', 'dont'],
+                        description:
+                          "Only when the material contrasts a right and a wrong way: 'do' for the way that works, 'dont' for the one that fails. The design renders the verdict (tick vs cross, quiet vs emphasised) so the reader gets it before reading. Omit on plain enumerations.",
+                      },
                     },
                     required: ['text'],
                   },

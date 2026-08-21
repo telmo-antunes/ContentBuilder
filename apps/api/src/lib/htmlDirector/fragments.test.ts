@@ -755,3 +755,21 @@ describe('fragment variants', () => {
     expect(out.recipe.fragments?.statement).toBe(STATEMENT); // one survivor → plain string
   });
 });
+
+describe('verdict rows', () => {
+  it('a row state travels as a class on the row element — tick/cross are the app CSS, never copy', () => {
+    const r = withFragments({ list: LIST });
+    const html = fill(r, input({
+      role: 'list',
+      parts: { headline: 'Two ways', rows: [
+        { text: 'Mask the cabin', state: 'dont' },
+        { text: 'Extract the foam', note: 'wins the job', state: 'do' },
+        { text: 'A plain row' },
+      ]},
+    }));
+    expect(html).toContain('class="row dont"');
+    expect(html).toContain('class="row do"');
+    expect(html).toContain('class="row"'); // the stateless row is untouched
+    expect(html).not.toMatch(/[✓✕]/); // glyphs belong to the gutter, not the markup
+  });
+});

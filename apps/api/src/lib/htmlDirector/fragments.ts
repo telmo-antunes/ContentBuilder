@@ -983,8 +983,13 @@ export async function fillRecipeFragmentGapsMeasured(
 // ── Substitution ────────────────────────────────────────────────────────────
 
 /** Fill one row unit: its text, and its note — or the note's element, dropped. */
-function fillRow(unit: string, row: { text: string; note?: string }): string {
+function fillRow(unit: string, row: { text: string; note?: string; state?: 'do' | 'dont' }): string {
   let out = unit;
+  // A verdict row carries its state as a class on the row element; the app's
+  // enumeration CSS draws the tick or cross and quiets the losing row.
+  if (row.state === 'do' || row.state === 'dont') {
+    out = out.replace(/class="([^"]*\brow\b[^"]*)"/, `class="$1 ${row.state}"`);
+  }
   const noteAt = out.indexOf(ROW_NOTE);
   if (noteAt !== -1) {
     out =

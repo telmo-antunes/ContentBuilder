@@ -35,8 +35,12 @@ export const PROMPT_VERSION = {
    * fragment VARIANT arrays (rotated per slide and per deck), and the list
    * vocabulary gains the app's numbered-rows contract. One skeleton per role
    * made every post a re-skin of the last.
+   * v6: THE JOB — posts are a business promoting its content to its audience,
+   * and should read like the business thinks (job sheets, verdicts,
+   * checklists); component vocabulary gains card / chip / badge / verdict
+   * rows / split-with-winner. Calibrated against Telmo's picked references.
    */
-  author: 5,
+  author: 6,
   /**
    * `CRITIQUE_SYSTEM` in lib/htmlDirector/authorRecipe.ts.
    * v2: also judges composition.align against the brand evidence, and that the
@@ -44,8 +48,10 @@ export const PROMPT_VERSION = {
    * v3: shared ENUMS now name composition.roles (per-role align overrides).
    * v4: judges variety — arrangements + fragment variants on the content
    * roles, and a list treatment beyond the quiet marker panel.
+   * v5: judges the job register — card / chip / badge / verdict-row / split
+   * devices present, so posts can read as the business's own artifacts.
    */
-  critique: 4,
+  critique: 5,
   /**
    * `PARSE_SYSTEM` in lib/htmlDirector/compose.ts (idea → slides + copy).
    * v2: the parse step may set per-slide "align" — it is the only model that
@@ -54,8 +60,10 @@ export const PROMPT_VERSION = {
    * v3: per-slide "why" — one line of the model's own reasoning for its calls
    * (role, image, align), stored on the slide and shown on the review page. A
    * decision nobody can see is a decision nobody can improve.
+   * v4: verdict rows — when the material contrasts a way that works with one
+   * that fails, rows carry state 'do'/'dont' instead of burying it in prose.
    */
-  parse: 3,
+  parse: 4,
   /**
    * `SLIDE_AUTHOR_INSTRUCTIONS` in lib/htmlDirector/prompt.ts (parts → markup).
    * v2: the spec names THIS slide's alignment (slide deviation → recipe role
@@ -64,8 +72,10 @@ export const PROMPT_VERSION = {
    * v3: full-bleed slides carry NO photo slot — the picture is the background
    * layer, and the slot rules (leave a hole / forced DEFAULT_SLOT) invert on
    * them. Ends the slot-chauvinism that fought the showcase archetype.
+   * v4: a row's verdict state travels as class "row do"/"row dont"; the app
+   * draws tick/cross and quiets the loser — the composer never writes glyphs.
    */
-  compose: 3,
+  compose: 4,
 } as const;
 
 /** The AI touchpoints that carry a versioned prompt. */

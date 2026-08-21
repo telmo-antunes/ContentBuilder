@@ -199,6 +199,17 @@ export function slideMediaCss(canvasHeight = 1350, align?: string): string {
     // The glyph is the brand's to choose (`--cb-marker`); only the gutter is ours.
     `.cb-slide .row.row::before{content:var(--cb-marker,"—");color:var(--cb-accent);grid-column:1;grid-row:1}`,
     /**
+     * VERDICT ROWS — a row whose class carries a state ('do' | 'dont', set by
+     * substitution or the composer from the parse step's row states). The app
+     * owns the mechanics — tick against cross in the marker gutter, the losing
+     * row quieted — and the brand restyles through the same var hooks as every
+     * other marker. This is what lets a deck render "the way that works vs the
+     * way that fails" as a verdict the reader gets before reading.
+     */
+    `.cb-slide .row.row.do::before{content:var(--cb-do-marker,"✓");color:var(--cb-do-color,var(--cb-accent))}`,
+    `.cb-slide .row.row.dont::before{content:var(--cb-dont-marker,"✕");color:var(--cb-dont-color,var(--cb-ink-muted))}`,
+    `.cb-slide .row.row.dont{opacity:var(--cb-dont-opacity,.6)}`,
+    /**
      * NUMBERED ROWS — the app-owned half of a richer list vocabulary.
      *
      * Brands cannot express numbering themselves: this sheet is emitted after
