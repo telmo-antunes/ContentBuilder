@@ -78,6 +78,8 @@ Rules that keep this file worth reading:
 - **Why it matters:** an entire axis of the design space is unreachable regardless of what a brand's homepage actually looks like.
 - **What was done this run:** author prompt v3 adds "ALIGNMENT IS A DECISION, NOT A DEFAULT" (evidence-based align choice, CSS must implement the declared align, centred display moments vs left-aligned running text); critique v2 judges point (8) on it. Hashes regenerated, 47 tests green.
 - **Direction (remaining):** (a) per-role align — `composition.roles` mirroring `motion.roles` — so a flush-left brand can still centre its quote/stat/cta; needs schema + fragments + compose threading. (b) One genuinely centred exemplar would teach this better than prose, same as Halftone did for light grounds. (c) Existing recipes (detailmasters included) keep their stored flush-left until re-authored — a brand decision, not an agent's.
+- **Seen again:**
+  - 2026-08-21 — direction (a) implemented, and extended per Telmo's steer that the recipe must not cage the composing model: `composition.roles` (recipe's per-role override) AND per-slide `authored.align` (the parse step — the only model that sees the whole deck — may deviate a slide whose content earns it). Applied by an app-owned `data-align` layer after the brand sheet, exactly like the archetype slack layer, so every stored brand gains the capability with no re-authoring. Prompts: author v4, critique v3, parse v2, compose v2. Directions (b) and (c) remain open.
 
 ### "Looks empty" reads the archetype, not the pixels
 
@@ -100,6 +102,15 @@ Rules that keep this file worth reading:
 Add the next one here, following the shape in [How to add an entry](#how-to-add-an-entry).
 
 ## Resolved
+
+### The slides PATCH silently erased `authored.source` on every hand-edited slide
+
+- **Kind:** Defect
+- **Severity:** cost me a fix
+- **First seen:** 2026-08-21 — smoke-odour-removal rebuild (every slide read `source: None` before any edit this session)
+- **What happened:** the PATCH normaliser in `routes/projects.ts` re-builds `authored` from an explicit pick-list (html/bg/role/archetype/pv) and the zod wire schema had no `source` field — so any client PATCH round-trip dropped the one stored record of which path (fragment vs ai) composed a slide, the field the fragments work added *because the markup cannot answer it*.
+- **Why it matters:** the fragment/ai split (the `ai:share` numbers, the 6-of-7-from-fragments result) silently degrades to "unknown" on any deck a human or agent touches.
+- **Resolved:** 2026-08-21 — `source` added to the wire schema and the pick-list (alongside the new `align`), so provenance survives edits. Historical decks that already lost it stay lost; re-compose is the only way back.
 
 ### The three "over capacity" fragments are a 1-in-93 case, and fixing them would cost the brand
 

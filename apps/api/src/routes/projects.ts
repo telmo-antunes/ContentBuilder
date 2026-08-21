@@ -146,6 +146,11 @@ export function normalizeSlides(slides: SlideInput[]) {
           ...(s.authored.role ? { role: s.authored.role } : {}),
           ...(s.authored.archetype ? { archetype: s.authored.archetype } : {}),
           ...(s.authored.pv ? { pv: s.authored.pv } : {}),
+          // Provenance and alignment survive a hand edit: this pick-list used
+          // to omit `source`, so any PATCH silently erased which path composed
+          // a slide — the field exists precisely because markup can't answer.
+          ...(s.authored.source ? { source: s.authored.source } : {}),
+          ...(s.authored.align ? { align: s.authored.align } : {}),
         }
       : undefined,
   }));
@@ -344,7 +349,9 @@ projectsRouter.get(
         stage: deriveStage(p as never),
         idea: p.idea ?? '',
         slideCount: slides.length,
-        authored: first?.authored ? { html: first.authored.html, bg: first.authored.bg, role: first.authored.role } : null,
+        authored: first?.authored
+          ? { html: first.authored.html, bg: first.authored.bg, role: first.authored.role, align: first.authored.align }
+          : null,
         exportedAt: p.exportedAt ?? null,
         postedAt: p.postedAt ?? null,
         updatedAt: p.updatedAt,
