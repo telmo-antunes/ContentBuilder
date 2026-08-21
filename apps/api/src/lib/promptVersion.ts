@@ -45,15 +45,21 @@ export const PROMPT_VERSION = {
    * v2: the parse step may set per-slide "align" — it is the only model that
    * sees the whole deck, so alignment deviations (a centred cta, a monumental
    * one-liner) are its call; the brand default stays a default, not a law.
+   * v3: per-slide "why" — one line of the model's own reasoning for its calls
+   * (role, image, align), stored on the slide and shown on the review page. A
+   * decision nobody can see is a decision nobody can improve.
    */
-  parse: 2,
+  parse: 3,
   /**
    * `SLIDE_AUTHOR_INSTRUCTIONS` in lib/htmlDirector/prompt.ts (parts → markup).
    * v2: the spec names THIS slide's alignment (slide deviation → recipe role
    * override → brand default) and the composer is told what a centred slide
    * changes about its judgment — never its markup.
+   * v3: full-bleed slides carry NO photo slot — the picture is the background
+   * layer, and the slot rules (leave a hole / forced DEFAULT_SLOT) invert on
+   * them. Ends the slot-chauvinism that fought the showcase archetype.
    */
-  compose: 2,
+  compose: 3,
 } as const;
 
 /** The AI touchpoints that carry a versioned prompt. */

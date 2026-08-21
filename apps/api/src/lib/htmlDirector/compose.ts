@@ -34,6 +34,7 @@ import {
   type Lesson,
   type RecipeEmphasisWrap,
   assignArchetypes,
+  archetypeFor,
   planInversion,
   BASE_BUDGETS,
   EXPLAIN_ROLES,
@@ -70,6 +71,19 @@ const SLIDE_ROLES = ['cover', 'statement', 'quote', 'feature', 'stat', 'list', '
 
 /** Fallback slot appended when a photo slide came back without one. */
 const DEFAULT_SLOT = `<figure class="${SLOT_CLASS}" ${SLOT_ATTR}="photo"></figure>`;
+
+/**
+ * Is this slide's photograph FULL-BLEED — the background layer, not a slot?
+ * Decided by the archetype (the deck-level composition call), and it flips the
+ * slot logic: a bleed slide's correct markup has NO figure, because a slot
+ * would punch an inset card through the picture behind it.
+ */
+const photoIsBleed = (input: ComposeSlideInput): boolean =>
+  archetypeFor(input.archetype)?.placement === 'bleed';
+
+/** Remove photo slots from a bleed slide's markup — empty by convention, so nothing is lost. */
+const stripSlots = (html: string): string =>
+  html.replace(/<figure[^>]*class="[^"]*\bcb-shot\b[^"]*"[^>]*>\s*<\/figure>\s*/g, '');
 
 /** How many slide composes run at once. A 9-slide deck used to be 9 serial
  *  calls; a small pool keeps latency near the slowest slide without hammering
@@ -120,6 +134,13 @@ const parseResultSchema = z.object({
          * flush-left brand). Absent = brand default; invalid values drop.
          */
         align: z.enum(['flush-left', 'center', 'flush-right']).optional().catch(undefined),
+        /**
+         * ONE LINE of the model's own reasoning for this slide's calls — why
+         * this role, why image true/false, why any align deviation. Stored on
+         * the slide and shown on the review page, because a decision nobody can
+         * see is a decision nobody can improve.
+         */
+        why: z.string().max(200).optional().catch(undefined),
       }),
     )
     .min(1)
@@ -954,7 +975,8 @@ RULES
 - "image": set true when this slide would be genuinely STRONGER with a photograph — it shows a place, a product, a person, a result, a before/after. Set false when the slide is a pure typographic statement, a pulled quote, or a big number, where a photo would only decorate. Judge each slide on its own; a deck may have several, one, or none.
 - With "image": true, also give "imageQuery" — 2–5 words naming the picture as you would search a stock library for it ("ceramic coating applied to car bonnet", not "a nice photo"). It is what the user's photo picker opens on.
 - A slide marked "image": true gets an eyebrow and a headline ONLY. Omit "body" AND "rows" entirely on those slides — a photograph takes nearly half the canvas, and neither a paragraph nor a list can share what is left. If the content is a list, it is not a photo slide: keep the rows and set "image": false.
-- "align": the brand has a default alignment and it usually stands — but it is a default, not a law. You see the whole deck, so when ONE slide's content earns a different alignment, say so: a cta or a monumental one-line statement often lands harder centred; a quote can centre; a list and any running body copy always read flush. Set "align" ("flush-left" | "center" | "flush-right") only on the slides that deviate, and let the rest inherit. Used well this is a beat in the deck's rhythm, not a theme — deviating on most slides means the brand default is wrong, not the slides.`;
+- "align": the brand has a default alignment and it usually stands — but it is a default, not a law. You see the whole deck, so when ONE slide's content earns a different alignment, say so: a cta or a monumental one-line statement often lands harder centred; a quote can centre; a list and any running body copy always read flush. Set "align" ("flush-left" | "center" | "flush-right") only on the slides that deviate, and let the rest inherit. Used well this is a beat in the deck's rhythm, not a theme — deviating on most slides means the brand default is wrong, not the slides.
+- "why": one short line per slide, written for the brand owner who will read it on the review page: the calls you made — why this role, why image true or false (and what the picture would be doing), why any align deviation. Plain words, no hedging, no restating the copy. This is how your judgment becomes visible and improvable, so treat it as part of the work, not an afterthought.`;
 
 /**
  * THE PARSE STEP'S OUTPUT SHAPE, as a tool the model is FORCED to call — so the
@@ -996,6 +1018,11 @@ const PARSE_TOOL: AiJsonTool = {
               enum: ['flush-left', 'center', 'flush-right'],
               description:
                 "Only when this slide should break the brand's default alignment because its content earns it — e.g. a centred cta or a monumental one-line statement. Omit to keep the brand default. Never centre a list or running body copy.",
+            },
+            why: {
+              type: 'string',
+              description:
+                'One short line, written for the brand owner reading the review page: the calls you made on this slide — why this role, why image true/false (and what the picture is doing), why any align deviation. Plain words, no hedging.',
             },
             parts: {
               type: 'object',
@@ -1483,6 +1510,8 @@ export async function parseForCompose(
     ...(s.imageQuery ? { imageQuery: s.imageQuery } : {}),
     // The parse step's per-slide alignment call — it saw the whole deck.
     ...(s.align ? { align: s.align } : {}),
+    // The model's one-line reasoning — stored, never re-fed to the composer.
+    ...(s.why ? { rationale: s.why } : {}),
     ...(opts?.variantBias?.[s.role] ? { variantBias: opts.variantBias[s.role] } : {}),
     index,
   }));
@@ -1925,7 +1954,10 @@ function composeByFragment(
   let html = ensureEmphasisWrap(cleaned, input.parts.emphasis, recipeEmphasisWrap(recipe));
   // The twin slot guard. `substituteFragment` already refuses a photo slide whose
   // fragment has no hole, so this can only fire if a prune took the slot with it.
-  if (input.photo && authoredSlots(html).length === 0) html += DEFAULT_SLOT;
+  // On a FULL-BLEED slide the logic inverts: the photo is the background layer,
+  // so the fragment's conditional slot is removed rather than required.
+  if (input.photo && photoIsBleed(input)) html = stripSlots(html);
+  else if (input.photo && authoredSlots(html).length === 0) html += DEFAULT_SLOT;
   return { html: balanced(html, input.role) };
 }
 
@@ -2037,10 +2069,12 @@ export async function composeSlide(
   // Mechanical placeholder guard, the twin of the verbatim guard above: if this
   // slide was meant to hold a photograph, it must LEAVE A HOLE for one. A model
   // that forgets the slot would silently produce a slide the user can't put an
-  // image on, so append one rather than trusting the prompt.
-  const linted = lint.html;
+  // image on, so append one rather than trusting the prompt. FULL-BLEED slides
+  // invert it: their photo is the background layer, so any slot the model
+  // emitted anyway is stripped instead of a missing one being added.
+  const linted = input.photo && photoIsBleed(input) ? stripSlots(lint.html) : lint.html;
   const withSlot = balanced(
-    input.photo && authoredSlots(lint.html).length === 0 ? linted + DEFAULT_SLOT : linted,
+    input.photo && !photoIsBleed(input) && authoredSlots(linted).length === 0 ? linted + DEFAULT_SLOT : linted,
     input.role,
   );
   // The role travels WITH the slide so the renderer can apply the recipe's
@@ -2069,6 +2103,8 @@ export async function composeProject(
     authored: { html: string; bg?: string; role?: string; archetype?: string; align?: string };
     /** The parse step's stock-search phrase for this slide's picture, if any. */
     imageQuery?: string;
+    /** The parse step's one-line reasoning for this slide's calls, if given. */
+    rationale?: string;
     /** Which path composed this slide — telemetry only; nothing stores it. */
     source: ComposePath;
   }>
@@ -2157,6 +2193,7 @@ export async function composeProject(
     role: SlideRole;
     authored: { html: string; bg?: string; role?: string; archetype?: string; align?: string; source?: ComposePath };
     imageQuery?: string;
+    rationale?: string;
     source: ComposePath;
   }> = [];
   const kept: ComposeSlideInput[] = [];
@@ -2172,6 +2209,7 @@ export async function composeProject(
         // what alignment it was composed for — the app layer needs the field.
         authored: { ...slide, source, ...(inputs[i]!.align ? { align: inputs[i]!.align } : {}) },
         ...(inputs[i]!.imageQuery ? { imageQuery: inputs[i]!.imageQuery } : {}),
+        ...(inputs[i]!.rationale ? { rationale: inputs[i]!.rationale } : {}),
         source,
       });
       kept.push(inputs[i]!);

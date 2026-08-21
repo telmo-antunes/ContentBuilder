@@ -64,6 +64,6 @@ export const PROMPT_TEXT: Partial<Record<TouchpointId, string>> = {
 export const EXPECTED_HASHES: Partial<Record<TouchpointId, string>> = {
   recipeAuthor: '9cb8cb19bdac',
   recipeCritique: '7e2320e8baad',
-  parse: '77a00d9bce66',
-  compose: '226a775327aa',
+  parse: '2d3226eb1bf6',
+  compose: '1186ebb24fcd',
 };

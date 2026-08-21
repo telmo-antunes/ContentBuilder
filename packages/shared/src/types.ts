@@ -198,13 +198,24 @@ export interface Slide {
   photos?: SlidePhoto[];
   /** Stock-search phrase chosen by the AI art director (drives the stock picker). */
   imageQuery?: string;
+  /** The parse step's one-line reasoning for this slide's calls — review insight. */
+  rationale?: string;
   overrides?: SlideOverrides;
   /**
    * AI-authored slide markup (semantic HTML using the brand recipe's classes).
    * This is what the renderer mounts — slides are authored-first; a slide
    * without markup renders as a neutral branded field.
    */
-  authored?: { html: string; bg?: string; role?: string; archetype?: string; pv?: Record<string, number> };
+  authored?: {
+    html: string;
+    bg?: string;
+    role?: string;
+    archetype?: string;
+    pv?: Record<string, number>;
+    source?: 'fragment' | 'ai';
+    /** Per-slide alignment deviation, applied by the app's data-align layer. */
+    align?: 'flush-left' | 'center' | 'flush-right';
+  };
 }
 
 export type ProjectStatus = 'draft' | 'rendered';
@@ -253,6 +264,12 @@ export interface Project {
   /** One direction per slide, in order — the plan the deck was composed
    *  against. Absent when the copywriter was left to shape the deck itself. */
   plan?: string[];
+  /**
+   * The decision ledger from the last compose: consequential calls the CODE
+   * took on the deck's behalf (e.g. a full-bleed photo dropped for fighting
+   * the brand ground). Shown on the review page as info chips.
+   */
+  composeNotes?: Array<{ slide?: number; note: string }>;
   /** The pages this post was written from, when the brief cited any. */
   sources?: Array<{ url: string; title?: string; byline?: string; published?: string; chars?: number }>;
   exportedAt?: string;
