@@ -40,8 +40,10 @@ import {
   BASE_BUDGETS,
   EXPLAIN_ROLES,
   type ComposeBudgets,
+  type Format,
 } from '@contentbuilder/shared';
-import { aiJson, aiMessage, modelFor, textOf, type AiJsonResult, type AiJsonTool } from '../ai';
+import { aiJson, aiMessage, cachedSystem, modelFor, textOf, type AiJsonResult, type AiJsonTool } from '../ai';
+import { critiqueDeck, type DeckCritique } from './deckCritique';
 import { config } from '../../config';
 import { sanitizeAuthoredHtml } from '../htmlSanitize';
 import { lintAuthored } from './lintAuthored';
@@ -273,6 +275,12 @@ export interface ComposeOptions {
    * like `record` — see the call site for why anything survives at all.
    */
   onCopyCheck?: (r: CopyCheckSummary) => void;
+  /**
+   * The art-director read on the FINISHED deck — what the measurable gates
+   * cannot see. Fires only when the deck was rendered and the budget allowed
+   * the look; absent is normal, not an error.
+   */
+  onCritique?: (c: DeckCritique) => void;
 }
 
 /** What the copy checks still object to after compose has done what it can. */
@@ -999,6 +1007,14 @@ RULES
 - "why": one short line per slide, written for the brand owner who will read it on the review page: the calls you made — why this role, why image true or false (and what the picture would be doing), why any align deviation. Plain words, no hedging, no restating the copy. This is how your judgment becomes visible and improvable, so treat it as part of the work, not an afterthought.`;
 
 /**
+ * The copywriter's rules are the longest constant in the pipeline and were
+ * re-billed in full on every parse — including the corrective re-parse and each
+ * per-slide direction, which repeat it verbatim minutes apart. Cached, the
+ * second and later calls read the prefix at a tenth of the input rate.
+ */
+const PARSE_SYSTEM_CACHED = cachedSystem(PARSE_SYSTEM);
+
+/**
  * THE PARSE STEP'S OUTPUT SHAPE, as a tool the model is FORCED to call — so the
  * deck arrives already parsed instead of being cut out of prose with a fence
  * regex and `indexOf('{')`.
@@ -1408,8 +1424,9 @@ export async function parseForCompose(
   // truncated mid-JSON is a failed parse, so the ceiling follows the input.
   const maxTokens = sources.length || plan.length > 6 ? 2600 : 1600;
   const reply = await aiJson(
-    { model, max_tokens: maxTokens, system: PARSE_SYSTEM, messages: [{ role: 'user', content: user }] },
+    { model, max_tokens: maxTokens, system: PARSE_SYSTEM_CACHED, messages: [{ role: 'user', content: user }] },
     PARSE_TOOL,
+    { feature: 'parse' },
   );
   let slides = stripMarkdownFromDeck(readDeck(parsePayload(reply), 'first pass'));
 
@@ -1458,7 +1475,7 @@ export async function parseForCompose(
         {
           model,
           max_tokens: maxTokens,
-          system: PARSE_SYSTEM,
+          system: PARSE_SYSTEM_CACHED,
           messages: [
             { role: 'user', content: user },
             { role: 'assistant', content: JSON.stringify({ slides }) },
@@ -1466,6 +1483,7 @@ export async function parseForCompose(
           ],
         },
         PARSE_TOOL,
+        { feature: 'parse' },
       );
       const corrected = stripMarkdownFromDeck(readDeck(parsePayload(retry), 'correction'));
       // Keep whichever attempt honours more of the user's own words — a retry
@@ -1604,8 +1622,9 @@ export async function parseSlideDirection(
     .join('\n');
 
   const reply = await aiJson(
-    { model: parseModel(opts), max_tokens: 900, system: PARSE_SYSTEM, messages: [{ role: 'user', content: user }] },
+    { model: parseModel(opts), max_tokens: 900, system: PARSE_SYSTEM_CACHED, messages: [{ role: 'user', content: user }] },
     PARSE_TOOL,
+    { feature: 'parse' },
   );
   const parsed = stripMarkdownFromDeck(readDeck(parsePayload(reply), 'one slide'));
   let slides = clampSlidesToBudgets(parsed.slice(0, 1), budgets, locks);
@@ -1678,8 +1697,9 @@ export async function parseSlideCopy(
     .join('\n');
 
   const reply = await aiJson(
-    { model: parseModel(opts), max_tokens: 900, system: PARSE_SYSTEM, messages: [{ role: 'user', content: user }] },
+    { model: parseModel(opts), max_tokens: 900, system: PARSE_SYSTEM_CACHED, messages: [{ role: 'user', content: user }] },
     PARSE_TOOL,
+    { feature: 'parse' },
   );
   const parsed = stripMarkdownFromDeck(readDeck(parsePayload(reply), 'slide copy'));
   const clamped = clampSlidesToBudgets(parsed.slice(0, 1), budgets, locks);
@@ -2020,12 +2040,15 @@ export async function composeSlide(
   // message so the system prompt stays byte-identical and cache-friendly, and
   // so the verbatim retry below inherits it too.
   const user = opts?.note ? `${built.user}\n\n${opts.note}` : built.user;
-  const resp = await aiMessage({
-    model,
-    max_tokens: 1400,
-    system,
-    messages: [{ role: 'user', content: user }],
-  });
+  const resp = await aiMessage(
+    {
+      model,
+      max_tokens: 1400,
+      system,
+      messages: [{ role: 'user', content: user }],
+    },
+    { feature: 'compose' },
+  );
   let result = digestReply(textOf(resp), input);
 
   // Mechanical verbatim guard — REPAIR, not just warn. One targeted retry that
@@ -2045,12 +2068,15 @@ export async function composeSlide(
     const violation =
       `VIOLATION: these copy parts must appear verbatim and were missing or altered:\n` +
       retryable.map(([k, v]) => `  ${k}: ${JSON.stringify(v)}`).join('\n');
-    const retryResp = await aiMessage({
-      model,
-      max_tokens: 1400,
-      system,
-      messages: [{ role: 'user', content: `${user}\n\n${violation}` }],
-    });
+    const retryResp = await aiMessage(
+      {
+        model,
+        max_tokens: 1400,
+        system,
+        messages: [{ role: 'user', content: `${user}\n\n${violation}` }],
+      },
+      { feature: 'compose:verbatim-retry' },
+    );
     const retried = digestReply(textOf(retryResp), input);
     // Keep whichever attempt lost less copy (the retry on a tie — it followed
     // the correction), then splice whatever is still missing.
@@ -2327,6 +2353,8 @@ export async function composeProject(
     if (a && !a.bg) a.bg = 'inverse';
   }
 
+  /** The art-director read on the finished deck, when one was affordable. */
+  let critique: DeckCritique | null = null;
   if (opts?.renderCheck ?? (Boolean(opts?.renderProbe) || renderCheckEnabledByDefault())) {
     opts?.onProgress?.({ phase: 'checking-layout', done: 0, total: out.length });
     const checked = await renderCheckDeck(recipe, kept, out.map((s) => s.authored), o.format ?? '1080x1350', {
@@ -2341,6 +2369,20 @@ export async function composeProject(
        * spend a vision call — the eval, the tests — simply does not pass it.
        */
       repairByLooking: (args) => repairByLooking(recipe, args),
+      /**
+       * SOMEBODY LOOKS AT THE FINISHED DECK. Every check above judges one slide
+       * against something measurable; this is the pass that can see a deck of
+       * near-identical frames, a picture that is related but wrong, or a slide
+       * that restates the one before it. Budget-gated, and it repairs nothing —
+       * the verdict reaches the review page, where a person acts on it.
+       */
+      onShots: async (shots) => {
+        critique = await critiqueDeck(
+          recipe,
+          shots.map((b64) => (b64 ? Buffer.from(b64, 'base64') : null)),
+          (o.format ?? '1080x1350') as Format,
+        );
+      },
       /**
        * THE LOOP, CLOSED AT THE WRITING END.
        *
@@ -2384,6 +2426,7 @@ export async function composeProject(
      * run — but until now it was indistinguishable from a deck that passed
      * every gate. The only trace was a `console.warn` on the API's stdout.
      */
+    if (critique) opts?.onCritique?.(critique);
     opts?.onLayoutCheck?.({
       measured: checked.measured,
       unmeasured: checked.unmeasured,

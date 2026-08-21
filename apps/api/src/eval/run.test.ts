@@ -13,21 +13,33 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../lib/ai', () => {
-  const canned = (params: { system?: string; messages?: Array<{ content?: unknown }> }) => {
-    const system = String(params.system ?? '');
+  // The system is now cached BLOCK ARRAYS (see cachedSystemLayers) — flatten to
+  // what the model actually reads before matching on it.
+  const flat = (sys: unknown): string =>
+    typeof sys === 'string'
+      ? sys
+      : Array.isArray(sys)
+        ? sys.map((b) => (b && typeof b === 'object' && 'text' in b ? String(b.text) : '')).join('\n')
+        : '';
+  const canned = (params: { system?: unknown; messages?: Array<{ content?: unknown }> }) => {
+    const system = flat(params.system);
     const user = String(params.messages?.[0]?.content ?? '');
     return system.startsWith('You are a social-carousel copywriter')
       ? mocks.parseText
       : (mocks.fragments[user.match(/^\s*role: (\w+)$/m)?.[1] ?? ''] ??
         '<div class="headline">missing test fragment</div>');
   };
+  const cacheBlock = (text: string) => ({ type: 'text', text, cache_control: { type: 'ephemeral' } });
   return {
-    aiMessage: async (params: { system?: string; messages?: Array<{ content?: unknown }> }) => ({
+    cachedSystem: (staticPart: string, dynamicPart?: string) =>
+      dynamicPart ? [cacheBlock(staticPart), { type: 'text', text: dynamicPart }] : [cacheBlock(staticPart)],
+    cachedSystemLayers: (...parts: string[]) => parts.filter(Boolean).map(cacheBlock),
+    aiMessage: async (params: { system?: unknown; messages?: Array<{ content?: unknown }> }) => ({
       content: [{ type: 'text', text: canned(params) }],
     }),
     // The parse step forces a tool: its canned JSON reply stands in for the
     // tool's `input`, exactly as a real reply's tool_use block would.
-    aiJson: async (params: { system?: string; messages?: Array<{ content?: unknown }> }) => {
+    aiJson: async (params: { system?: unknown; messages?: Array<{ content?: unknown }> }) => {
       const text = canned(params);
       try {
         return { json: JSON.parse(text) as Record<string, unknown>, text };

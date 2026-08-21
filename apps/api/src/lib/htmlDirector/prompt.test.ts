@@ -32,3 +32,38 @@ describe('the arrangement reaches the composer', () => {
     expect(slidePrompt(detailMastersRecipe, input({ archetype: 'nonsense' })).user).not.toContain('arrangement:');
   });
 })
+
+// ── Prompt caching ───────────────────────────────────────────────────────────
+
+describe('the composer prompt is cached in two scopes', () => {
+  const input = (over: Record<string, unknown> = {}) =>
+    ({ role: 'statement', parts: { headline: 'A line' }, format: '1080x1350', index: 0, ...over }) as never;
+  const built = slidePrompt(detailMastersRecipe, input({ role: 'statement' }));
+  const blocks = built.system as Array<{ text: string; cache_control?: unknown }>;
+
+  it('sends the instructions and the brand spec as two cached prefix layers', () => {
+    // Two entries: one shared by every brand, one shared by this deck's slides.
+    // Collapsing to a single breakpoint would scope the shared half per-brand
+    // and throw away most of the hit rate.
+    expect(blocks).toHaveLength(2);
+    for (const b of blocks) expect(b.cache_control).toEqual({ type: 'ephemeral' });
+    expect(blocks[0]!.text).toContain('You are the slide composer');
+    expect(blocks[1]!.text).toContain('COMPONENT CLASSES');
+  });
+
+  it('keeps everything per-slide OUT of the cached prefix', () => {
+    const prefix = blocks.map((b) => b.text).join('\n');
+    // The copy, the role and the arrangement all vary slide to slide; any of
+    // them in the prefix would invalidate the cache on every single slide.
+    // (The instructions legitimately REFER to the composition pattern — what
+    // must not be in the prefix is the resolved per-slide block itself.)
+    expect(prefix).not.toContain('COMPOSITION PATTERN to follow:');
+    expect(prefix).not.toContain('copy parts');
+    expect(built.user).toContain('COMPOSITION PATTERN to follow:');
+  });
+
+  it('is byte-identical across slides of the same deck — the thing that makes it cache', () => {
+    const other = slidePrompt(detailMastersRecipe, input({ role: 'cta', index: 6 }));
+    expect((other.system as Array<{ text: string }>).map((b) => b.text)).toEqual(blocks.map((b) => b.text));
+  });
+});

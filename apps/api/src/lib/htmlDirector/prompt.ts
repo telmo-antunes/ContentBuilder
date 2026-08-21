@@ -13,6 +13,8 @@
  * inside `.cb-slide`; the renderer injects the recipe stylesheet + `--cb-*`
  * tokens around it. The fragment is sanitised (allowlist) before it is stored.
  */
+import type Anthropic from '@anthropic-ai/sdk';
+import { cachedSystemLayers } from '../ai';
 import {
   RECIPE_FORMAT_DIMS,
   archetypeFor,
@@ -117,6 +119,21 @@ const SLACK_IN_WORDS: Record<string, string> = {
 export const variantIndexOf = (input: ComposeSlideInput): number =>
   (input.index ?? 0) + (input.variantBias ?? 0) + (input.seed ?? 0);
 
+/**
+ * The BRAND-STABLE half of the composer's spec: byte-identical for every slide
+ * of a deck, so it rides in the cached system prefix instead of being re-sent
+ * (and re-billed) on all seven slides. See `cachedSystemLayers` in lib/ai.ts.
+ */
+export function recipeBrandBlock(recipe: BrandRecipe): string {
+  const comps = recipe.components.map((c) => `  .${c.className} — ${c.use}`).join('\n');
+  return [
+    `SIGNATURE MOVE (${recipe.signature.name}): ${recipe.signature.description}`,
+    ``,
+    `COMPONENT CLASSES you may use (and nothing else):`,
+    comps,
+  ].join('\n');
+}
+
 /** Render the recipe into the compact spec the composer reasons over. */
 export function recipeSpecBlock(
   recipe: BrandRecipe,
@@ -146,6 +163,35 @@ export function recipeSpecBlock(
     ``,
     `COMPONENT CLASSES you may use (and nothing else):`,
     comps,
+    ``,
+    `COMPOSITION PATTERN to follow:`,
+    patterns,
+  ].join('\n');
+}
+
+/**
+ * The PER-SLIDE half of the spec — the alignment this slide composes at and the
+ * one arrangement it follows. Both vary by role, deck position and deviation,
+ * so this sits in the user message, after the cached prefix.
+ */
+export function slideSpecBlock(
+  recipe: BrandRecipe,
+  format: string,
+  role?: string,
+  index?: number,
+  align?: SlideAlign,
+): string {
+  const chosen = role ? recipePatternVariant(recipe, format, role, index) : undefined;
+  const patterns = chosen
+    ? `  - ${chosen}`
+    : recipePatternsFor(recipe, format).map((p) => `  - ${p}`).join('\n');
+  const effectiveAlign = slideAlignFor(recipe, role, align) ?? recipe.composition.align;
+  return [
+    `ALIGNMENT: ${effectiveAlign}${
+      effectiveAlign !== recipe.composition.align
+        ? ` (this slide deviates from the brand's ${recipe.composition.align} default — compose for ${effectiveAlign})`
+        : ''
+    }`,
     ``,
     `COMPOSITION PATTERN to follow:`,
     patterns,
@@ -189,7 +235,7 @@ Return only the fragment (the inner markup of .cb-slide).`;
 export function buildComposeMessages(
   recipe: BrandRecipe,
   input: ComposeSlideInput,
-): { system: string; user: string } {
+): { system: Anthropic.TextBlockParam[]; user: string } {
   const p = input.parts;
   const partLines = Object.entries({
     eyebrow: p.eyebrow,
@@ -215,8 +261,8 @@ export function buildComposeMessages(
   const canvas = dims ? `${dims.w}×${dims.h} (${dims.label})` : input.format;
   const arrangement = archetypeFor(input.archetype);
   const user = [
-    `BRAND SPEC`,
-    recipeSpecBlock(recipe, input.format, input.role, variantIndexOf(input), input.align),
+    `THIS SLIDE'S SPEC`,
+    slideSpecBlock(recipe, input.format, input.role, variantIndexOf(input), input.align),
     ``,
     `THIS SLIDE`,
     `  role: ${input.role}`,
@@ -240,5 +286,13 @@ export function buildComposeMessages(
     .filter((l) => l !== ``)
     .join('\n');
 
-  return { system: SLIDE_AUTHOR_INSTRUCTIONS, user };
+  /**
+   * TWO CACHE SCOPES: the instructions (identical everywhere) and the brand's
+   * own vocabulary (identical across this deck's slides). Both are prefix, so a
+   * seven-slide deck pays full price for them once instead of seven times.
+   */
+  return {
+    system: cachedSystemLayers(SLIDE_AUTHOR_INSTRUCTIONS, `BRAND SPEC\n${recipeBrandBlock(recipe)}`),
+    user,
+  };
 }

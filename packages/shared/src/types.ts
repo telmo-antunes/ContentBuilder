@@ -277,6 +277,28 @@ export interface Project {
    */
   recipeSnapshot?: unknown;
   recipeSnapshotAt?: string;
+  /**
+   * The art-director read on the last rendered deck — what the measurable
+   * gates cannot see (sameness, a related-but-wrong picture, a slide that
+   * restates the one before it). Advisory: it never gates shipping.
+   */
+  critique?: {
+    verdict: string;
+    findings: Array<{
+      slide: number;
+      fault: string;
+      fix: string;
+      severity: 'blocking' | 'notable' | 'minor';
+    }>;
+  };
+  /** What the last compose cost, and anything the ceiling turned down. */
+  spend?: {
+    spentUsd: number;
+    ceilingUsd: number | null;
+    calls: number;
+    skipped: string[];
+    byFeature: Array<{ feature: string; costUsd: number; calls: number }>;
+  };
   /** The pages this post was written from, when the brief cited any. */
   sources?: Array<{ url: string; title?: string; byline?: string; published?: string; chars?: number }>;
   exportedAt?: string;

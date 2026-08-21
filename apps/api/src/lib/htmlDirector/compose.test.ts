@@ -28,7 +28,13 @@ vi.mock('../ai', () => {
     active -= 1;
     return { content: [{ type: 'text', text }] } as unknown as Anthropic.Message;
   };
+  const cacheBlock = (text: string) => ({ type: 'text', text, cache_control: { type: 'ephemeral' } });
   return {
+    // The cache helpers are pure — mirrored here so the mocked module keeps
+    // the real shape (block arrays), which is what `sysOf` reads back.
+    cachedSystem: (staticPart: string, dynamicPart?: string) =>
+      dynamicPart ? [cacheBlock(staticPart), { type: 'text', text: dynamicPart }] : [cacheBlock(staticPart)],
+    cachedSystemLayers: (...parts: string[]) => parts.filter(Boolean).map(cacheBlock),
     aiMessage: send,
     /**
      * The structured-output helper, faked at the same seam: the canned reply
@@ -70,7 +76,9 @@ const { SLIDE_AUTHOR_INSTRUCTIONS } = await import('./prompt');
 const { brandRecipeSchema } = await import('@contentbuilder/shared');
 
 const sysOf = (c: Anthropic.MessageCreateParamsNonStreaming): string =>
-  typeof c.system === 'string' ? c.system : '';
+  typeof c.system === 'string'
+    ? c.system
+    : (c.system ?? []).map((b) => ('text' in b ? b.text : '')).join('\n');
 const userOf = (c: Anthropic.MessageCreateParamsNonStreaming, i = 0): string => {
   const m = c.messages[i];
   return typeof m?.content === 'string' ? m.content : '';
@@ -937,7 +945,7 @@ describe('compose by example (the recipe composes its own slides)', () => {
 
     // THE PRIZE: one parse call for the deck, and nothing else.
     expect(aiCalls).toHaveLength(1);
-    expect(aiCalls[0]!.system).toContain('social-carousel copywriter');
+    expect(sysOf(aiCalls[0]!)).toContain('social-carousel copywriter');
     expect(out.map((s) => s.source)).toEqual(['fragment', 'fragment', 'fragment', 'fragment']);
     expect(out.map((s) => s.role)).toEqual(['cover', 'list', 'statement', 'cta']);
 
@@ -1011,7 +1019,7 @@ describe('compose by example (the recipe composes its own slides)', () => {
 
     expect(out.map((s) => s.source)).toEqual(['fragment', 'fragment', 'ai', 'fragment']);
     expect(aiCalls).toHaveLength(2); // the parse + exactly one compose
-    expect(sysOf(aiCalls[1]!)).toBe(SLIDE_AUTHOR_INSTRUCTIONS);
+    expect(sysOf(aiCalls[1]!)).toContain(SLIDE_AUTHOR_INSTRUCTIONS);
     expect(userOf(aiCalls[1]!)).toContain('role: statement');
     expect(out[2]!.authored.html).toContain('Book a slot');
     expect(warnings()).toContainEqual(
@@ -1066,7 +1074,7 @@ describe('compose by example (the recipe composes its own slides)', () => {
     // the model path still runs: 1 parse + one compose per slide, nothing retried
     expect(aiCalls).toHaveLength(5);
     expect(out.map((s) => s.source)).toEqual(['ai', 'ai', 'ai', 'ai']);
-    for (const call of aiCalls.slice(1)) expect(sysOf(call)).toBe(SLIDE_AUTHOR_INSTRUCTIONS);
+    for (const call of aiCalls.slice(1)) expect(sysOf(call)).toContain(SLIDE_AUTHOR_INSTRUCTIONS);
     // …and its output is byte-identical to what the composer wrote. The photo
     // cover gets NO appended slot: its archetype is full-bleed (showcase), so
     // the photograph is the background layer and the slot guard inverts.
