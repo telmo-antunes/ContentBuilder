@@ -1163,9 +1163,26 @@ export async function renderCheckDeck(
     const shoot = probe.shoot;
     if (!opts?.onShots || !shoot) return;
     try {
-      const shots = await Promise.all(
-        finalSlides.map((s, i) => shoot(i, s.html).catch(() => null)),
-      );
+      /**
+       * ONE AT A TIME, deliberately.
+       *
+       * `measure` reads a DOM attribute and parallelises happily; a shoot
+       * renders, screenshots and downsamples, and seven of those launched at
+       * once fight over the same page pool until they hit the acquire ceiling.
+       * The first real deck through here lost FIVE of its seven slides that
+       * way — every one a 90s timeout — and the critique then reviewed a
+       * two-slide deck and said, correctly, that it barely counted as a
+       * sequence. Sequentially they all arrive, and a capture pass that runs
+       * once per deck can afford the wall-clock.
+       */
+      const shots: Array<string | null> = [];
+      for (const [i, s] of finalSlides.entries()) {
+        shots.push(await shoot(i, s.html).catch(() => null));
+      }
+      const missing = shots.filter((x) => !x).length;
+      if (missing) {
+        console.warn(`[render-check] ${missing}/${shots.length} slide(s) would not photograph — reviewing the rest`);
+      }
       await opts.onShots(shots);
     } catch (err) {
       // A critique is an improvement to the hand-off, never a gate on shipping.
