@@ -1540,3 +1540,101 @@ describe('trimToFinished — the repair the correction never had', () => {
     expect(original.startsWith(out!)).toBe(true);
   });
 });
+
+// ── Two floors: a deck keeps its pictures, and its button ────────────────────
+
+describe('the picture floor', () => {
+  const deckOf = (parts: Record<string, unknown>[]) =>
+    JSON.stringify({
+      slides: parts.map((p, i) => ({
+        role: i === 0 ? 'cover' : i === parts.length - 1 ? 'cta' : 'statement',
+        image: false,
+        parts: p,
+      })),
+    });
+
+  it('gives one slide a photograph when the deck came out with none', async () => {
+    // Every individual refusal above is reasonable; nothing owned the total,
+    // and a real deck shipped as seven identical black gradients.
+    reply.mockImplementation(() =>
+      deckOf([
+        { headline: 'A cover line.' },
+        { headline: 'A statement.', body: 'With a body.' },
+        { headline: 'Try it free.', cta: 'Start now' },
+      ]),
+    );
+    const out = await parseForCompose(detailMastersRecipe, 'an idea', { photoBudget: 5 });
+    expect(out.some((s) => s.photo)).toBe(true);
+  });
+
+  it('leaves a deck alone when the brand has no photographs to give it', async () => {
+    reply.mockImplementation(() =>
+      deckOf([
+        { headline: 'A cover line.' },
+        { headline: 'A statement.', body: 'With a body.' },
+        { headline: 'Try it free.', cta: 'Start now' },
+      ]),
+    );
+    const out = await parseForCompose(detailMastersRecipe, 'an idea', { photoBudget: 0 });
+    expect(out.some((s) => s.photo)).toBe(false);
+  });
+
+  it('never takes a picture from a deck that already has one', async () => {
+    reply.mockImplementation(() =>
+      JSON.stringify({
+        slides: [
+          { role: 'cover', image: true, parts: { headline: 'A cover line.' } },
+          { role: 'cta', image: false, parts: { headline: 'Try it free.', cta: 'Start now' } },
+        ],
+      }),
+    );
+    const out = await parseForCompose(detailMastersRecipe, 'an idea', { photoBudget: 5 });
+    expect(out.filter((s) => s.photo)).toHaveLength(1);
+  });
+});
+
+describe('the closing slide keeps its button', () => {
+  it('re-homes a call to action the model composed as plain body text', async () => {
+    // The recipe's `cta` fragment was missing, so the role fell to the model —
+    // which wrote the offer as an ordinary line and shipped a slide with no
+    // button at all, on a deck where everything else was on-brand.
+    const noCtaFragment = { ...detailMastersWithFragments, fragments: undefined };
+    reply.mockImplementation((params: Anthropic.MessageCreateParamsNonStreaming) =>
+      sysOf(params).includes('STRICT JSON')
+        ? JSON.stringify({
+            slides: [
+              { role: 'cover', parts: { headline: 'A cover line.' } },
+              { role: 'cta', parts: { headline: 'Try it free.', cta: 'Start your free trial' } },
+            ],
+          })
+        : // the composer's answer: the words are right, the element is not
+          '<div class="headline">Try it free.</div>\n<div class="body">Start your free trial</div>',
+    );
+    const out = await composeProject(noCtaFragment as never, 'an idea', { renderCheck: false });
+    const closing = out[out.length - 1]!.authored.html;
+    expect(closing).toContain('class="cta"');
+    expect(closing).toContain('Start your free trial');
+    // Re-homed, not duplicated: the words appear once.
+    expect(closing.match(/Start your free trial/g)).toHaveLength(1);
+  });
+
+  it('leaves a cta slide that already has its button alone', async () => {
+    const html = '<div class="headline">Try it free.</div>\n<div class="cta">Start now</div>';
+    reply.mockImplementation((params: Anthropic.MessageCreateParamsNonStreaming) =>
+      sysOf(params).includes('STRICT JSON')
+        ? JSON.stringify({
+            slides: [
+              { role: 'cover', parts: { headline: 'A cover line.' } },
+              { role: 'cta', parts: { headline: 'Try it free.', cta: 'Start now' } },
+            ],
+          })
+        : html,
+    );
+    const out = await composeProject(
+      { ...detailMastersWithFragments, fragments: undefined } as never,
+      'an idea',
+      { renderCheck: false },
+    );
+    expect(out[out.length - 1]!.authored.html).toContain('class="cta"');
+  });
+});
