@@ -71,6 +71,13 @@ export interface ComposeSlideInput {
   /** Position in the deck — rotates which composition VARIANT this role uses. */
   index?: number;
   /**
+   * Per-DECK offset for the variant rotation, derived from the project (a
+   * stable hash of its id), so two consecutive posts pick different pattern +
+   * fragment variants for the same roles. Deterministic: recomposing the same
+   * project lands on the same variants.
+   */
+  seed?: number;
+  /**
    * Start that rotation further along. Set from a `rearranges-role` lesson: the
    * arrangement the rotation lands on is the one this brand keeps swapping out,
    * so the composer reaches past it. Never changes the slide's position in the
@@ -107,7 +114,7 @@ const SLACK_IN_WORDS: Record<string, string> = {
 };
 
 export const variantIndexOf = (input: ComposeSlideInput): number =>
-  (input.index ?? 0) + (input.variantBias ?? 0);
+  (input.index ?? 0) + (input.variantBias ?? 0) + (input.seed ?? 0);
 
 /** Render the recipe into the compact spec the composer reasons over. */
 export function recipeSpecBlock(

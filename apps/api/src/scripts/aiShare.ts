@@ -23,6 +23,7 @@ import {
   recipeStylesheetFor,
   composeRecipeLayers,
   findBrandMark,
+  fragmentVariantsFor,
   type BrandRecipe,
 } from '@contentbuilder/shared';
 
@@ -168,16 +169,16 @@ function visibleText(html: string): string {
          * directions. The share of guessed slides is printed so the number is
          * read with the right confidence.
          */
-        const frag = recipe.fragments?.[role];
+        const variants = fragmentVariantsFor(recipe, role);
         const stored = s.authored?.source;
         all.push({
           at,
           role,
           html,
-          hasFragment: Boolean(frag),
+          hasFragment: variants.length > 0,
           fromFragment: stored
             ? stored === 'fragment'
-            : Boolean(frag && isSubsequence(skeleton(html), skeleton(frag))),
+            : variants.some((f) => isSubsequence(skeleton(html), skeleton(f))),
           known: Boolean(stored),
           charsAi,
           charsBrand,

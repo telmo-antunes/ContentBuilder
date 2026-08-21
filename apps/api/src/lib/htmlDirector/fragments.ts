@@ -48,13 +48,14 @@ import {
   SLOT_ATTR,
   archetypeFor,
   authoredSlots,
+  fragmentVariantFor,
   recipeEmphasisWrap,
   recipePatternVariant,
   type BrandRecipe,
   type SlideRole,
 } from '@contentbuilder/shared';
 import { sanitizeAuthoredHtml } from '../htmlSanitize';
-import type { ComposeParts, ComposeSlideInput } from './prompt';
+import { variantIndexOf, type ComposeParts, type ComposeSlideInput } from './prompt';
 
 // ── Shared markup helpers ───────────────────────────────────────────────────
 //
@@ -399,16 +400,28 @@ export function validateRecipeFragments(recipe: BrandRecipe): {
   const raw = recipe.fragments;
   if (!raw || !Object.keys(raw).length) return { recipe, dropped: [] };
 
-  const kept: Record<string, string> = {};
+  // A role may carry one fragment or an array of VARIANTS; each variant is
+  // checked on its own, so one broken arrangement costs itself, not the role.
+  const kept: Record<string, string | string[]> = {};
   const dropped: DroppedFragment[] = [];
-  for (const [role, fragment] of Object.entries(raw)) {
-    const checked = checkFragment(recipe, role, fragment);
-    if ('reason' in checked) dropped.push({ role, reason: checked.reason });
-    else kept[role] = checked.html;
+  let changed = false;
+  for (const [role, value] of Object.entries(raw)) {
+    const variants = Array.isArray(value) ? value : [value];
+    const good: string[] = [];
+    for (const fragment of variants) {
+      const checked = checkFragment(recipe, role, fragment);
+      if ('reason' in checked) {
+        dropped.push({ role, reason: checked.reason });
+        changed = true;
+      } else {
+        if (checked.html !== fragment) changed = true;
+        good.push(checked.html);
+      }
+    }
+    if (good.length) kept[role] = Array.isArray(value) && good.length > 1 ? good : (good[0] as string);
+    if (Array.isArray(value) && good.length === 1) changed = true;
   }
-  if (!dropped.length && Object.entries(kept).every(([r, h]) => raw[r] === h)) {
-    return { recipe, dropped };
-  }
+  if (!changed && !dropped.length) return { recipe, dropped };
   const next: BrandRecipe = { ...recipe };
   if (Object.keys(kept).length) next.fragments = kept;
   else delete next.fragments;
@@ -524,14 +537,22 @@ export function carryForwardFragments(
   const have = next.fragments ?? {};
   const carried: string[] = [];
   const unusable: DroppedFragment[] = [];
-  const merged: Record<string, string> = { ...have };
+  const merged: Record<string, string | string[]> = { ...have };
 
-  for (const [role, fragment] of Object.entries(had)) {
-    if (have[role] || typeof fragment !== 'string') continue;
-    const checked = checkFragment(next, role, fragment);
-    if ('reason' in checked) unusable.push({ role, reason: checked.reason });
-    else {
-      merged[role] = checked.html;
+  for (const [role, value] of Object.entries(had)) {
+    if (have[role]) continue;
+    // A role may carry VARIANTS — each is re-validated against the new recipe
+    // on its own, and the role is carried with whichever survive.
+    const variants = Array.isArray(value) ? value : [value];
+    const good: string[] = [];
+    for (const fragment of variants) {
+      if (typeof fragment !== 'string') continue;
+      const checked = checkFragment(next, role, fragment);
+      if ('reason' in checked) unusable.push({ role, reason: checked.reason });
+      else good.push(checked.html);
+    }
+    if (good.length) {
+      merged[role] = Array.isArray(value) && good.length > 1 ? good : (good[0] as string);
       carried.push(role);
     }
   }
@@ -680,19 +701,28 @@ export function fillRecipeFragmentGaps(recipe: BrandRecipe): {
   const fragments = recipe.fragments;
   if (!fragments || !Object.keys(fragments).length) return { recipe, repairs: [] };
 
-  const next: Record<string, string> = { ...fragments };
+  const next: Record<string, string | string[]> = { ...fragments };
   const repairs: FragmentRepair[] = [];
-  for (const [role, fragment] of Object.entries(fragments)) {
+  for (const [role, value] of Object.entries(fragments)) {
     const wanted = ROLE_PARTS[role];
-    if (!wanted || typeof fragment !== 'string') continue;
-    const out = fillFragmentGaps(recipe, role, fragment, wanted);
-    // Copy holes first, then the photo slot: the slot is positioned relative to
-    // the sign-off line, which the copy pass may itself have added.
-    const withPhoto = ensurePhotoHole(recipe, role, out.html);
-    const added = [...out.added, ...(withPhoto.added ? [PHOTO_SLOT_PART] : [])];
+    if (!wanted) continue;
+    // Each VARIANT is filled independently — a hole one arrangement lacks may
+    // be exactly the furniture another was designed without.
+    const variants = Array.isArray(value) ? value : [value];
+    const filledVariants: string[] = [];
+    const added: string[] = [];
+    for (const fragment of variants) {
+      if (typeof fragment !== 'string') continue;
+      const out = fillFragmentGaps(recipe, role, fragment, wanted);
+      // Copy holes first, then the photo slot: the slot is positioned relative to
+      // the sign-off line, which the copy pass may itself have added.
+      const withPhoto = ensurePhotoHole(recipe, role, out.html);
+      filledVariants.push(withPhoto.html);
+      added.push(...out.added, ...(withPhoto.added ? [PHOTO_SLOT_PART] : []));
+    }
     if (!added.length) continue;
-    next[role] = withPhoto.html;
-    repairs.push({ role, added });
+    next[role] = Array.isArray(value) ? filledVariants : (filledVariants[0] as string);
+    repairs.push({ role, added: [...new Set(added)] });
   }
   if (!repairs.length) return { recipe, repairs: [] };
   return { recipe: { ...recipe, fragments: next }, repairs };
@@ -829,7 +859,7 @@ export async function fillRecipeFragmentGapsMeasured(
   if (!fragments || !Object.keys(fragments).length)
     return { recipe, repairs: [], declined: [], unmeasured: [], overCapacity: [] };
 
-  const next: Record<string, string> = { ...fragments };
+  const next: Record<string, string | string[]> = { ...fragments };
   const omits: Record<string, string[]> = { ...(recipe.fragmentOmits ?? {}) };
   const repairs: FragmentRepair[] = [];
   const declined: MeasuredFill['declined'] = [];
@@ -838,6 +868,10 @@ export async function fillRecipeFragmentGapsMeasured(
 
   for (const [role, fragment] of Object.entries(fragments)) {
     const wanted = ROLE_PARTS[role];
+    // Variant ARRAYS skip the measured filler: they are authored complete by a
+    // prompt that demands genuinely different arrangements, and "fill every
+    // hole a role allows" is the wrong instinct for a variant whose identity
+    // is what it leaves out. The filler serves the legacy one-string shape.
     if (!wanted || typeof fragment !== 'string') continue;
 
     let kept = fragment;
@@ -1065,7 +1099,11 @@ export function substituteFragment(
   recipe: BrandRecipe,
   input: ComposeSlideInput,
 ): FragmentFill | FragmentGap {
-  const fragment = recipe.fragments?.[input.role];
+  // The variant is picked by the SAME rotation index that picks the role's
+  // composition pattern, so the markup always implements the arrangement the
+  // composer was told — and a per-deck seed in that index is what makes two
+  // consecutive posts substitute different skeletons.
+  const fragment = fragmentVariantFor(recipe, input.role, variantIndexOf(input));
   if (typeof fragment !== 'string' || !fragment.trim()) return { kind: 'no-fragment' };
 
   // 1. Can this fragment carry every part this slide was given? A part with no

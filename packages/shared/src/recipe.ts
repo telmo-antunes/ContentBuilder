@@ -257,8 +257,18 @@ export const brandRecipeSchema = z.object({
    * role-keyed record: zod would type an enum-keyed record as TOTAL (every role
    * present), and the whole point is that a brand may fill in as few roles as it
    * can express well.
+   *
+   * A role's value may be ONE fragment (string) or VARIANTS (array of up to 4):
+   * genuinely different arrangements of the same role, rotated per slide and
+   * per deck exactly like `composition.patterns` — variant i implements
+   * pattern i. One fragment per role made every deck reuse the same seven
+   * skeletons; substitution stays coherent, the rotation is what keeps two
+   * consecutive posts from being re-skins of each other.
    */
-  fragments: z.record(z.string(), z.string().max(4000)).optional().catch(undefined),
+  fragments: z
+    .record(z.string(), z.union([z.string().max(4000), z.array(z.string().max(4000)).min(1).max(4)]))
+    .optional()
+    .catch(undefined),
 
   /**
    * HOLES A ROLE DELIBERATELY DOES NOT GET, keyed by role — `['tagline']`, or
@@ -586,6 +596,29 @@ export function recipePatternVariant(
   index = 0,
 ): string | undefined {
   const mine = recipePatternsForRole(recipe, format, role);
+  if (!mine.length) return undefined;
+  return mine[Math.abs(index) % mine.length];
+}
+
+/**
+ * A role's fragment VARIANTS, normalised to an array — [] when the role has
+ * none. The stored value may be a bare string (the historical shape, still the
+ * common case) or an array of genuinely different arrangements.
+ */
+export function fragmentVariantsFor(recipe: BrandRecipe, role: string): string[] {
+  const v = recipe.fragments?.[role];
+  if (v === undefined) return [];
+  return (Array.isArray(v) ? v : [v]).filter((f) => typeof f === 'string' && f.trim().length > 0);
+}
+
+/**
+ * The ONE fragment this slide substitutes — rotated by the same index that
+ * picks the composition pattern, so variant i of the markup always implements
+ * arrangement i of the prose. Same slide → same variant; a per-deck seed in
+ * the index is what makes consecutive posts differ.
+ */
+export function fragmentVariantFor(recipe: BrandRecipe, role: string, index = 0): string | undefined {
+  const mine = fragmentVariantsFor(recipe, role);
   if (!mine.length) return undefined;
   return mine[Math.abs(index) % mine.length];
 }

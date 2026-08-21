@@ -109,9 +109,10 @@ WHY THE SPLIT: it is what lets this brand's owner later say "make the background
 
 const SLIDE_ROLE_LIST = SLIDE_ROLES.join(', ');
 
-const FRAGMENTS_CONTRACT = `YOU ALSO COMPOSE THE SLIDES, ONCE. Emit "fragments" — a map of slide role (${SLIDE_ROLE_LIST}) to ONE worked slide of that role, written in this brand's markup with the WORDS left as placeholders.
+const FRAGMENTS_CONTRACT = `YOU ALSO COMPOSE THE SLIDES, ONCE. Emit "fragments" — a map of slide role (${SLIDE_ROLE_LIST}) to a worked slide of that role, written in this brand's markup with the WORDS left as placeholders.
 WHY: without them every future slide is re-invented by a cheap model reading your prose rules, which is where invented classes, drifting arrangements and duplicated copy come from. With them, a post is composed by SUBSTITUTION — your markup, this week's words, no model, no drift. Treat each fragment as the definitive layout of that role, not a hint: it is what the brand will actually look like.
 ${FRAGMENT_CONVENTION}
+VARIANTS — one skeleton per role makes every post a re-skin of the last, and followers see consecutive posts. For statement, feature and list give an ARRAY of 2–3 worked variants that are genuinely different ARRANGEMENTS — a different order, different furniture, one carrying a rule where another carries a panel, one anchored low where another sits high — not the same markup with different spacing. Variant i implements arrangement i of that role's composition.patterns, and the app rotates them per slide and per deck, so two consecutive posts compose different skeletons while staying unmistakably this brand. Other roles may stay a single string; the cover and cta are the brand's fixed handshake and one definitive layout each is right.
 Cover every role you can lay out well. A role you leave out (or that names a class you never defined) simply falls back to the model, so a fragment you are unsure of costs nothing to omit — but a brand with all seven is a brand whose every post is composed exactly as you designed it.`;
 
 export const RECIPE_AUTHOR_SYSTEM = `You are an elite brand & art director. From a business's brand evidence you author its complete DESIGN SYSTEM — a "recipe" that EVERY future Instagram post is composed against, authored ONCE. Deliver it by CALLING THE "author_recipe" TOOL with the whole design system as its argument, matching the shape of the worked examples EXACTLY. (If you cannot call the tool, output the same object as STRICT JSON only — no prose, no fences.)
@@ -169,12 +170,13 @@ HARD RULES:
 - No <script>, no @import, no external URLs except inline data: URIs (grain). The logo is var(--cb-logo).
 - Do NOT set width/height/aspect-ratio/max-width/object-fit on .cb-shot — the app owns its geometry, and overriding it breaks the shape the composer asked for. Style its SURFACE only.
 - Same for a LIST ROW: the app lays a row out as a marker in its own gutter with the item hanging off it and the detail on its own line beneath. Do NOT set display:flex on the row, and NEVER push the detail right with margin-left:auto — that reads fine at 26px and collapses into a right-drifting mess at the sizes a phone needs. Style the SURFACE: the row's colour and size, a hairline between rows, the detail's quieter tone. To choose the bullet, set the --cb-marker custom property on .cb-slide (e.g. --cb-marker: "\u00b7"), and do not author a marker element.
+- A LIST DESERVES A VOCABULARY, not one quiet panel. The app also supports NUMBERED rows: put class "numbered" on the rows container and the gutter counts them ("01", "02", …) in the display family and the accent — style the index through --cb-row-index-color / --cb-row-index-size / --cb-row-index-weight on .cb-slide (a big editorial index is one size var away). Give the list role at least one treatment beyond the plain marker panel — numbered is the cheapest strong one — and make list variants genuinely differ (marker panel vs numbered vs a heavier row whose detail carries the weight).
 - The three layers together under ~4500 characters (the per-format overrides in "formats" are separate). ${ENUMS}
 - INVENT this brand's own colours/fonts/voice/signature/graphic — never reuse the examples'.`;
 
 export const RECIPE_CRITIQUE_SYSTEM = `You are a ruthless design director reviewing a junior's brand recipe against a reference bar. Deliver your review by CALLING THE "review_recipe" TOOL. (If you cannot call the tool, output the same object as STRICT JSON only, no prose, no fences.)
 
-Judge the recipe you are given on: (1) is the background CINEMATIC and layered, or a flat/timid gradient? (2) is there a real, named SIGNATURE move applied consistently? (3) is the display type feed-huge (${HEADLINE_RANGE_PX}) or timid? (4) is the component vocabulary rich (8–12 classes) or thin? (5) are per-format "formats" overrides present for story + square? (6) is ONE accent rationed with real negative space? (7) does "motion" carry a style+pace that genuinely matches the brand's character, with an evocative one-line description AND per-role overrides in "motion.roles" that give a stat, a quote and a cta their own distinct entrance? (8) does composition.align follow the brand's own evidence rather than defaulting to flush-left — and does the type/components CSS actually implement the align the recipe declares?
+Judge the recipe you are given on: (1) is the background CINEMATIC and layered, or a flat/timid gradient? (2) is there a real, named SIGNATURE move applied consistently? (3) is the display type feed-huge (${HEADLINE_RANGE_PX}) or timid? (4) is the component vocabulary rich (8–12 classes) or thin? (5) are per-format "formats" overrides present for story + square? (6) is ONE accent rationed with real negative space? (7) does "motion" carry a style+pace that genuinely matches the brand's character, with an evocative one-line description AND per-role overrides in "motion.roles" that give a stat, a quote and a cta their own distinct entrance? (8) does composition.align follow the brand's own evidence rather than defaulting to flush-left — and does the type/components CSS actually implement the align the recipe declares? (9) VARIETY: do statement, feature and list each carry 2–3 genuinely different arrangements (patterns AND fragment variants — different order and furniture, not respaced copies), and does the list vocabulary go beyond one quiet marker panel (e.g. a numbered treatment)? One skeleton per role means every post is a re-skin of the last.
 
 REPLY WITH A VERDICT, AND A PATCH — NOT THE WHOLE RECIPE. Exactly one of:
   {"verdict":"pass"}
@@ -257,7 +259,11 @@ const AUTHOR_TOOL: AiJsonTool = {
           ]),
         ),
       },
-      composition: { type: 'object', description: 'align, and patterns[] (one arrangement per line).' },
+      composition: {
+        type: 'object',
+        description:
+          'align, optional roles (per-role align overrides), and patterns[] — one arrangement per line, with 2–3 DIFFERENT arrangements for statement, feature and list (the app rotates them per slide and per deck; "role: …" prefix names the role a line belongs to).',
+      },
       imagery: { type: 'object', description: 'treatment, photoRole, texture, subjects[].' },
       voice: { type: 'object', description: 'description, dos[], donts[].' },
       formats: {

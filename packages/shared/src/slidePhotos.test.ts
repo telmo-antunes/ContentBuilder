@@ -361,3 +361,14 @@ describe('an unfilled slot outside the editor', () => {
     expect(hiddenSlotCss('cb1', 'hero')).not.toContain('Add photo');
   });
 })
+
+describe('numbered rows', () => {
+  it('the app owns the counter mechanics; the brand styles the index through vars', () => {
+    const css = slideMediaCss();
+    expect(css).toContain('.cb-slide .numbered{counter-reset:cb-row}');
+    expect(css).toContain('counter(cb-row,decimal-leading-zero)');
+    // Brand hooks — the same pattern as --cb-marker.
+    expect(css).toContain('var(--cb-row-index-color,var(--cb-accent))');
+    expect(css).toContain('var(--cb-row-index-size,1em)');
+  });
+});

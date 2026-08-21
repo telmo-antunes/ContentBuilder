@@ -199,6 +199,23 @@ export function slideMediaCss(canvasHeight = 1350, align?: string): string {
     // The glyph is the brand's to choose (`--cb-marker`); only the gutter is ours.
     `.cb-slide .row.row::before{content:var(--cb-marker,"—");color:var(--cb-accent);grid-column:1;grid-row:1}`,
     /**
+     * NUMBERED ROWS — the app-owned half of a richer list vocabulary.
+     *
+     * Brands cannot express numbering themselves: this sheet is emitted after
+     * theirs, so our glyph rule above out-cascades any `::before` counter a
+     * recipe authors. The contract instead: put class "numbered" on the rows
+     * container and the gutter counts the rows. The brand styles it through
+     * vars, same pattern as --cb-marker — index colour (--cb-row-index-color),
+     * size (--cb-row-index-size), and the display family carries it by default
+     * so a big editorial "01" is one var away.
+     */
+    `.cb-slide .numbered{counter-reset:cb-row}`,
+    `.cb-slide .numbered .row.row{counter-increment:cb-row}`,
+    `.cb-slide .numbered .row.row::before{content:counter(cb-row,decimal-leading-zero);` +
+      `font-family:var(--cb-display);font-variant-numeric:tabular-nums;` +
+      `color:var(--cb-row-index-color,var(--cb-accent));font-size:var(--cb-row-index-size,1em);` +
+      `line-height:1;font-weight:var(--cb-row-index-weight,700)}`,
+    /**
      * A row's children are told apart BY CLASS, not by tag.
      *
      * They used to be told apart by tag: any non-empty `<span>` was read as the

@@ -414,7 +414,7 @@ describe('filling the gaps a fragment was authored without', () => {
       ...detailMastersRecipe,
       fragments: { list: '<div class="headline">{{headline}}</div>\n<div class="panel">{{#rows}}<div class="row">{{row.text}}</div>{{/rows}}</div>' },
     });
-    const repaired = out.recipe.fragments!.list!;
+    const repaired = out.recipe.fragments!.list! as string;
     expect(checkFragment(detailMastersRecipe, 'list', repaired)).toHaveProperty('html');
     // …and it can still carry a real slide, rows and all.
     const filled = substituteFragment(out.recipe, {
@@ -432,7 +432,7 @@ describe('filling the gaps a fragment was authored without', () => {
       ...detailMastersRecipe,
       fragments: { list: '<div class="panel">{{#rows}}<div class="row">{{row.text}}</div>{{/rows}}</div>' },
     });
-    const repaired = out.recipe.fragments!.list!;
+    const repaired = out.recipe.fragments!.list! as string;
     const panelStart = repaired.indexOf('class="panel"');
     const panelEnd = repaired.indexOf('</div>', repaired.indexOf('{{/rows}}'));
     for (const part of ['{{eyebrow}}', '{{headline}}', '{{body}}']) {
@@ -540,7 +540,7 @@ describe('filling the gaps with a measurement', () => {
 
     expect(out.declined.map((d) => d.part)).toContain(PHOTO_SLOT_PART);
     expect(out.recipe.fragmentOmits?.statement).toContain(PHOTO_SLOT_PART);
-    expect(authoredSlots(out.recipe.fragments?.statement ?? '')).toHaveLength(0);
+    expect(authoredSlots((out.recipe.fragments?.statement as string) ?? '')).toHaveLength(0);
     // And the copy holes it measured as fitting are still there.
     expect(out.recipe.fragments?.statement).toContain('{{handle}}');
   });
@@ -643,7 +643,7 @@ describe('ensurePhotoHole', () => {
   it('reports the photo slot as a repair through fillRecipeFragmentGaps', () => {
     const { recipe, repairs } = fillRecipeFragmentGaps(withFragments({ statement: STATEMENT }));
     expect(repairs.find((r) => r.role === 'statement')?.added).toContain('photo slot');
-    expect(authoredSlots(recipe.fragments?.statement ?? '')).toEqual(['hero']);
+    expect(authoredSlots((recipe.fragments?.statement as string) ?? '')).toEqual(['hero']);
   });
 })
 
@@ -707,3 +707,51 @@ describe('firstSlideBody', () => {
     expect(firstSlideBody(frag)).toBe(frag);
   });
 })
+
+// ── Fragment VARIANTS — the rotation that keeps decks from being re-skins ────
+
+describe('fragment variants', () => {
+  const STATEMENT_B = `<div class="eyebrow">{{eyebrow}}</div>
+<div class="fill"></div>
+<div class="headline">{{headline}}</div>
+<div class="body">{{body}}</div>
+<div class="rule"></div>`;
+
+  const withVariants = (): BrandRecipe =>
+    brandRecipeSchema.parse({ ...detailMastersRecipe, fragments: { statement: [STATEMENT, STATEMENT_B] } });
+
+  const parts = { headline: 'One line.' };
+
+  it('rotates by slide index, exactly like composition patterns', () => {
+    const r = withVariants();
+    const a = fill(r, input({ role: 'statement', parts, index: 0 }));
+    const b = fill(r, input({ role: 'statement', parts, index: 1 }));
+    const c = fill(r, input({ role: 'statement', parts, index: 2 }));
+    expect(a).not.toBe(b); // consecutive indices land on different skeletons
+    expect(a).toBe(c); // …and the rotation wraps deterministically
+  });
+
+  it('a per-deck seed shifts which variant the same slide gets', () => {
+    const r = withVariants();
+    const deck1 = fill(r, input({ role: 'statement', parts, index: 0 }));
+    const deck2 = fill(r, input({ role: 'statement', parts, index: 0, seed: 1 }));
+    expect(deck1).not.toBe(deck2);
+  });
+
+  it('a single-string role behaves exactly as before, at any index', () => {
+    const r = withFragments({ statement: STATEMENT });
+    expect(fill(r, input({ role: 'statement', parts, index: 0 }))).toBe(
+      fill(r, input({ role: 'statement', parts, index: 5, seed: 3 })),
+    );
+  });
+
+  it('validation checks each variant on its own and drops only the broken one', () => {
+    const r = brandRecipeSchema.parse({
+      ...detailMastersRecipe,
+      fragments: { statement: [STATEMENT, '<div class="nope">{{headline}}</div>'] },
+    });
+    const out = validateRecipeFragments(r);
+    expect(out.dropped).toHaveLength(1);
+    expect(out.recipe.fragments?.statement).toBe(STATEMENT); // one survivor → plain string
+  });
+});
