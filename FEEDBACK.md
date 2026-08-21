@@ -51,6 +51,34 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
+### A cta headline shipped unfinished — third occurrence, and the re-parse had already fired
+
+- **Kind:** Defect
+- **Severity:** blocked shipping
+- **First seen:** 2026-08-21 — the prepaid-packages test deck, slide 7: `Your next quiet week is already` — the sentence simply stops.
+- **What happened:** `unfinishedProse` exists precisely for this and the spend ledger shows the parse ran TWICE, so the corrective re-parse fired and the deck shipped unfinished anyway. HANDOFF.md already records "two headlines have shipped past it"; this is the third. The check reports what survives and nothing refuses it.
+- **Why it matters:** it is the closing slide — the one carrying the offer — and no downstream gate can catch it: it fits, it does not collide, and the words are "verbatim" by every rule the composer follows.
+- **Direction:** stop treating an unfinished headline as advisory. After the corrective re-parse, a part still ending mid-thought should either be re-asked ONCE on its own (a single part, not the deck) or dropped to a shorter element the slide can carry — and if neither works, the slide should be marked, not shipped clean. The deck-critique cannot substitute: it reviews pixels and read this one as merely "floating".
+
+### The brand's own name renders wrong in generated copy
+
+- **Kind:** Defect
+- **Severity:** cost me a fix
+- **First seen:** 2026-08-21 — the prepaid-packages test deck, slide 7: "Start free with **Detailmasters CRM**."
+- **What happened:** the product is written `detailmasters CRM` — lowercase, always — and the copywriter title-cased it. Nothing in the pipeline knows the brand's name has a fixed casing.
+- **Why it matters:** it is the single most-repeated string the product will ever emit, it appears on the slide that carries the offer, and a house-style rule that lives only in a human's head gets broken by every new model.
+- **Direction:** the recipe already carries the brand's identity; give it a `nameFormat` (or reuse the wordmark) and enforce it mechanically after the parse, exactly like the brand-mark normaliser already does for the logo — a prompt line alone will not hold.
+
+### A full-bleed cta puts white type on a light photograph
+
+- **Kind:** Defect
+- **Severity:** cost me a fix
+- **First seen:** 2026-08-21 — the prepaid-packages test deck, slide 7.
+- **What happened:** the closing slide took a bleed photo of a pale seat; the headline and the body sit on it in white and near-white with no legibility scrim doing real work, and the gold cta button rendered as plain text rather than the brand's filled button.
+- **Why it matters:** `suitsBleedOver` exists to drop a photo whose tone fights the brand ground, and it passed this one — the check compares the photo against the GROUND, not against the type that will sit on it.
+- **Direction:** judge the bleed against the INK as well as the ground, and measure the region the type actually occupies rather than the whole frame (the anchor logic already computes that region). Separately: find why `.cta` lost its button treatment on a bleed slide — a photo slide should not silently downgrade the one element that asks for the click.
+
+
 ### The review check was slot-chauvinist — and it talked an agent into un-designing a full-bleed cover
 
 - **Kind:** Defect

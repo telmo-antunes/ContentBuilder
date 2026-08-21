@@ -118,6 +118,19 @@ export async function critiqueDeck(
   const usable = shots.filter((s): s is Buffer => Boolean(s));
   // One slide is not a sequence, and sequence is most of what this judges.
   if (usable.length < 2) return null;
+  /**
+   * A PARTIAL DECK IS NOT A DECK. When slides fail to photograph, the sheet
+   * silently becomes a different, shorter deck — and the review reads as a
+   * confident verdict on a post nobody made. The first real run lost five of
+   * seven slides and was told, reasonably, that two slides "barely count as a
+   * sequence". Half the deck or less is not worth reviewing at all; anything
+   * missing is disclosed so the model judges what it can actually see.
+   */
+  const missing = shots.length - usable.length;
+  if (usable.length < Math.ceil(shots.length / 2)) {
+    console.warn(`[critique] only ${usable.length}/${shots.length} slide(s) rendered — not reviewing a partial deck`);
+    return null;
+  }
   if (!affordsUsd(CRITIQUE_ESTIMATE_USD, 'deck-critique')) return null;
 
   let sheet: Buffer;
@@ -153,6 +166,12 @@ export async function critiqueDeck(
                   `Its signature move: ${recipe.signature.name} — ${recipe.signature.description}`,
                   ``,
                   `${usable.length} slides, in order, numbered on the sheet. Review them.`,
+                  ...(missing
+                    ? [
+                        `NOTE: ${missing} further slide(s) of this deck could not be rendered and are NOT on the sheet.`,
+                        `Judge only what you can see, and do not conclude the deck is too short.`,
+                      ]
+                    : []),
                 ].join('\n'),
               },
             ],

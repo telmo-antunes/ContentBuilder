@@ -65,6 +65,26 @@ describe('the deck critique', () => {
     expect(out!.findings[0]).toMatchObject({ slide: 0, severity: 'notable' });
   });
 
+  it('refuses to review a deck that mostly failed to render', async () => {
+    // A partial sheet is a DIFFERENT, shorter deck — reviewing it produces a
+    // confident verdict on a post nobody made. (The first real run lost five
+    // of seven slides and was told two slides barely count as a sequence.)
+    reply = () => ({ verdict: 'ok', findings: [] });
+    aiCalls.length = 0;
+    const mostlyMissing = [Buffer.from('a'), Buffer.from('b'), null, null, null, null, null];
+    expect(await critiqueDeck(detailMastersRecipe, mostlyMissing, '1080x1350')).toBeNull();
+    expect(aiCalls).toHaveLength(0);
+  });
+
+  it('discloses the gap when only a few slides are missing', async () => {
+    reply = () => ({ verdict: 'ok', findings: [] });
+    aiCalls.length = 0;
+    await critiqueDeck(detailMastersRecipe, [...shots(5), null], '1080x1350');
+    const sent = JSON.stringify(aiCalls[0]);
+    expect(sent).toContain('could not be rendered');
+    expect(sent).toContain('do not conclude the deck is too short');
+  });
+
   it('never throws when the model call fails — a critique cannot block shipping', async () => {
     reply = () => {
       throw new Error('vision unavailable');
