@@ -24,10 +24,18 @@ export const PROMPT_VERSION = {
    * `SYSTEM` + the worked exemplars in lib/htmlDirector/authorRecipe.ts.
    * v2: the author now also emits `fragments` — one worked slide per role, in
    * the brand's own markup with `{{…}}` copy holes (see htmlDirector/fragments.ts).
+   * v3: composition.align is an explicit decision read from the brand evidence
+   * (center is a real option; all three exemplars are flush-left, which was
+   * silently becoming the only answer), and the CSS must implement the align
+   * the recipe declares.
    */
-  author: 2,
-  /** `CRITIQUE_SYSTEM` in lib/htmlDirector/authorRecipe.ts. */
-  critique: 1,
+  author: 3,
+  /**
+   * `CRITIQUE_SYSTEM` in lib/htmlDirector/authorRecipe.ts.
+   * v2: also judges composition.align against the brand evidence, and that the
+   * authored CSS implements the declared align.
+   */
+  critique: 2,
   /** `PARSE_SYSTEM` in lib/htmlDirector/compose.ts (idea → slides + copy). */
   parse: 1,
   /** `SLIDE_AUTHOR_INSTRUCTIONS` in lib/htmlDirector/prompt.ts (parts → markup). */
