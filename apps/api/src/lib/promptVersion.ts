@@ -41,8 +41,12 @@ export const PROMPT_VERSION = {
    * rows / split-with-winner. Calibrated against Telmo's picked references.
    * v7: VERTICAL RHYTHM — spacing authored as grouping (tight lockups,
    * ~2× between units, air around the cta, 3–4 reused spacing steps).
+   * v8: the fragments TOOL SCHEMA admits variant arrays. Every fragment was
+   * declared `type: 'string'`, and structured output makes the schema
+   * authoritative — so v5's demand for 2–3 arrangements per role was
+   * unsatisfiable, and three re-authors dutifully returned one skeleton each.
    */
-  author: 7,
+  author: 8,
   /**
    * `CRITIQUE_SYSTEM` in lib/htmlDirector/authorRecipe.ts.
    * v2: also judges composition.align against the brand evidence, and that the

@@ -14,7 +14,7 @@
  */
 import { createHash } from 'node:crypto';
 import type { TouchpointId } from '@contentbuilder/shared';
-import { RECIPE_AUTHOR_SYSTEM, RECIPE_CRITIQUE_SYSTEM } from './htmlDirector/authorRecipe';
+import { AUTHOR_TOOL, RECIPE_AUTHOR_SYSTEM, RECIPE_CRITIQUE_SYSTEM } from './htmlDirector/authorRecipe';
 import { SLIDE_AUTHOR_INSTRUCTIONS } from './htmlDirector/prompt';
 import { PARSE_SYSTEM, countGuidance, formatGuidance } from './htmlDirector/compose';
 
@@ -48,7 +48,17 @@ export const promptHash = (text: string): string =>
 
 /** The live text of every versioned prompt. */
 export const PROMPT_TEXT: Partial<Record<TouchpointId, string>> = {
-  recipeAuthor: RECIPE_AUTHOR_SYSTEM,
+  /**
+   * THE SCHEMA IS HALF THE PROMPT, and it was outside the guard.
+   *
+   * Structured output makes the tool schema authoritative over the prose: every
+   * fragment was declared `type: 'string'`, so a prompt demanding 2–3
+   * arrangements per role was unsatisfiable and three re-authors returned one
+   * skeleton each — with the hash unmoved the whole time, because only the
+   * system text was hashed. Exactly the failure this file already records for
+   * PARSE_USER_RULES, on a different touchpoint.
+   */
+  recipeAuthor: `${RECIPE_AUTHOR_SYSTEM}\n${JSON.stringify(AUTHOR_TOOL.schema)}`,
   recipeCritique: RECIPE_CRITIQUE_SYSTEM,
   // The system prompt AND the rule-bearing parts of the user message — see
   // PARSE_USER_RULES. One hash covers both, so either one moving is a version
@@ -62,7 +72,7 @@ export const PROMPT_TEXT: Partial<Record<TouchpointId, string>> = {
  * Regenerate with:  npm --prefix apps/api run prompt:hashes
  */
 export const EXPECTED_HASHES: Partial<Record<TouchpointId, string>> = {
-  recipeAuthor: 'de0be8d4b756',
+  recipeAuthor: '7d521972937c',
   recipeCritique: 'cca647567b3e',
   parse: '2426768a2089',
   compose: '3ad68f52e4cc',

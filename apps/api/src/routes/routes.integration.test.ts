@@ -60,7 +60,7 @@ vi.mock('@anthropic-ai/sdk', () => ({
 
 import type { Server } from 'node:http';
 import { createApp } from '../app';
-import { modelFor } from '../lib/ai';
+import { modelFor, designModel } from '../lib/ai';
 import { VideoExportCancelled, type IsCancelled } from '../lib/videoExporter';
 import { failInterruptedVideoJobs } from '../lib/videoJobs';
 import { BusinessModel, BrandKitModel, MediaAssetModel, ProjectModel, ProjectVersionModel, SettingModel, VideoJobModel } from '../models';
@@ -1044,7 +1044,14 @@ describe('modelFor', () => {
   it('prefers the Settings override for its touchpoint only', async () => {
     await SettingModel.create({ key: 'ai', captionModel: 'claude-caption-override' });
     expect(await modelFor('caption')).toBe('claude-caption-override');
-    expect(await modelFor('recipe')).toBe('claude-test'); // untouched touchpoint
+    /**
+     * The point is that an override on ONE touchpoint leaves the others alone —
+     * not what tier `recipe` happens to resolve to. Asserting the literal made
+     * this test fail the moment a real ANTHROPIC_MODEL_DESIGN was set in the
+     * environment it reads, which is a property of the developer's .env and
+     * nothing to do with what is being tested.
+     */
+    expect(await modelFor('recipe')).toBe(designModel()); // untouched touchpoint
 
     // Settings PUT persists the override fields too.
     const res = await request(app()).put('/settings').send({ visionModel: 'claude-vision-override' });

@@ -10,6 +10,20 @@
  */
 import type { BrandRecipe } from '@contentbuilder/shared';
 import { REFERENCE_RECIPES } from '../lib/htmlDirector/recipes';
+
+/**
+ * THE EVAL'S BRANDS CARRY NO FRAGMENTS, AND THAT IS THE POINT.
+ *
+ * The reference recipes ship worked fragments so the recipe-AUTHOR model can
+ * see the shape it is being asked for. The eval has a different job: it
+ * measures what the COMPOSER does when it has to write a slide, against
+ * baselines recorded run over run. Substituting instead would measure a
+ * different thing entirely and invalidate every recorded report.
+ *
+ * Stated here, once, rather than depending on the exemplars happening to have
+ * none — which is exactly what broke the day they gained some.
+ */
+const withoutFragments = (recipe: BrandRecipe): BrandRecipe => ({ ...recipe, fragments: undefined });
 import type { SourceDoc } from '../lib/sourceIngest';
 
 export interface EvalFixture {
@@ -42,8 +56,8 @@ export interface EvalBrand {
 
 /** The two proven reference recipes — no DB, no seeding, fully deterministic. */
 export const EVAL_BRANDS: EvalBrand[] = [
-  { id: 'dynatos', name: 'Dynatós Program', recipe: REFERENCE_RECIPES['Dynatós Program']! },
-  { id: 'detailmasters', name: 'DetailMasters CRM', recipe: REFERENCE_RECIPES['DetailMasters CRM']! },
+  { id: 'dynatos', name: 'Dynatós Program', recipe: withoutFragments(REFERENCE_RECIPES['Dynatós Program']!) },
+  { id: 'detailmasters', name: 'DetailMasters CRM', recipe: withoutFragments(REFERENCE_RECIPES['DetailMasters CRM']!) },
 ];
 
 /**

@@ -51,6 +51,7 @@ import { getStorage } from '../../storage';
 import {
   FRAGMENT_CONVENTION,
   carryForwardFragments,
+  derivePatternsFromFragments,
   fillRecipeFragmentGaps,
   fillRecipeFragmentGapsMeasured,
   validateRecipeFragments,
@@ -217,7 +218,7 @@ Keep the brand's colours, fonts and voice — improve the CRAFT. ${ENUMS} No pro
  * Module-level and constant: the tool list renders before `system`, so these
  * bytes are part of the cached prefix and must never vary per call.
  */
-const AUTHOR_TOOL: AiJsonTool = {
+export const AUTHOR_TOOL: AiJsonTool = {
   name: 'author_recipe',
   description:
     "Deliver the brand's finished design system. Every field takes the same shape as the worked examples, except that the CSS is delivered as the three layers rather than one flat stylesheet.",
@@ -261,11 +262,31 @@ const AUTHOR_TOOL: AiJsonTool = {
       fragments: {
         type: 'object',
         description:
-          'One worked slide per role, in this brand\'s markup with the copy left as {{placeholder}} holes — what every future post of that role is composed by substituting into. Keys are slide roles; each value is the inner markup of .cb-slide.',
+          'Worked slides per role, in this brand\'s markup with the copy left as {{placeholder}} holes — what every future post of that role is composed by substituting into. Keys are slide roles. A value is EITHER one worked slide (a string) OR, for the content roles, an ARRAY of 2–4 genuinely different arrangements of that role, which the app rotates per slide and per deck so consecutive posts are not re-skins of each other.',
         properties: Object.fromEntries(
           SLIDE_ROLES.map((role) => [
             role,
-            { type: 'string', description: `The worked "${role}" slide, with {{…}} holes for its copy.` },
+            {
+              /**
+               * STRING **OR** ARRAY — and this is why variants never appeared.
+               *
+               * Structured output makes the SCHEMA authoritative: every fragment
+               * was declared `type: 'string'`, so however loudly the prompt
+               * asked for 2–3 arrangements per role, the model could not comply
+               * without violating the tool contract. It emitted one skeleton per
+               * role because that is the only thing it was allowed to emit.
+               */
+              /**
+               * NO `type` HERE, on purpose — this field is a string OR an array
+               * of strings, and an `anyOf` broke the forced tool call outright
+               * (the model returned a payload missing `tokens` and `signature`).
+               * The file's own contract already covers this case: keep the tool
+               * schema loose, carry the shape in the description, and let
+               * `brandRecipeSchema` be the actual gate — it accepts both.
+               */
+              description:
+                `The worked "${role}" slide, with {{…}} holes for its copy — EITHER one string, OR (for the content roles) an array of 2–4 genuinely DIFFERENT arrangements: a different order and different furniture, not one layout respaced. Variant i implements arrangement i of this role's composition.patterns.`,
+            },
           ]),
         ),
       },
@@ -693,7 +714,20 @@ function gate(recipe: BrandRecipe, label: string, previous?: BrandRecipe): Brand
    * a per-slide model call: slower, less predictable, and the exact path that
    * once rendered the model's own reasoning onto a slide.
    */
-  const roles = Object.keys(filled.recipe.fragments ?? {});
+  /**
+   * A fragment the composer has no arrangement for is markup nobody was told
+   * about — and the art-direction pass, which chooses BETWEEN arrangements,
+   * stands down entirely when a brand has none. Derived from the fragments
+   * themselves, so the two can never disagree.
+   */
+  const patterned = derivePatternsFromFragments(filled.recipe);
+  if (patterned.added.length) {
+    console.warn(
+      `[recipe:${label}] derived ${patterned.added.length} composition pattern(s) from the fragments the author wrote`,
+    );
+  }
+
+  const roles = Object.keys(patterned.recipe.fragments ?? {});
   const missing = SLIDE_ROLES.filter((r) => !roles.includes(r));
   if (roles.length) {
     console.warn(
@@ -701,7 +735,7 @@ function gate(recipe: BrandRecipe, label: string, previous?: BrandRecipe): Brand
         (missing.length ? ` — no fragment for ${missing.join(', ')}, those roles cost a model call per slide` : ''),
     );
   }
-  return filled.recipe;
+  return patterned.recipe;
 }
 
 /**
@@ -820,7 +854,17 @@ async function authorOnce(
   const content = shot ? [shot, { type: 'text' as const, text: user }] : user;
   const params = {
     model,
-    max_tokens: 7000,
+    /**
+     * ROOM FOR THE VARIANTS.
+     *
+     * 7000 fitted a recipe with ONE fragment per role. Asking the content roles
+     * for 2–4 arrangements each roughly triples that payload, and a truncated
+     * tool input does not fail loudly — it arrives as an object missing
+     * `tokens` and `signature`, which reads like a model that ignored the
+     * schema rather than an output cap. This call already streams (`large`),
+     * so the ceiling is the only thing that was in the way.
+     */
+    max_tokens: 20000,
     system: AUTHOR_SYSTEMS[pairingFor(evidence)],
     messages: [{ role: 'user' as const, content }],
   };
