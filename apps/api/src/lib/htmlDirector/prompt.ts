@@ -18,7 +18,9 @@ import {
   archetypeFor,
   recipePatternsFor,
   recipePatternVariant,
+  slideAlignFor,
   type BrandRecipe,
+  type SlideAlign,
 } from '@contentbuilder/shared';
 
 /** A slide's role — selects which composition pattern the composer follows. */
@@ -54,6 +56,12 @@ export interface ComposeSlideInput {
    * Studio's photo picker so it opens on a search instead of an empty box.
    */
   imageQuery?: string;
+  /**
+   * This slide's alignment when it deviates from the brand default — the parse
+   * step's per-deck call. Threaded into the spec block so the composer arranges
+   * for it, stored on `authored.align`, applied by the app's `data-align` layer.
+   */
+  align?: SlideAlign;
   /** Position in the deck — rotates which composition VARIANT this role uses. */
   index?: number;
   /**
@@ -96,7 +104,13 @@ export const variantIndexOf = (input: ComposeSlideInput): number =>
   (input.index ?? 0) + (input.variantBias ?? 0);
 
 /** Render the recipe into the compact spec the composer reasons over. */
-export function recipeSpecBlock(recipe: BrandRecipe, format: string, role?: string, index?: number): string {
+export function recipeSpecBlock(
+  recipe: BrandRecipe,
+  format: string,
+  role?: string,
+  index?: number,
+  align?: SlideAlign,
+): string {
   const comps = recipe.components.map((c) => `  .${c.className} — ${c.use}`).join('\n');
   // When the role is known, lead with the ONE variant this slide should follow
   // (a brand may author several arrangements per role); otherwise list them all.
@@ -104,9 +118,17 @@ export function recipeSpecBlock(recipe: BrandRecipe, format: string, role?: stri
   const patterns = chosen
     ? `  - ${chosen}`
     : recipePatternsFor(recipe, format).map((p) => `  - ${p}`).join('\n');
+  // THIS slide's alignment: its own deviation → the recipe's per-role override
+  // → the brand default. Named per slide so the composer arranges for the
+  // alignment the app layer will actually apply, instead of the global one.
+  const effectiveAlign = slideAlignFor(recipe, role, align) ?? recipe.composition.align;
   return [
     `SIGNATURE MOVE (${recipe.signature.name}): ${recipe.signature.description}`,
-    `ALIGNMENT: ${recipe.composition.align}`,
+    `ALIGNMENT: ${effectiveAlign}${
+      effectiveAlign !== recipe.composition.align
+        ? ` (this slide deviates from the brand's ${recipe.composition.align} default — compose for ${effectiveAlign})`
+        : ''
+    }`,
     ``,
     `COMPONENT CLASSES you may use (and nothing else):`,
     comps,
@@ -125,6 +147,7 @@ HARD RULES
 - Apply the brand SIGNATURE MOVE exactly as its description says (e.g. wrap the emphasis phrase in the specified span; or place the tagline element).
 - HONOUR THE ARRANGEMENT when this slide names one. It is not a suggestion and it is not yours to choose: it was decided for the DECK, so that seven slides have a rhythm instead of seven independent opinions, and the layout the app applies afterwards enforces it. Two things follow from it. Where it says the leftover space belongs tells you where the spacer goes — a ".fill" above the content anchors the slide low, one below packs it from the top — so put it there and not by feel. And the line limit on the headline is a limit on THIS composition, not on the brand: a headline that runs past it is not emphasis any more, it is unedited copy sitting where a picture or a list should be.
 - Follow the COMPOSITION PATTERN that matches this slide's ROLE. Use a <div class="fill"></div> spacer where the pattern bottom-anchors content.
+- ALIGNMENT is stated in the spec, per slide, and the app applies it to the whole frame afterwards — you never write alignment classes or styles. What it changes for you is judgment, not markup: on a centred slide keep the fragment to short display moments (an eyebrow, the headline, one payoff line, a cta) and drop asymmetric furniture, because centred running text and centred lists do not read.
 - A SPACER IS ONLY WORTH WRITING WHEN SOMETHING FOLLOWS IT. A <div class="fill"></div> at the END of the fragment grows into empty canvas and leaves the bottom half of the poster blank — the classic unfinished-looking slide. Put the spacer where you want the gap: after the top-edge marks (the logo, the eyebrow) and before the statement they introduce, so the label sits on the top edge and the copy settles on the baseline.
 - The canvas (dimensions given below) is large and the stylesheet already sets big, legible type for it — do not fight it. Keep the fragment to the few elements the pattern calls for; embrace negative space. On a taller (story) canvas lean on the fill spacer to spread content; on a square canvas keep it to the essentials.
 - If a copy part is absent, omit its element (don't fabricate a placeholder).
@@ -177,7 +200,7 @@ export function buildComposeMessages(
   const arrangement = archetypeFor(input.archetype);
   const user = [
     `BRAND SPEC`,
-    recipeSpecBlock(recipe, input.format, input.role, variantIndexOf(input)),
+    recipeSpecBlock(recipe, input.format, input.role, variantIndexOf(input), input.align),
     ``,
     `THIS SLIDE`,
     `  role: ${input.role}`,

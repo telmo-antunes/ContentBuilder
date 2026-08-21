@@ -19,7 +19,7 @@ import { z } from 'zod';
 import { AA_LARGE, AA_TEXT, contrastRatio, hexToRgb, relativeLuminance } from './colorContrast';
 import { APP_IMAGE_CLASSES, slideMediaCss } from './slidePhotos';
 import { AMBIENT_INTENSITIES, AMBIENT_STYLES, DEFAULT_AMBIENT, type AmbientSpec } from './slideMotion';
-import { slideArchetypeCss } from './archetypes';
+import { slideArchetypeCss, slideAlignCss, isSlideAlign, type SlideAlign } from './archetypes';
 import { slideTypesettingCss } from './lineBreaks';
 import {
   enforceDescenderClearance,
@@ -292,6 +292,15 @@ export const brandRecipeSchema = z.object({
   composition: z
     .object({
       align: z.enum(['flush-left', 'center', 'flush-right']).catch('flush-left'),
+      /**
+       * PER-ROLE alignment overrides, mirroring `motion.roles`: the brand's
+       * default `align` stands, and a role listed here composes differently —
+       * a flush-left brand whose cta centres, a centred brand whose list reads
+       * left. The recipe is identity, not a straitjacket: alignment is a
+       * per-slide composition decision, and this is the recipe's half of it
+       * (the parse step's per-slide `authored.align` is the other, and wins).
+       */
+      roles: z.record(z.string(), z.enum(['flush-left', 'center', 'flush-right'])).optional(),
       /** Ordered arrangement recipes, e.g. "logo top-left → eyebrow → headline → rule → body". */
       patterns: z.array(z.string().max(200)).max(12).catch([]),
     })
@@ -466,9 +475,29 @@ export function recipeStylesheetFor(recipe: BrandRecipe, format: string): string
   // The archetype layer is app capability like the image layer, and goes LAST:
   // it owns where a slide's leftover space lands, and it can only take that
   // decision off the markup by outranking the brand's own `.fill` spacers.
+  // The alignment layer rides the same contract for the horizontal axis: it
+  // only fires on slides that carry an explicit `data-align`.
   const archetypes = slideArchetypeCss();
+  const align = slideAlignCss();
   const typesetting = slideTypesettingCss();
-  return [typeBaseCss(), authored, surface, media, archetypes, typesetting].filter(Boolean).join('\n');
+  return [typeBaseCss(), authored, surface, media, archetypes, align, typesetting].filter(Boolean).join('\n');
+}
+
+/**
+ * The alignment ONE SLIDE composes at, or undefined when the brand's global
+ * alignment (implemented by its own stylesheet) should stand. Resolution:
+ * the slide's own choice → the recipe's per-role override → nothing.
+ * Undefined keeps `data-align` off the DOM, so the app layer stays inert on
+ * every slide that never asked for an exception.
+ */
+export function slideAlignFor(
+  recipe: BrandRecipe | undefined,
+  role: string | undefined,
+  authoredAlign?: string,
+): SlideAlign | undefined {
+  if (isSlideAlign(authoredAlign)) return authoredAlign;
+  const byRole = role ? recipe?.composition?.roles?.[role] : undefined;
+  return isSlideAlign(byRole) ? byRole : undefined;
 }
 
 /**

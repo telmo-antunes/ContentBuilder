@@ -28,18 +28,32 @@ export const PROMPT_VERSION = {
    * (center is a real option; all three exemplars are flush-left, which was
    * silently becoming the only answer), and the CSS must implement the align
    * the recipe declares.
+   * v4: composition.roles — per-role alignment overrides, mirroring
+   * motion.roles; fragments must not hard-pin text-align on structural
+   * elements the app's data-align layer would need to move.
    */
-  author: 3,
+  author: 4,
   /**
    * `CRITIQUE_SYSTEM` in lib/htmlDirector/authorRecipe.ts.
    * v2: also judges composition.align against the brand evidence, and that the
    * authored CSS implements the declared align.
+   * v3: shared ENUMS now name composition.roles (per-role align overrides).
    */
-  critique: 2,
-  /** `PARSE_SYSTEM` in lib/htmlDirector/compose.ts (idea → slides + copy). */
-  parse: 1,
-  /** `SLIDE_AUTHOR_INSTRUCTIONS` in lib/htmlDirector/prompt.ts (parts → markup). */
-  compose: 1,
+  critique: 3,
+  /**
+   * `PARSE_SYSTEM` in lib/htmlDirector/compose.ts (idea → slides + copy).
+   * v2: the parse step may set per-slide "align" — it is the only model that
+   * sees the whole deck, so alignment deviations (a centred cta, a monumental
+   * one-liner) are its call; the brand default stays a default, not a law.
+   */
+  parse: 2,
+  /**
+   * `SLIDE_AUTHOR_INSTRUCTIONS` in lib/htmlDirector/prompt.ts (parts → markup).
+   * v2: the spec names THIS slide's alignment (slide deviation → recipe role
+   * override → brand default) and the composer is told what a centred slide
+   * changes about its judgment — never its markup.
+   */
+  compose: 2,
 } as const;
 
 /** The AI touchpoints that carry a versioned prompt. */

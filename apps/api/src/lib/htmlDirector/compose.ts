@@ -113,6 +113,13 @@ const parseResultSchema = z.object({
          * user had to invent the search themselves.
          */
         imageQuery: z.string().max(80).optional(),
+        /**
+         * This slide's alignment, ONLY when it should deviate from the brand's
+         * default — the parse step sees the whole deck, so per-slide alignment
+         * is its call to make (a centred cta or monumental one-liner on a
+         * flush-left brand). Absent = brand default; invalid values drop.
+         */
+        align: z.enum(['flush-left', 'center', 'flush-right']).optional().catch(undefined),
       }),
     )
     .min(1)
@@ -946,7 +953,8 @@ RULES
 - Write in the brand voice provided. No hashtags, no emoji.
 - "image": set true when this slide would be genuinely STRONGER with a photograph — it shows a place, a product, a person, a result, a before/after. Set false when the slide is a pure typographic statement, a pulled quote, or a big number, where a photo would only decorate. Judge each slide on its own; a deck may have several, one, or none.
 - With "image": true, also give "imageQuery" — 2–5 words naming the picture as you would search a stock library for it ("ceramic coating applied to car bonnet", not "a nice photo"). It is what the user's photo picker opens on.
-- A slide marked "image": true gets an eyebrow and a headline ONLY. Omit "body" AND "rows" entirely on those slides — a photograph takes nearly half the canvas, and neither a paragraph nor a list can share what is left. If the content is a list, it is not a photo slide: keep the rows and set "image": false.`;
+- A slide marked "image": true gets an eyebrow and a headline ONLY. Omit "body" AND "rows" entirely on those slides — a photograph takes nearly half the canvas, and neither a paragraph nor a list can share what is left. If the content is a list, it is not a photo slide: keep the rows and set "image": false.
+- "align": the brand has a default alignment and it usually stands — but it is a default, not a law. You see the whole deck, so when ONE slide's content earns a different alignment, say so: a cta or a monumental one-line statement often lands harder centred; a quote can centre; a list and any running body copy always read flush. Set "align" ("flush-left" | "center" | "flush-right") only on the slides that deviate, and let the rest inherit. Used well this is a beat in the deck's rhythm, not a theme — deviating on most slides means the brand default is wrong, not the slides.`;
 
 /**
  * THE PARSE STEP'S OUTPUT SHAPE, as a tool the model is FORCED to call — so the
@@ -982,6 +990,12 @@ const PARSE_TOOL: AiJsonTool = {
               type: 'string',
               description:
                 'Only when image is true: 2–5 words describing the picture, as you would type them into a stock photo library.',
+            },
+            align: {
+              type: 'string',
+              enum: ['flush-left', 'center', 'flush-right'],
+              description:
+                "Only when this slide should break the brand's default alignment because its content earns it — e.g. a centred cta or a monumental one-line statement. Omit to keep the brand default. Never centre a list or running body copy.",
             },
             parts: {
               type: 'object',
@@ -1467,6 +1481,8 @@ export async function parseForCompose(
     // Kept even on a slide whose slot was demoted: the photo panel can still
     // put a background or a free overlay there, and the search is just as good.
     ...(s.imageQuery ? { imageQuery: s.imageQuery } : {}),
+    // The parse step's per-slide alignment call — it saw the whole deck.
+    ...(s.align ? { align: s.align } : {}),
     ...(opts?.variantBias?.[s.role] ? { variantBias: opts.variantBias[s.role] } : {}),
     index,
   }));
@@ -2050,7 +2066,7 @@ export async function composeProject(
 ): Promise<
   Array<{
     role: SlideRole;
-    authored: { html: string; bg?: string; role?: string; archetype?: string };
+    authored: { html: string; bg?: string; role?: string; archetype?: string; align?: string };
     /** The parse step's stock-search phrase for this slide's picture, if any. */
     imageQuery?: string;
     /** Which path composed this slide — telemetry only; nothing stores it. */
@@ -2139,7 +2155,7 @@ export async function composeProject(
   });
   const out: Array<{
     role: SlideRole;
-    authored: { html: string; bg?: string; role?: string; archetype?: string; source?: ComposePath };
+    authored: { html: string; bg?: string; role?: string; archetype?: string; align?: string; source?: ComposePath };
     imageQuery?: string;
     source: ComposePath;
   }> = [];
@@ -2152,7 +2168,9 @@ export async function composeProject(
       const { source, ...slide } = a;
       out.push({
         role: inputs[i]!.role,
-        authored: { ...slide, source },
+        // `align` is stored like `source`: the finished markup cannot be asked
+        // what alignment it was composed for — the app layer needs the field.
+        authored: { ...slide, source, ...(inputs[i]!.align ? { align: inputs[i]!.align } : {}) },
         ...(inputs[i]!.imageQuery ? { imageQuery: inputs[i]!.imageQuery } : {}),
         source,
       });

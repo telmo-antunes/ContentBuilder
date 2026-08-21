@@ -24,6 +24,7 @@ import {
   recipeAmbient,
   recipeMotionCss,
   recipeMotionTiming,
+  slideAlignFor,
   statCountUp,
   type BrandRecipe,
   type Format,
@@ -67,7 +68,7 @@ export function AuthoredSlide({
   onOverflow,
 }: {
   recipe: BrandRecipe;
-  authored: { html: string; bg?: string; role?: string; archetype?: string };
+  authored: { html: string; bg?: string; role?: string; archetype?: string; align?: string };
   /** The target canvas — selects the recipe's per-format vertical tuning. */
   format: Format;
   logoUrl?: string;
@@ -497,6 +498,10 @@ export function AuthoredSlide({
         // The archetype's CSS keys off this attribute, so it has to reach the
         // DOM — it is what decides where this slide's leftover space lands.
         data-archetype={isArchetype(authored.archetype) ? authored.archetype : undefined}
+        // The alignment layer's attribute — absent unless this slide (or the
+        // recipe, for this role) explicitly deviates from the brand's global
+        // alignment, so the app CSS stays inert everywhere else.
+        data-align={slideAlignFor(recipe, authored.role, authored.align)}
         dangerouslySetInnerHTML={slideHtmlObj}
       />
       {layer(over, 'over')}

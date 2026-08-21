@@ -21,6 +21,7 @@
  * brand sheet, and neutralises stray `.fill` spacers — slack becomes a property
  * of the chosen composition instead of an accident of markup.
  */
+import { SLOT_CLASS } from './slidePhotos';
 
 /** Where the leftover vertical space goes. */
 export type SlackPolicy =
@@ -296,6 +297,49 @@ export function slideArchetypeCss(): string {
   }
 
   return rules.join('\n');
+}
+
+// ── Alignment ────────────────────────────────────────────────────────────────
+
+/**
+ * The horizontal sibling of the slack policy: where a slide's content ALIGNS.
+ *
+ * `composition.align` on the recipe is the brand's default, implemented by the
+ * brand's own stylesheet. This layer exists for the exceptions — a slide whose
+ * content earns a different alignment (a centred CTA, a monumental one-liner)
+ * without the brand being re-authored. Resolution order, most specific first:
+ * the slide's own `authored.align` (the deck-seeing parse step's choice) →
+ * `composition.roles[role]` (the recipe's per-role default) → nothing, which
+ * leaves the brand stylesheet's global alignment standing.
+ *
+ * Values reuse the recipe's own enum so the two vocabularies cannot drift.
+ */
+export const SLIDE_ALIGNS = ['flush-left', 'center', 'flush-right'] as const;
+export type SlideAlign = (typeof SLIDE_ALIGNS)[number];
+
+export const isSlideAlign = (v: unknown): v is SlideAlign =>
+  typeof v === 'string' && (SLIDE_ALIGNS as readonly string[]).includes(v);
+
+/**
+ * App-owned alignment CSS, keyed off `data-align` on the slide root exactly as
+ * the slack policy keys off `data-archetype`. Emitted AFTER the brand sheet so
+ * an explicit per-slide alignment outranks the brand's global one — the same
+ * "app capability, goes last" contract as the archetype layer.
+ *
+ * Deliberately minimal: `text-align` plus the flex cross-axis, and the slot's
+ * inline margins (which the global sheet keys off the RECIPE's align — these
+ * rules re-key them off the slide's own). Anything cleverer belongs to the
+ * brand's stylesheet, which can always restyle `.cb-slide[data-align="…"]`.
+ */
+export function slideAlignCss(): string {
+  return [
+    `.cb-slide[data-align="flush-left"]{text-align:left;align-items:flex-start}`,
+    `.cb-slide[data-align="center"]{text-align:center;align-items:center}`,
+    `.cb-slide[data-align="flush-right"]{text-align:right;align-items:flex-end}`,
+    `.cb-slide[data-align="flush-left"] .${SLOT_CLASS}{margin-inline:0}`,
+    `.cb-slide[data-align="center"] .${SLOT_CLASS}{margin-inline:auto}`,
+    `.cb-slide[data-align="flush-right"] .${SLOT_CLASS}{margin-inline-start:auto;margin-inline-end:0}`,
+  ].join('\n');
 }
 
 // ── Rhythm ───────────────────────────────────────────────────────────────────
