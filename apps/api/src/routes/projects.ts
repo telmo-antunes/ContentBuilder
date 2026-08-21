@@ -25,6 +25,7 @@ import {
   type SlidePhoto,
 } from '@contentbuilder/shared';
 import { composeProject, composeSlide, parseSlideCopy, parseSlideDirection } from '../lib/htmlDirector/compose';
+import { withSpendLedger, summarize, type SpendLedger } from '../lib/spend';
 import { resolveBrief } from '../lib/sourceIngest';
 import { authoredShape, partsFromAuthored, rewriteAuthoredCopy } from '../lib/htmlDirector/reparse';
 import { addHeadlineVariant, removeHeadlineVariant } from '../lib/htmlDirector/renderCheck';
@@ -649,8 +650,18 @@ projectsRouter.post(
     let captured: ComposeRecord | undefined;
     let layout: LayoutCheckSummary | undefined;
     let copy: CopyCheckSummary | undefined;
+    /**
+     * EVERY AI CALL THIS COMPOSE MAKES IS METERED AGAINST ONE LEDGER, and the
+     * ceiling is what lets the expensive steps ask before they run. The ledger
+     * is opened here — around the whole compose, including the guard chain's
+     * own retries — because a per-post budget is only meaningful if it counts
+     * everything the post costs.
+     */
+    let ledger: SpendLedger | undefined;
     try {
-      composed = await composeProject(parsedRecipe.data, briefIdea, {
+      const run = await withSpendLedger(
+        { projectId: String(project._id), ceilingUsd: config.ai.postCeilingUsd },
+        () => composeProject(parsedRecipe.data, briefIdea, {
         format: project.get('format'),
         slideCount,
         plan: brief.plan,
@@ -694,7 +705,10 @@ projectsRouter.post(
             { $set: { composeProgress: { ...p, at: new Date() } } },
           ).catch(() => {});
         },
-      });
+        }),
+      );
+      composed = run.value;
+      ledger = run.ledger;
     } catch (err) {
       // The trail is deliberately LEFT BEHIND on a failure: the phase it died in
       // is the most useful thing about a compose that did not finish.
@@ -779,6 +793,10 @@ projectsRouter.post(
     }));
     project.set('slides', slides);
     project.set('composeNotes', composeNotes);
+    // What this post cost, and anything the ceiling turned down. Stored rather
+    // than logged: a silent downgrade is worse than an expensive deck, so the
+    // review page can say which steps the budget bought and which it refused.
+    if (ledger) project.set('spend', summarize(ledger));
     project.set('status', 'draft');
     // Keep the prompt AND the plan: it's what an Ideas card holds, it lets you
     // see what a finished post was actually asked to be, and re-composing later

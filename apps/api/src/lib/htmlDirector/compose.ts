@@ -1418,6 +1418,7 @@ export async function parseForCompose(
   const reply = await aiJson(
     { model, max_tokens: maxTokens, system: PARSE_SYSTEM_CACHED, messages: [{ role: 'user', content: user }] },
     PARSE_TOOL,
+    { feature: 'parse' },
   );
   let slides = stripMarkdownFromDeck(readDeck(parsePayload(reply), 'first pass'));
 
@@ -1474,6 +1475,7 @@ export async function parseForCompose(
           ],
         },
         PARSE_TOOL,
+        { feature: 'parse' },
       );
       const corrected = stripMarkdownFromDeck(readDeck(parsePayload(retry), 'correction'));
       // Keep whichever attempt honours more of the user's own words — a retry
@@ -1614,6 +1616,7 @@ export async function parseSlideDirection(
   const reply = await aiJson(
     { model: parseModel(opts), max_tokens: 900, system: PARSE_SYSTEM_CACHED, messages: [{ role: 'user', content: user }] },
     PARSE_TOOL,
+    { feature: 'parse' },
   );
   const parsed = stripMarkdownFromDeck(readDeck(parsePayload(reply), 'one slide'));
   let slides = clampSlidesToBudgets(parsed.slice(0, 1), budgets, locks);
@@ -1688,6 +1691,7 @@ export async function parseSlideCopy(
   const reply = await aiJson(
     { model: parseModel(opts), max_tokens: 900, system: PARSE_SYSTEM_CACHED, messages: [{ role: 'user', content: user }] },
     PARSE_TOOL,
+    { feature: 'parse' },
   );
   const parsed = stripMarkdownFromDeck(readDeck(parsePayload(reply), 'slide copy'));
   const clamped = clampSlidesToBudgets(parsed.slice(0, 1), budgets, locks);
@@ -2028,12 +2032,15 @@ export async function composeSlide(
   // message so the system prompt stays byte-identical and cache-friendly, and
   // so the verbatim retry below inherits it too.
   const user = opts?.note ? `${built.user}\n\n${opts.note}` : built.user;
-  const resp = await aiMessage({
-    model,
-    max_tokens: 1400,
-    system,
-    messages: [{ role: 'user', content: user }],
-  });
+  const resp = await aiMessage(
+    {
+      model,
+      max_tokens: 1400,
+      system,
+      messages: [{ role: 'user', content: user }],
+    },
+    { feature: 'compose' },
+  );
   let result = digestReply(textOf(resp), input);
 
   // Mechanical verbatim guard — REPAIR, not just warn. One targeted retry that
@@ -2053,12 +2060,15 @@ export async function composeSlide(
     const violation =
       `VIOLATION: these copy parts must appear verbatim and were missing or altered:\n` +
       retryable.map(([k, v]) => `  ${k}: ${JSON.stringify(v)}`).join('\n');
-    const retryResp = await aiMessage({
-      model,
-      max_tokens: 1400,
-      system,
-      messages: [{ role: 'user', content: `${user}\n\n${violation}` }],
-    });
+    const retryResp = await aiMessage(
+      {
+        model,
+        max_tokens: 1400,
+        system,
+        messages: [{ role: 'user', content: `${user}\n\n${violation}` }],
+      },
+      { feature: 'compose:verbatim-retry' },
+    );
     const retried = digestReply(textOf(retryResp), input);
     // Keep whichever attempt lost less copy (the retry on a tie — it followed
     // the correction), then splice whatever is still missing.

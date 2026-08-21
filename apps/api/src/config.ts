@@ -40,6 +40,14 @@ export const config = {
      * modelSmall → model so an unset slot still designs (just cheaper).
      */
     modelDesign: optional('ANTHROPIC_MODEL_DESIGN'),
+    /**
+     * THE PER-POST SPEND CEILING, in USD. Quality here is bought — a stronger
+     * tier on the cover, a second look at a rendered slide — so the budget is
+     * a product decision rather than a constant: the pipeline degrades in a
+     * fixed order (alternatives → repair → design pass) instead of failing,
+     * and never drops the parse or the checks. Unset means "count, don't cap".
+     */
+    postCeilingUsd: Number(process.env.AI_POST_CEILING_USD ?? '0.40') || Infinity,
   },
   stock: {
     /** Pexels API key (free at pexels.com/api). Unset = AI drafts leave image placeholders. */

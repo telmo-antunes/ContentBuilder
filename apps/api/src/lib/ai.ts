@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import mongoose from 'mongoose';
 import { config } from '../config';
+import { noteSpend } from './spend';
 import { SettingModel } from '../models';
 
 /**
@@ -221,16 +222,56 @@ export function cachedSystemLayers(...staticParts: string[]): Anthropic.TextBloc
     .map((text) => ({ type: 'text', text, cache_control: { type: 'ephemeral' } }) as const);
 }
 
+/**
+ * METER EVERY CALL, HERE.
+ *
+ * Usage used to be recorded at a handful of call sites, which meant the two
+ * calls that dominate a post's cost — the parse and the per-slide compose —
+ * were counted nowhere. Metering at the one seam every request already passes
+ * through makes coverage automatic: a new feature is counted the day it is
+ * written, without anyone remembering to add a line.
+ *
+ * Best-effort and never rethrown: bookkeeping must not fail a generation that
+ * has already succeeded.
+ */
+async function meter(feature: string | undefined, model: string, resp: Anthropic.Message): Promise<void> {
+  try {
+    await noteSpend({
+      feature: feature ?? 'ai',
+      model,
+      inputTokens: resp.usage?.input_tokens,
+      outputTokens: resp.usage?.output_tokens,
+      cacheCreationInputTokens: resp.usage?.cache_creation_input_tokens,
+      cacheReadInputTokens: resp.usage?.cache_read_input_tokens,
+    });
+  } catch {
+    /* metering is never allowed to break a successful call */
+  }
+}
+
+/** What a caller can tell the meter about the call it is making. */
+export interface AiCallOpts {
+  /** The touchpoint this call belongs to, for the ledger and the dashboard. */
+  feature?: string;
+}
+
 /** Create a message; on a Fable-family refusal, retry once on the fallback model. */
 export async function aiMessage(
   params: Anthropic.MessageCreateParamsNonStreaming,
+  opts?: AiCallOpts,
 ): Promise<Anthropic.Message> {
   const client = aiClient();
   const resp = await client.messages.create(params);
   if (resp.stop_reason === 'refusal' && isFableFamily(params.model)) {
     console.warn(`[ai] ${params.model} declined a request — retrying on ${FALLBACK_MODEL}`);
-    return client.messages.create({ ...params, model: FALLBACK_MODEL });
+    // The declined attempt is metered too: a refusal before any output is not
+    // billed, but a partial one is, and the retry is a second call either way.
+    await meter(opts?.feature, params.model, resp);
+    const retried = await client.messages.create({ ...params, model: FALLBACK_MODEL });
+    await meter(opts?.feature, FALLBACK_MODEL, retried);
+    return retried;
   }
+  await meter(opts?.feature, params.model, resp);
   return resp;
 }
 
@@ -242,14 +283,19 @@ export async function aiMessage(
  */
 export async function aiMessageLarge(
   params: Anthropic.MessageCreateParamsNonStreaming,
+  callOpts?: AiCallOpts,
 ): Promise<Anthropic.Message> {
   const client = aiClient();
   const opts = { timeout: LARGE_REQUEST_TIMEOUT_MS };
   const resp = await client.messages.stream(params, opts).finalMessage();
   if (resp.stop_reason === 'refusal' && isFableFamily(params.model)) {
     console.warn(`[ai] ${params.model} declined a request — retrying on ${FALLBACK_MODEL}`);
-    return client.messages.stream({ ...params, model: FALLBACK_MODEL }, opts).finalMessage();
+    await meter(callOpts?.feature, params.model, resp);
+    const retried = await client.messages.stream({ ...params, model: FALLBACK_MODEL }, opts).finalMessage();
+    await meter(callOpts?.feature, FALLBACK_MODEL, retried);
+    return retried;
   }
+  await meter(callOpts?.feature, params.model, resp);
   return resp;
 }
 
@@ -361,11 +407,12 @@ export interface AiJsonResult {
 export async function aiJson(
   params: Anthropic.MessageCreateParamsNonStreaming,
   tool: AiJsonTool,
-  opts?: { large?: boolean },
+  opts?: { large?: boolean; feature?: string },
 ): Promise<AiJsonResult> {
   const send = opts?.large ? aiMessageLarge : aiMessage;
+  const callOpts = { feature: opts?.feature };
   try {
-    const resp = await send(withJsonTool(params, tool));
+    const resp = await send(withJsonTool(params, tool), callOpts);
     return { json: toolInputOf(resp, tool.name), text: textOf(resp) };
   } catch (err) {
     if (!isBadRequest(err)) throw err;
@@ -373,6 +420,6 @@ export async function aiJson(
       `[ai] ${params.model} rejected the forced "${tool.name}" tool — retrying as plain text:`,
       err instanceof Error ? err.message : err,
     );
-    return { text: textOf(await send(params)) };
+    return { text: textOf(await send(params, callOpts)) };
   }
 }

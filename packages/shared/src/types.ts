@@ -277,6 +277,14 @@ export interface Project {
    */
   recipeSnapshot?: unknown;
   recipeSnapshotAt?: string;
+  /** What the last compose cost, and anything the ceiling turned down. */
+  spend?: {
+    spentUsd: number;
+    ceilingUsd: number | null;
+    calls: number;
+    skipped: string[];
+    byFeature: Array<{ feature: string; costUsd: number; calls: number }>;
+  };
   /** The pages this post was written from, when the brief cited any. */
   sources?: Array<{ url: string; title?: string; byline?: string; published?: string; chars?: number }>;
   exportedAt?: string;
