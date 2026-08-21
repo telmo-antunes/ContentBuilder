@@ -164,6 +164,18 @@ Add the next one here, following the shape in [How to add an entry](#how-to-add-
 
 ## Resolved
 
+### A deck shipped with no photographs at all, and a closing slide with no button
+
+- **Kind:** Defect
+- **Severity:** blocked shipping
+- **First seen:** 2026-08-22 — the prepaid-packages deck recomposed to verify the cta copy fix. The art-director pass called it: "there are no pictures at all — seven identical black gradients in a row… the deck dies somewhere around slide 3", plus "the CTA is a small grey line of text with no button".
+- **What happened, both the same shape:** every individual refusal was correct and nothing owned the OUTCOME. Photos: rows and a picture cannot share a slide, this role has nowhere to put one, the library is spent, this bleed photo's tone fights the ground — each reasonable, and together they left a deck with zero pictures. The button: the recipe's `cta` fragment was missing (the author dropped it), so the role fell to the model, which composed the offer as an ordinary body line — a slide carrying the call to action with no `.cta` element on it.
+- **Resolved:** 2026-08-22 — two floors, both deterministic:
+  · when the brand HAS photographs and the deck ended up with none, the earliest photo-capable slide not carrying rows gets one back. One slide, not a quota: a deck that legitimately wants to be typographic stays that way apart from it.
+  · a `cta` slide with cta copy and no `.cta` element has that copy RE-HOMED into one — never invented, re-homed, exactly like the brand-mark normaliser beside it.
+- **Worth remembering:** this is the third instance of the same pattern in two days — a chain of individually-correct decisions with nothing responsible for the result (see also the silent design-pass skip and the stale critique). Whenever a rule can say "no", something has to own what happens when they all do.
+
+
 ### A cta headline shipped unfinished — third occurrence, and the re-parse had already fired
 
 - **Kind:** Defect

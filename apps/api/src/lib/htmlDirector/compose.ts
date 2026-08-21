@@ -1340,7 +1340,7 @@ function normalizeParsedDeck(
 ): ParsedSlide[] {
   const capable = photoCapableRoles(recipe);
   let remaining = photoBudget;
-  return slides.map((s, i) => {
+  const out: ParsedSlide[] = slides.map((s, i) => {
     let role = s.role;
     let image = s.image;
     const parts = { ...s.parts };
@@ -1451,6 +1451,34 @@ function normalizeParsedDeck(
     }
     return { ...s, role, image, parts };
   });
+
+  /**
+   * A DECK WITH NO PICTURES AT ALL IS A FAILURE, not a style.
+   *
+   * Every rule above turns a photograph DOWN for a good reason — rows and a
+   * picture cannot share a slide, this role has nowhere to put one, the
+   * library is spent — and nothing was ever responsible for the total. A real
+   * deck came back as seven identical black gradients and the art-director
+   * pass called it correctly: "no photograph, no product, no studio… the deck
+   * dies around slide 3."
+   *
+   * So when the brand HAS photographs and the deck ended up with none, one
+   * slide gets one back: the earliest photo-capable slide that is not carrying
+   * rows, because the cover and the slide after it are what decide whether
+   * anyone swipes. Deliberately ONE — this is a floor, not a quota, and a deck
+   * that legitimately wants to be typographic stays that way apart from it.
+   */
+  const wantsPhoto = (photoBudget ?? 0) > 0;
+  if (wantsPhoto && !out.some((s) => s.image)) {
+    const i = out.findIndex((s) => capable.has(s.role) && !(s.parts.rows ?? []).length);
+    if (i !== -1) {
+      out[i] = { ...out[i]!, image: true };
+      console.warn(
+        `[compose] parse: the deck came out with no pictures at all — slide ${i + 1} (${out[i]!.role}) gets one`,
+      );
+    }
+  }
+  return out;
 }
 
 /** Parse an idea into composed-slide inputs (role + verbatim parts). */
@@ -2408,6 +2436,36 @@ export async function composeProject(
       s.authored.html = marks.htmls[i]!;
     });
     console.warn(`[compose] deck: brand mark normalised on ${marks.repaired} slide(s)`);
+  }
+
+  /**
+   * THE CLOSING SLIDE KEEPS ITS BUTTON.
+   *
+   * Every brand styles `.cta` as the one filled, clickable-looking element in
+   * the deck, and the recipe fragment for `cta` puts the copy inside it. When
+   * that fragment is missing the role falls to the model, which composed the
+   * call to action as an ordinary line of body text — so the slide carrying
+   * the offer shipped as a small grey sentence with no button at all, on a
+   * deck where every other element was on-brand.
+   *
+   * Deterministic, like the brand mark above: if a cta slide has cta copy and
+   * no `.cta` element, the copy is moved into one. It never invents words —
+   * it re-homes the ones the parse already wrote.
+   */
+  for (const slide of out) {
+    if (slide.role !== 'cta') continue;
+    const html = slide.authored.html;
+    if (/class="[^"]*\bcta\b/.test(html)) continue;
+    const parts = kept.find((k) => k.role === 'cta')?.parts;
+    const copy = typeof parts?.cta === 'string' ? parts.cta.trim() : '';
+    if (!copy) continue;
+    const escaped = copy.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Prefer promoting the element that already holds the words.
+    const holder = new RegExp(`<(\\w+)([^>]*)>\\s*${escaped}\\s*</\\1>`);
+    slide.authored.html = holder.test(html)
+      ? html.replace(holder, `<div class="cta">${copy}</div>`)
+      : `${html}\n<div class="cta">${copy}</div>`;
+    console.warn('[compose] cta: the closing slide had no .cta element — the call to action was re-homed into one');
   }
 
   const substituted = out.filter((s) => s.source === 'fragment').length;
