@@ -60,6 +60,11 @@ export interface ComposeSlideInput {
    */
   imageQuery?: string;
   /**
+   * The art director's chosen arrangement for this slide (0-based), when it
+   * overrode the positional rotation. See `variantIndexOf`.
+   */
+  variantPin?: number;
+  /**
    * This slide's alignment when it deviates from the brand default — the parse
    * step's per-deck call. Threaded into the spec block so the composer arranges
    * for it, stored on `authored.align`, applied by the app's `data-align` layer.
@@ -116,8 +121,19 @@ const SLACK_IN_WORDS: Record<string, string> = {
   center: 'around the content — let it sit optically centred, with room either side',
 };
 
+/**
+ * WHICH ARRANGEMENT THIS SLIDE USES.
+ *
+ * Normally derived — deck position, plus a lesson's bias, plus the per-deck
+ * seed that stops consecutive posts being re-skins. `variantPin` is the art
+ * director's override: it has read the whole deck and matched the arrangement
+ * to what the slide actually SAYS, which position never can, so it wins
+ * outright rather than being added to the rotation.
+ */
 export const variantIndexOf = (input: ComposeSlideInput): number =>
-  (input.index ?? 0) + (input.variantBias ?? 0) + (input.seed ?? 0);
+  input.variantPin !== undefined
+    ? input.variantPin
+    : (input.index ?? 0) + (input.variantBias ?? 0) + (input.seed ?? 0);
 
 /**
  * The BRAND-STABLE half of the composer's spec: byte-identical for every slide

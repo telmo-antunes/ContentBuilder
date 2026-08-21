@@ -701,6 +701,9 @@ projectsRouter.post(
          * document mid-compose would race with the write at the end.
          * Best-effort by construction — a failed crumb must never fail a deck.
          */
+        // Production opts into the paid deck-level pass; the eval harness and
+        // the tests keep the deterministic plan.
+        artDirection: true,
         onCritique: (c) => {
           critique = c;
         },

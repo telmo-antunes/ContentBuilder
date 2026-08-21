@@ -45,6 +45,7 @@ import {
 import { aiJson, aiMessage, cachedSystem, modelFor, textOf, type AiJsonResult, type AiJsonTool } from '../ai';
 import { critiqueDeck, type DeckCritique } from './deckCritique';
 import { improveByLooking, slidesWorthDesigning } from './designPass';
+import { planDeck } from './artDirection';
 import { config } from '../../config';
 import { sanitizeAuthoredHtml } from '../htmlSanitize';
 import { lintAuthored } from './lintAuthored';
@@ -282,6 +283,12 @@ export interface ComposeOptions {
    * the look; absent is normal, not an error.
    */
   onCritique?: (c: DeckCritique) => void;
+  /**
+   * Plan the deck before composing it — the art-direction call. OFF by
+   * default, like every other paid pass here: the eval harness and the unit
+   * tests want the deterministic plan, and production opts in.
+   */
+  artDirection?: boolean;
 }
 
 /** What the copy checks still object to after compose has done what it can. */
@@ -2207,6 +2214,28 @@ export async function composeProject(
     },
   });
   /**
+   * ART DIRECTION, once, before anything is composed. It has read the whole
+   * deck's copy and may override the POSITIONAL variant rotation where the
+   * content earns a different arrangement, and nominate the one inverted
+   * slide. Budget-gated and entirely optional: without it — or when it
+   * declines — every slide keeps the deterministic default.
+   */
+  const plan = !(opts?.artDirection ?? false)
+    ? null
+    : await planDeck(
+    recipe,
+        inputs.map((i) => ({ role: i.role, parts: i.parts as Record<string, unknown> })),
+        o.format ?? '1080x1350',
+      );
+  if (plan) {
+    inputs.forEach((input, i) => {
+      const p = plan.slides[i];
+      if (p?.variant !== undefined) input.variantPin = p.variant;
+    });
+    if (plan.note) console.warn(`[art-direction] ${plan.note}`);
+  }
+
+  /**
    * ARCHETYPES BEFORE COMPOSITION, NOT AFTER.
    *
    * `assignArchetypes` needs a role and whether the slide has a photo — both
@@ -2348,8 +2377,15 @@ export async function composeProject(
    * a composer looking at one slide cannot judge a deck's rhythm. `bg:'inverse'`
    * has existed as a per-slide opt-in the composer almost never took.
    */
-  if (invertAt !== undefined) {
-    const a = out[invertAt]?.authored;
+  /**
+   * The art director's pick wins when it made one: `planInversion` chooses the
+   * slide nearest the middle that is eligible, which is a sound rule and a
+   * blind one — the turning point of an argument is not reliably its midpoint.
+   */
+  const directedInvert = plan?.slides.findIndex((p) => p.invert === true) ?? -1;
+  const invertSlide = directedInvert >= 0 ? directedInvert : invertAt;
+  if (invertSlide !== undefined && invertSlide >= 0) {
+    const a = out[invertSlide]?.authored;
     // Never overrides a surface the composer chose deliberately.
     if (a && !a.bg) a.bg = 'inverse';
   }
