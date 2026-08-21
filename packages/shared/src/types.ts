@@ -283,8 +283,16 @@ export interface Project {
    * restates the one before it). Advisory: it never gates shipping.
    */
   critique?: {
-    verdict: string;
-    findings: Array<{
+    /**
+     * 'ok' means the deck WAS reviewed (findings may still be empty — that is
+     * a clean deck). 'skipped' names why there is no review, so the two can
+     * never be confused again.
+     */
+    status: 'ok' | 'skipped';
+    reason?: string;
+    detail?: string;
+    verdict?: string;
+    findings?: Array<{
       slide: number;
       fault: string;
       fix: string;

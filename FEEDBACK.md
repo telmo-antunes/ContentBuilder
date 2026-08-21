@@ -173,6 +173,16 @@ Add the next one here, following the shape in [How to add an entry](#how-to-add-
 
 ## Resolved
 
+### A failed review left the PREVIOUS deck's critique on the project
+
+- **Kind:** Defect
+- **Severity:** blocked shipping (it reported a verdict about a deck that no longer existed)
+- **First seen:** 2026-08-22 — the prepaid-packages deck. The Anthropic account ran out of credits mid-compose; `[critique] review failed: 400 … credit balance is too low`. The review page then displayed a confident six-finding verdict — every word of it about a DIFFERENT, earlier deck — while the spend ledger read `skipped: []`, because the budget was not the reason.
+- **What happened:** `critiqueDeck` returned a bare `null` for six unrelated reasons (too few slides, a partial deck, no budget, the sheet failing, the model failing, an unreadable reply), and the route only wrote the field on success. So "nobody looked" and "somebody looked and it was fine" were the same state, and the stalest possible answer won.
+- **Why it matters:** the critique exists precisely because the measurable gates can pass on a bad deck. A stale pass is worse than no pass — it is the one check whose failure mode is a false all-clear.
+- **Resolved:** 2026-08-22 — the critique returns a named outcome (`ok` | `skipped` with a reason and detail), the route ALWAYS writes a fresh answer including "there isn't one", the reason is added to `composeNotes`, and the review page shows a "Deck not reviewed" chip whose text says plainly that nothing here claims the deck is fine — it says nobody looked.
+
+
 ### Replacing a recipe silently re-skinned every deck already reviewed
 
 - **Kind:** Defect

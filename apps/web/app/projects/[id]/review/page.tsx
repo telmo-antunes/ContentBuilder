@@ -885,6 +885,18 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
    * A "blocking" read gates the ship bar exactly like a measured fault; the
    * rest inform without blocking.
    */
+  if (project.critique?.status === 'skipped') {
+    chips.push({
+      key: 'crit-skipped',
+      tone: 'info',
+      label: 'Deck not reviewed',
+      hint:
+        `The art-director pass did not run on this deck` +
+        (project.critique.reason ? ` — ${project.critique.reason}` : '') +
+        (project.critique.detail ? ` (${project.critique.detail})` : '') +
+        '. Nothing here says the deck is fine; it says nobody looked.',
+    });
+  }
   for (const [i, f] of (project.critique?.findings ?? []).entries()) {
     chips.push({
       key: `crit-${i}`,

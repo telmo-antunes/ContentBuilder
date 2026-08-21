@@ -43,7 +43,7 @@ import {
   type Format,
 } from '@contentbuilder/shared';
 import { aiJson, aiMessage, cachedSystem, modelFor, textOf, type AiJsonResult, type AiJsonTool } from '../ai';
-import { critiqueDeck, type DeckCritique } from './deckCritique';
+import { critiqueDeck, type CritiqueOutcome } from './deckCritique';
 import { improveByLooking, slidesWorthDesigning } from './designPass';
 import { planDeck } from './artDirection';
 import { config } from '../../config';
@@ -282,7 +282,7 @@ export interface ComposeOptions {
    * cannot see. Fires only when the deck was rendered and the budget allowed
    * the look; absent is normal, not an error.
    */
-  onCritique?: (c: DeckCritique) => void;
+  onCritique?: (c: CritiqueOutcome) => void;
   /**
    * Plan the deck before composing it — the art-direction call. OFF by
    * default, like every other paid pass here: the eval harness and the unit
@@ -2390,8 +2390,12 @@ export async function composeProject(
     if (a && !a.bg) a.bg = 'inverse';
   }
 
-  /** The art-director read on the finished deck, when one was affordable. */
-  let critique: DeckCritique | null = null;
+  /**
+   * The art-director read on the finished deck — or the named reason there
+   * isn't one. Never left undefined once the render check has run, so a
+   * caller can always tell "not reviewed" from "reviewed and clean".
+   */
+  let critique: CritiqueOutcome | undefined;
   if (opts?.renderCheck ?? (Boolean(opts?.renderProbe) || renderCheckEnabledByDefault())) {
     opts?.onProgress?.({ phase: 'checking-layout', done: 0, total: out.length });
     const checked = await renderCheckDeck(recipe, kept, out.map((s) => s.authored), o.format ?? '1080x1350', {
