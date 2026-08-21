@@ -169,6 +169,14 @@ describe('slideAlignCss', () => {
       expect(css).toContain(`[data-align="${a}"] .cb-shot`);
     }
   });
+
+  it('centred slides get balanced wrapping and a narrower running-text measure', () => {
+    // Measured on a real deck: identical vertical gaps, and the whole
+    // difference between the good and bad render was the ragged centred wrap.
+    expect(css).toContain(`[data-align="center"] .headline`);
+    expect(css).toContain('text-wrap:balance');
+    expect(css).toContain(`[data-align="center"] .body{max-width:22ch;margin-inline:auto}`);
+  });
 });
 
 describe('slideAlignFor (via recipe)', () => {

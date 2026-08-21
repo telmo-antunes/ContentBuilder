@@ -36,6 +36,13 @@ export interface LayoutSignals {
   collide: boolean;
   slack: number;
   headlineLines: number;
+  /**
+   * The VERTICAL RHYTHM, measured: the ink-to-ink gap between each pair of
+   * consecutive painted blocks, labelled by their classes so a verdict can say
+   * "eyebrow → headline", not "gap 2". Fit and collision say whether a slide
+   * is legal; this is the data for whether its spacing is any good.
+   */
+  gaps: Array<{ a: string; b: string; g: number }>;
 }
 import type { SlidePhotoSet } from './projectRender';
 
@@ -197,6 +204,8 @@ export function AuthoredSlide({
            * slide where nothing overlaps.
            */
           paints: getComputedStyle(c).visibility !== 'hidden',
+          /** First class, for rhythm verdicts that can name their blocks. */
+          cls: c.classList[0] ?? c.tagName.toLowerCase(),
         }))
         .sort((a, b) => a.top - b.top);
 
@@ -257,7 +266,19 @@ export function AuthoredSlide({
         if (line > 0) headlineLines = Math.max(1, Math.round(headlineEl.offsetHeight / line));
       }
 
-      onOverflow(over, { collide, slack, headlineLines });
+      /**
+       * THE RHYTHM DATA: every ink-to-ink gap between consecutive painted
+       * blocks, with the class names on both sides. No verdict is taken here —
+       * the thresholds live server-side where they can be tuned against real
+       * decks; this pass just reports what the reader's eye actually gets.
+       */
+      const gaps = painted.slice(1).map((b, i) => ({
+        a: painted[i]!.cls,
+        b: b.cls,
+        g: Math.max(0, b.inkTop - painted[i]!.inkBottom),
+      }));
+
+      onOverflow(over, { collide, slack, headlineLines, gaps });
     };
     measure();
     const fonts = (document as Document & { fonts?: FontFaceSet }).fonts;

@@ -135,6 +135,8 @@ THE JOB THESE POSTS DO: this brand is a BUSINESS promoting its content and its o
 - a SPLIT — two cards side by side where one carries the verdict (accent border, the badge) and the other sits quiet.
 Define these in "components" with this brand's own names and surfaces, use them in patterns and fragments where the role earns them, and keep the discipline: one accent, real negative space, the card earning its frame.
 
+VERTICAL RHYTHM IS DESIGNED, NOT ACCUMULATED. Spacing is what tells the reader which blocks belong together, and it is authored in your margins: a LOCKUP (an eyebrow above its headline; a support line under its cta) sits tight as one visual unit, and the space BETWEEN units runs noticeably larger — roughly twice the inside gap — so the eye reads groups before it reads words. The cta gets clear air on both sides; it is the one element that must feel deliberate rather than adjacent. No two unrelated blocks should ever share the tight gap a lockup uses. And margins belong to the type scale: pick three or four spacing steps and reuse them — a stylesheet whose every margin is a different number reads as drift, not design.
+
 WHAT REFERENCE-GRADE MEANS (both examples do ALL of this):
 1. TYPE SIZED FOR A PHONE, NOT FOR THE CANVAS. The canvas is 1080px wide but it is READ on a handset, where Instagram shows it about 393pt wide — so everything you author is seen at roughly a THIRD of the size you write. Divide by 2.75 to get what the reader actually gets, and design against THAT number. For reference: iOS body text is 17pt, Instagram's own caption is ~14pt, and under about 11pt people stop reading and the text becomes texture.
    Minimums (canvas px → what the phone shows). Go bigger freely; never go under:

@@ -62,7 +62,7 @@ export const PROMPT_TEXT: Partial<Record<TouchpointId, string>> = {
  * Regenerate with:  npm --prefix apps/api run prompt:hashes
  */
 export const EXPECTED_HASHES: Partial<Record<TouchpointId, string>> = {
-  recipeAuthor: '266d35c58f29',
+  recipeAuthor: 'de0be8d4b756',
   recipeCritique: 'cca647567b3e',
   parse: '2426768a2089',
   compose: '3ad68f52e4cc',

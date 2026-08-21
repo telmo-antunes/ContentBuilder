@@ -371,14 +371,33 @@ async function readOverflow(page: Page, url: string): Promise<LayoutVerdict> {
   await new Promise((r) => setTimeout(r, SETTLE_MS));
   const read = await page.evaluate(() => {
     const ds = (globalThis as any).document?.body?.dataset ?? {};
-    return { overflow: ds.overflow, collide: ds.collide, slack: ds.slack, lines: ds.headlineLines };
+    return {
+      overflow: ds.overflow,
+      collide: ds.collide,
+      slack: ds.slack,
+      lines: ds.headlineLines,
+      gaps: ds.gaps,
+    };
   });
   const num = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+  let gaps: LayoutVerdict['gaps'] = [];
+  try {
+    const parsed = JSON.parse(String(read.gaps ?? '[]'));
+    if (Array.isArray(parsed)) {
+      gaps = parsed.filter(
+        (g): g is { a: string; b: string; g: number } =>
+          !!g && typeof g.a === 'string' && typeof g.b === 'string' && Number.isFinite(g.g),
+      );
+    }
+  } catch {
+    /* an unreadable rhythm payload must not fail the fit check */
+  }
   return {
     state: read.overflow === 'true' ? 'overflows' : read.overflow === 'false' ? 'fits' : 'unknown',
     collide: read.collide === 'true',
     slack: num(read.slack),
     headlineLines: num(read.lines),
+    gaps,
   };
 }
 
@@ -397,6 +416,9 @@ export interface LayoutVerdict {
   slack: number;
   /** Rendered line count of the slide's headline; 0 when it has none. */
   headlineLines: number;
+  /** Labelled ink-to-ink gaps between consecutive painted blocks — the rhythm
+   *  data. Optional: absent means the probe predates it or didn't measure. */
+  gaps?: Array<{ a: string; b: string; g: number }>;
 }
 
 /**
@@ -457,6 +479,7 @@ export const UNKNOWN_VERDICT: LayoutVerdict = {
   collide: false,
   slack: 0,
   headlineLines: 0,
+  gaps: [],
 };
 
 /**
