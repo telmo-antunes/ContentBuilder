@@ -31,15 +31,21 @@ export const PROMPT_VERSION = {
    * v4: composition.roles — per-role alignment overrides, mirroring
    * motion.roles; fragments must not hard-pin text-align on structural
    * elements the app's data-align layer would need to move.
+   * v5: VARIETY — statement/feature/list want 2–3 pattern arrangements and
+   * fragment VARIANT arrays (rotated per slide and per deck), and the list
+   * vocabulary gains the app's numbered-rows contract. One skeleton per role
+   * made every post a re-skin of the last.
    */
-  author: 4,
+  author: 5,
   /**
    * `CRITIQUE_SYSTEM` in lib/htmlDirector/authorRecipe.ts.
    * v2: also judges composition.align against the brand evidence, and that the
    * authored CSS implements the declared align.
    * v3: shared ENUMS now name composition.roles (per-role align overrides).
+   * v4: judges variety — arrangements + fragment variants on the content
+   * roles, and a list treatment beyond the quiet marker panel.
    */
-  critique: 3,
+  critique: 4,
   /**
    * `PARSE_SYSTEM` in lib/htmlDirector/compose.ts (idea → slides + copy).
    * v2: the parse step may set per-slide "align" — it is the only model that

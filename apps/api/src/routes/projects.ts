@@ -657,6 +657,10 @@ projectsRouter.post(
         locks: brief.locks,
         sources,
         lessons,
+        // Stable per-project offset for the pattern/fragment variant rotation:
+        // consecutive posts compose different skeletons for the same roles,
+        // while recomposing THIS project always lands on the same ones.
+        variantSeed: [...String(id)].reduce((n, c) => n + c.charCodeAt(0), 0),
         // Only ask for a photo slot this brand can actually fill — an empty
         // one is a dead grey box, which is worse than no photograph at all.
         photoBudget: pool.length,

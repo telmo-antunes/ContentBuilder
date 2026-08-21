@@ -35,6 +35,7 @@ import {
   type RecipeEmphasisWrap,
   assignArchetypes,
   archetypeFor,
+  fragmentVariantsFor,
   planInversion,
   BASE_BUDGETS,
   EXPLAIN_ROLES,
@@ -156,6 +157,13 @@ export interface ComposeOptions {
    * manual stepper. Still honoured so the eval harness can hold it constant.
    */
   slideCount?: number;
+  /**
+   * Per-deck offset for the pattern + fragment variant rotation — a stable
+   * hash of the project id, so consecutive posts compose different skeletons
+   * for the same roles while a recompose of one project stays deterministic.
+   * Absent (evals, tests): rotation behaves exactly as before.
+   */
+  variantSeed?: number;
   /** Override the model (defaults to the small tier). */
   model?: string;
   handle?: string;
@@ -1190,8 +1198,11 @@ function parseUser(
 function photoCapableRoles(recipe: BrandRecipe): Set<string> {
   const out = new Set<string>();
   for (const role of SLIDE_ROLES) {
-    const fragment = recipe.fragments?.[role];
-    if (typeof fragment !== 'string' || !fragment.trim() || authoredSlots(fragment).length > 0) {
+    const variants = fragmentVariantsFor(recipe, role);
+    // No fragment → the model composes it and can leave a hole; any variant
+    // with a slot → the fragment path can host the photo. Only a role whose
+    // every variant is slot-less is one the photo budget should not spend on.
+    if (!variants.length || variants.some((f) => authoredSlots(f).length > 0)) {
       out.add(role);
     }
   }
@@ -1513,6 +1524,7 @@ export async function parseForCompose(
     // The model's one-line reasoning — stored, never re-fed to the composer.
     ...(s.why ? { rationale: s.why } : {}),
     ...(opts?.variantBias?.[s.role] ? { variantBias: opts.variantBias[s.role] } : {}),
+    ...(opts?.variantSeed ? { seed: opts.variantSeed } : {}),
     index,
   }));
 }
