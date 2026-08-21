@@ -1618,6 +1618,32 @@ describe('the closing slide keeps its button', () => {
     expect(closing.match(/Start your free trial/g)).toHaveLength(1);
   });
 
+  it('re-homes a call to action the model left as a BARE TEXT NODE', async () => {
+    // What actually shipped: `Start free trial` loose between the body and the
+    // handle, wrapped in nothing. The first version of this guard could not see
+    // it, appended a button, and shipped the offer TWICE — worse than the
+    // missing button the guard exists to fix.
+    reply.mockImplementation((params: Anthropic.MessageCreateParamsNonStreaming) =>
+      sysOf(params).includes('STRICT JSON')
+        ? JSON.stringify({
+            slides: [
+              { role: 'cover', parts: { headline: 'A cover line.' } },
+              { role: 'cta', parts: { headline: 'Try it free.', cta: 'Start free trial' } },
+            ],
+          })
+        : '<h1 class="headline">Try it free.</h1>\nStart free trial\n<div class="handle">detailmasters.io</div>',
+    );
+    const out = await composeProject(
+      { ...detailMastersWithFragments, fragments: undefined } as never,
+      'an idea',
+      { renderCheck: false },
+    );
+    const closing = out[out.length - 1]!.authored.html;
+    expect(closing).toContain('<div class="cta">Start free trial</div>');
+    // Said ONCE — the loose text became the button rather than sitting beside it.
+    expect(closing.match(/Start free trial/g)).toHaveLength(1);
+  });
+
   it('leaves a cta slide that already has its button alone', async () => {
     const html = '<div class="headline">Try it free.</div>\n<div class="cta">Start now</div>';
     reply.mockImplementation((params: Anthropic.MessageCreateParamsNonStreaming) =>

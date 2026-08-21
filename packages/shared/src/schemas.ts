@@ -153,6 +153,11 @@ export const slideSchema = z.object({
        * implements it (see shared/archetypes.ts). Absent = brand default.
        */
       align: z.enum(['flush-left', 'center', 'flush-right']).optional().catch(undefined),
+      /**
+       * The GROUND this slide sits on, when it deviates from the brand's own.
+       * Rendered as `data-surface`; absent means the brand's ground stands.
+       */
+      surface: z.enum(['base', 'raised', 'deep']).optional().catch(undefined),
     })
     .optional(),
 });

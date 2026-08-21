@@ -154,6 +154,7 @@ export function normalizeSlides(slides: SlideInput[]) {
           // a slide — the field exists precisely because markup can't answer.
           ...(s.authored.source ? { source: s.authored.source } : {}),
           ...(s.authored.align ? { align: s.authored.align } : {}),
+          ...(s.authored.surface ? { surface: s.authored.surface } : {}),
         }
       : undefined,
   }));

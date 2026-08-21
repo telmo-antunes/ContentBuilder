@@ -107,6 +107,8 @@ const slideSchema = new Schema(
            * `data-align`; absent means the brand's global alignment stands.
            */
           align: { type: String, enum: ['flush-left', 'center', 'flush-right'], required: false },
+          /** The ground this slide sits on, when it deviates from the brand's. */
+          surface: { type: String, enum: ['base', 'raised', 'deep'], required: false },
         },
         { _id: false },
       ),

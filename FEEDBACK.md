@@ -164,6 +164,24 @@ Add the next one here, following the shape in [How to add an entry](#how-to-add-
 
 ## Resolved
 
+### Seven identical grounds — the sameness no layout lever could fix
+
+- **Kind:** Gap
+- **Severity:** blocked shipping (the art-director pass returned it as `blocking` on every deck)
+- **First seen:** 2026-08-21 → 2026-08-22, four decks running. Layout variety was solved twice over — six archetypes, rotating arrangements, per-role alignment, fragment variants — and the verdict never changed: "seven identical black tiles… a template loop rather than a carousel".
+- **What happened:** every slide was painted on the SAME ground, and at feed scale the ground is most of what the eye receives. `surfaces.inverse` existed for exactly this and is almost never authored — the live brand had `surfaces: null` — so `planInversion` never fired and nothing varied at all. Meanwhile the brand carried an unused `groundAlt` token documented as "raised surface".
+- **Resolved:** 2026-08-22 — a third app-owned layer beside slack and alignment: three grounds (`base` / `raised` / `deep`) derived from tokens every recipe already has, assigned across the deck (`planSurfaces`) so no two adjacent slides share one. The cover and the close keep the brand's own ground — the same two exclusions `planInversion` draws — and a slide carrying a photograph is left alone, because the picture is already the variation. Works on every stored brand with no re-authoring and no AI spend; brands can restyle `.cb-slide[data-surface="…"]`.
+- **Caveat worth keeping:** the effect is deliberately subtle (one deck breathing, not three brands) and on a brand whose `groundAlt` sits close to its `ground` it may be too subtle. If it still reads flat, the lever is the brand's own tokens, not more app CSS.
+
+### The cta guard shipped the offer twice
+
+- **Kind:** Defect
+- **Severity:** cost me a fix
+- **First seen:** 2026-08-22 — the first deck composed after the cta button guard landed. The closing slide showed "Start free trial" as a plain line AND as the gold button.
+- **What happened:** the guard promotes the element holding the cta copy, or appends a button if there is none. The model had emitted the copy as a BARE TEXT NODE — `Start free trial` loose between the body and the handle, wrapped in nothing — which the holder pattern could not match, so it appended: a duplicate, which is worse than the missing button the guard exists to fix. My own test had only covered copy inside an element.
+- **Resolved:** 2026-08-22 — loose text outside any tag is now replaced in place (tag-segment aware, so an attribute cannot be mangled), with the append kept only as a last resort. Found by looking at the exported deck, not by the tests — which is the argument for always opening the contact sheet.
+
+
 ### A deck shipped with no photographs at all, and a closing slide with no button
 
 - **Kind:** Defect

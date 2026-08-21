@@ -19,7 +19,7 @@ import { z } from 'zod';
 import { AA_LARGE, AA_TEXT, contrastRatio, hexToRgb, relativeLuminance } from './colorContrast';
 import { APP_IMAGE_CLASSES, slideMediaCss } from './slidePhotos';
 import { AMBIENT_INTENSITIES, AMBIENT_STYLES, DEFAULT_AMBIENT, type AmbientSpec } from './slideMotion';
-import { slideArchetypeCss, slideAlignCss, isSlideAlign, type SlideAlign } from './archetypes';
+import { slideArchetypeCss, slideAlignCss, slideSurfaceCss, isSlideAlign, type SlideAlign } from './archetypes';
 import { slideTypesettingCss } from './lineBreaks';
 import {
   enforceDescenderClearance,
@@ -489,8 +489,13 @@ export function recipeStylesheetFor(recipe: BrandRecipe, format: string): string
   // only fires on slides that carry an explicit `data-align`.
   const archetypes = slideArchetypeCss();
   const align = slideAlignCss();
+  // The per-slide GROUND, after the brand sheet like every other app layer —
+  // inert on a slide that carries no `data-surface`.
+  const surfaces = slideSurfaceCss();
   const typesetting = slideTypesettingCss();
-  return [typeBaseCss(), authored, surface, media, archetypes, align, typesetting].filter(Boolean).join('\n');
+  return [typeBaseCss(), authored, surface, media, archetypes, align, surfaces, typesetting]
+    .filter(Boolean)
+    .join('\n');
 }
 
 /**

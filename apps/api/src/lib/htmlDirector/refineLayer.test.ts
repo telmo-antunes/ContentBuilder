@@ -94,7 +94,11 @@ describe('refineRecipeLayer — the layered path', () => {
     const css = recipeStylesheetFor(recipe, '1080x1350');
     expect(css).toContain(NEW_BG);
     expect(css.indexOf(NEW_BG)).toBeLessThan(css.indexOf('font-size: 104px'));
-    expect(css).not.toContain('radial-gradient'); // the old layer is gone
+    // The old layer is gone. Asserted against the layer ITSELF, not against
+    // "radial-gradient" — the app's own surface layer legitimately uses that
+    // function, so the generic proxy started reporting a replacement that had
+    // in fact happened.
+    expect(css).not.toContain(BG);
   });
 
   it('targets the type layer without disturbing background or components', async () => {

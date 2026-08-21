@@ -8,6 +8,8 @@ import {
   isArchetype,
   slideArchetypeCss,
   slideAlignCss,
+  slideSurfaceCss,
+  planSurfaces,
   SLIDE_ALIGNS,
   planInversion,
   type ArchetypeKey,
@@ -198,5 +200,59 @@ describe('slideAlignFor (via recipe)', () => {
     expect(slideAlignFor(recipe, 'list')).toBeUndefined();
     // Junk from a stored document never reaches the DOM attribute.
     expect(slideAlignFor(recipe, 'cta', 'sideways')).toBe('center');
+  });
+});
+
+// ── Surfaces ─────────────────────────────────────────────────────────────────
+
+describe('planSurfaces', () => {
+  const deckOf = (...roles: string[]) => roles.map((role) => ({ role }));
+
+  it('keeps the brand ground at both ends — the handshake and the close', () => {
+    const out = planSurfaces(deckOf('cover', 'statement', 'statement', 'statement', 'cta'));
+    expect(out[0]).toBe('base');
+    expect(out[out.length - 1]).toBe('base');
+  });
+
+  it('never paints the same ground twice running — that is the whole point', () => {
+    const out = planSurfaces(deckOf('cover', 'statement', 'statement', 'statement', 'list', 'statement', 'cta'));
+    for (let i = 1; i < out.length; i += 1) {
+      if (out[i] === 'base' && out[i - 1] === 'base') continue; // anchors may adjoin
+      expect(out[i]).not.toBe(out[i - 1]);
+    }
+  });
+
+  it('actually varies the middle of the deck', () => {
+    const out = planSurfaces(deckOf('cover', 'statement', 'statement', 'statement', 'statement', 'cta'));
+    expect(new Set(out.slice(1, -1)).size).toBeGreaterThan(1);
+  });
+
+  it('leaves a slide carrying a photograph alone — the picture IS the variation', () => {
+    const out = planSurfaces([
+      { role: 'cover' },
+      { role: 'feature', hasPhoto: true },
+      { role: 'statement' },
+      { role: 'cta' },
+    ]);
+    expect(out[1]).toBe('base');
+  });
+});
+
+describe('slideSurfaceCss', () => {
+  const css = slideSurfaceCss();
+
+  it('derives every ground from tokens the brand already has', () => {
+    // No re-authoring: the live brand has `surfaces: null` and an unused
+    // groundAlt, which is exactly what this spends.
+    expect(css).toContain('var(--cb-ground-alt, var(--cb-ground))');
+    expect(css).toContain('var(--cb-ground)');
+  });
+
+  it('says nothing about `base` — a slide that does not deviate is untouched', () => {
+    expect(css).not.toContain('data-surface="base"');
+  });
+
+  it('never paints over a photograph', () => {
+    expect(css).toContain('.cb-slide.photo[data-surface]{background:inherit}');
   });
 });
