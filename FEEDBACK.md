@@ -51,7 +51,51 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
-*Nothing open.* Every finding in this file has been resolved — see below, newest first.
+### A photo can be attached past the slot the markup is waiting for
+
+- **Kind:** Defect
+- **Severity:** cost me a fix
+- **First seen:** 2026-08-21 — smoke-odour-removal rebuild (project 6a8574e6bfee5cbcc1fe0a34)
+- **What happened:** Slide 1's authored markup carried `<figure class="cb-shot" data-cb-slot="hero"></figure>`, but its photo was stored with `placement: "background"`. The render put the photo in a broken top band with a hard seam into dark, the review page flagged "Slide 1 needs a photo" even though the slide *had* one, and the deck was handed over in that state on 2026-08-20. Fixed by re-attaching the same asset as `{placement:'slot', slot:'hero'}`.
+- **Why it matters:** the review check reports the symptom ("needs a photo") rather than the cause (photo exists, wrong layer), so the person fixing it is sent to upload a photo that is already there. And nothing at attach time notices that a declared slot is empty while a photo floats on another layer.
+- **Direction:** when a slide's authored html declares an unfilled `data-cb-slot` and a photo is attached with `placement` background/free, either default it into the slot or say so at attach time. The review message should distinguish "no photo" from "photo on the wrong layer".
+
+### PATCH validation errors name neither the slide nor the field
+
+- **Kind:** Friction
+- **Severity:** cost me a fix
+- **First seen:** 2026-08-21 — smoke-odour-removal rebuild
+- **What happened:** `PATCH /projects/:id` with new photo objects (no `id`) returned `{"fieldErrors":{"slides":["Required","Required"]}}` — no slide index, no field path. Finding that `slidePhotoSchema.id` is required (`z.string().min(1)`) took a dive into `packages/shared/src/schemas.ts`.
+- **Why it matters:** every API-driving session pays the same source dive; a client cannot generate a stable id contract it does not know exists.
+- **Direction:** default `id` server-side (uuid) when absent, or surface zod's issue paths (`slides.0.photos.0.id`) in `details`.
+
+### The recipe author never chooses centered — exemplar monoculture, second instance
+
+- **Kind:** Gap
+- **Severity:** minor (structural)
+- **First seen:** 2026-08-21 — raised by Telmo: no deck ever uses centered composition
+- **What happened:** `composition.align ∈ {flush-left|center|flush-right}` exists in the ENUMS, but all three reference recipes in `htmlDirector/recipes.ts` are `align: 'flush-left'`, so every authored brand inherits flush-left — the same exemplar-monoculture failure the file header documents for ground tone (both seeded exemplars dark+gold → "every authored recipe drifted toward dark-moody-premium" → Halftone Press was invented to fix it). Compose then threads `ALIGNMENT: flush-left` as deck-wide law.
+- **Why it matters:** an entire axis of the design space is unreachable regardless of what a brand's homepage actually looks like.
+- **What was done this run:** author prompt v3 adds "ALIGNMENT IS A DECISION, NOT A DEFAULT" (evidence-based align choice, CSS must implement the declared align, centred display moments vs left-aligned running text); critique v2 judges point (8) on it. Hashes regenerated, 47 tests green.
+- **Direction (remaining):** (a) per-role align — `composition.roles` mirroring `motion.roles` — so a flush-left brand can still centre its quote/stat/cta; needs schema + fragments + compose threading. (b) One genuinely centred exemplar would teach this better than prose, same as Halftone did for light grounds. (c) Existing recipes (detailmasters included) keep their stored flush-left until re-authored — a brand decision, not an agent's.
+
+### "Looks empty" reads the archetype, not the pixels
+
+- **Kind:** Friction
+- **Severity:** minor
+- **First seen:** 2026-08-21 — smoke-odour-removal rebuild
+- **What happened:** removing slide 2's photo (feature/split, text-only after the fix) tripped "Slide 2 looks empty". Slides 3 and 6 — visually near-identical statement slides — pass Clean. The fix that cleared it was relabeling `role`/`archetype` to statement and re-ordering the same four elements; the rendered pixels barely changed.
+- **Why it matters:** the check judges the label, not the render, so the honest fix (this slide is now a statement) is invisible to the person clicking "Fix →", who is nudged toward re-adding a photo instead.
+- **Direction:** judge emptiness from the rendered slide (ink coverage / element count), or make the Fix action offer "recompose as statement" alongside "add a photo".
+
+### A deck can be composed with no audience and no DM keyword set
+
+- **Kind:** Friction
+- **Severity:** minor
+- **First seen:** 2026-08-21 — smoke-odour-removal rebuild (created 2026-08-20 without them)
+- **What happened:** the project reached `rendered` + caption with `settings.audience` and `settings.dmKeyword` both unset, even though the CRM payload carried both. Slide 7 and the caption agreed on ODOUR only because the copy happened to; the settings existed to prevent exactly the GROW-drift the schema comment describes.
+- **Why it matters:** any later `tweak` or caption regeneration can silently fall back to the generic keyword, and the review header shows no warning when the fields are empty.
+- **Direction:** warn on the review page when a cta slide or caption contains a DM keyword and `settings.dmKeyword` is unset; compose could refuse the mismatch the way it refuses an imageless deck.
 
 Add the next one here, following the shape in [How to add an entry](#how-to-add-an-entry).
 
