@@ -62,6 +62,12 @@ export interface ComposeSlideInput {
    * for it, stored on `authored.align`, applied by the app's `data-align` layer.
    */
   align?: SlideAlign;
+  /**
+   * The parse step's one-line reasoning for this slide's calls (role, image,
+   * align). Never reaches the composer — it is stored on the slide and shown
+   * on the review page, so the model's judgment is inspectable after the fact.
+   */
+  rationale?: string;
   /** Position in the deck — rotates which composition VARIANT this role uses. */
   index?: number;
   /**
@@ -158,6 +164,7 @@ HARD RULES
 
 IMAGE SLOTS
 - When this slide is marked "image: true", leave a HOLE for a photograph the user will supply — never describe one, never link one, never invent a src.
+- EXCEPT when the brief says the photograph is FULL-BLEED: then there is NO hole to leave. The picture is placed as a background layer behind your whole fragment, with a scrim keeping the type legible — a slot would punch an inset card through it. Emit no figure at all, and keep the copy to the few short display moments the arrangement names.
 - A slot is exactly: <figure class="cb-shot" data-cb-slot="NAME"></figure> — always empty, no children, no <img> inside.
 - NAME is your own short lowercase label for what belongs there (e.g. "hero", "before", "after", "product"). Lowercase letters, digits and hyphens only. Each slot on a slide needs a different name.
 - Add a shape class when the composition wants one: "wide" (16:9), "tall" (3:4), "square" (1:1). With no shape class a slot is 4:3.
@@ -211,7 +218,9 @@ export function buildComposeMessages(
         `and the headline may run to ${arrangement.maxHeadlineLines} line${arrangement.maxHeadlineLines === 1 ? '' : 's'}.`
       : ``,
     input.photo
-      ? `  image: true — this slide holds a photograph. Leave an EMPTY <figure class="cb-shot" data-cb-slot="…"> where it belongs (see IMAGE SLOTS). Treatment for reference: ${recipe.imagery.treatment || 'photographic'}`
+      ? archetypeFor(input.archetype)?.placement === 'bleed'
+        ? `  image: true, FULL-BLEED — the photograph arrives as the background layer behind your markup, under the brand's scrim (see IMAGE SLOTS). Do NOT leave a <figure class="cb-shot"> slot. Compose only the type, spare, for the arrangement's quiet end. Treatment for reference: ${recipe.imagery.treatment || 'photographic'}`
+        : `  image: true — this slide holds a photograph. Leave an EMPTY <figure class="cb-shot" data-cb-slot="…"> where it belongs (see IMAGE SLOTS). Treatment for reference: ${recipe.imagery.treatment || 'photographic'}`
       : ``,
     `  copy parts (VERBATIM — arrange, do not change):`,
     partLines || '  (none)',

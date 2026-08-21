@@ -94,6 +94,12 @@ export const slideSchema = z.object({
    * it from any stored document that still carries it.
    */
   photos: z.array(slidePhotoSchema).max(24).default([]),
+  /**
+   * The parse step's one-line reasoning for this slide's calls (role, image,
+   * align) — shown on the review page so the model's judgment is inspectable,
+   * and preserved through edits like `imageQuery`.
+   */
+  rationale: z.string().max(200).optional().catch(undefined),
   overrides: z
     .object({
       focalPoint: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) }).optional(),

@@ -46,6 +46,7 @@ import {
   RECIPE_STRUCTURAL_CLASSES,
   SLIDE_ROLES,
   SLOT_ATTR,
+  archetypeFor,
   authoredSlots,
   recipeEmphasisWrap,
   recipePatternVariant,
@@ -1084,12 +1085,16 @@ export function substituteFragment(
     return { kind: 'no-placeholder', part: 'emphasis' };
   }
 
-  // 2. A slide that holds a photograph needs the hole for it.
-  if (input.photo && authoredSlots(fragment).length === 0) return { kind: 'no-slot' };
+  // 2. A slide that holds a photograph needs the hole for it — UNLESS the
+  //    photograph is full-bleed (the archetype's call): then it arrives as the
+  //    background layer, a hole-less fragment is exactly right, and any
+  //    conditional slot the fragment does carry is dropped like on a text slide.
+  const bleed = archetypeFor(input.archetype)?.placement === 'bleed';
+  if (input.photo && !bleed && authoredSlots(fragment).length === 0) return { kind: 'no-slot' };
 
   let html = fillRows(fragment, input.parts.rows ?? []);
   html = fillParts(html, input.parts);
-  if (!input.photo) html = dropSlots(html);
+  if (!input.photo || bleed) html = dropSlots(html);
   html = tidy(html);
   return html ? { html } : { kind: 'empty' };
 }

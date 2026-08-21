@@ -5,6 +5,7 @@ import Link from 'next/link';
 import {
   FORMAT_LABELS,
   MAX_SLIDE_DIRECTION_CHARS,
+  archetypeFor,
   authoredSlots,
   contrastRatio,
   VIDEO_SECONDS_DEFAULT,
@@ -808,12 +809,26 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
   const chips: Array<{ key: string; tone: ChipTone; label: string; hint?: string; slide?: number }> = [];
   slides.forEach((s, i) => {
     const n = i + 1;
-    if (unfilledSlots(s) > 0) {
+    // A background (full-bleed) photo satisfies the slide's need for a picture:
+    // empty slots are removed at render, so flagging them here sent people to
+    // fill a slot the design never wanted — a deck was "fixed" from full-bleed
+    // into an inset card chasing exactly this chip.
+    const hasBgPhoto = (s.photos ?? []).some((p) => p.placement === 'background');
+    const arch = archetypeFor(s.authored?.archetype);
+    if (unfilledSlots(s) > 0 && !hasBgPhoto) {
       chips.push({
         key: `photo-${s.id}`,
         tone: 'warn',
         label: `Slide ${n} needs a photo`,
         hint: 'An image slot the composer left is still empty — it exports as a blank panel.',
+        slide: i,
+      });
+    } else if (arch?.placement === 'bleed' && arch.photo === 'required' && !hasBgPhoto) {
+      chips.push({
+        key: `bleed-${s.id}`,
+        tone: 'warn',
+        label: `Slide ${n} needs its background photo`,
+        hint: 'This composition is full-bleed — the photograph IS the frame. Attach one as the background, not into a slot.',
         slide: i,
       });
     }
@@ -851,6 +866,18 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
         slide: i,
       });
     }
+  });
+  // The compose step's decision ledger — calls the code took on the deck's
+  // behalf (e.g. a full-bleed photo dropped for fighting the brand ground).
+  // Info tone: they explain the deck, they don't gate shipping.
+  (project.composeNotes ?? []).forEach((cn, idx) => {
+    chips.push({
+      key: `note-${idx}`,
+      tone: 'info',
+      label: cn.slide ? `Slide ${cn.slide}: a call was made` : 'A call was made',
+      hint: cn.note,
+      ...(cn.slide ? { slide: cn.slide - 1 } : {}),
+    });
   });
   for (const c of pairing?.contradictions ?? []) {
     chips.push({
@@ -1342,6 +1369,13 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                 <h3 className="colh">
                   Slide {sel + 1} of {slides.length} <span className="n">selected</span>
                 </h3>
+                {/* The model's own one-line reasoning for this slide's calls —
+                    role, image, alignment. Insight, not instruction. */}
+                {selectedWorking.rationale && (
+                  <p className="beat" title="Why the AI made this slide's calls (role, image, alignment)">
+                    AI: {selectedWorking.rationale}
+                  </p>
+                )}
                 <CanvasCopyEditor
                   enabled={editId === selectedWorking.id}
                   els={editEls}

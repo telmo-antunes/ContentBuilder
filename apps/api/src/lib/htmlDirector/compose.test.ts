@@ -964,12 +964,16 @@ describe('compose by example (the recipe composes its own slides)', () => {
     );
   });
 
-  it('keeps the photo slot on the photo slide, and applies the signature emphasis', async () => {
+  it('drops the slot on a full-bleed photo slide, and applies the signature emphasis', async () => {
     reply.mockImplementation(() => deck());
     const out = await composeProject(byExample, 'an idea', { renderCheck: false });
     const cover = out[0]!.authored.html;
 
-    expect(cover).toContain('<figure class="cb-shot" data-cb-slot="hero"></figure>');
+    // A photo cover is assigned the showcase archetype (placement 'bleed'):
+    // the photograph arrives as the BACKGROUND layer, so the fragment's
+    // conditional slot is dropped — a slot would punch a card through it.
+    expect(out[0]!.authored.archetype).toBe('showcase');
+    expect(cover).not.toContain('cb-shot');
     // the mechanical wrap runs on the substituted path exactly as on the model one
     expect(cover).toContain(
       '<div class="headline">Get paid before you <span class="it">lift a finger.</span></div>',
@@ -1063,14 +1067,14 @@ describe('compose by example (the recipe composes its own slides)', () => {
     expect(aiCalls).toHaveLength(5);
     expect(out.map((s) => s.source)).toEqual(['ai', 'ai', 'ai', 'ai']);
     for (const call of aiCalls.slice(1)) expect(sysOf(call)).toBe(SLIDE_AUTHOR_INSTRUCTIONS);
-    // …and its output is byte-identical to what the composer wrote (plus the slot
-    // guard's own append on the photo slide, exactly as before).
+    // …and its output is byte-identical to what the composer wrote. The photo
+    // cover gets NO appended slot: its archetype is full-bleed (showcase), so
+    // the photograph is the background layer and the slot guard inverts.
     expect(out[1]!.authored.html).toBe(composed['list']);
     expect(out[2]!.authored.html).toBe(composed['statement']);
     expect(out[3]!.authored.html).toBe(composed['cta']);
-    expect(out[0]!.authored.html).toBe(
-      `${composed['cover']}<figure class="cb-shot" data-cb-slot="photo"></figure>`,
-    );
+    expect(out[0]!.authored.archetype).toBe('showcase');
+    expect(out[0]!.authored.html).toBe(composed['cover']);
     // nothing in the new path so much as logged
     expect(warnings().some((w) => w.includes('fragment'))).toBe(false);
   });
