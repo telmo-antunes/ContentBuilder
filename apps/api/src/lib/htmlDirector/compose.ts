@@ -747,6 +747,11 @@ const DANGLING_WORDS = new Set([
   'nor', 'be', 'been', 'being', 'has', 'have', 'had', 'will', 'would', 'can', 'could',
   'should', 'may', 'might', 'must', 'which', 'who', 'whose', 'than', 'then', 'our',
   'his', 'her', 'my', 'these', 'those', 'every', 'each',
+  // Degree/time adverbs that modify something that never arrives. A cta shipped
+  // reading "Your next quiet week is already" — the sentence simply stops.
+  'already', 'almost', 'nearly', 'barely', 'hardly', 'merely', 'simply', 'quite',
+  'rather', 'very', 'really', 'truly', 'about', 'around', 'because', 'while',
+  'when', 'where', 'until', 'unless', 'before', 'after', 'since',
 ]);
 
 // ── Copy that stops mid-thought ─────────────────────────────────────────────
@@ -807,6 +812,64 @@ const INTERNAL_SENTENCE_BREAK = /[.!?…]\s+\S/;
  *   · A HEADLINE may be a fragment — 34 of 93 carry no full stop, by design —
  *     but no line may end on a word that leaves a phrase open.
  */
+/**
+ * CUT AN UNFINISHED LINE BACK TO WHERE IT WAS STILL FINISHED.
+ *
+ * `unfinishedProse` has always been able to SEE this fault and never able to do
+ * anything about it: it reported, the caller logged, and the deck shipped with
+ * a headline that stops mid-sentence — three times, the last one on the closing
+ * slide that carries the offer.
+ *
+ * Trimming is the honest repair because it removes words rather than inventing
+ * them: everything left was written, budgeted and approved upstream, so a
+ * shorter line is still the author's line. Two moves, in order:
+ *
+ *   · a line that already broke a sentence keeps its COMPLETE sentences and
+ *     drops the fragment it started ("A. B. And then" → "A. B.");
+ *   · a line that ends on a word leaving a phrase open drops trailing words
+ *     until it does not ("… week is already" → "… week").
+ *
+ * Returns null when nothing worth keeping survives — better to flag the slide
+ * than to ship a two-word stub nobody wrote.
+ */
+export function trimToFinished(text: string): string | null {
+  const original = text.trim();
+  if (!original) return null;
+
+  let out = original;
+  // Keep whole sentences when the line started another one and abandoned it.
+  if (INTERNAL_SENTENCE_BREAK.test(out)) {
+    const lastEnd = Math.max(out.lastIndexOf('.'), out.lastIndexOf('!'), out.lastIndexOf('?'), out.lastIndexOf('…'));
+    if (lastEnd > 0) out = out.slice(0, lastEnd + 1).trim();
+  }
+
+  // Then drop trailing words that leave a phrase open.
+  const MIN_WORDS = 3;
+  let words = out.replace(/[,;:]+$/, '').split(/\s+/).filter(Boolean);
+  while (
+    words.length > MIN_WORDS &&
+    !TERMINAL_PUNCTUATION.test(words[words.length - 1] ?? '') &&
+    DANGLING_WORDS.has((words[words.length - 1] ?? '').toLowerCase().replace(/[,;:]+$/, ''))
+  ) {
+    words = words.slice(0, -1);
+  }
+  out = words.join(' ').replace(/[,;:]+$/, '').trim();
+
+  if (!out || out === original) return null;
+  if (out.split(/\s+/).length < MIN_WORDS) return null;
+  /**
+   * A repair that is still unfinished is not a repair — checked exactly the way
+   * `unfinishedProse` checks, terminal punctuation first. Two complete
+   * sentences legitimately contain an internal break ("A. B."); what the
+   * detector objects to is a break with an unfinished clause after it.
+   */
+  if (TERMINAL_PUNCTUATION.test(out)) return out;
+  const last = out.split(/\s+/).pop()?.toLowerCase().replace(/[,;:]+$/, '') ?? '';
+  if (INTERNAL_SENTENCE_BREAK.test(out)) return null;
+  if (DANGLING_WORDS.has(last)) return null;
+  return out;
+}
+
 export function unfinishedProse(slides: ParsedSlide[]): UnfinishedProse[] {
   const out: UnfinishedProse[] = [];
   const dangles = (v: string) => {
@@ -1543,6 +1606,38 @@ export async function parseForCompose(
    * There is still nothing to repair deterministically — the missing words are
    * the point — so what survives is REPORTED, to the caller and not only to a
    * terminal nobody is reading.
+   */
+  /**
+   * REPAIR WHAT THE CORRECTION DID NOT.
+   *
+   * Asking the model again was already tried — that is the corrective re-parse
+   * above — and a headline still shipped mid-sentence three times. So the last
+   * move is deterministic: cut the line back to where it was still finished.
+   * It removes words rather than inventing them, so what remains is still the
+   * copy that was written and approved.
+   *
+   * A part the user LOCKED is never touched: they asked for those words
+   * exactly, and an unfinished lock is their sentence to finish.
+   */
+  const locked = (value: string) => locks.some((l) => value.includes(l));
+  for (const u of unfinishedProse(slides)) {
+    const slide = slides[u.slide];
+    if (!slide) continue;
+    const current = u.label === 'headline' ? slide.parts.headline : (slide.parts as Record<string, unknown>)[u.label];
+    if (typeof current !== 'string' || locked(current)) continue;
+    const trimmed = trimToFinished(current);
+    if (!trimmed) continue;
+    (slide.parts as Record<string, unknown>)[u.label] = trimmed;
+    console.warn(
+      `[compose] parse: slide ${u.slide + 1} ${u.label} stopped mid-thought — trimmed to ${JSON.stringify(trimmed)}`,
+    );
+  }
+
+  /**
+   * WHAT SURVIVED BOTH REPAIRS IS A REAL FAULT, and it must not ship looking
+   * clean. It used to be logged to a terminal and returned in the compose
+   * RESPONSE only — so anyone opening the review page later saw a deck whose
+   * ship bar said all-clear while its closing headline stopped mid-sentence.
    */
   const stillUnfinished = unfinishedProse(slides);
   for (const u of stillUnfinished) {

@@ -821,6 +821,13 @@ projectsRouter.post(
           ? { status: 'skipped', reason: critique.reason, detail: critique.detail }
           : { status: 'skipped', reason: 'not-run' },
     );
+    /**
+     * Copy that stops mid-thought is stored, not just returned. It used to
+     * exist only in the compose RESPONSE, so anyone opening the review page
+     * afterwards saw an all-clear ship bar above a headline that stops
+     * mid-sentence — which is how the same fault shipped three times.
+     */
+    project.set('copyFaults', copy?.unfinished?.length ? copy.unfinished : undefined);
     if (critique?.status === 'skipped') {
       // Said out loud beside the other compose decisions: a silent downgrade is
       // the one outcome worse than an expensive deck.

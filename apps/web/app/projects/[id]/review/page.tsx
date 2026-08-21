@@ -885,6 +885,20 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
    * A "blocking" read gates the ship bar exactly like a measured fault; the
    * rest inform without blocking.
    */
+  /**
+   * A LINE THAT STOPS MID-SENTENCE BLOCKS THE SHIP BAR. Every other gate here
+   * passes such a slide — it fits, nothing collides, the words are verbatim —
+   * which is exactly why it shipped three times before this chip existed.
+   */
+  for (const [i, f] of (project.copyFaults ?? []).entries()) {
+    chips.push({
+      key: `copy-${i}`,
+      tone: 'bad',
+      label: `Slide ${f.slide + 1}: ${f.label} stops mid-thought`,
+      hint: `“${f.text}” — ${f.reason}. Rewrite it, or shorten it to a line that finishes.`,
+      slide: f.slide,
+    });
+  }
   if (project.critique?.status === 'skipped') {
     chips.push({
       key: 'crit-skipped',

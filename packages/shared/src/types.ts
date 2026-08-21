@@ -299,6 +299,13 @@ export interface Project {
       severity: 'blocking' | 'notable' | 'minor';
     }>;
   };
+  /**
+   * Copy that still stops mid-thought after the corrective re-parse AND the
+   * deterministic trim. No later gate can catch it: such a slide fits, does
+   * not collide, and its words are "verbatim" by every rule the composer
+   * follows — so it has to be carried to the review page explicitly.
+   */
+  copyFaults?: Array<{ slide: number; label: string; text: string; reason: string }>;
   /** What the last compose cost, and anything the ceiling turned down. */
   spend?: {
     spentUsd: number;

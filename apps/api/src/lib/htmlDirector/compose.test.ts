@@ -67,7 +67,8 @@ vi.mock('../ai', () => {
   };
 });
 
-const { composeSlide, composeProject, parseForCompose, composeBudgetsFor, unfinishedProse } = await import('./compose');
+const { composeSlide, composeProject, parseForCompose, composeBudgetsFor, unfinishedProse, trimToFinished } =
+  await import('./compose');
 type LayoutCheckSummary = import('./compose').LayoutCheckSummary;
 type ComposeProgress = import('./compose').ComposeProgress;
 const { detailMastersRecipe: detailMastersWithFragments } = await import('./recipes');
@@ -1507,3 +1508,35 @@ describe('parse guards on what each hole may carry', () => {
     expect(slide.parts.stat).toBe('3 in 5')
   })
 })
+
+// ── Unfinished copy ──────────────────────────────────────────────────────────
+
+describe('trimToFinished — the repair the correction never had', () => {
+  it('cuts back to the last complete sentence when a line abandoned another', () => {
+    expect(trimToFinished('Cash lands first. Slow weeks are funded. And then')).toBe(
+      'Cash lands first. Slow weeks are funded.',
+    );
+  });
+
+  it('drops trailing words that leave a phrase open', () => {
+    // The exact line that shipped on a closing slide.
+    expect(trimToFinished('Your next quiet week is already')).toBe('Your next quiet week');
+  });
+
+  it('leaves a finished line alone', () => {
+    expect(trimToFinished('Foam and carpet decide the result.')).toBeNull();
+    expect(trimToFinished('Never sell a discount')).toBeNull();
+  });
+
+  it('refuses to leave a stub nobody wrote', () => {
+    // Trimming this leaves one word; better to flag the slide than to ship it.
+    expect(trimToFinished('January is already')).toBeNull();
+  });
+
+  it('never invents words — everything it returns was in the original', () => {
+    const original = 'A busy December fixes nothing if January is';
+    const out = trimToFinished(original);
+    expect(out).not.toBeNull();
+    expect(original.startsWith(out!)).toBe(true);
+  });
+});
