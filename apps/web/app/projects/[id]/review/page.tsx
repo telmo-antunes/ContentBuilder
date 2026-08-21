@@ -774,7 +774,7 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
     );
   }
 
-  const kit = toRenderKit(project.brandKit);
+  const kit = toRenderKit(project.brandKit, project.recipeSnapshot as Parameters<typeof toRenderKit>[1]);
   const inspectorW = 288;
   const inspectorScale = inspectorW / dimensionsFor(project.format).width;
   const recipe = (project.brandKit as { recipe?: BrandRecipe } | undefined)?.recipe;

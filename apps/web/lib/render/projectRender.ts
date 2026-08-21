@@ -14,15 +14,18 @@ const FALLBACK_KIT: RenderBrandKit = {
   fonts: { render: { heading: 'Montserrat', body: 'Inter' } },
 };
 
-/** Map the persisted brand kit to the shape the layout components consume. */
-export function toRenderKit(kit: BrandKit | null | undefined): RenderBrandKit {
+/** Map the persisted brand kit to the shape the layout components consume.
+ *  `recipeOverride` is the project's pinned `recipeSnapshot`, when it has one —
+ *  a shipped deck keeps rendering under the recipe it was approved with, no
+ *  matter what the kit's live recipe has since become. */
+export function toRenderKit(kit: BrandKit | null | undefined, recipeOverride?: BrandKit['recipe']): RenderBrandKit {
   if (!kit) return FALLBACK_KIT;
   return {
     colors: kit.colors,
     fonts: { render: kit.fonts.render },
     logo: kit.logo?.url ? { url: kit.logo.url } : undefined,
     logoTreatment: kit.logoTreatment,
-    recipe: kit.recipe,
+    recipe: recipeOverride ?? kit.recipe,
   };
 }
 
