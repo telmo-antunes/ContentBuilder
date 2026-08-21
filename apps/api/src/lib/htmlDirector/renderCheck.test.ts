@@ -32,6 +32,9 @@ vi.mock('../ai', () => ({
     return part && 'text' in part ? part.text : '';
   },
   modelFor: async () => 'test-model',
+  cachedSystem: (staticPart: string) => [{ type: 'text', text: staticPart }],
+  cachedSystemLayers: (...parts: string[]) =>
+    parts.filter(Boolean).map((text) => ({ type: 'text', text })),
 }));
 
 const {

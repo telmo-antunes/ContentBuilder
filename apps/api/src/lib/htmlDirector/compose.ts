@@ -41,7 +41,7 @@ import {
   EXPLAIN_ROLES,
   type ComposeBudgets,
 } from '@contentbuilder/shared';
-import { aiJson, aiMessage, modelFor, textOf, type AiJsonResult, type AiJsonTool } from '../ai';
+import { aiJson, aiMessage, cachedSystem, modelFor, textOf, type AiJsonResult, type AiJsonTool } from '../ai';
 import { config } from '../../config';
 import { sanitizeAuthoredHtml } from '../htmlSanitize';
 import { lintAuthored } from './lintAuthored';
@@ -999,6 +999,14 @@ RULES
 - "why": one short line per slide, written for the brand owner who will read it on the review page: the calls you made — why this role, why image true or false (and what the picture would be doing), why any align deviation. Plain words, no hedging, no restating the copy. This is how your judgment becomes visible and improvable, so treat it as part of the work, not an afterthought.`;
 
 /**
+ * The copywriter's rules are the longest constant in the pipeline and were
+ * re-billed in full on every parse — including the corrective re-parse and each
+ * per-slide direction, which repeat it verbatim minutes apart. Cached, the
+ * second and later calls read the prefix at a tenth of the input rate.
+ */
+const PARSE_SYSTEM_CACHED = cachedSystem(PARSE_SYSTEM);
+
+/**
  * THE PARSE STEP'S OUTPUT SHAPE, as a tool the model is FORCED to call — so the
  * deck arrives already parsed instead of being cut out of prose with a fence
  * regex and `indexOf('{')`.
@@ -1408,7 +1416,7 @@ export async function parseForCompose(
   // truncated mid-JSON is a failed parse, so the ceiling follows the input.
   const maxTokens = sources.length || plan.length > 6 ? 2600 : 1600;
   const reply = await aiJson(
-    { model, max_tokens: maxTokens, system: PARSE_SYSTEM, messages: [{ role: 'user', content: user }] },
+    { model, max_tokens: maxTokens, system: PARSE_SYSTEM_CACHED, messages: [{ role: 'user', content: user }] },
     PARSE_TOOL,
   );
   let slides = stripMarkdownFromDeck(readDeck(parsePayload(reply), 'first pass'));
@@ -1458,7 +1466,7 @@ export async function parseForCompose(
         {
           model,
           max_tokens: maxTokens,
-          system: PARSE_SYSTEM,
+          system: PARSE_SYSTEM_CACHED,
           messages: [
             { role: 'user', content: user },
             { role: 'assistant', content: JSON.stringify({ slides }) },
@@ -1604,7 +1612,7 @@ export async function parseSlideDirection(
     .join('\n');
 
   const reply = await aiJson(
-    { model: parseModel(opts), max_tokens: 900, system: PARSE_SYSTEM, messages: [{ role: 'user', content: user }] },
+    { model: parseModel(opts), max_tokens: 900, system: PARSE_SYSTEM_CACHED, messages: [{ role: 'user', content: user }] },
     PARSE_TOOL,
   );
   const parsed = stripMarkdownFromDeck(readDeck(parsePayload(reply), 'one slide'));
@@ -1678,7 +1686,7 @@ export async function parseSlideCopy(
     .join('\n');
 
   const reply = await aiJson(
-    { model: parseModel(opts), max_tokens: 900, system: PARSE_SYSTEM, messages: [{ role: 'user', content: user }] },
+    { model: parseModel(opts), max_tokens: 900, system: PARSE_SYSTEM_CACHED, messages: [{ role: 'user', content: user }] },
     PARSE_TOOL,
   );
   const parsed = stripMarkdownFromDeck(readDeck(parsePayload(reply), 'slide copy'));

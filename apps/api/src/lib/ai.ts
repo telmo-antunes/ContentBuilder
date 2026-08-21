@@ -196,6 +196,31 @@ export function cachedSystem(
   return blocks;
 }
 
+/**
+ * TWO NESTED CACHE SCOPES, for the per-slide volume call.
+ *
+ * `cachedSystem` places one breakpoint, which is right when a feature has one
+ * stable prefix. The composer has TWO, at different lifetimes:
+ *
+ *   · the instructions — byte-identical for every slide of every deck of every
+ *     brand, so one entry serves the whole product;
+ *   · the brand's own spec (signature + component vocabulary) — identical
+ *     across the slides of a deck, and re-sent on every one of them.
+ *
+ * A breakpoint caches everything up to and including its block, so two
+ * breakpoints give two entries: the global one (hit by every brand) and the
+ * brand one (hit by every later slide in the deck). Collapsing them into a
+ * single breakpoint would scope the shared half per-brand and throw away most
+ * of the hit rate.
+ *
+ * Anything that varies per SLIDE stays in the user message, after both.
+ */
+export function cachedSystemLayers(...staticParts: string[]): Anthropic.TextBlockParam[] {
+  return staticParts
+    .filter((p) => p !== undefined && p !== '')
+    .map((text) => ({ type: 'text', text, cache_control: { type: 'ephemeral' } }) as const);
+}
+
 /** Create a message; on a Fable-family refusal, retry once on the fallback model. */
 export async function aiMessage(
   params: Anthropic.MessageCreateParamsNonStreaming,
