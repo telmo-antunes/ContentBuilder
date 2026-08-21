@@ -70,7 +70,17 @@ vi.mock('../ai', () => {
 const { composeSlide, composeProject, parseForCompose, composeBudgetsFor, unfinishedProse } = await import('./compose');
 type LayoutCheckSummary = import('./compose').LayoutCheckSummary;
 type ComposeProgress = import('./compose').ComposeProgress;
-const { detailMastersRecipe } = await import('./recipes');
+const { detailMastersRecipe: detailMastersWithFragments } = await import('./recipes');
+/**
+ * THE MODEL PATH, explicitly.
+ *
+ * These tests are about what the composer does when it has to WRITE a slide —
+ * call counts, retries, the guard chain. The exemplar now ships worked
+ * fragments (so the author model can see the shape), which means using it raw
+ * here would silently exercise substitution instead and assert nothing about
+ * the model. Stripping them states the intent that used to be an accident.
+ */
+const detailMastersRecipe = { ...detailMastersWithFragments, fragments: undefined };
 const { sanitizeAuthoredHtml } = await import('../htmlSanitize');
 const { SLIDE_AUTHOR_INSTRUCTIONS } = await import('./prompt');
 const { brandRecipeSchema } = await import('@contentbuilder/shared');

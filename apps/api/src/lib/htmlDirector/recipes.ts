@@ -227,6 +227,11 @@ export const detailMastersRecipe: BrandRecipe = brandRecipeSchema.parse({
 .cb-slide .panel .row em{ margin-left:auto; font-style:normal; font-size:26px; color:#8c857a; }
 .cb-slide .cta{ align-self:flex-start; background:var(--cb-accent); color:#1c1408; font-weight:600; font-size:32px; border-radius:var(--cb-radius); padding:28px 46px; margin-top:14px; }
 .cb-slide .handle{ color:#8c857a; font-size:26px; margin-top:32px; letter-spacing:.06em; }
+.cb-slide .card{ border:1.5px solid var(--cb-line); border-radius:var(--cb-radius); padding:40px 44px; background:linear-gradient(180deg, rgba(212,192,157,.06), rgba(212,192,157,.02)); position:relative; margin-top:30px; }
+.cb-slide .card.win{ border-color:var(--cb-accent); box-shadow:0 18px 60px rgba(193,154,92,.12); }
+.cb-slide .badge{ position:absolute; top:-20px; left:44px; background:var(--cb-accent); color:#1c1408; border-radius:999px; padding:11px 24px; font-size:24px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; }
+.cb-slide .chip{ display:inline-block; border:1.5px solid var(--cb-line); border-radius:999px; padding:14px 26px; font-size:25px; color:var(--cb-ink-muted); letter-spacing:.06em; margin-top:28px; }
+.cb-slide{ --cb-row-index-color:var(--cb-accent); --cb-row-index-size:1.5em; --cb-dont-opacity:.55; }
 `.trim(),
   components: [
     { className: 'logo-row', use: 'Wrapper for the DM monogram + wordmark. Contains .monogram and .wordmark.' },
@@ -238,6 +243,9 @@ export const detailMastersRecipe: BrandRecipe = brandRecipeSchema.parse({
     { className: 'body', use: 'Supporting sentence(s), muted.' },
     { className: 'stat', use: 'A giant gold serif number (e.g. a percentage) for a results slide.' },
     { className: 'panel', use: 'An elegant gold-bordered card; rows via .row with a .tick and trailing <em> status.' },
+    { className: 'card', use: 'A framed surface grouping a claim\'s evidence. Add .win for the option that carries the verdict.' },
+    { className: 'badge', use: 'A small filled label on a card\'s corner, naming the winner or the point.' },
+    { className: 'chip', use: 'A bordered capsule for one piece of metadata (a topic, a read time).' },
     { className: 'cta', use: 'A solid gold call-to-action button.' },
     { className: 'handle', use: 'The url / @handle at the bottom, muted.' },
     { className: 'fill', use: 'An empty flex-grow spacer to bottom-anchor content.' },
@@ -273,14 +281,106 @@ export const detailMastersRecipe: BrandRecipe = brandRecipeSchema.parse({
 `.trim(),
     },
   },
+  /**
+   * WORKED FRAGMENTS — and the reason they exist here.
+   *
+   * The author prompt has always ASKED for fragments and no exemplar has ever
+   * shown one, so every authored brand invented them from one generic prose
+   * snippet: exactly one skeleton per role, which is why a deck of seven
+   * slides read as one slide repeated six times. Prose lost to the exemplar,
+   * as it did for ground tone before Halftone Press was written.
+   *
+   * So statement, feature and list carry ARRAYS here: genuinely different
+   * arrangements of the same role — a different order, different furniture,
+   * one anchored low where another sits high, a marker panel against a
+   * numbered one. Variant i implements arrangement i of that role's patterns,
+   * and the app rotates them per slide and per deck.
+   *
+   * `quote` is deliberately absent: this brand defines no quote vocabulary, and
+   * the prompt says a role you cannot lay out well costs nothing to omit — the
+   * omission is part of what this teaches.
+   */
+  fragments: {
+    cover: `<div class="logo-row"><div class="monogram"></div><div class="wordmark"><b>detail</b><i>masters</i></div></div>
+<div class="fill"></div>
+<div class="eyebrow">{{eyebrow}}</div>
+<div class="headline">{{headline}}</div>
+<div class="body">{{body}}</div>
+<figure class="cb-shot" data-cb-slot="hero"></figure>`,
+    statement: [
+      // Anchored low: the label sits on the top edge, the claim on the baseline.
+      `<div class="eyebrow">{{eyebrow}}</div>
+<div class="fill"></div>
+<div class="headline">{{headline}}</div>
+<div class="rule"></div>
+<div class="body">{{body}}</div>`,
+      // Claim high, evidence in a card — the business's own artifact.
+      `<div class="eyebrow">{{eyebrow}}</div>
+<div class="headline sm">{{headline}}</div>
+<div class="rule"></div>
+<div class="fill"></div>
+<div class="card"><div class="body">{{body}}</div></div>`,
+    ],
+    feature: [
+      // Type first, the picture closing the frame.
+      `<div class="eyebrow">{{eyebrow}}</div>
+<div class="headline">{{headline}}</div>
+<div class="rule"></div>
+<div class="body">{{body}}</div>
+<div class="fill"></div>
+<figure class="cb-shot" data-cb-slot="hero"></figure>`,
+      // Picture first — a different silhouette, not the same one respaced.
+      `<div class="eyebrow">{{eyebrow}}</div>
+<figure class="cb-shot wide" data-cb-slot="hero"></figure>
+<div class="headline sm">{{headline}}</div>
+<div class="body">{{body}}</div>
+<div class="fill"></div>`,
+    ],
+    list: [
+      // The marker panel: quiet, scannable, the default.
+      `<div class="eyebrow">{{eyebrow}}</div>
+<div class="headline sm">{{headline}}</div>
+<div class="rule"></div>
+<div class="body">{{body}}</div>
+<div class="panel">{{#rows}}<div class="row">{{row.text}}<em>{{row.note}}</em></div>{{/rows}}</div>
+<div class="fill"></div>`,
+      // Numbered: the app counts the rows in the gutter (see `numbered`), which
+      // turns a list into a method worth saving.
+      `<div class="eyebrow">{{eyebrow}}</div>
+<div class="headline">{{headline}}</div>
+<div class="body">{{body}}</div>
+<div class="fill"></div>
+<div class="panel numbered">{{#rows}}<div class="row">{{row.text}}<em>{{row.note}}</em></div>{{/rows}}</div>`,
+    ],
+    stat: `<div class="eyebrow">{{eyebrow}}</div>
+<div class="fill"></div>
+<div class="stat">{{stat}}</div>
+<div class="headline sm">{{headline}}</div>
+<div class="body">{{body}}</div>`,
+    cta: `<div class="logo-row"><div class="monogram"></div><div class="wordmark"><b>detail</b><i>masters</i></div></div>
+<div class="fill"></div>
+<div class="eyebrow">{{eyebrow}}</div>
+<div class="headline">{{headline}}</div>
+<div class="cta">{{cta}}</div>
+<div class="body">{{body}}</div>
+<div class="handle">{{handle}}</div>`,
+  },
   composition: {
     align: 'flush-left',
+    /**
+     * ONE LINE PER ARRANGEMENT, role-prefixed — and the content roles carry
+     * TWO, matching their fragment variants index for index. A role with a
+     * single pattern gives the rotation nothing to rotate.
+     */
     patterns: [
       'cover (add class "photo" to slide): logo-row → fill → eyebrow → headline(with .it) → body',
-      'cover (add class "photo" to slide): logo-row → fill → headline(with .it) → rule (quieter, image-led)',
-      'feature: eyebrow → headline(.it) → rule → body → fill → panel',
-      'feature: eyebrow → headline(.it) → panel → fill → body',
-      'stat: eyebrow → headline → stat → body',
+      'statement: eyebrow → fill → headline(.it) → rule → body (claim on the baseline)',
+      'statement: eyebrow → headline.sm(.it) → rule → fill → card holding the body (evidence framed)',
+      'feature: eyebrow → headline(.it) → rule → body → fill → cb-shot (type first)',
+      'feature: eyebrow → cb-shot.wide → headline.sm(.it) → body → fill (picture first)',
+      'list: eyebrow → headline.sm(.it) → rule → panel of rows → fill (marker panel)',
+      'list: eyebrow → headline(.it) → fill → panel.numbered of rows (a numbered method)',
+      'stat: eyebrow → fill → stat → headline.sm → body',
       'cta: logo-row → fill → eyebrow → headline(.it) → cta → handle',
     ],
   },

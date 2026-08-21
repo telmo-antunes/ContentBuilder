@@ -940,6 +940,17 @@ export const RECIPE_STRUCTURAL_CLASSES: ReadonlySet<string> = new Set([
   'it',
   'row',
   'tick',
+  /**
+   * APP-DRAWN LIST TREATMENTS. These carry no brand CSS of their own — the app
+   * draws them (see `slideMediaCss`) and the brand restyles them through its
+   * own vars. They were shipped as capabilities before they were listed here,
+   * which made them unusable in practice: a fragment naming `numbered` was
+   * thrown away as an invented class, so the one list treatment beyond a quiet
+   * marker panel could not actually be authored.
+   */
+  'numbered',
+  'do',
+  'dont',
   ...APP_IMAGE_CLASSES,
 ]);
 

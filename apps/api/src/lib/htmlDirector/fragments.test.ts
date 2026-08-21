@@ -1,6 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { BASE_BUDGETS, EXPLAIN_ROLES, brandRecipeSchema, type BrandRecipe } from '@contentbuilder/shared';
-import { detailMastersRecipe } from './recipes';
+import { fragmentVariantsFor } from '@contentbuilder/shared';
+import { detailMastersRecipe as detailMastersWithFragments } from './recipes';
+
+/**
+ * A brand with NO fragments — what several tests below are actually about.
+ * The exemplar ships worked ones now, so the absence has to be stated.
+ */
+const detailMastersRecipe = { ...detailMastersWithFragments, fragments: undefined };
 import { authoredSlots } from '@contentbuilder/shared';
 import {
   FRAGMENT_CONVENTION,
@@ -771,5 +778,49 @@ describe('verdict rows', () => {
     expect(html).toContain('class="row do"');
     expect(html).toContain('class="row"'); // the stateless row is untouched
     expect(html).not.toMatch(/[✓✕]/); // glyphs belong to the gutter, not the markup
+  });
+});
+
+// ── The exemplar contract ────────────────────────────────────────────────────
+
+describe('the worked exemplar teaches by showing', () => {
+  const exemplar = detailMastersWithFragments;
+
+  it('carries fragments at all — prose alone lost to the exemplar three times', () => {
+    // Ground tone (Halftone Press), alignment, and then variants: each time the
+    // author model copied the exemplars' SHAPE over the prompt's words.
+    expect(exemplar.fragments).toBeDefined();
+  });
+
+  it('shows VARIANT ARRAYS on the content roles, which is the shape being taught', () => {
+    for (const role of ['statement', 'feature', 'list']) {
+      expect(fragmentVariantsFor(exemplar, role).length).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it('shows the list treatment the app can draw but no brand had ever used', () => {
+    expect(fragmentVariantsFor(exemplar, 'list').some((f) => f.includes('numbered'))).toBe(true);
+  });
+
+  it('shows the job-register devices, not just type on a ground', () => {
+    const all = Object.values(exemplar.fragments ?? {}).flat().join('\n');
+    expect(all).toContain('class="card"');
+  });
+
+  it('survives the app\'s own validator — an exemplar that would be thrown away teaches nothing', () => {
+    const { dropped } = validateRecipeFragments(exemplar);
+    expect(dropped).toEqual([]);
+  });
+
+  it('has a pattern for every fragment variant, index for index', () => {
+    // Variant i implements arrangement i; a variant with no matching pattern is
+    // markup the composer was never told about.
+    for (const role of ['statement', 'feature', 'list']) {
+      const variants = fragmentVariantsFor(exemplar, role).length;
+      const patterns = (exemplar.composition.patterns ?? []).filter((p) =>
+        p.trim().toLowerCase().startsWith(role),
+      ).length;
+      expect(patterns).toBe(variants);
+    }
   });
 });
