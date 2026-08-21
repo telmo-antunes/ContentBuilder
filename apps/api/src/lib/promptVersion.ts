@@ -39,8 +39,10 @@ export const PROMPT_VERSION = {
    * and should read like the business thinks (job sheets, verdicts,
    * checklists); component vocabulary gains card / chip / badge / verdict
    * rows / split-with-winner. Calibrated against Telmo's picked references.
+   * v7: VERTICAL RHYTHM — spacing authored as grouping (tight lockups,
+   * ~2× between units, air around the cta, 3–4 reused spacing steps).
    */
-  author: 6,
+  author: 7,
   /**
    * `CRITIQUE_SYSTEM` in lib/htmlDirector/authorRecipe.ts.
    * v2: also judges composition.align against the brand evidence, and that the

@@ -125,6 +125,14 @@ Add the next one here, following the shape in [How to add an entry](#how-to-add-
 
 ## Resolved
 
+### Replacing a recipe silently re-skinned every deck already reviewed
+
+- **Kind:** Defect
+- **Severity:** cost me a fix
+- **First seen:** 2026-08-21 — spotted by Telmo minutes after the detailmasters re-author: the approved smoke-odour deck's cta slide came back centred with a floating button, because decks render LIVE against the kit's recipe and the new recipe carried `composition.roles.cta = center` plus different `.cta` styling.
+- **Why it matters:** "rendered live" is right while a deck is being made and wrong forever after — a recipe swap mutates work that was already approved, with the review page still claiming 100% all-clear.
+- **Resolved:** 2026-08-21 — `recipeSnapshot` pinned onto the project at first export; review and export render paths use the snapshot over the live recipe (PR #107). The smoke-odour deck was pinned to its approved recipe and renders byte-identical to the reviewed export again.
+
 ### The slides PATCH silently erased `authored.source` on every hand-edited slide
 
 - **Kind:** Defect

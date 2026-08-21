@@ -459,7 +459,7 @@ describe('repairLayout — the bidirectional ladder', () => {
   const HTML = '<div class="headline">A headline</div>\n<div class="body">Body</div>';
   const input = { role: 'statement' as const, parts: {}, format: '1080x1350' as const, index: 0 };
   const v = (over: Partial<LayoutVerdict>): LayoutVerdict => ({
-    state: 'fits', collide: false, slack: 0, headlineLines: 2, ...over,
+    state: 'fits', collide: false, slack: 0, headlineLines: 2, gaps: [], ...over,
   });
 
   it('does nothing when the slide is clean', async () => {
@@ -557,7 +557,7 @@ describe('the rung that asks for more copy', () => {
     index: 0,
   };
   const v = (over: Partial<LayoutVerdict>): LayoutVerdict => ({
-    state: 'fits', collide: false, slack: 0, headlineLines: 2, ...over,
+    state: 'fits', collide: false, slack: 0, headlineLines: 2, gaps: [], ...over,
   });
   const THIN = '<div class="headline">Holds the most</div><div class="fill"></div>';
   const FULLER = '<div class="headline">Holds the most</div><div class="body">And ruins the fastest.</div>';
@@ -654,7 +654,7 @@ describe('the rung that asks for more copy', () => {
 describe('the rung after the ladder — looking at the slide', () => {
   const input = { role: 'feature' as const, parts: {}, format: '1080x1350' as const, index: 0 };
   const v = (over: Partial<LayoutVerdict>): LayoutVerdict => ({
-    state: 'fits', collide: false, slack: 0, headlineLines: 2, ...over,
+    state: 'fits', collide: false, slack: 0, headlineLines: 2, gaps: [], ...over,
   });
   const HTML = '<div class="headline">A headline</div><div class="fill"></div>';
   const REARRANGED = '<div class="fill"></div><div class="headline">A headline</div>';

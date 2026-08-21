@@ -61,6 +61,8 @@ export default function RenderStage({
             document.body.dataset.collide = layout.collide ? 'true' : 'false';
             document.body.dataset.slack = layout.slack.toFixed(4);
             document.body.dataset.headlineLines = String(layout.headlineLines);
+            // The rhythm data — labelled ink gaps — for the same single probe.
+            document.body.dataset.gaps = JSON.stringify(layout.gaps ?? []);
           }
         }}
       />

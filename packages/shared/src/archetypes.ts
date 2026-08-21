@@ -339,6 +339,19 @@ export function slideAlignCss(): string {
     `.cb-slide[data-align="flush-left"] .${SLOT_CLASS}{margin-inline:0}`,
     `.cb-slide[data-align="center"] .${SLOT_CLASS}{margin-inline:auto}`,
     `.cb-slide[data-align="flush-right"] .${SLOT_CLASS}{margin-inline-start:auto;margin-inline-end:0}`,
+    /**
+     * CENTRED TYPE HAS ITS OWN CRAFT. Copy is composed for a flush rag, and
+     * centring it verbatim is what makes a centred slide read as unpleasant
+     * rather than deliberate: an uneven two-line wrap turns into a ragged
+     * pyramid, and a flush-width support line floats wide of the stack.
+     * Measured on a real deck — the vertical gaps were identical between the
+     * good and the bad render; the whole difference was the wrap. So centred
+     * slides get balanced line-breaking on every text block and a narrower
+     * measure on running text; brands restyle via the same selectors.
+     */
+    `.cb-slide[data-align="center"] .headline,.cb-slide[data-align="center"] .body,` +
+      `.cb-slide[data-align="center"] .tagline,.cb-slide[data-align="center"] .quote{text-wrap:balance}`,
+    `.cb-slide[data-align="center"] .body{max-width:22ch;margin-inline:auto}`,
   ].join('\n');
 }
 
