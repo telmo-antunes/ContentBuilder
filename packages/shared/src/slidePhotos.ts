@@ -146,7 +146,8 @@ export function slideMediaCss(canvasHeight = 1350, align?: string): string {
   const shape = (cls: string, ratio: number, budget: number) => {
     const maxH = Math.round(canvasHeight * budget);
     const maxW = Math.round(maxH * ratio);
-    const sel = `.cb-slide .${SLOT_CLASS}${cls ? '.' + cls : ''}`;
+    // Same reason as the override below: a shape is a CARD's geometry.
+    const sel = `.cb-slide .${SLOT_CLASS}:not(.edge)${cls ? '.' + cls : ''}`;
     return `${sel}{aspect-ratio:${ratio === 1 ? '1/1' : cls === 'wide' ? '16/9' : cls === 'tall' ? '3/4' : '4/3'};` +
       `max-width:${maxW}px;max-height:${maxH}px}`;
   };
@@ -192,11 +193,21 @@ export function slideMediaCss(canvasHeight = 1350, align?: string): string {
     `.cb-slide .${SLOT_CLASS}.edge{position:absolute;top:0;bottom:0;right:0;` +
       `width:var(--cb-edge-width,46%);max-width:none;max-height:none;aspect-ratio:auto;` +
       `border-radius:0;margin:0;z-index:0}`,
-    // The type keeps its side: a scrim fading INTO the copy, not over it.
-    `.cb-slide .${SLOT_CLASS}.edge::before{content:"";position:absolute;inset:0;z-index:1;` +
-      `background:linear-gradient(90deg,var(--cb-ground) 0%,color-mix(in srgb,var(--cb-ground) 35%,transparent) 42%,transparent 78%)}`,
-    `.cb-slide .${SLOT_CLASS}.edge.left{right:auto;left:0}`,
-    `.cb-slide .${SLOT_CLASS}.edge.left::before{background:linear-gradient(270deg,var(--cb-ground) 0%,color-mix(in srgb,var(--cb-ground) 35%,transparent) 42%,transparent 78%)}`,
+    /**
+     * The picture fades into the copy — with a MASK, not a scrim.
+     *
+     * A slot paints its photograph on `::before` (see `slotFillCss`), so an
+     * edge scrim written as `::before` does not sit over the picture, it
+     * REPLACES it: the geometry rendered a half-frame panel and the photograph
+     * silently vanished. `::after` is spoken for too — the recipe's own scrim
+     * and grain live there. Masking the figure itself needs no pseudo-element
+     * and fades the picture out on the side the type occupies.
+     */
+    `.cb-slide .${SLOT_CLASS}.edge{-webkit-mask-image:linear-gradient(90deg,transparent 0%,#000 34%);` +
+      `mask-image:linear-gradient(90deg,transparent 0%,#000 34%)}`,
+    `.cb-slide .${SLOT_CLASS}.edge.left{right:auto;left:0;` +
+      `-webkit-mask-image:linear-gradient(270deg,transparent 0%,#000 34%);` +
+      `mask-image:linear-gradient(270deg,transparent 0%,#000 34%)}`,
     // Everything the composer wrote sits above the picture.
     `.cb-slide:has(> .${SLOT_CLASS}.edge) > *:not(.${SLOT_CLASS}){position:relative;z-index:2}`,
     // ── plates: our own slide, shown on a slide ──────────────────────────
@@ -365,8 +376,15 @@ export function slotOverrideCss(
   // loses to the base shape rule `.cb-slide .cb-shot.tall` at (0,4,0) — the
   // override would be emitted, parsed, and silently never applied. With it the
   // two tie, and this sheet is written after the base, so order decides.
+  /**
+   * `:not(.edge)` because a stored SHAPE describes a card, and an edge
+   * photograph is not one — it takes a whole side and derives its height from
+   * top/bottom. Without this the override re-imposes an aspect ratio and a
+   * max-height on it at higher specificity, and the picture collapses: the
+   * geometry renders, the photograph does not.
+   */
   return (
-    `.${scope} .cb-slide .${SLOT_CLASS}[${SLOT_ATTR}="${slot}"]{` +
+    `.${scope} .cb-slide .${SLOT_CLASS}:not(.edge)[${SLOT_ATTR}="${slot}"]{` +
     `aspect-ratio:${ratio};max-width:${maxW}px;max-height:${maxH}px}`
   );
 }
@@ -427,7 +445,14 @@ export function backgroundPhotoCss(
  * picture that was never supplied should cost the layout nothing.
  */
 export function hiddenSlotCss(scope: string, slot: string): string {
-  return `.${scope} .cb-slide [${SLOT_ATTR}="${slot}"]{display:none}`;
+  /**
+   * `.cb-shot` is in the selector so this cannot merely TIE with a placement
+   * rule. It used to be `[data-cb-slot=…]` alone at (0,3,0), the same weight as
+   * `.cb-slide .cb-shot.edge`, and an unfilled EDGE slot therefore painted a
+   * dark half-frame panel where a photograph was supposed to be — an empty
+   * slot made visible again by the very rule meant to place a picture.
+   */
+  return `.${scope} .cb-slide .${SLOT_CLASS}[${SLOT_ATTR}="${slot}"]{display:none}`;
 }
 
 /**

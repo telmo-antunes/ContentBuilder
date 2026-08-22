@@ -51,6 +51,16 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
+### The edge placement painted a panel and swallowed the photograph
+
+- **Kind:** Defect
+- **Severity:** cost me a fix (three exports before it rendered)
+- **First seen:** 2026-08-22, verifying the new `edge` placement on a real deck.
+- **What happened:** a slot paints its photograph on `::before` (`slotFillCss`), and the edge scrim was written as `::before` too — so it did not sit OVER the picture, it REPLACED it. The geometry rendered perfectly: a half-frame dark panel exactly where a photograph was meant to be. Two wrong diagnoses first (a specificity tie with the shape override, then an unfilled slot), each of which turned out to be a real but separate weakness worth fixing anyway.
+- **Resolved:** 2026-08-22 — the fade is a `mask-image` on the figure, needing no pseudo-element at all (`::after` is spoken for too — the recipe's own scrim and grain live there). Also hardened on the way past: `slotOverrideCss` and the base shape rules now carry `:not(.edge)` (a shape describes a CARD, and an edge photo derives its height from top/bottom), and `hiddenSlotCss` gained `.cb-shot` so it out-specifies placement rules rather than tying with them — an unfilled edge slot could otherwise paint a dark half-frame.
+- **Worth remembering:** the pseudo-element budget on a slot is now fully spent — `::before` is the picture, `::after` is the brand's. A future placement needs a mask, a filter or a real child element, not a third pseudo.
+
+
 ### Every photograph below the cover is the same inset card
 
 - **Kind:** Gap
