@@ -76,6 +76,7 @@ const {
   trimToFinished,
   brandHandleFromWebsite,
   enforceBrandDomain,
+  clampDisplayLine,
 } = await import('./compose');
 type LayoutCheckSummary = import('./compose').LayoutCheckSummary;
 type ComposeProgress = import('./compose').ComposeProgress;
@@ -1687,6 +1688,36 @@ describe('trimToFinished never makes a line worse', () => {
 
   it('still trims the modifiers that leave a clause standing', () => {
     expect(trimToFinished('Your next quiet week is already')).toBe('Your next quiet week');
+  });
+});
+
+describe('the clamp owns the cuts it makes', () => {
+  it('names the phrase-completing word it removed — the cut that reads finished', () => {
+    // Shipped as "Revenue is whatever walked": grammatical, wrong, and
+    // invisible to every downstream detector.
+    expect(clampDisplayLine('Revenue is whatever walked in that week', 36)).toEqual({
+      text: 'Revenue is whatever walked',
+      suspect: 'in',
+    });
+    expect(clampDisplayLine('A workable rule of thumb', 22)).toEqual({
+      text: 'A workable rule',
+      suspect: 'of',
+    });
+  });
+
+  it('trusts a clause-boundary cut — the line ends on its own punctuation', () => {
+    expect(clampDisplayLine('Cash first. Then the', 20).suspect).toBeNull();
+    expect(clampDisplayLine('Cash first. Then the equipment', 20)).toEqual({
+      text: 'Cash first.',
+      suspect: null,
+    });
+  });
+
+  it('does not suspect a line it never cut', () => {
+    expect(clampDisplayLine('Short enough already', 36)).toEqual({
+      text: 'Short enough already',
+      suspect: null,
+    });
   });
 });
 

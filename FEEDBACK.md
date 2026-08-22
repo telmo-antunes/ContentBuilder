@@ -51,6 +51,15 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
+### The deck critique judges frames whose photographs do not exist yet
+
+- **Kind:** Gap (ordering)
+- **Severity:** major — the deck-level look pass cannot see the deck that ships
+- **First seen:** 2026-08-22 — after the imagery-settle fix, the critique STILL called a deck with photos on two slides "no photography anywhere in the deck". The captures were honest; the frames were not: the render check, design pass and critique all run inside `composeProject`, and the ROUTE attaches the brand-library photos to the slots after compose returns. Every vision pass judges empty-slot frames.
+- **Direction:** attach photos before the look passes run. Either the route picks the photo pool assignments first and threads them into compose so the render scaffold carries them, or the critique moves out of compose to a post-attachment step in the route. The second is smaller: the critique already needs nothing from compose except the shots, and re-shooting the attached deck once (~9 page loads, no model cost) is cheap next to a verdict about imagery that is structurally wrong.
+- **Until then:** discount critique findings about missing/weak photography.
+
+
 ### A background re-author succeeded hours after it "failed" and silently degraded the live recipe
 
 - **Kind:** Incident (resolved) + guard shipped
