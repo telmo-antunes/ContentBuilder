@@ -179,6 +179,17 @@ export function AuthoredSlide({
       const boxes = Array.from(el.children)
         .filter((c): c is HTMLElement => c instanceof HTMLElement && c.offsetHeight > 0)
         .filter((c) => !SPACER_CLASSES.has(c.classList[0] ?? ''))
+        /**
+         * OUT-OF-FLOW ELEMENTS ARE NOT PART OF THE STACK. An edge photograph
+         * is absolutely positioned by design — it takes one side of the frame
+         * floor to ceiling — so measuring it as a block in the column reports
+         * a collision with every line of type beside it, and slack that is
+         * really just the picture.
+         */
+        .filter((c) => {
+          const pos = getComputedStyle(c).position;
+          return pos !== 'absolute' && pos !== 'fixed';
+        })
         .map((c) => ({
           top: c.offsetTop,
           bottom: c.offsetTop + c.offsetHeight,

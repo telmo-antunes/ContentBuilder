@@ -51,6 +51,16 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
+### Every photograph below the cover is the same inset card
+
+- **Kind:** Gap
+- **Severity:** cost me a fix (Telmo: "I still don't like the way images are being rendered on slides 2+, I would give AI more freedom in that regard")
+- **First seen:** 2026-08-22, across every deck the rebuild produced.
+- **What happened:** the composer can ask for a slot and nothing else. The four shape classes vary the RATIO; none of them vary the RELATIONSHIP between the picture and the frame, so every photo below a full-bleed cover is an inset rounded rectangle floating on the ground — which `archetypes.ts` itself names as "the single strongest template signal a deck can carry", and which no amount of layout or surface variety could fix.
+- **Partly resolved:** 2026-08-22 — an `edge` placement: the picture takes one side floor-to-ceiling with the type holding the other, out of flow so it costs no vertical budget (what made `tall` expensive) and cannot push a headline off-canvas. `edge left` mirrors it. The composer is told when to reach for it — the picture is the SUBJECT of the slide, not evidence for the words — and the flow measurement now ignores out-of-flow children so a side photo is not read as a colliding block. Compose prompt v5.
+- **Still open:** a full-width BAND was drafted and dropped — escaping the slide's padding needs a variable brands do not set, and a half-working placement is worse than none. Worth doing properly by having recipes expose their padding as a token. Also unproven in a real compose: the model has the freedom now, and whether it USES it well is the next thing to look at.
+
+
 ### Every `shoot` hung: element screenshots never return on a backgrounded page
 
 - **Kind:** Defect
