@@ -54,6 +54,21 @@ export function currentLedger(): SpendLedger | undefined {
   return store.getStore();
 }
 
+/**
+ * Continue an EXISTING ledger in a new async scope — the same post's budget,
+ * picked back up after work that has to happen outside the original scope.
+ *
+ * The deck critique needs this: it runs after compose returns, because only
+ * then has the route attached the brand-library photos and saved the deck the
+ * critique should actually judge — but its cost belongs to the same post and
+ * must answer to the same ceiling. Spend and refusals accumulate into the
+ * ledger given; opening a FRESH ledger there instead would quietly hand the
+ * critique a second budget.
+ */
+export async function withLedger<T>(ledger: SpendLedger, fn: () => Promise<T>): Promise<T> {
+  return store.run(ledger, fn);
+}
+
 /** Run `fn` inside a fresh ledger and hand back both its value and the ledger. */
 export async function withSpendLedger<T>(
   init: { projectId?: string; ceilingUsd?: number },
