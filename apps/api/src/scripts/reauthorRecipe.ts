@@ -76,6 +76,51 @@ async function main() {
   console.log(`  align: ${recipe.composition.align}`);
   console.log(`  numbered list support used: ${JSON.stringify(recipe.fragments ?? {}).includes('numbered')}`);
 
+  /**
+   * A RE-AUTHOR MAY NOT QUIETLY MAKE THE BRAND POORER. A background retry of
+   * this script succeeded hours after everyone believed it had failed, and
+   * saved a recipe with NO cover or cta fragment and no role-prefixed patterns
+   * — art direction went dead, every cover and close fell to the model path,
+   * and the next deck shipped a fabricated domain off exactly that path.
+   * Nothing owned the outcome: the author call succeeded, the save succeeded,
+   * the deck was worse. So the save now owns it: a result that LOSES a role's
+   * fragment or drops the brand to zero role-matched patterns is written to a
+   * file for inspection instead of over the live recipe. `--force` remains for
+   * a deliberate, watched replacement.
+   */
+  const lostFragments = previous
+    ? SLIDE_ROLES.filter(
+        (role) =>
+          fragmentVariantsFor(previous, role).length > 0 && fragmentVariantsFor(recipe, role).length === 0,
+      )
+    : [];
+  const roleMatched = (r: BrandRecipe | undefined) =>
+    SLIDE_ROLES.reduce(
+      (n, role) =>
+        n +
+        (r?.composition?.patterns ?? []).filter((x) => x.trim().toLowerCase().startsWith(role)).length,
+      0,
+    );
+  const patternsDied = roleMatched(previous) > 0 && roleMatched(recipe) === 0;
+  if ((lostFragments.length || patternsDied) && !process.argv.includes('--force')) {
+    const dir = join(process.cwd(), 'storage', 'recipe-backups');
+    mkdirSync(dir, { recursive: true });
+    const rejected = join(
+      dir,
+      `${String(biz._id)}-${new Date().toISOString().replace(/[:.]/g, '-')}-REJECTED.json`,
+    );
+    writeFileSync(rejected, JSON.stringify(recipe, null, 2));
+    console.error(
+      `[reauthor] REFUSED to save: the new recipe is a variety regression` +
+        (lostFragments.length ? ` — lost fragment(s) for ${lostFragments.join(', ')}` : '') +
+        (patternsDied ? ` — role-matched patterns dropped to zero` : '') +
+        `.\n[reauthor] The live recipe is untouched. The rejected result is at ${rejected}.` +
+        `\n[reauthor] Re-run with --force only for a deliberate, watched replacement.`,
+    );
+    await disconnectDb();
+    process.exit(2);
+  }
+
   kit.set('recipe', recipe);
   await kit.save();
   console.log('[reauthor] saved as the live recipe.');

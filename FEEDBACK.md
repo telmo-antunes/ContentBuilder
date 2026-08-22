@@ -51,6 +51,16 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
+### A background re-author succeeded hours after it "failed" and silently degraded the live recipe
+
+- **Kind:** Incident (resolved) + guard shipped
+- **Severity:** major — the next deck shipped off the degraded recipe
+- **What happened:** during the 2026-08-21 API-overload window, re-author retries were left running in the background. Everyone (including the session driving them) believed they had failed; the last one completed at ~23:47, saved a recipe with NO cover/cta fragments and no role-prefixed patterns, and the morning's compose shipped a fabricated domain and misplaced photos off exactly the paths that regression opened. The endorsed recipe was recovered from `storage/recipe-backups/`.
+- **The pattern, again:** a chain of individually-correct steps with nothing owning the outcome — author call ok, save ok, brand poorer.
+- **Guard shipped:** `reauthorRecipe.ts` now refuses to save a variety regression (a role losing its fragment, or role-matched patterns dropping to zero); the rejected result goes to a `-REJECTED.json` file and `--force` exists for deliberate replacements.
+- **Still open:** WHY the author produced that result (v8 schema fix produced variants for 3 roles but dropped cover/cta fragments and role-prefixed patterns) — the guard contains the blast radius; the author prompt/schema still owes an answer.
+
+
 ### The composer cannot choose the edge placement on slides it never composes
 
 - **Kind:** Gap
