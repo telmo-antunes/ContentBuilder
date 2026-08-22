@@ -782,7 +782,13 @@ export interface UnfinishedProse {
   slide: number;
   label: string;
   text: string;
-  reason: 'no terminal punctuation' | 'ends on a dangling word' | 'starts a sentence it never finishes';
+  reason:
+    | 'no terminal punctuation'
+    | 'ends on a dangling word'
+    | 'starts a sentence it never finishes'
+    /** The budget clamp removed a phrase-completing word: the line reads
+     *  finished and may no longer mean what was approved. */
+    | 'clamped mid-phrase';
 }
 
 /**
@@ -923,13 +929,39 @@ export function unfinishedProse(slides: ParsedSlide[]): UnfinishedProse[] {
   return out;
 }
 
+/**
+ * The danglers whose REMOVAL is itself a rewrite. Dropping "the" or "and" off
+ * a cut line leaves the phrase it was; dropping a preposition or particle can
+ * complete a DIFFERENT phrase — "Revenue is whatever walked in" clamped to
+ * "Revenue is whatever walked" shipped as a grammatical sentence that no
+ * longer said what was written. This is the same lesson `SAFE_TO_TRIM`
+ * encodes for `trimToFinished`; the clamp kept the older, blunter list, and
+ * the two functions disagreed about the one case that matters.
+ */
+const PHRASAL_DROPS = new Set([
+  'in', 'on', 'at', 'by', 'of', 'to', 'for', 'from', 'with', 'without',
+  'into', 'onto', 'over', 'under', 'about', 'around', 'as',
+]);
+
 /** Drop trailing words that cannot end a line, down to a floor of one word. */
 function dropDanglers(s: string): string {
+  return dropDanglersInfo(s).text;
+}
+
+/**
+ * Like `dropDanglers`, but says when it removed a phrase-completing word —
+ * the cut that reads clean and lies about what the line said.
+ */
+function dropDanglersInfo(s: string): { text: string; phrasal: string | null } {
   const words = s.split(' ');
-  while (words.length > 1 && DANGLING_WORDS.has(words[words.length - 1]!.toLowerCase().replace(/[^a-z']/gi, ''))) {
+  let phrasal: string | null = null;
+  while (words.length > 1) {
+    const last = words[words.length - 1]!.toLowerCase().replace(/[^a-z']/gi, '');
+    if (!DANGLING_WORDS.has(last)) break;
+    if (PHRASAL_DROPS.has(last)) phrasal = last;
     words.pop();
   }
-  return words.join(' ');
+  return { text: words.join(' '), phrasal };
 }
 
 /**
@@ -940,8 +972,20 @@ function dropDanglers(s: string): string {
  * that was plainly leading somewhere.
  */
 function clampNoEllipsis(raw: string, max: number): string {
+  return clampDisplayLine(raw, max).text;
+}
+
+/**
+ * The clamp with a conscience: the same cut as `clampNoEllipsis`, plus a
+ * `suspect` naming the phrase-completing word it removed, when it removed one.
+ * A clause-boundary cut ends on completed punctuation and is trusted; a
+ * word-boundary cut that had to drop a preposition produced a line that READS
+ * finished and may no longer mean what was approved — the caller owes that to
+ * the copy-fault report, because no downstream check can see it.
+ */
+export function clampDisplayLine(raw: string, max: number): { text: string; suspect: string | null } {
   const s = String(raw ?? '').replace(/\s+/g, ' ').trim();
-  if (s.length <= max) return s;
+  if (s.length <= max) return { text: s, suspect: null };
   const cut = s.slice(0, max);
   const clause = Math.max(
     cut.lastIndexOf('. '),
@@ -953,10 +997,12 @@ function clampNoEllipsis(raw: string, max: number): string {
     cut.lastIndexOf(' — '),
   );
   if (clause >= max * 0.5) {
-    return dropDanglers(cut.slice(0, clause + 1).trim().replace(/[\s,;:—–-]+$/, ''));
+    // Ends on its own punctuation — a line that was written short.
+    return { text: dropDanglers(cut.slice(0, clause + 1).trim().replace(/[\s,;:—–-]+$/, '')), suspect: null };
   }
   const word = cut.lastIndexOf(' ');
-  return dropDanglers((word > 0 ? cut.slice(0, word) : cut).replace(/[\s,;:—–-]+$/, ''));
+  const info = dropDanglersInfo((word > 0 ? cut.slice(0, word) : cut).replace(/[\s,;:—–-]+$/, ''));
+  return { text: info.text, suspect: info.phrasal };
 }
 
 /**
@@ -1016,6 +1062,11 @@ function clampSlidesToBudgets(
   slides: ParsedSlide[],
   budgets: ComposeBudgets,
   locks: readonly string[] = [],
+  /**
+   * Told about every clamp that removed a phrase-completing word — the cut
+   * that reads finished while meaning something else. See `clampDisplayLine`.
+   */
+  onSuspect?: (u: UnfinishedProse) => void,
 ): ParsedSlide[] {
   const isLocked = (v: string) => locks.some((l) => containsLock(v, l));
   return slides.map((s, i) => {
@@ -1030,7 +1081,16 @@ function clampSlidesToBudgets(
         return;
       }
       // Prose loses a whole sentence; a display line loses its trailing clause.
-      const clamped = key === 'body' ? clampSentences(v, budget) : clampNoEllipsis(v, budget);
+      let clamped: string;
+      if (key === 'body') {
+        clamped = clampSentences(v, budget);
+      } else {
+        const line = clampDisplayLine(v, budget);
+        clamped = line.text;
+        if (line.suspect) {
+          onSuspect?.({ slide: i, label: key, text: clamped, reason: 'clamped mid-phrase' });
+        }
+      }
       console.warn(
         `[compose] parse: clamped slide ${i + 1} ${key} ${v.length} → ${clamped.length} chars (budget ${budget})`,
       );
@@ -1043,11 +1103,14 @@ function clampSlidesToBudgets(
     clamp('body', bodyBudgetFor(budgets, s));
     parts.rows?.forEach((r, j) => {
       if (r.text.length <= budgets.rowText || isLocked(r.text)) return;
-      const clamped = clampNoEllipsis(r.text, budgets.rowText);
+      const line = clampDisplayLine(r.text, budgets.rowText);
+      if (line.suspect) {
+        onSuspect?.({ slide: i, label: `rows[${j}].text`, text: line.text, reason: 'clamped mid-phrase' });
+      }
       console.warn(
-        `[compose] parse: clamped slide ${i + 1} rows[${j}].text ${r.text.length} → ${clamped.length} chars (budget ${budgets.rowText})`,
+        `[compose] parse: clamped slide ${i + 1} rows[${j}].text ${r.text.length} → ${line.text.length} chars (budget ${budgets.rowText})`,
       );
-      r.text = clamped;
+      r.text = line.text;
     });
     // A clamped headline may have lost its emphasis phrase; an emphasis that is
     // no longer inside the headline can never be composed verbatim, so drop it
@@ -1338,6 +1401,44 @@ function photoCapableRoles(recipe: BrandRecipe): Set<string> {
 }
 
 /**
+ * The web address a deck may cite, derived from the brand's OWN record — the
+ * host of its website, bare. `https://www.detailmasters.pro/en/crm` →
+ * `detailmasters.pro`. This is what the route passes as `handle` when the
+ * business has no Instagram handle on file: a fact from the database, so the
+ * models are never left to guess one.
+ */
+export function brandHandleFromWebsite(url: string | undefined | null): string | undefined {
+  if (!url) return undefined;
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, '');
+    return host.includes('.') ? host : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * THE BRAND'S DOMAIN IS A FACT, NOT A GUESS.
+ *
+ * A deck shipped with "DETAILMASTERS.IO" set in the footer of its closing
+ * slide — a domain that does not exist, invented by a model that knew the
+ * brand's name and was never told its address (`.pro`). Nothing in the recipe
+ * carried it; nothing downstream checked it. So when the caller knows the true
+ * host, any token that reads as the brand's name under a DIFFERENT TLD is
+ * rewritten to the real one, wherever it appears — a fabricated address is the
+ * one mistake a reader can act on (they will type it in) and the one a
+ * substitution can fix without touching a single authored word around it.
+ */
+export function enforceBrandDomain(text: string, handle: string | undefined): string {
+  const host = handle?.replace(/^@/, '').trim();
+  if (!host || !host.includes('.')) return text;
+  const sld = host.split('.')[0]!;
+  const escaped = sld.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const domainish = new RegExp(`\\b${escaped}(\\.[a-z]{2,})+\\b`, 'gi');
+  return text.replace(domainish, (m) => (m.toLowerCase() === host.toLowerCase() ? m : host));
+}
+
+/**
  * Make the parsed deck STRUCTURALLY honest, before a single slide is composed.
  *
  * Four rules, all deterministic, all fixing a failure seen on a real deck:
@@ -1386,6 +1487,23 @@ function normalizeParsedDeck(
         console.warn(`[compose] parse: slide ${i + 1} put prose in the handle — dropped`);
         delete parts.handle;
       }
+    }
+
+    // The brand's domain is a fact — see `enforceBrandDomain`. Swept across
+    // every text part, not just the handle, because a fabricated address is as
+    // wrong in a body line as in the footer.
+    for (const key of Object.keys(parts) as Array<keyof typeof parts>) {
+      const v = parts[key];
+      if (typeof v !== 'string') continue;
+      const swept = enforceBrandDomain(v, handle);
+      if (swept !== v) {
+        console.warn(`[compose] parse: slide ${i + 1} cited a wrong domain in "${key}" — corrected to ${handle}`);
+        (parts as Record<string, unknown>)[key] = swept;
+      }
+    }
+    for (const row of rows) {
+      if (typeof row.text === 'string') row.text = enforceBrandDomain(row.text, handle);
+      if (typeof row.note === 'string') row.note = enforceBrandDomain(row.note, handle);
     }
 
     /**
@@ -1621,7 +1739,8 @@ export async function parseForCompose(
       console.warn('[compose] parse: corrective re-parse failed — clamping the original instead');
     }
   }
-  slides = clampSlidesToBudgets(slides, budgets, locks);
+  const clampSuspects: UnfinishedProse[] = [];
+  slides = clampSlidesToBudgets(slides, budgets, locks, (u) => clampSuspects.push(u));
 
   /**
    * A hard count is a promise to the caller, so it is enforced rather than
@@ -1690,7 +1809,19 @@ export async function parseForCompose(
    * RESPONSE only — so anyone opening the review page later saw a deck whose
    * ship bar said all-clear while its closing headline stopped mid-sentence.
    */
-  const stillUnfinished = unfinishedProse(slides);
+  const checked = unfinishedProse(slides);
+  /**
+   * A clamp that removed a phrase-completing word joins the report: it is the
+   * one fault every detector downstream is BLIND to, because the line it
+   * leaves behind reads grammatical. Deduped on slide+label — when the same
+   * line also trips a detector, one entry is enough. A hard count above may
+   * have dropped the slide entirely; a suspect pointing past the deck is noise.
+   */
+  const seen = new Set(checked.map((u) => `${u.slide}:${u.label}`));
+  const stillUnfinished = [
+    ...checked,
+    ...clampSuspects.filter((u) => u.slide < slides.length && !seen.has(`${u.slide}:${u.label}`)),
+  ];
   for (const u of stillUnfinished) {
     console.warn(
       `[compose] parse: slide ${u.slide + 1} ${u.label} still stops mid-thought after the correction — ${JSON.stringify(u.text)}`,
@@ -2593,6 +2724,19 @@ export async function composeProject(
    * slide nearest the middle that is eligible, which is a sound rule and a
    * blind one — the turning point of an argument is not reliably its midpoint.
    */
+  // The parse-level sweep corrects the copy it was given; this one catches the
+  // composer inventing an address of its own (a `<div class="handle">` it was
+  // never asked for is exactly how detailmasters.io shipped).
+  if (o.handle) {
+    for (const [i, s] of out.entries()) {
+      const swept = enforceBrandDomain(s.authored.html, o.handle);
+      if (swept !== s.authored.html) {
+        console.warn(`[compose] slide ${i + 1} cited a wrong domain — corrected to ${o.handle}`);
+        s.authored.html = swept;
+      }
+    }
+  }
+
   const directedInvert = plan?.slides.findIndex((p) => p.invert === true) ?? -1;
   const invertSlide = directedInvert >= 0 ? directedInvert : invertAt;
   if (invertSlide !== undefined && invertSlide >= 0) {
@@ -2627,7 +2771,9 @@ export async function composeProject(
        * fragments, for free. Budget-gated per slide, and every improvement is
        * re-measured before it is kept.
        */
-      designSlides: slidesWorthDesigning(out.map((s) => s.role)),
+      designSlides: slidesWorthDesigning(
+        out.map((s) => ({ role: s.role, photo: /data-cb-slot=/.test(s.authored.html) })),
+      ),
       improveByLooking: (args) =>
         improveByLooking(recipe, {
           html: args.html,

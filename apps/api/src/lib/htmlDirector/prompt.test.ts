@@ -47,7 +47,7 @@ describe('the composer prompt is cached in two scopes', () => {
     // and throw away most of the hit rate.
     expect(blocks).toHaveLength(2);
     for (const b of blocks) expect(b.cache_control).toEqual({ type: 'ephemeral' });
-    expect(blocks[0]!.text).toContain('You are the slide composer');
+    expect(blocks[0]!.text).toContain('You compose one slide');
     expect(blocks[1]!.text).toContain('COMPONENT CLASSES');
   });
 

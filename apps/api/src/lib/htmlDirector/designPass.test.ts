@@ -69,19 +69,40 @@ describe('the design pass', () => {
 });
 
 describe('slidesWorthDesigning', () => {
+  const roles = (rs: string[], photoAt: number[] = []) =>
+    rs.map((role, i) => ({ role, photo: photoAt.includes(i) }));
+
   it('buys the cover and the list — the two frames a deck rides on', () => {
-    expect(slidesWorthDesigning(['cover', 'statement', 'list', 'statement', 'cta'])).toEqual([0, 2]);
+    expect(slidesWorthDesigning(roles(['cover', 'statement', 'list', 'statement', 'cta']))).toEqual([0, 2]);
+  });
+
+  it('buys the PHOTO slides — the two-body layouts the measuring gates cannot judge', () => {
+    // The shipped faults: a feature slide's inset drifting in a dead middle
+    // band, an eyebrow crowding a screenshot — both on slides nothing looked at.
+    expect(
+      slidesWorthDesigning(roles(['cover', 'statement', 'feature', 'list', 'statement', 'feature', 'cta'], [2, 5])),
+    ).toEqual([0, 2, 5]);
+  });
+
+  it('caps the spend at three slides, cover first', () => {
+    const picks = slidesWorthDesigning(roles(['cover', 'feature', 'feature', 'feature', 'list'], [1, 2, 3]));
+    expect(picks).toHaveLength(3);
+    expect(picks[0]).toBe(0);
   });
 
   it('orders them so a half-affordable budget still buys the cover', () => {
-    expect(slidesWorthDesigning(['cover', 'list'])[0]).toBe(0);
+    expect(slidesWorthDesigning(roles(['cover', 'list']))[0]).toBe(0);
   });
 
   it('falls back to the closing slide when a deck has no list', () => {
-    expect(slidesWorthDesigning(['cover', 'statement', 'cta'])).toEqual([0, 2]);
+    expect(slidesWorthDesigning(roles(['cover', 'statement', 'cta']))).toEqual([0, 2]);
+  });
+
+  it('does not double-buy a slide that is both cover and photo-bearing', () => {
+    expect(slidesWorthDesigning(roles(['cover', 'statement', 'cta'], [0]))).toEqual([0, 2]);
   });
 
   it('spends nothing on a deck with neither', () => {
-    expect(slidesWorthDesigning(['statement', 'statement'])).toEqual([]);
+    expect(slidesWorthDesigning(roles(['statement', 'statement']))).toEqual([]);
   });
 });

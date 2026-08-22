@@ -354,6 +354,52 @@ function pagePool(browser: Browser, limit: number, viewport: { width: number; he
   };
 }
 
+/**
+ * WAIT FOR THE PICTURES, NOT JUST THE PAGE.
+ *
+ * `waitUntil: 'load'` fires for the document; the photographs arrive after it —
+ * hydrated `<img>`s and CSS `background-image`s the client applies — so a
+ * capture taken at 'load' can show a photo slide with no photo in it. That is
+ * not hypothetical: a deck critique called a seven-slide deck with photographs
+ * on three slides "no real imagery", and every pass that LOOKS at a slide (the
+ * critique, the design pass, the vision repair) was judging frames its own
+ * pipeline had photographed too early. Bounded, because one dead image URL must
+ * never wedge a probe that has a whole deck to measure.
+ */
+async function settleImagery(page: Page): Promise<void> {
+  const settle = page.evaluate(async () => {
+    const g = globalThis as any;
+    const doc = g.document;
+    if (!doc) return;
+    const imgs = Array.from(doc.images ?? []) as Array<any>;
+    await Promise.all(
+      imgs.map((img) =>
+        img.complete ? Promise.resolve() : new Promise((r) => { img.onload = img.onerror = r; }),
+      ),
+    );
+    const urls = new Set<string>();
+    for (const el of Array.from(doc.querySelectorAll('*')) as Array<any>) {
+      const bg = g.getComputedStyle(el).backgroundImage;
+      if (bg && bg !== 'none') {
+        for (const m of bg.matchAll(/url\((['"]?)(.*?)\1\)/g)) urls.add(m[2]);
+      }
+    }
+    await Promise.all(
+      [...urls].map(
+        (u) =>
+          new Promise((r) => {
+            const im = new g.Image();
+            im.onload = im.onerror = r;
+            im.src = u;
+          }),
+      ),
+    );
+  });
+  await Promise.race([settle, new Promise((r) => setTimeout(r, IMAGERY_TIMEOUT_MS))]);
+}
+
+const IMAGERY_TIMEOUT_MS = 8000;
+
 /** Drive one slide's render and read the guard's verdict off the page. */
 async function readOverflow(page: Page, url: string): Promise<LayoutVerdict> {
   await page.goto(url, { waitUntil: 'load', timeout: GOTO_TIMEOUT_MS });
@@ -362,6 +408,7 @@ async function readOverflow(page: Page, url: string): Promise<LayoutVerdict> {
     const doc = (globalThis as { document?: any }).document;
     if (doc?.fonts?.ready) await doc.fonts.ready;
   });
+  await settleImagery(page);
   // Wait for the guard to publish at all before trusting a reading — an absent
   // attribute means "not measured yet", not "fits".
   await page.waitForFunction(
@@ -596,6 +643,9 @@ async function captureSlide(page: Page, url: string): Promise<string | null> {
     const doc = (globalThis as { document?: { fonts?: { ready?: Promise<unknown> } } }).document;
     if (doc?.fonts?.ready) await doc.fonts.ready;
   });
+  // A capture exists to be LOOKED at — a photo slide photographed before its
+  // photo decodes is a lie to every vision pass downstream. See settleImagery.
+  await settleImagery(page);
   await new Promise((r) => setTimeout(r, SETTLE_MS));
   const el = await page.$('[data-slide-root]');
   if (!el) return null;
