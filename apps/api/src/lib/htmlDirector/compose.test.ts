@@ -1664,3 +1664,20 @@ describe('the closing slide keeps its button', () => {
     expect(out[out.length - 1]!.authored.html).toContain('class="cta"');
   });
 });
+
+describe('trimToFinished never makes a line worse', () => {
+  it('does NOT trim a phrasal-verb particle', () => {
+    // Shipped as "Your income is whatever walked" — the `in` belonged to
+    // "walked in", and removing it changed what the sentence said.
+    expect(trimToFinished('Your income is whatever walked in')).toBeNull();
+  });
+
+  it('leaves other prepositions alone too — they are reported, not rewritten', () => {
+    expect(trimToFinished('Equipment you can finally budget for')).toBeNull();
+    expect(trimToFinished('The margin you can plan around')).toBeNull();
+  });
+
+  it('still trims the modifiers that leave a clause standing', () => {
+    expect(trimToFinished('Your next quiet week is already')).toBe('Your next quiet week');
+  });
+});

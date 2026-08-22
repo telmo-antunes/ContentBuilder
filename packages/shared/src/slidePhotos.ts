@@ -103,6 +103,9 @@ export const APP_IMAGE_CLASSES: readonly string[] = [
   PLATE_CLASS,
   // shape modifiers on a slot: wide | tall | square (the '' default has no class)
   ...Object.keys(SLOT_SHAPES).filter(Boolean),
+  // placement modifiers: the picture takes a side, or a full-width band
+  'edge',
+  'left',
   // free overlays (siblings of the slide) and their two z-order layers
   'cb-free-layer',
   'cb-free-img',
@@ -163,6 +166,39 @@ export function slideMediaCss(canvasHeight = 1350, align?: string): string {
     shape('wide', SLOT_SHAPES.wide.ratio, SLOT_SHAPES.wide.budget),
     shape('tall', SLOT_SHAPES.tall.ratio, SLOT_SHAPES.tall.budget),
     shape('square', SLOT_SHAPES.square.ratio, SLOT_SHAPES.square.budget),
+    /**
+     * PLACEMENTS THAT ARE NOT A CARD.
+     *
+     * Every photograph on every slide but the cover was the same inset rounded
+     * rectangle, because the slot is the only thing the composer can ask for —
+     * and this file's own comment names that as "the single strongest template
+     * signal a deck can carry". The shapes vary the RATIO; none of them vary
+     * the RELATIONSHIP between the picture and the frame.
+     *
+     * So two more, both full-bleed in one direction, both escaping the slide's
+     * padding rather than sitting inside it:
+     *
+     *   · EDGE — the picture takes one side, floor to ceiling, and the type
+     *     holds the other. This is the "split" composition a designer reaches
+     *     for first and the app could not express at all.
+     * It is out of flow, so it costs the layout nothing and cannot push a
+     * headline off-canvas — which is what made `tall` expensive. The brand
+     * styles its surface exactly as it styles any slot.
+     *
+     * (A full-width BAND was drafted alongside it and dropped: escaping the
+     * slide's padding needs a variable brands do not set, and a placement that
+     * only half-works is worse than one that does not exist.)
+     */
+    `.cb-slide .${SLOT_CLASS}.edge{position:absolute;top:0;bottom:0;right:0;` +
+      `width:var(--cb-edge-width,46%);max-width:none;max-height:none;aspect-ratio:auto;` +
+      `border-radius:0;margin:0;z-index:0}`,
+    // The type keeps its side: a scrim fading INTO the copy, not over it.
+    `.cb-slide .${SLOT_CLASS}.edge::before{content:"";position:absolute;inset:0;z-index:1;` +
+      `background:linear-gradient(90deg,var(--cb-ground) 0%,color-mix(in srgb,var(--cb-ground) 35%,transparent) 42%,transparent 78%)}`,
+    `.cb-slide .${SLOT_CLASS}.edge.left{right:auto;left:0}`,
+    `.cb-slide .${SLOT_CLASS}.edge.left::before{background:linear-gradient(270deg,var(--cb-ground) 0%,color-mix(in srgb,var(--cb-ground) 35%,transparent) 42%,transparent 78%)}`,
+    // Everything the composer wrote sits above the picture.
+    `.cb-slide:has(> .${SLOT_CLASS}.edge) > *:not(.${SLOT_CLASS}){position:relative;z-index:2}`,
     // ── plates: our own slide, shown on a slide ──────────────────────────
     // Doubled class for (0,4,1): the brand's treatment is `.cb-slide .cb-shot::after`
     // at (0,2,1), and a brand is free to write something more specific than

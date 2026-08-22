@@ -844,13 +844,35 @@ export function trimToFinished(text: string): string | null {
     if (lastEnd > 0) out = out.slice(0, lastEnd + 1).trim();
   }
 
-  // Then drop trailing words that leave a phrase open.
+  /**
+   * ONLY WORDS WHOSE REMOVAL LEAVES A CLAUSE STANDING.
+   *
+   * The first version trimmed any dangling word and promptly made a headline
+   * worse: "Your income is whatever walked in" lost its `in` and shipped as
+   * "…whatever walked". `in` was a PARTICLE of a phrasal verb, not a dangling
+   * preposition, and no amount of word-listing tells those apart reliably.
+   *
+   * So trimming is restricted to the classes that are safe to drop —
+   * modifiers, determiners and conjunctions, which leave the clause before
+   * them intact. Prepositions and particles are never trimmed: a line ending
+   * on one is REPORTED instead, and blocks the ship bar. Flagging a line a
+   * human can fix beats silently rewriting it into something they did not say.
+   */
+  const SAFE_TO_TRIM = new Set([
+    'already', 'almost', 'nearly', 'barely', 'hardly', 'merely', 'simply', 'quite',
+    'rather', 'very', 'really', 'truly', 'still', 'just', 'even', 'also', 'too',
+    'and', 'or', 'but', 'nor', 'so', 'then', 'that', 'which', 'who', 'whose',
+    'a', 'an', 'the', 'your', 'their', 'its', 'our', 'his', 'her', 'my',
+    'these', 'those', 'every', 'each', 'is', 'are', 'was', 'were', 'be', 'been',
+    'being', 'has', 'have', 'had', 'will', 'would', 'can', 'could', 'should',
+    'may', 'might', 'must',
+  ]);
   const MIN_WORDS = 3;
   let words = out.replace(/[,;:]+$/, '').split(/\s+/).filter(Boolean);
   while (
     words.length > MIN_WORDS &&
     !TERMINAL_PUNCTUATION.test(words[words.length - 1] ?? '') &&
-    DANGLING_WORDS.has((words[words.length - 1] ?? '').toLowerCase().replace(/[,;:]+$/, ''))
+    SAFE_TO_TRIM.has((words[words.length - 1] ?? '').toLowerCase().replace(/[,;:]+$/, ''))
   ) {
     words = words.slice(0, -1);
   }

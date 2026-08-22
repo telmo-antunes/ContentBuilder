@@ -372,3 +372,25 @@ describe('numbered rows', () => {
     expect(css).toContain('var(--cb-row-index-size,1em)');
   });
 });
+
+describe('the edge placement', () => {
+  const css = slideMediaCss();
+
+  it('gives the picture a whole side, out of flow', () => {
+    // The one composition an inset card cannot do — and the reason every
+    // photograph below the cover looked alike.
+    expect(css).toContain('.cb-slide .cb-shot.edge{position:absolute;top:0;bottom:0;right:0;');
+    expect(css).toContain('.cb-slide .cb-shot.edge.left{right:auto;left:0}');
+  });
+
+  it('costs no vertical budget — it overrides the slot geometry entirely', () => {
+    const edge = css.split('\n').find((l) => l.includes('.cb-shot.edge{'))!;
+    expect(edge).toContain('max-height:none');
+    expect(edge).toContain('aspect-ratio:auto');
+  });
+
+  it('keeps the type above the picture and readable against it', () => {
+    expect(css).toContain('.cb-slide:has(> .cb-shot.edge) > *:not(.cb-shot){position:relative;z-index:2}');
+    expect(css).toContain('.cb-shot.edge::before');
+  });
+});

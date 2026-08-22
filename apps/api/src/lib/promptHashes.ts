@@ -75,5 +75,5 @@ export const EXPECTED_HASHES: Partial<Record<TouchpointId, string>> = {
   recipeAuthor: '7d521972937c',
   recipeCritique: 'cca647567b3e',
   parse: '2426768a2089',
-  compose: '3ad68f52e4cc',
+  compose: '367aca567aac',
 };

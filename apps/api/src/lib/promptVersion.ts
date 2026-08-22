@@ -80,8 +80,11 @@ export const PROMPT_VERSION = {
    * them. Ends the slot-chauvinism that fought the showcase archetype.
    * v4: a row's verdict state travels as class "row do"/"row dont"; the app
    * draws tick/cross and quiets the loser — the composer never writes glyphs.
+   * v5: the composer may give a photograph a SIDE ("edge"), not only an inset
+   * card in one of four ratios — the split composition the app could not
+   * express, and the reason every photo below the cover looked alike.
    */
-  compose: 4,
+  compose: 5,
 } as const;
 
 /** The AI touchpoints that carry a versioned prompt. */
