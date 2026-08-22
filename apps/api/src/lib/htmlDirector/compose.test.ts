@@ -67,8 +67,16 @@ vi.mock('../ai', () => {
   };
 });
 
-const { composeSlide, composeProject, parseForCompose, composeBudgetsFor, unfinishedProse, trimToFinished } =
-  await import('./compose');
+const {
+  composeSlide,
+  composeProject,
+  parseForCompose,
+  composeBudgetsFor,
+  unfinishedProse,
+  trimToFinished,
+  brandHandleFromWebsite,
+  enforceBrandDomain,
+} = await import('./compose');
 type LayoutCheckSummary = import('./compose').LayoutCheckSummary;
 type ComposeProgress = import('./compose').ComposeProgress;
 const { detailMastersRecipe: detailMastersWithFragments } = await import('./recipes');
@@ -1679,5 +1687,44 @@ describe('trimToFinished never makes a line worse', () => {
 
   it('still trims the modifiers that leave a clause standing', () => {
     expect(trimToFinished('Your next quiet week is already')).toBe('Your next quiet week');
+  });
+});
+
+describe('the brand domain is a fact, not a guess', () => {
+  it('derives the citable handle from the business website', () => {
+    // The real record: a deep marketing URL, www and path stripped.
+    expect(brandHandleFromWebsite('https://www.detailmasters.pro/en/crm')).toBe('detailmasters.pro');
+    expect(brandHandleFromWebsite('https://dynatos.vercel.app')).toBe('dynatos.vercel.app');
+  });
+
+  it('derives nothing from nothing — no record, no guess', () => {
+    expect(brandHandleFromWebsite(undefined)).toBeUndefined();
+    expect(brandHandleFromWebsite('not a url')).toBeUndefined();
+    expect(brandHandleFromWebsite('http://localhost')).toBeUndefined();
+  });
+
+  it('rewrites a fabricated TLD to the real one — the shipped detailmasters.io', () => {
+    expect(enforceBrandDomain('DETAILMASTERS.IO', 'detailmasters.pro')).toBe('detailmasters.pro');
+    expect(enforceBrandDomain('Find us at detailmasters.com today', 'detailmasters.pro')).toBe(
+      'Find us at detailmasters.pro today',
+    );
+  });
+
+  it('leaves the RIGHT domain alone, whatever its case', () => {
+    expect(enforceBrandDomain('detailmasters.pro', 'detailmasters.pro')).toBe('detailmasters.pro');
+    expect(enforceBrandDomain('DETAILMASTERS.PRO', 'detailmasters.pro')).toBe('DETAILMASTERS.PRO');
+  });
+
+  it('leaves unrelated domains and bare brand names alone', () => {
+    // Another business's address is not ours to rewrite, and the brand's NAME
+    // in prose is not a domain.
+    expect(enforceBrandDomain('as seen on instagram.com', 'detailmasters.pro')).toBe('as seen on instagram.com');
+    expect(enforceBrandDomain('detailmasters keeps the schedule full', 'detailmasters.pro')).toBe(
+      'detailmasters keeps the schedule full',
+    );
+  });
+
+  it('does not sweep when the handle is an @name — there is no domain to enforce', () => {
+    expect(enforceBrandDomain('detailmasters.io', '@detailmasters')).toBe('detailmasters.io');
   });
 });

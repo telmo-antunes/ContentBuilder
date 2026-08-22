@@ -83,8 +83,14 @@ export const PROMPT_VERSION = {
    * v5: the composer may give a photograph a SIDE ("edge"), not only an inset
    * card in one of four ratios — the split composition the app could not
    * express, and the reason every photo below the cover looked alike.
+   * v6: REWRITTEN FROM INTENT, not patched. Five generations of appended
+   * warnings had turned the prompt into a rule pile that read as defence;
+   * same machine-checked contracts, reorganised as job → freedoms → contract,
+   * with the photo placements framed as one composition decision (the
+   * two-body layout and where its seam falls) instead of a slot grammar with
+   * exceptions. No contract was dropped.
    */
-  compose: 5,
+  compose: 6,
 } as const;
 
 /** The AI touchpoints that carry a versioned prompt. */

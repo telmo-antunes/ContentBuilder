@@ -24,7 +24,7 @@ import {
   type Format,
   type SlidePhoto,
 } from '@contentbuilder/shared';
-import { composeProject, composeSlide, parseSlideCopy, parseSlideDirection } from '../lib/htmlDirector/compose';
+import { brandHandleFromWebsite, composeProject, composeSlide, parseSlideCopy, parseSlideDirection } from '../lib/htmlDirector/compose';
 import { withSpendLedger, summarize, type SpendLedger } from '../lib/spend';
 import { CRITIQUE_SKIP_TEXT, type CritiqueOutcome } from '../lib/htmlDirector/deckCritique';
 import { resolveBrief } from '../lib/sourceIngest';
@@ -610,6 +610,19 @@ projectsRouter.post(
       );
     }
 
+    /**
+     * THE BRAND'S ADDRESS TRAVELS WITH THE BRIEF. The business record is the
+     * only place the real domain lives; a copywriter told the brand's name but
+     * not its address will invent one (detailmasters.io shipped on a real
+     * deck). An Instagram handle on the profile wins when one exists; the
+     * website host is the fallback every business record has.
+     */
+    const business = await BusinessModel.findById(businessId).lean();
+    const profileHandle = (business as { profile?: { instagram?: unknown } } | null)?.profile?.instagram;
+    const brandHandle =
+      (typeof profileHandle === 'string' && profileHandle.trim()) ||
+      brandHandleFromWebsite((business as { websiteUrl?: string } | null)?.websiteUrl);
+
     const kit = await approvedKitFor(businessId);
     // Stored recipes are migrated on read, so a brand authored against an older
     // shape keeps working instead of failing to parse.
@@ -671,6 +684,7 @@ projectsRouter.post(
         locks: brief.locks,
         sources,
         lessons,
+        handle: brandHandle || undefined,
         // Stable per-project offset for the pattern/fragment variant rotation:
         // consecutive posts compose different skeletons for the same roles,
         // while recomposing THIS project always lands on the same ones.

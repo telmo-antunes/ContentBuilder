@@ -175,25 +175,32 @@ export async function improveByLooking(
 /**
  * WHICH SLIDES ARE WORTH THE MONEY.
  *
- * A deck rides on two frames: the cover decides whether anyone swipes, and the
- * list is the one people screenshot. Everything between them is carried
- * perfectly well by the brand's own fragments, for free — paying a model to
- * redo what code already does correctly is how a budget gets spent with nothing
- * to show for it.
+ * A deck rides on the cover (it decides whether anyone swipes) and on the
+ * slides that carry a PHOTOGRAPH — a picture plus type is a two-body layout
+ * problem, and the only faults that have shipped past every measuring gate
+ * (a small inset floating in a dead middle band, an eyebrow crowding a
+ * screenshot) were on exactly these slides: the numbers-only gates cannot see
+ * a composition that is wrong while fitting. Type-only slides between them are
+ * carried perfectly well by the brand's own fragments, for free.
  *
- * Returns deck indices, worst-case two, in the order they should be attempted
- * so a half-affordable budget still buys the more valuable one.
+ * Returns deck indices, at most three, in the order they should be attempted
+ * so a half-affordable budget still buys the most valuable ones.
  */
-export function slidesWorthDesigning(roles: readonly string[]): number[] {
+export function slidesWorthDesigning(
+  slides: ReadonlyArray<{ role: string; photo?: boolean }>,
+): number[] {
   const out: number[] = [];
-  const cover = roles.indexOf('cover');
-  if (cover !== -1) out.push(cover);
-  const list = roles.indexOf('list');
-  if (list !== -1) out.push(list);
-  // No list in this deck? The closing slide is the next-most-seen frame.
-  if (list === -1) {
-    const cta = roles.lastIndexOf('cta');
-    if (cta !== -1 && cta !== cover) out.push(cta);
-  }
+  const CAP = 3;
+  const push = (i: number) => {
+    if (i !== -1 && !out.includes(i) && out.length < CAP) out.push(i);
+  };
+  push(slides.findIndex((s) => s.role === 'cover'));
+  // Every slide holding a photo slot, in deck order — the two-body layouts.
+  slides.forEach((s, i) => {
+    if (s.photo) push(i);
+  });
+  push(slides.findIndex((s) => s.role === 'list'));
+  // Nothing but the cover so far? The closing slide is the next-most-seen frame.
+  if (out.length < 2) push(slides.map((s) => s.role).lastIndexOf('cta'));
   return out;
 }

@@ -1338,6 +1338,44 @@ function photoCapableRoles(recipe: BrandRecipe): Set<string> {
 }
 
 /**
+ * The web address a deck may cite, derived from the brand's OWN record — the
+ * host of its website, bare. `https://www.detailmasters.pro/en/crm` →
+ * `detailmasters.pro`. This is what the route passes as `handle` when the
+ * business has no Instagram handle on file: a fact from the database, so the
+ * models are never left to guess one.
+ */
+export function brandHandleFromWebsite(url: string | undefined | null): string | undefined {
+  if (!url) return undefined;
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, '');
+    return host.includes('.') ? host : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * THE BRAND'S DOMAIN IS A FACT, NOT A GUESS.
+ *
+ * A deck shipped with "DETAILMASTERS.IO" set in the footer of its closing
+ * slide — a domain that does not exist, invented by a model that knew the
+ * brand's name and was never told its address (`.pro`). Nothing in the recipe
+ * carried it; nothing downstream checked it. So when the caller knows the true
+ * host, any token that reads as the brand's name under a DIFFERENT TLD is
+ * rewritten to the real one, wherever it appears — a fabricated address is the
+ * one mistake a reader can act on (they will type it in) and the one a
+ * substitution can fix without touching a single authored word around it.
+ */
+export function enforceBrandDomain(text: string, handle: string | undefined): string {
+  const host = handle?.replace(/^@/, '').trim();
+  if (!host || !host.includes('.')) return text;
+  const sld = host.split('.')[0]!;
+  const escaped = sld.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const domainish = new RegExp(`\\b${escaped}(\\.[a-z]{2,})+\\b`, 'gi');
+  return text.replace(domainish, (m) => (m.toLowerCase() === host.toLowerCase() ? m : host));
+}
+
+/**
  * Make the parsed deck STRUCTURALLY honest, before a single slide is composed.
  *
  * Four rules, all deterministic, all fixing a failure seen on a real deck:
@@ -1386,6 +1424,23 @@ function normalizeParsedDeck(
         console.warn(`[compose] parse: slide ${i + 1} put prose in the handle — dropped`);
         delete parts.handle;
       }
+    }
+
+    // The brand's domain is a fact — see `enforceBrandDomain`. Swept across
+    // every text part, not just the handle, because a fabricated address is as
+    // wrong in a body line as in the footer.
+    for (const key of Object.keys(parts) as Array<keyof typeof parts>) {
+      const v = parts[key];
+      if (typeof v !== 'string') continue;
+      const swept = enforceBrandDomain(v, handle);
+      if (swept !== v) {
+        console.warn(`[compose] parse: slide ${i + 1} cited a wrong domain in "${key}" — corrected to ${handle}`);
+        (parts as Record<string, unknown>)[key] = swept;
+      }
+    }
+    for (const row of rows) {
+      if (typeof row.text === 'string') row.text = enforceBrandDomain(row.text, handle);
+      if (typeof row.note === 'string') row.note = enforceBrandDomain(row.note, handle);
     }
 
     /**
@@ -2593,6 +2648,19 @@ export async function composeProject(
    * slide nearest the middle that is eligible, which is a sound rule and a
    * blind one — the turning point of an argument is not reliably its midpoint.
    */
+  // The parse-level sweep corrects the copy it was given; this one catches the
+  // composer inventing an address of its own (a `<div class="handle">` it was
+  // never asked for is exactly how detailmasters.io shipped).
+  if (o.handle) {
+    for (const [i, s] of out.entries()) {
+      const swept = enforceBrandDomain(s.authored.html, o.handle);
+      if (swept !== s.authored.html) {
+        console.warn(`[compose] slide ${i + 1} cited a wrong domain — corrected to ${o.handle}`);
+        s.authored.html = swept;
+      }
+    }
+  }
+
   const directedInvert = plan?.slides.findIndex((p) => p.invert === true) ?? -1;
   const invertSlide = directedInvert >= 0 ? directedInvert : invertAt;
   if (invertSlide !== undefined && invertSlide >= 0) {
@@ -2627,7 +2695,9 @@ export async function composeProject(
        * fragments, for free. Budget-gated per slide, and every improvement is
        * re-measured before it is kept.
        */
-      designSlides: slidesWorthDesigning(out.map((s) => s.role)),
+      designSlides: slidesWorthDesigning(
+        out.map((s) => ({ role: s.role, photo: /data-cb-slot=/.test(s.authored.html) })),
+      ),
       improveByLooking: (args) =>
         improveByLooking(recipe, {
           html: args.html,
