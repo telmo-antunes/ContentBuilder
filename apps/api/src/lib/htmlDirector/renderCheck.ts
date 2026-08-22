@@ -636,6 +636,68 @@ export const openRenderProbe: OpenProbe = async (recipe, format, slides) => {
  * samples: a vision model is being asked what the composition LOOKS like, which
  * survives 640px, and a full 1080px frame is an expensive way to ask.
  */
+/**
+ * Photograph a LIVE project's slides — the deck as it will actually ship,
+ * photos attached, straight off the real /render route.
+ *
+ * This exists because every in-compose look pass judges frames whose pictures
+ * do not exist yet: the route attaches the brand-library photos AFTER
+ * `composeProject` returns, so a critique run inside compose called a deck
+ * with photographs on two slides "no photography anywhere in the deck" — and
+ * was right about the frames it saw. The route calls this after the project is
+ * SAVED with its photos, and hands the shots to the critique.
+ *
+ * Sequential on one page, deliberately (see `lookAtDeck`), and best-effort
+ * throughout: no browser, no web server, or a slide that will not photograph
+ * each yield null — the critique's partial-deck refusal owns that outcome.
+ */
+export async function shootLiveDeck(
+  projectId: string,
+  slideIds: readonly string[],
+  format: Format | string,
+): Promise<Array<string | null>> {
+  if (!slideIds.length) return [];
+  let page: Page | undefined;
+  try {
+    const { getBrowser } = await import('../browser');
+    const browser: Browser = await getBrowser();
+    page = await browser.newPage();
+    await page.setViewport({ ...dimensionsFor(asFormat(format)), deviceScaleFactor: 1 });
+  } catch (err) {
+    console.warn(
+      `[render-check] live deck shoot unavailable: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return slideIds.map(() => null);
+  }
+  const base = config.webUrl.replace(/\/+$/, '');
+  const shots: Array<string | null> = [];
+  try {
+    for (const [i, id] of slideIds.entries()) {
+      try {
+        shots.push(
+          await withCeiling(
+            captureSlide(page, `${base}/render?projectId=${projectId}&slideId=${encodeURIComponent(id)}`),
+            MEASURE_TIMEOUT_MS,
+            `live slide ${i + 1} shoot`,
+          ),
+        );
+      } catch (err) {
+        console.warn(
+          `[render-check] could not photograph live slide ${i + 1}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        shots.push(null);
+      }
+    }
+  } finally {
+    await page.close().catch(() => {});
+  }
+  const missing = shots.filter((x) => !x).length;
+  if (missing) {
+    console.warn(`[render-check] ${missing}/${shots.length} live slide(s) would not photograph`);
+  }
+  return shots;
+}
+
 async function captureSlide(page: Page, url: string): Promise<string | null> {
   await page.goto(url, { waitUntil: 'load', timeout: GOTO_TIMEOUT_MS });
   await page.waitForSelector('[data-slide-root]', { timeout: MOUNT_TIMEOUT_MS });
@@ -1071,9 +1133,13 @@ export async function repairOverflow(
 
 export interface DeckCheckOptions extends CheckOptions {
   /**
-   * Hand the FINAL rendered deck to a caller that wants to look at it — the
-   * deck critique. Base64 PNGs in deck order, null where a slide would not
-   * photograph. Optional: without it nothing is captured and nothing is spent.
+   * Hand the FINAL rendered deck to a caller that wants to look at it.
+   * Base64 PNGs in deck order, null where a slide would not photograph.
+   * Optional: without it nothing is captured and nothing is spent.
+   *
+   * NOTE: these frames carry NO photos — a compose-time scaffold has none.
+   * The deck critique therefore does not use this any more; it judges the
+   * saved deck via `shootLiveDeck`, after the route attaches the photos.
    */
   onShots?: (shots: Array<string | null>) => Promise<void>;
   /**

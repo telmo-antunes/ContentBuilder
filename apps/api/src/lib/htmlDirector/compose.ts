@@ -44,7 +44,6 @@ import {
   type Format,
 } from '@contentbuilder/shared';
 import { aiJson, aiMessage, cachedSystem, modelFor, textOf, type AiJsonResult, type AiJsonTool } from '../ai';
-import { critiqueDeck, type CritiqueOutcome } from './deckCritique';
 import { improveByLooking, slidesWorthDesigning } from './designPass';
 import { planDeck } from './artDirection';
 import { config } from '../../config';
@@ -278,12 +277,6 @@ export interface ComposeOptions {
    * like `record` — see the call site for why anything survives at all.
    */
   onCopyCheck?: (r: CopyCheckSummary) => void;
-  /**
-   * The art-director read on the FINISHED deck — what the measurable gates
-   * cannot see. Fires only when the deck was rendered and the budget allowed
-   * the look; absent is normal, not an error.
-   */
-  onCritique?: (c: CritiqueOutcome) => void;
   /**
    * Plan the deck before composing it — the art-direction call. OFF by
    * default, like every other paid pass here: the eval harness and the unit
@@ -2745,12 +2738,6 @@ export async function composeProject(
     if (a && !a.bg) a.bg = 'inverse';
   }
 
-  /**
-   * The art-director read on the finished deck — or the named reason there
-   * isn't one. Never left undefined once the render check has run, so a
-   * caller can always tell "not reviewed" from "reviewed and clean".
-   */
-  let critique: CritiqueOutcome | undefined;
   if (opts?.renderCheck ?? (Boolean(opts?.renderProbe) || renderCheckEnabledByDefault())) {
     opts?.onProgress?.({ phase: 'checking-layout', done: 0, total: out.length });
     const checked = await renderCheckDeck(recipe, kept, out.map((s) => s.authored), o.format ?? '1080x1350', {
@@ -2781,20 +2768,6 @@ export async function composeProject(
           role: args.role,
           label: `design-pass:${args.role ?? 'slide'}`,
         }),
-      /**
-       * SOMEBODY LOOKS AT THE FINISHED DECK. Every check above judges one slide
-       * against something measurable; this is the pass that can see a deck of
-       * near-identical frames, a picture that is related but wrong, or a slide
-       * that restates the one before it. Budget-gated, and it repairs nothing —
-       * the verdict reaches the review page, where a person acts on it.
-       */
-      onShots: async (shots) => {
-        critique = await critiqueDeck(
-          recipe,
-          shots.map((b64) => (b64 ? Buffer.from(b64, 'base64') : null)),
-          (o.format ?? '1080x1350') as Format,
-        );
-      },
       /**
        * THE LOOP, CLOSED AT THE WRITING END.
        *
@@ -2838,7 +2811,6 @@ export async function composeProject(
      * run — but until now it was indistinguishable from a deck that passed
      * every gate. The only trace was a `console.warn` on the API's stdout.
      */
-    if (critique) opts?.onCritique?.(critique);
     opts?.onLayoutCheck?.({
       measured: checked.measured,
       unmeasured: checked.unmeasured,

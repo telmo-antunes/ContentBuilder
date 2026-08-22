@@ -25,11 +25,11 @@ import {
   type SlidePhoto,
 } from '@contentbuilder/shared';
 import { brandHandleFromWebsite, composeProject, composeSlide, parseSlideCopy, parseSlideDirection } from '../lib/htmlDirector/compose';
-import { withSpendLedger, summarize, type SpendLedger } from '../lib/spend';
-import { CRITIQUE_SKIP_TEXT, type CritiqueOutcome } from '../lib/htmlDirector/deckCritique';
+import { withSpendLedger, withLedger, summarize, type SpendLedger } from '../lib/spend';
+import { CRITIQUE_SKIP_TEXT, critiqueDeck, type CritiqueOutcome } from '../lib/htmlDirector/deckCritique';
 import { resolveBrief } from '../lib/sourceIngest';
 import { authoredShape, partsFromAuthored, rewriteAuthoredCopy } from '../lib/htmlDirector/reparse';
-import { addHeadlineVariant, removeHeadlineVariant } from '../lib/htmlDirector/renderCheck';
+import { addHeadlineVariant, removeHeadlineVariant, shootLiveDeck } from '../lib/htmlDirector/renderCheck';
 import { sanitizeAuthoredHtml } from '../lib/htmlSanitize';
 import { ProjectModel, ProjectVersionModel, BusinessModel, BrandKitModel, MediaAssetModel, VideoJobModel, VIDEO_JOB_ACTIVE_STATES } from '../models';
 import { ApiError, asyncHandler, parseBody, publicErrMessage, requireObjectId } from '../lib/http';
@@ -673,7 +673,6 @@ projectsRouter.post(
      * everything the post costs.
      */
     let ledger: SpendLedger | undefined;
-    let critique: CritiqueOutcome | undefined;
     try {
       const run = await withSpendLedger(
         { projectId: String(project._id), ceilingUsd: config.ai.postCeilingUsd },
@@ -719,9 +718,6 @@ projectsRouter.post(
         // Production opts into the paid deck-level pass; the eval harness and
         // the tests keep the deterministic plan.
         artDirection: true,
-        onCritique: (c) => {
-          critique = c;
-        },
         onProgress: (p) => {
           void ProjectModel.updateOne(
             { _id: project._id },
@@ -827,15 +823,12 @@ projectsRouter.post(
      * failed left the PREVIOUS deck's critique in place — and the review page
      * showed a confident verdict about a deck that no longer existed. That is
      * how an out-of-credits error looked exactly like a clean review.
+     *
+     * Written as "not-run" HERE, before the save, and overwritten by the real
+     * review below — so a crash between the two leaves an honest "not
+     * reviewed" rather than a stale verdict.
      */
-    project.set(
-      'critique',
-      critique?.status === 'ok'
-        ? { status: 'ok', ...critique.critique }
-        : critique
-          ? { status: 'skipped', reason: critique.reason, detail: critique.detail }
-          : { status: 'skipped', reason: 'not-run' },
-    );
+    project.set('critique', { status: 'skipped', reason: 'not-run' });
     /**
      * Copy that stops mid-thought is stored, not just returned. It used to
      * exist only in the compose RESPONSE, so anyone opening the review page
@@ -843,15 +836,6 @@ projectsRouter.post(
      * mid-sentence — which is how the same fault shipped three times.
      */
     project.set('copyFaults', copy?.unfinished?.length ? copy.unfinished : undefined);
-    if (critique?.status === 'skipped') {
-      // Said out loud beside the other compose decisions: a silent downgrade is
-      // the one outcome worse than an expensive deck.
-      composeNotes.push({
-        note: `This deck was not reviewed — ${CRITIQUE_SKIP_TEXT[critique.reason]}${
-          critique.detail ? ` (${critique.detail})` : ''
-        }.`,
-      });
-    }
     project.set('status', 'draft');
     // Keep the prompt AND the plan: it's what an Ideas card holds, it lets you
     // see what a finished post was actually asked to be, and re-composing later
@@ -873,6 +857,54 @@ projectsRouter.post(
     );
     if (!project.get('stage') || project.get('stage') === 'idea') project.set('stage', 'ready');
     await project.save();
+
+    /**
+     * THE DECK REVIEW — after the photographs exist.
+     *
+     * The critique used to run inside `composeProject`, where the render
+     * scaffold carries no media: it judged empty-slot frames and called a deck
+     * with photographs on two slides "no photography anywhere" — right about
+     * the frames it saw, wrong about the deck. So the deck it judges is the
+     * deck that ships: the SAVED project, photos attached, shot through the
+     * real /render route. Same post, same budget — the ledger is resumed, not
+     * reopened, so the critique still answers to the per-post ceiling.
+     * Best-effort throughout: a review that cannot run leaves a named skip,
+     * never a stale verdict and never a failed compose.
+     */
+    let critique: CritiqueOutcome | undefined;
+    if (ledger) {
+      const shots = await shootLiveDeck(
+        String(project._id),
+        slides.map((s) => s.id),
+        project.get('format'),
+      );
+      critique = await withLedger(ledger, () =>
+        critiqueDeck(
+          parsedRecipe.data,
+          shots.map((b64) => (b64 ? Buffer.from(b64, 'base64') : null)),
+          project.get('format') as Format,
+        ),
+      );
+      project.set(
+        'critique',
+        critique.status === 'ok'
+          ? { status: 'ok', ...critique.critique }
+          : { status: 'skipped', reason: critique.reason, detail: critique.detail },
+      );
+      if (critique.status === 'skipped') {
+        // Said out loud beside the other compose decisions: a silent downgrade
+        // is the one outcome worse than an expensive deck.
+        composeNotes.push({
+          note: `This deck was not reviewed — ${CRITIQUE_SKIP_TEXT[critique.reason]}${
+            critique.detail ? ` (${critique.detail})` : ''
+          }.`,
+        });
+        project.set('composeNotes', composeNotes);
+      }
+      // The spend summary now includes what the review cost.
+      project.set('spend', summarize(ledger));
+      await project.save();
+    }
 
     /**
      * REMEMBER WHAT MADE THIS. The prompts, the copy they produced and the

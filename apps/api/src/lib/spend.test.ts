@@ -7,7 +7,7 @@ vi.mock('./usage', () => ({
   recordUsage: async () => {},
 }));
 
-const { affordsUsd, currentLedger, noteSpend, remainingUsd, summarize, withSpendLedger } =
+const { affordsUsd, currentLedger, noteSpend, remainingUsd, summarize, withSpendLedger, withLedger } =
   await import('./spend');
 
 const spend = (usd: number) =>
@@ -50,6 +50,22 @@ describe('the spend ledger', () => {
       affordsUsd(0.02, 'design-pass:cover');
     });
     expect(ledger.skipped).toEqual(['design-pass:cover']);
+  });
+
+  it('resumes a ledger — the critique answers to the same ceiling as its compose', async () => {
+    // The deck review runs AFTER compose returns (only then do the photos
+    // exist), outside the original scope. A fresh ledger there would be a
+    // second budget; resuming the first is what makes the ceiling per-POST.
+    const { ledger } = await withSpendLedger({ ceilingUsd: 0.4 }, async () => {
+      await spend(0.37);
+    });
+    await withLedger(ledger, async () => {
+      // $0.37 of $0.40 already spent — the review's $0.04 estimate is refused.
+      expect(affordsUsd(0.04, 'deck-critique')).toBe(false);
+      await spend(0.02);
+    });
+    expect(ledger.spentUsd).toBeCloseTo(0.39, 5);
+    expect(ledger.skipped).toEqual(['deck-critique']);
   });
 
   it('keeps concurrent decks on their own budgets', async () => {
