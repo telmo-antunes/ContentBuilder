@@ -51,6 +51,15 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
+### The composer cannot choose the edge placement on slides it never composes
+
+- **Kind:** Gap
+- **Severity:** minor (structural, and predictable in hindsight)
+- **First seen:** 2026-08-22 — the first compose after the edge placement shipped: `edge used: no`, both photo slides rendered as inset cards again.
+- **What happened:** the edge freedom lives in the COMPOSER prompt, and 5 of 7 slides substitute from recipe fragments without a model call. A fragment's slot is plain `cb-shot` markup, so the one path that composes most of the deck can never express the one placement built to break the inset-card mould. The freedom exists exactly where the traffic is not.
+- **Direction:** two options that compose: (a) give the exemplar's `feature` fragments an edge VARIANT, so the rotation can land on it deterministically; (b) let ART DIRECTION set a placement hint per slide (it already reads the whole deck and owns the variant pins), so "this picture deserves half the poster" is decided by the pass that can see all the pictures. (b) is the better home — placement is a judgment about content, which is art direction's whole job.
+
+
 ### The edge placement painted a panel and swallowed the photograph
 
 - **Kind:** Defect
