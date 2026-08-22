@@ -65,7 +65,9 @@ describe('isSlotName', () => {
  */
 describe('slot shapes survive their height budget', () => {
   const resolve = (css: string, cls: string, column: number, ratio: number) => {
-    const sel = cls ? `\\.cb-shot\\.${cls}` : '\\.cb-shot(?!\\.)';
+    // The card geometry now carries `:not(.edge)` — a shape describes a CARD,
+    // and an edge photograph is not one.
+    const sel = cls ? `\\.cb-shot:not\\(\\.edge\\)\\.${cls}` : `\\.cb-shot:not\\(\\.edge\\)(?!\\.)`;
     const m = css.match(new RegExp(`${sel}\\{[^}]*max-width:(\\d+)px;max-height:(\\d+)px`));
     if (!m) throw new Error(`no rule for .cb-shot${cls ? '.' + cls : ''}`);
     const w = Math.min(column, Number(m[1]));
@@ -90,13 +92,13 @@ describe('slot shapes survive their height budget', () => {
 
   it('caps the WIDTH, since capping the height is what broke the ratio', () => {
     const css = slideMediaCss(1350);
-    expect(css).toMatch(/\.cb-shot\.tall\{[^}]*max-width:\d+px/);
+    expect(css).toMatch(/\.cb-shot:not\(\.edge\)\.tall\{[^}]*max-width:\d+px/);
   });
 
   it('sizes the budget against the canvas it is given', () => {
     const post = slideMediaCss(1350);
     const story = slideMediaCss(1920);
-    const w = (css: string) => Number(css.match(/\.cb-shot\.tall\{[^}]*max-width:(\d+)px/)![1]);
+    const w = (css: string) => Number(css.match(/\.cb-shot:not\(\.edge\)\.tall\{[^}]*max-width:(\d+)px/)![1]);
     expect(w(story)).toBeGreaterThan(w(post));
   });
 
@@ -206,7 +208,9 @@ describe('slotOverrideCss', () => {
     const override = slotOverrideCss('cbs1', 'hero', 'tall', 'md', 1350);
     const base = `.cbs1 .cb-slide .${SLOT_CLASS}.tall`;
     expect(specificity(override.split('{')[0]!)).toBeGreaterThanOrEqual(specificity(base));
-    expect(override).toContain(`.${SLOT_CLASS}[${SLOT_ATTR}="hero"]`);
+    // Keyed to the slot, and carrying `:not(.edge)` — a shape is a CARD's
+    // geometry, and an edge photograph derives its height from top/bottom.
+    expect(override).toContain(`.${SLOT_CLASS}:not(.edge)[${SLOT_ATTR}="hero"]`);
   });
 
   it('emits nothing when the photo has no resize of its own', () => {
@@ -350,7 +354,7 @@ describe('an unfilled slot outside the editor', () => {
 
   it('targets exactly one slot in exactly one slide scope', () => {
     const css = hiddenSlotCss('cb1', 'hero');
-    expect(css).toContain(`.cb1 .cb-slide [${SLOT_ATTR}="hero"]`);
+    expect(css).toContain(`.cb1 .cb-slide .${SLOT_CLASS}[${SLOT_ATTR}="hero"]`);
     expect(css).not.toContain('"art"');
   });
 
@@ -380,7 +384,7 @@ describe('the edge placement', () => {
     // The one composition an inset card cannot do — and the reason every
     // photograph below the cover looked alike.
     expect(css).toContain('.cb-slide .cb-shot.edge{position:absolute;top:0;bottom:0;right:0;');
-    expect(css).toContain('.cb-slide .cb-shot.edge.left{right:auto;left:0}');
+    expect(css).toContain('.cb-slide .cb-shot.edge.left{right:auto;left:0;');
   });
 
   it('costs no vertical budget — it overrides the slot geometry entirely', () => {
@@ -391,6 +395,6 @@ describe('the edge placement', () => {
 
   it('keeps the type above the picture and readable against it', () => {
     expect(css).toContain('.cb-slide:has(> .cb-shot.edge) > *:not(.cb-shot){position:relative;z-index:2}');
-    expect(css).toContain('.cb-shot.edge::before');
+    expect(css).toContain('mask-image:linear-gradient(90deg,transparent 0%,#000 34%)');
   });
 });
