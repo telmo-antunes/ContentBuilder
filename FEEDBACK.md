@@ -51,6 +51,24 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
+### A stored critique never expires, even though every PATCH after it can invalidate it
+
+- **Kind:** Gap
+- **Severity:** cost me a fix
+- **First seen:** 2026-08-25 — the-aftercare-message (IG carousel)
+- **What happened:** compose ran the deck critique on the saved deck (correctly, per the recent photo-attachment-ordering fix) and it flagged real problems — slide 1's cover photo made "detail masters" illegible against "the light grey seat fabric," and four consecutive near-black frames flattened the middle of the deck. Both were true AT THAT MOMENT. I then made three rounds of `PATCH` edits (two copy fixes, a photo swap on the cover, a photo add on slide 5) and re-exported — but `GET /projects/:id` kept returning the ORIGINAL critique verbatim, now describing a cover photo that had been deleted three edits earlier and no longer existed in any form.
+- **Why it matters:** a critique that stays confidently specific about a deck that no longer exists is worse than an absent one — it reads as current because nothing marks it stale, and a session or a user skimming the review page has no signal to distrust it. This is the same shape of failure already fixed for "critique runs before photos are attached" (FEEDBACK.md, resolved) — the fix moved the critique AFTER photo attachment, but nothing moved it after HAND EDITS, which happen on essentially every deck a session touches.
+- **Direction:** any `PATCH`, `/tweak`, or `/variants` write that changes `authored` or `photos` should clear the stored critique (or flip its status to something the review page renders as "stale — re-run"), the same way a failed compose now writes an honest "not reviewed" instead of leaving the previous verdict in place.
+
+### Compose can only fill slots from its own pool — it cannot reserve one for an image the brief already named
+
+- **Kind:** Gap
+- **Severity:** cost me a fix
+- **First seen:** 2026-08-25 — the-aftercare-message (IG carousel), built from a `content:instagram` payload
+- **What happened:** the payload handed to compose already named two specific images for two specific slides — a cover hero and a screenshot evidencing the "private notes" claim — with URLs, `fit`, and `shape` decided by the blog pipeline that produced them. Compose has no field for this: it can only fill `data-cb-slot` figures the model chose to author, from photos already sitting in the brand's library. Since neither payload image existed in the library yet, compose produced zero photo slots anywhere in the deck, on a role (cover) that in this SAME run separately grabbed an unrelated pool photo as a full-bleed background because pool-based photo attachment and payload-based imagery are two mechanisms that don't know about each other. Getting the two payload images onto the right slides took: upload each to the library, hand-insert an empty `<figure class="cb-shot">` into two slides' markup, call `/slides/:id/variants` on each (2 model calls) to get the recipe to arrange around it, patch the result back in (restoring a `<b>` tag the fragment substitution dropped along the way), then attach the real photo. Six manual steps and two AI calls to place two images the brief had already fully specified.
+- **Why it matters:** every blog-post-to-carousel repurpose goes through exactly this payload shape (this is not a one-off — `content:instagram` always supplies specific, pre-decided image URLs per slot). Each one will hit the same six-step workaround unless compose can be told about incoming images up front.
+- **Direction:** let the compose request carry an image manifest — `{slot, subject, shape}` entries the copywriter can plan around, similar to how it already plans `photo: true/false` per role internally. A slide told "you will receive a photo of X for slot Y" can author its `cb-shot` figure in the first pass, and the images attach the moment they exist rather than requiring an editing session to retrofit a photo the brief specified from the start.
+
 ### The deck critique judges frames whose photographs do not exist yet — RESOLVED
 
 - **Kind:** Gap (ordering) — resolved 2026-08-22: the critique moved out of `composeProject` to the route's post-attachment pass. The SAVED deck (photos attached) is shot through the real /render route (`shootLiveDeck`) and reviewed under the same per-post ledger, resumed via `withLedger` so it answers to the same ceiling.
@@ -280,6 +298,7 @@ Add the next one here, following the shape in [How to add an entry](#how-to-add-
 - **What happened:** the PATCH normaliser in `routes/projects.ts` re-builds `authored` from an explicit pick-list (html/bg/role/archetype/pv) and the zod wire schema had no `source` field — so any client PATCH round-trip dropped the one stored record of which path (fragment vs ai) composed a slide, the field the fragments work added *because the markup cannot answer it*.
 - **Why it matters:** the fragment/ai split (the `ai:share` numbers, the 6-of-7-from-fragments result) silently degrades to "unknown" on any deck a human or agent touches.
 - **Resolved:** 2026-08-21 — `source` added to the wire schema and the pick-list (alongside the new `align`), so provenance survives edits. Historical decks that already lost it stay lost; re-compose is the only way back.
+- **Seen again:** 2026-08-25 — the-aftercare-message (IG carousel). The fix above added the ONE missing field; it did not make the pattern safe. A PATCH sent to fix two truncated/fabricated copy strings — `{id, authored}` per slide, nothing else — silently wiped a compose-time `photos` attachment (a full-bleed background photo on the cover, `placement:'background'`) that was never mentioned in the request. Confirmed by diffing the pre- and post-PATCH project state: `photos: [{...}]` → `photos: []` on a slide whose `authored` I never touched for imagery. Zod's `photos: z.array(...).default([])` makes "the caller didn't mention photos" indistinguishable from "the caller wants zero photos." This is architectural, not a missing field — the wholesale-replace PATCH will keep costing a fix for whatever the next caller forgets to round-trip. Direction: PATCH should merge each slide's `photos` (and ideally the whole slide) against the STORED document rather than replacing wholesale, so omission means "unchanged" the way a human editing one field expects.
 
 ### The three "over capacity" fragments are a 1-in-93 case, and fixing them would cost the brand
 
