@@ -116,8 +116,14 @@ export const ARCHETYPES = {
   /** A heading and its enumerated rows, packed to the top. */
   list: {
     key: 'list',
-    intent: 'Heading and rows, packed from the top so the list reads as one block.',
-    slack: 'bottom',
+    intent: 'Heading and rows as one block, optically centred — a short list no longer sits over an empty half-frame.',
+    /**
+     * Was `bottom`. Four short rows packed from the top left the lower half of
+     * every list slide empty — the owner scored hierarchy 1 on decks where
+     * three slides in a row did exactly that. Centred, the block reads as the
+     * slide's subject; a long list fills the frame either way.
+     */
+    slack: 'center',
     photo: 'never',
     maxHeadlineLines: 2,
   },
@@ -339,6 +345,11 @@ export function slideAlignCss(): string {
     `.cb-slide[data-align="flush-left"] .${SLOT_CLASS}{margin-inline:0}`,
     `.cb-slide[data-align="center"] .${SLOT_CLASS}{margin-inline:auto}`,
     `.cb-slide[data-align="flush-right"] .${SLOT_CLASS}{margin-inline-start:auto;margin-inline-end:0}`,
+    // A brand's button and mark usually pin themselves `align-self:flex-start`;
+    // on a centred slide they must follow the type, or the close ships with
+    // centred lines over a button hugging the left edge.
+    `.cb-slide[data-align="center"] .cta,.cb-slide[data-align="center"] .logo-row,.cb-slide[data-align="center"] .logo{align-self:center}`,
+    `.cb-slide[data-align="flush-right"] .cta,.cb-slide[data-align="flush-right"] .logo-row,.cb-slide[data-align="flush-right"] .logo{align-self:flex-end}`,
     /**
      * CENTRED TYPE HAS ITS OWN CRAFT. Copy is composed for a flush rag, and
      * centring it verbatim is what makes a centred slide read as unpleasant

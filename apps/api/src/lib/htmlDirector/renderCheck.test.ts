@@ -460,7 +460,7 @@ describe('renderCheckDeck', () => {
 // ── The layout ladder ────────────────────────────────────────────────────────
 describe('repairLayout — the bidirectional ladder', () => {
   const HTML = '<div class="headline">A headline</div>\n<div class="body">Body</div>';
-  const input = { role: 'statement' as const, parts: {}, format: '1080x1350' as const, index: 0 };
+  const input = { role: 'feature' as const, parts: {}, format: '1080x1350' as const, index: 0 };
   const v = (over: Partial<LayoutVerdict>): LayoutVerdict => ({
     state: 'fits', collide: false, slack: 0, headlineLines: 2, gaps: [], ...over,
   });
@@ -740,7 +740,9 @@ describe('layoutFaults', () => {
     expect(layoutFaults(hole, undefined, 'cover')).toEqual([]);
     expect(layoutFaults(hole, undefined, 'cta')).toEqual([]);
     expect(layoutFaults(hole, undefined, 'feature')).toEqual(['slack 55%']);
-    expect(layoutFaults(hole, undefined, 'statement')).toEqual(['slack 55%']);
+    // A statement is a display role since 2026-09: a one-liner is mostly air by
+    // design, and the content limit made the gate feed it a body every time.
+    expect(layoutFaults(hole, undefined, 'statement')).toEqual([]);
     expect(layoutFaults(hole, undefined, 'list')).toEqual(['slack 55%']);
     // An unknown role gets the permissive limit — a gate that cries wolf is a
     // gate that gets ignored.
@@ -777,8 +779,8 @@ describe('renderCheckDeck — the layout gates run too', () => {
 
     const out = await renderCheckDeck(
       detailMastersRecipe,
-      [{ role: 'statement' as const, parts: {}, format: '1080x1350' as const, index: 0 }],
-      [{ html: CAP, role: 'statement', archetype: 'statement' }],
+      [{ role: 'feature' as const, parts: {}, format: '1080x1350' as const, index: 0 }],
+      [{ html: CAP, role: 'feature', archetype: 'statement' }],
       '1080x1350',
       { openProbe },
     );
@@ -798,8 +800,9 @@ describe('renderCheckDeck — the layout gates run too', () => {
 
     const out = await renderCheckDeck(
       detailMastersRecipe,
-      [{ role: 'statement' as const, parts: {}, format: '1080x1350' as const, index: 0 }],
-      [{ html: CAP, role: 'statement', archetype: 'statement' }],
+      // A content role: statement takes the display limit since 2026-09.
+      [{ role: 'feature' as const, parts: {}, format: '1080x1350' as const, index: 0 }],
+      [{ html: CAP, role: 'feature', archetype: 'statement' }],
       '1080x1350',
       { openProbe },
     );

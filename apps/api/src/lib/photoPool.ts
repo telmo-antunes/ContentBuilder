@@ -87,9 +87,24 @@ export async function brandPhotoPool(businessId: string) {
 export function fillSlotsFromPool(
   slides: Array<{ id: string; authored?: { html: string; archetype?: string } }>,
   pool: Array<{ _id: unknown }>,
+  /**
+   * Pool ids known to SUIT the brand ground as a full-bleed picture. A bleed
+   * slide takes the first unused one of these; slot fills keep pool order,
+   * because a slot is judged by relevance the pool cannot see, not by tone.
+   */
+  bleedPreferred?: ReadonlySet<string>,
 ): { photos: SlidePhoto[][]; used: number } {
   const photos: SlidePhoto[][] = slides.map(() => []);
-  let next = 0;
+  const taken = new Set<number>();
+  const take = (prefer?: ReadonlySet<string>): { _id: unknown } | undefined => {
+    const pick = (pred: (m: { _id: unknown }) => boolean) => {
+      const i = pool.findIndex((m, k) => !taken.has(k) && pred(m));
+      if (i === -1) return undefined;
+      taken.add(i);
+      return pool[i];
+    };
+    return (prefer && pick((m) => prefer.has(String(m._id)))) || pick(() => true);
+  };
   slides.forEach((slide, i) => {
     const wants = archetypeFor(slide.authored?.archetype);
 
@@ -104,10 +119,11 @@ export function fillSlotsFromPool(
      * new way to render.
      */
     if (wants?.placement === 'bleed' && wants.photo !== 'never') {
-      if (next >= pool.length) return;
+      const m = take(bleedPreferred);
+      if (!m) return;
       photos[i]!.push({
         id: randomUUID(),
-        mediaAssetId: String((pool[next++] as { _id: unknown })._id),
+        mediaAssetId: String(m._id),
         placement: 'background',
         fit: 'cover',
       });
@@ -118,17 +134,18 @@ export function fillSlotsFromPool(
     }
 
     for (const slot of authoredSlots(slide.authored?.html ?? '')) {
-      if (next >= pool.length) return;
+      const m = take();
+      if (!m) return;
       photos[i]!.push({
         id: randomUUID(),
-        mediaAssetId: String((pool[next++] as { _id: unknown })._id),
+        mediaAssetId: String(m._id),
         placement: 'slot',
         slot,
         fit: 'cover',
       });
     }
   });
-  return { photos, used: next };
+  return { photos, used: taken.size };
 }
 
 export interface AttachedPhotos {
@@ -157,8 +174,30 @@ export async function attachPoolPhotos(
   pool: Array<{ _id: unknown; key?: string }>,
   groundHex: string,
 ): Promise<AttachedPhotos> {
-  const filled = fillSlotsFromPool(base, pool);
   const groundLuminance = hexLuminance(groundHex) ?? 0;
+  /**
+   * PICTURES THAT SUIT THE GROUND GO FIRST. The pool used to be spent in
+   * upload order, and on a near-black brand the first six uploads were pale
+   * UI screenshots — so every full-bleed cover had its picture handed to it
+   * and then dropped by the tone check below, on every deck, while twelve
+   * darker photographs sat further down the pool untouched. Measured once per
+   * candidate on a 160px thumbnail; a picture that will not decode counts as
+   * suitable rather than failing the compose. Only the BLEED pick prefers
+   * them — ordering the whole pool by tone put car photographs on the
+   * product-proof slots where the screenshots belong.
+   */
+  const suited = await Promise.all(
+    pool.map(async (m) => {
+      if (!m.key) return true;
+      try {
+        return await suitsBleedOver(await getStorage().read(m.key), groundLuminance);
+      } catch {
+        return true;
+      }
+    }),
+  );
+  const bleedPreferred = new Set(pool.filter((_, i) => suited[i]).map((m) => String(m._id)));
+  const filled = fillSlotsFromPool(base, pool, bleedPreferred);
   const notes: AttachedPhotos['notes'] = [];
   const anchors = await Promise.all(
     filled.photos.map(async (ps, i) => {

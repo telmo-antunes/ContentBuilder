@@ -14,6 +14,7 @@
 import { z } from 'zod';
 import {
   RECIPE_REVEAL_ORDER,
+  fragmentVariantFor,
   SLOT_ATTR,
   SLOT_CLASS,
   authoredSlots,
@@ -904,7 +905,13 @@ export function unfinishedProse(slides: ParsedSlide[]): UnfinishedProse[] {
     const last = v.replace(/[,;]+$/, '').split(/\s+/).pop()?.toLowerCase() ?? '';
     return DANGLING_WORDS.has(last);
   };
-  const check = (slide: number, label: string, value: string | undefined, needsFullStop: boolean) => {
+  const check = (
+    slide: number,
+    label: string,
+    value: string | undefined,
+    needsFullStop: boolean,
+    mayDangle = false,
+  ) => {
     const v = (value ?? '').trim();
     // One word is a label however it is punctuated; two words can still dangle.
     if (!v || v.split(/\s+/).length < 2) return;
@@ -915,13 +922,22 @@ export function unfinishedProse(slides: ParsedSlide[]): UnfinishedProse[] {
       return;
     }
     if (needsFullStop) out.push({ slide, label, text: v, reason: 'no terminal punctuation' });
-    else if (dangles(v)) out.push({ slide, label, text: v, reason: 'ends on a dangling word' });
+    else if (!mayDangle && dangles(v)) out.push({ slide, label, text: v, reason: 'ends on a dangling word' });
   };
   slides.forEach((s, i) => {
     for (const part of PROSE_PARTS) check(i, part, s.parts[part], part === 'body');
     check(i, 'headline', s.parts.headline, false);
     (s.parts.rows ?? []).forEach((r, j) => {
-      check(i, `rows[${j}].text`, r.text, false);
+      /**
+       * A ROW MAY END ON A PREPOSITION. "The date they cannot wash it until",
+       * "What not to do until then", "How to wash it from that date on" are a
+       * brief's own items, scanned rather than read, and the dangling-word
+       * rule fired on all three — first as blocking copy faults on
+       * source-verbatim text, then, worse, as a corrective re-parse that had
+       * the copywriter REWORD the source to satisfy it. The sentence-break
+       * rule still applies: a row that opens a second sentence must close it.
+       */
+      check(i, `rows[${j}].text`, r.text, false, true);
       check(i, `rows[${j}].note`, r.note, true);
     });
   });
@@ -2598,7 +2614,34 @@ export async function composeFromInputs(
   if (plan) {
     inputs.forEach((input, i) => {
       const p = plan.slides[i];
-      if (p?.variant !== undefined) input.variantPin = p.variant;
+      if (p?.variant === undefined) return;
+      /**
+       * A PIN MUST STILL COMPOSE FOR FREE. The director chooses from the
+       * arrangements' one-line descriptions and cannot see their holes, so it
+       * pinned a statement with a tagline to the card variant (no tagline
+       * hole) and a feature with a body to the numbered poster (no body hole)
+       * — and both fell to a paid model call plus a verbatim retry, $0.10 of
+       * a $0.28 deck. A pin the fragment cannot carry is dropped with a note;
+       * the rotation's default is then tried, and the model only if that
+       * fails too.
+       */
+      const pinned = { ...input, variantPin: p.variant };
+      // A verdict list draws ✓/✕ in the gutter; the numbered variant draws
+      // 01/02/03 there instead, and the verdict is lost. The director pinned
+      // exactly that on a "leave these out" list.
+      const verdict = (input.parts.rows ?? []).some((r) => r.state === 'do' || r.state === 'dont');
+      const pinnedFragment = fragmentVariantFor(recipe, input.role, p.variant);
+      if (verdict && pinnedFragment && /\bnumbered\b/.test(pinnedFragment)) {
+        console.warn(`[art-direction] slide ${i + 1}: a verdict list cannot take the numbered arrangement — keeping the default`);
+        return;
+      }
+      if (recipe.fragments?.[input.role] && !composeByFragment(recipe, pinned)) {
+        console.warn(
+          `[art-direction] slide ${i + 1}: variant ${p.variant} cannot carry this slide's parts — keeping the default arrangement`,
+        );
+        return;
+      }
+      input.variantPin = p.variant;
     });
     if (plan.note) console.warn(`[art-direction] ${plan.note}`);
   }

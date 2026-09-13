@@ -11,6 +11,8 @@
  *   npx tsx src/scripts/composeFromParse.ts --corpus <id> --replay          # the stored generated parts
  *
  * --parse <file>       {"slides":[{role, image?, imageQuery?, align?, why?, parts}]} — the write_slides shape
+ * --parse live         call the REAL copywriter (Settings/env tier, or --parse-model) — Phase 2 validation
+ * --critique           run the art-director critique on the saved render, under the same ledger
  * --replay             use the corpus brief's STORED parse output instead of --parse
  * --reference          compose against the code's REFERENCE recipe for the brand (recipes.ts), not the stored kit
  * --advertise a,b      add classes to the recipe's component list for this run (a class the stylesheet
@@ -50,6 +52,7 @@ const {
   composeByFragment,
   composeFromInputs,
   finishParsedDeck,
+  parseForCompose,
   readDeck,
   repeatedSlides,
   stripMarkdownFromDeck,
@@ -59,10 +62,11 @@ const { checkFragment, fillRecipeFragmentGaps } = await import('../lib/htmlDirec
 const { buildContactSheet } = await import('../lib/contactSheet');
 const { openRenderProbe, shootLiveDeck } = await import('../lib/htmlDirector/renderCheck');
 const { closeBrowser } = await import('../lib/browser');
-const { summarize, withSpendLedger } = await import('../lib/spend');
+const { summarize, withLedger, withSpendLedger } = await import('../lib/spend');
 const { modelFor } = await import('../lib/ai');
 
 type ComposeOptions = import('../lib/htmlDirector/compose').ComposeOptions;
+type ComposeSlideInput = import('../lib/htmlDirector/prompt').ComposeSlideInput;
 type BrandRecipe = import('@contentbuilder/shared').BrandRecipe;
 
 const asFormat = (f: string | undefined): Format => (isFormat(f) ? f : '1080x1350');
@@ -132,40 +136,83 @@ async function main(): Promise<void> {
   recipe = fillRecipeFragmentGaps(recipe).recipe;
   const useFragments = !cliHas('--no-fragments');
 
-  // ── the parse result, held to the parse step's own checks ─────────────────
-  const req = buildParseRequest(recipe, idea, opts);
-  const payload = replay
-    ? { slides: (stored?.generated ?? []).map((g) => ({ role: g.role, parts: g.parts, image: /data-cb-slot=/.test(g.html ?? '') })) }
-    : JSON.parse(readFileSync(parseFile!, 'utf8'));
-  let slides = stripMarkdownFromDeck(readDeck(payload, 'lab'));
-  const flagrant = budgetViolationsOf(slides, req.budgets).filter((v) => v.length > v.budget * 1.1);
-  const lost = missingLocks(JSON.stringify(slides), req.locks);
-  const repeats = repeatedSlides(slides);
-  const unfinished = unfinishedProse(slides);
-  say('');
-  say('## What the corrective re-parse would have complained about');
-  say('');
-  if (!flagrant.length && !lost.length && !repeats.length && !unfinished.length) say('- nothing — the parse passed every check first time');
-  for (const v of flagrant) say(`- slide ${v.slide + 1} ${v.label} is ${v.length} chars against a budget of ${v.budget}`);
-  for (const l of lost) say(`- verbatim string not used: ${JSON.stringify(l)}`);
-  for (const u of unfinished) say(`- slide ${u.slide + 1} ${u.label} stops mid-thought (${u.reason}): ${JSON.stringify(u.text)}`);
-  for (const r of repeats) say(`- slides ${r.a + 1} and ${r.b + 1} make the same point (${Math.round(r.score * 100)}% word overlap)`);
-  const soft = budgetViolationsOf(slides, req.budgets).filter((v) => v.length <= v.budget * 1.1);
-  for (const v of soft) say(`- (clamped silently) slide ${v.slide + 1} ${v.label} ${v.length}/${v.budget}`);
+  // ── one ledger for the whole run ─────────────────────────────────────────
+  // Production's ceiling is $0.40 (AI_POST_CEILING_USD); the lab defaults to
+  // $0.10 so the vision passes are refused unless an experiment raises it.
+  const ceilingUsd = Number(cliArg('--ceiling') ?? '0.10');
+  const { ledger } = await withSpendLedger({ projectId: 'lab', ceilingUsd }, async () => undefined);
+  const live = parseFile === 'live';
+  const parseModel = cliArg('--parse-model') ?? (noModel ? 'none' : await modelFor('parse'));
+  const composeModel = cliArg('--compose-model') ?? (noModel ? 'none' : await modelFor('compose'));
+  let handle: string | undefined;
+  let poolSize = 24;
+  if (resolved.businessId) {
+    try {
+      const { connectDb } = await import('../db');
+      await connectDb(1, 200);
+      const { BusinessModel } = await import('../models');
+      const { brandPhotoPool } = await import('../lib/photoPool');
+      const { brandHandleFromWebsite } = await import('../lib/htmlDirector/compose');
+      const biz = (await BusinessModel.findById(resolved.businessId).lean()) as { website?: string } | null;
+      handle = brandHandleFromWebsite(biz?.website);
+      poolSize = (await brandPhotoPool(resolved.businessId)).length;
+    } catch {
+      /* no db: defaults stand */
+    }
+  }
 
+  // ── the parse result, held to the parse step's own checks ─────────────────
+  const req = buildParseRequest(recipe, idea, { ...opts, parseModel, handle });
   const copyFaults: unknown[] = [];
-  const inputs = finishParsedDeck(recipe, slides, req, {
-    ...opts,
-    photoBudget: 24,
-    onCopyCheck: (c) => copyFaults.push(...c.unfinished),
-  });
+  let inputs: ComposeSlideInput[];
+  if (live) {
+    if (noModel) throw new Error('--parse live needs the model; drop --no-model');
+    // THE REAL COPYWRITER, exactly as the route calls it: the same request the
+    // dump writes, the brand's handle, the photo budget the pool affords.
+    say('');
+    say(`## Live parse — ${parseModel}`);
+    const t0 = Date.now();
+    inputs = await withLedger(ledger, () =>
+      parseForCompose(recipe, idea, { ...opts, parseModel, handle, photoBudget: poolSize, onCopyCheck: (c) => copyFaults.push(...c.unfinished) }),
+    );
+    say(`- ${inputs.length} slide(s) in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+    writeFileSync(
+      resolve(outDir, `${label}.parse.json`),
+      JSON.stringify({ slides: inputs.map((i) => ({ role: i.role, image: i.photo ?? false, imageQuery: i.imageQuery, align: i.align, why: i.rationale, parts: i.parts })) }, null, 2) + '\n',
+    );
+    say(`- parse saved → ${label}.parse.json`);
+  } else {
+    const payload = replay
+      ? { slides: (stored?.generated ?? []).map((g) => ({ role: g.role, parts: g.parts, image: /data-cb-slot=/.test(g.html ?? '') })) }
+      : JSON.parse(readFileSync(parseFile!, 'utf8'));
+    const slides = stripMarkdownFromDeck(readDeck(payload, 'lab'));
+    const flagrant = budgetViolationsOf(slides, req.budgets).filter((v) => v.length > v.budget * 1.1);
+    const lost = missingLocks(JSON.stringify(slides), req.locks);
+    const repeats = repeatedSlides(slides);
+    const unfinished = unfinishedProse(slides);
+    say('');
+    say('## What the corrective re-parse would have complained about');
+    say('');
+    if (!flagrant.length && !lost.length && !repeats.length && !unfinished.length) say('- nothing — the parse passed every check first time');
+    for (const v of flagrant) say(`- slide ${v.slide + 1} ${v.label} is ${v.length} chars against a budget of ${v.budget}`);
+    for (const l of lost) say(`- verbatim string not used: ${JSON.stringify(l)}`);
+    for (const u of unfinished) say(`- slide ${u.slide + 1} ${u.label} stops mid-thought (${u.reason}): ${JSON.stringify(u.text)}`);
+    for (const r of repeats) say(`- slides ${r.a + 1} and ${r.b + 1} make the same point (${Math.round(r.score * 100)}% word overlap)`);
+    const soft = budgetViolationsOf(slides, req.budgets).filter((v) => v.length <= v.budget * 1.1);
+    for (const v of soft) say(`- (clamped silently) slide ${v.slide + 1} ${v.label} ${v.length}/${v.budget}`);
+    inputs = finishParsedDeck(recipe, slides, req, {
+      ...opts,
+      photoBudget: poolSize,
+      onCopyCheck: (c) => copyFaults.push(...c.unfinished),
+    });
+  }
   say('');
   say(`## Deck as the parse step hands it on — ${inputs.length} slide(s)`);
   say('');
-  say('| # | role | image | parts |');
-  say('|---|---|---|---|');
+  say('| # | role | image | parts | why |');
+  say('|---|---|---|---|---|');
   for (const [i, s] of inputs.entries()) {
-    say(`| ${i + 1} | ${s.role} | ${s.photo ? 'yes' : ''} | ${Object.entries(s.parts).map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(' ').replace(/\|/g, '\\|').slice(0, 300)} |`);
+    say(`| ${i + 1} | ${s.role} | ${s.photo ? 'yes' : ''} | ${Object.entries(s.parts).map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(' ').replace(/\|/g, '\\|').slice(0, 300)} | ${(s.rationale ?? '').replace(/\|/g, '\\|')} |`);
   }
   if (copyFaults.length) say(`\nCopy faults after repair: ${JSON.stringify(copyFaults)}`);
   // Variant pins: the art director's override, applied by hand.
@@ -203,14 +250,12 @@ async function main(): Promise<void> {
   // ── the production path from art direction to the layout ladder ──────────
   const o: ComposeOptions = {
     ...opts,
-    // The tiers production resolves (Settings override → env), unless an
-    // experiment names its own: `--compose-model` / `--parse-model`.
-    model: cliArg('--compose-model') ?? (noModel ? 'none' : await modelFor('compose')),
-    parseModel: cliArg('--parse-model') ?? (noModel ? 'none' : await modelFor('parse')),
+    model: composeModel,
+    parseModel,
     useFragments,
     artDirection: !noModel && cliHas('--art-direction'),
     renderCheck: !cliHas('--no-render-check'),
-    handle: stored?.settings?.dmKeyword ? undefined : undefined,
+    handle,
   };
   const notes: string[] = [];
   const origWarn = console.warn;
@@ -218,23 +263,14 @@ async function main(): Promise<void> {
     notes.push(args.map(String).join(' '));
     origWarn(...args);
   };
-  // A ledger with a small ceiling: the substitution and the layout gates are
-  // free, a slide the model composes costs cents, and the vision passes (art
-  // direction, design pass, repair-by-looking) are what a lab run must NOT
-  // quietly spend. `--ceiling` raises it when an experiment wants them.
-  const ceilingUsd = Number(cliArg('--ceiling') ?? '0.10');
   let composed;
-  let spend: ReturnType<typeof summarize> | undefined;
   try {
-    const run = await withSpendLedger({ projectId: 'lab', ceilingUsd }, () =>
+    composed = await withLedger(ledger, () =>
       composeFromInputs(recipe, inputs, { ...o, onLayoutCheck: (l) => notes.push(`[layout] ${JSON.stringify(l)}`) }, { idea, parseUser: req.user }),
     );
-    composed = run.value;
-    spend = summarize(run.ledger);
   } finally {
     console.warn = origWarn;
   }
-  if (spend) say(`\nSpend: $${spend.spentUsd.toFixed(4)} over ${spend.calls} call(s) of a $${ceilingUsd} lab ceiling${spend.skipped.length ? ` — refused: ${spend.skipped.join('; ')}` : ''}`);
   say('');
   say('## Composed');
   say('');
@@ -251,6 +287,7 @@ async function main(): Promise<void> {
 
   // ── the pixels ────────────────────────────────────────────────────────────
   const save = !cliHas('--no-save');
+  let savedProjectId: string | undefined;
   let shots: Array<string | null> = [];
   const flagsFor = (i: number) => [
     ...(notes.some((n) => n.includes(`slide ${i + 1}`) && /overflow|collid|slack|dropped/.test(n)) ? ['gate'] : []),
@@ -311,6 +348,7 @@ async function main(): Promise<void> {
       recipeSnapshot: recipe,
       recipeSnapshotAt: new Date(),
     });
+    savedProjectId = String(project._id);
     say('');
     say(`Saved as project ${project._id} ("LAB · ${label}") — ${attached.photos.flat().length} photo(s) attached from a pool of ${pool.length}${attached.notes.length ? `; ${attached.notes.length} bleed photo(s) dropped for tone` : ''}`);
     shots = await shootLiveDeck(String(project._id), base.map((s) => s.id), format);
@@ -324,6 +362,33 @@ async function main(): Promise<void> {
     say('');
     say('Photographed through a scaffold — no photos attached (use --save for the real look).');
   }
+  // ── the critique, as the route runs it: after the save, on the real render ──
+  let critiqueLine = '';
+  if (cliHas('--critique') && !noModel && shots.some(Boolean)) {
+    const { critiqueDeck } = await import('../lib/htmlDirector/deckCritique');
+    const outcome = await withLedger(ledger, () =>
+      critiqueDeck(recipe, shots.map((b64) => (b64 ? Buffer.from(b64, 'base64') : null)), format),
+    );
+    if (outcome.status === 'ok') {
+      const r = outcome.critique;
+      say('');
+      say('## Critique');
+      say('');
+      say(`> ${r.verdict ?? ''}`);
+      for (const f of r.findings ?? []) say(`- [${f.severity}] slide ${f.slide}: ${f.fault} — *${f.fix}*`);
+      critiqueLine = `critique: ${(r.findings ?? []).length} finding(s)`;
+      if (savedProjectId) {
+        const { ProjectModel } = await import('../models');
+        await ProjectModel.updateOne({ _id: savedProjectId }, { $set: { critique: { status: 'ok', ...r, at: new Date() } } }).catch(() => {});
+      }
+    } else {
+      say(`\nCritique skipped: ${outcome.reason}${'detail' in outcome && outcome.detail ? ` — ${outcome.detail}` : ''}`);
+    }
+  }
+  const spend = summarize(ledger);
+  say(`\nSpend: $${spend.spentUsd.toFixed(4)} over ${spend.calls} call(s) of a $${ceilingUsd} ceiling${spend.skipped.length ? ` — refused: ${spend.skipped.join('; ')}` : ''}${critiqueLine ? ` · ${critiqueLine}` : ''}`);
+  for (const f of spend.byFeature) say(`  - ${f.feature}: $${f.costUsd.toFixed(4)} × ${f.calls}`);
+
   const ok = shots.filter(Boolean).length;
   if (ok) {
     const sheet = await buildContactSheet(
