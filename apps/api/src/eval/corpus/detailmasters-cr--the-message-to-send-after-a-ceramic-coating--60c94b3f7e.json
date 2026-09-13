@@ -1,0 +1,161 @@
+{
+  "id": "detailmasters-cr--the-message-to-send-after-a-ceramic-coating--60c94b3f7e",
+  "title": "The message to send after a ceramic coating",
+  "brand": "detailmasters CRM",
+  "businessId": "6a42337c717dcf4105b9f9f4",
+  "projectId": "6a8dfbc393f1f2b9ea562c27",
+  "type": "carousel",
+  "format": "1080x1350",
+  "settings": {
+    "theme": "bold",
+    "slideCounter": false,
+    "dmKeyword": "AFTERCARE",
+    "audience": "studio owner"
+  },
+  "brief": {
+    "idea": "Write every slide in English.\n\nHeadline: The message to send after a ceramic coating\n\nSubhead: What to put in a message after handover, and how to send it from the booking itself.\n\nReader: Studios applying ceramic coatings who explain the care verbally, if at all, and hear nothing until a car comes back damaged\n\nFacts you may state (and ONLY these):\n- Customer profiles carry private notes and a full service history visible only to the studio.\n- Service status updates let a studio message a client about a job in progress.\n\nClose with a call to action asking the reader to DM the keyword AFTERCARE.\n\nDo not invent CLAIMS of any kind: no statistics, no facts, no list items the source above does not contain. Compress the given sentences — cut words, never substitute your own. When the source presents a list as ordered, keep its order and do not add or drop items.\n\nLead with the reader's problem, not with the product."
+  },
+  "models": {
+    "parse": "claude-sonnet-4-6",
+    "compose": "claude-sonnet-5"
+  },
+  "promptVersions": {
+    "parse": 9,
+    "compose": 7,
+    "caption": 1
+  },
+  "parseUser": "BRAND VOICE: Quietly confident and aspirational, addressing the studio owner directly with understated elegance — evocative fragments over hype, with a flash of urgency when revenue is on the line.\nPHOTOGRAPHY: this brand uses images sparingly, to support the type — ask for one only where it genuinely adds proof or atmosphere.\nDO: Speak to 'you', the owner; Short evocative fragments; Concrete numbers and outcomes; Let restraint carry the confidence\nDON'T: Exclamation-heavy hype; Generic SaaS jargon; Cramming multiple claims into one line; Overusing the gold accent\nHANDLE: detailmasters.pro\nSLIDES: exactly 6. Not one more, not one fewer — split or merge your points to land on that number.\nWHAT THIS BRAND HAS TAUGHT YOU — these are corrections its owner made to your previous posts, more than once each. Follow them:\n  · This brand's body copy is always cut after it is written — aim about 52 characters shorter than the budget allows.\n  · This brand deletes the body rather than keep it — only write one when the slide is genuinely worse without it.\n  · This brand reaches for the word \"back\" — use it where it fits.\n  · This brand reaches for the word \"work\" — use it where it fits.\n  · This brand reaches for the word \"prepaid\" — use it where it fits.\n  · This brand reaches for the word \"package\" — use it where it fits.\nBRIEF: Write every slide in English.\n\nHeadline: The message to send after a ceramic coating\n\nSubhead: What to put in a message after handover, and how to send it from the booking itself.\n\nReader: Studios applying ceramic coatings who explain the care verbally, if at all, and hear nothing until a car comes back damaged\n\nFacts you may state (and ONLY these):\n- Customer profiles carry private notes and a full service history visible only to the studio.\n- Service status updates let a studio message a client about a job in progress.\n\nClose with a call to action asking the reader to DM the keyword AFTERCARE.\n\nDo not invent CLAIMS of any kind: no statistics, no facts, no list items the source above does not contain. Compress the given sentences — cut words, never substitute your own. When the source presents a list as ordered, keep its order and do not add or drop items.\n\nLead with the reader's problem, not with the product.",
+  "generated": [
+    {
+      "id": "6846b301-d3db-441f-aabd-e6fc9e82ae64",
+      "role": "cover",
+      "path": "ai",
+      "parts": {
+        "eyebrow": "After handover",
+        "headline": "What to send after a ceramic coat",
+        "tagline": "Most studios say it once. Then wait for damage."
+      },
+      "html": "<div class=\"logo-row\">\n  <div class=\"monogram\"></div>\n  <div class=\"wordmark\"><b>detail</b><i>masters</i></div>\n</div>\n<div class=\"fill\"></div>\n<div class=\"eyebrow\">After handover</div>\n<div class=\"headline sm\">What to send after a <span class=\"it\">ceramic coat</span></div>\n<div class=\"rule\"></div>\n<div class=\"body\">Most studios say it once. Then wait for damage.</div>"
+    },
+    {
+      "id": "a13fcf8c-e563-43d9-a1e6-7bf37df45513",
+      "role": "statement",
+      "path": "fragment",
+      "parts": {
+        "headline": "They nodded. They drove away.",
+        "body": "Verbal care advice doesn't travel home with the car."
+      },
+      "html": "<div class=\"fill\"></div>\n<div class=\"headline\">They nodded. They drove away.</div>\n<div class=\"rule\"></div>\n<div class=\"body\">Verbal care advice doesn't travel home with the car.</div>\n<div class=\"fill\"></div>"
+    },
+    {
+      "id": "2ddd32f4-fff5-466d-b926-443d7720a87e",
+      "role": "feature",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "From the booking itself",
+        "headline": "Send it the moment the work is done.",
+        "body": "Status updates let you message a client about a job — straight from the booking."
+      },
+      "html": "<div class=\"eyebrow\">From the booking itself</div>\n<div class=\"fill\"></div>\n<div class=\"headline\">Send it the moment the work is done.</div>\n<div class=\"rule\"></div>\n<div class=\"body\">Status updates let you message a client about a job — straight from the booking.</div>"
+    },
+    {
+      "id": "28663264-3273-49eb-81c9-0592d9587ee6",
+      "role": "list",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "What goes in it",
+        "headline": "Put this in the message.",
+        "rows": [
+          {
+            "text": "What was applied, panel by panel"
+          },
+          {
+            "text": "First-wash window — days, not advice"
+          },
+          {
+            "text": "What to avoid, written down"
+          },
+          {
+            "text": "How to book the next check back"
+          }
+        ]
+      },
+      "html": "<div class=\"eyebrow\">What goes in it</div>\n<div class=\"headline sm\">Put this in the message.</div>\n<div class=\"fill\"></div>\n<div class=\"panel\"><div class=\"row\"><span class=\"tick\"></span>What was applied, panel by panel</div>\n<div class=\"row\"><span class=\"tick\"></span>First-wash window — days, not advice</div>\n<div class=\"row\"><span class=\"tick\"></span>What to avoid, written down</div>\n<div class=\"row\"><span class=\"tick\"></span>How to book the next check back</div></div>"
+    },
+    {
+      "id": "b5d22e85-66c5-4949-895e-ed6907d53f55",
+      "role": "feature",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "Nothing leaves the studio",
+        "headline": "Private notes. Full history. Yours.",
+        "body": "Customer profiles carry private notes and a full service history visible only to you."
+      },
+      "html": "<div class=\"eyebrow\">Nothing leaves the studio</div>\n<div class=\"fill\"></div>\n<div class=\"headline\">Private notes. Full history. Yours.</div>\n<div class=\"rule\"></div>\n<div class=\"body\">Customer profiles carry private notes and a full service history visible only to you.</div>"
+    },
+    {
+      "id": "861f0a4a-e469-474e-9111-8f41826ebb58",
+      "role": "cta",
+      "path": "fragment",
+      "parts": {
+        "headline": "Want the message that works?",
+        "body": "DM the word AFTERCARE and we'll send it back to you.",
+        "cta": "DM AFTERCARE",
+        "handle": "detailmasters.pro"
+      },
+      "html": "<div class=\"logo-row\">\n  <div class=\"monogram\"></div>\n  <div class=\"wordmark\"><b>detail</b><i>masters</i></div>\n</div>\n<div class=\"fill\"></div>\n<div class=\"headline\">Want the message that works?</div>\n<div class=\"body\">DM the word AFTERCARE and we'll send it back to you.</div>\n<div class=\"cta\">DM AFTERCARE</div>\n<div class=\"handle\">detailmasters.pro</div>"
+    }
+  ],
+  "outcome": {
+    "at": "2026-08-27T20:38:46.038Z",
+    "exported": true,
+    "slides": [
+      {
+        "slideId": "6846b301-d3db-441f-aabd-e6fc9e82ae64",
+        "role": "cover",
+        "verdict": "edited",
+        "edits": [
+          {
+            "part": "headline",
+            "before": "What to send after a ceramic coat",
+            "after": "What to write to the client after a ceramic coating"
+          },
+          {
+            "part": "body",
+            "before": "Most studios say it once. Then wait for damage.",
+            "after": "Most studios fail this very important step."
+          }
+        ]
+      },
+      {
+        "slideId": "a13fcf8c-e563-43d9-a1e6-7bf37df45513",
+        "role": "statement",
+        "verdict": "kept"
+      },
+      {
+        "slideId": "2ddd32f4-fff5-466d-b926-443d7720a87e",
+        "role": "feature",
+        "verdict": "kept"
+      },
+      {
+        "slideId": "28663264-3273-49eb-81c9-0592d9587ee6",
+        "role": "list",
+        "verdict": "kept"
+      },
+      {
+        "slideId": "b5d22e85-66c5-4949-895e-ed6907d53f55",
+        "role": "feature",
+        "verdict": "kept"
+      },
+      {
+        "slideId": "861f0a4a-e469-474e-9111-8f41826ebb58",
+        "role": "cta",
+        "verdict": "kept"
+      }
+    ],
+    "added": 0
+  },
+  "generationId": "6a8dfc2d93f1f2b9ea562c95",
+  "generatedAt": "2026-08-25T20:33:49.442Z",
+  "runsOfThisBrief": 1
+}

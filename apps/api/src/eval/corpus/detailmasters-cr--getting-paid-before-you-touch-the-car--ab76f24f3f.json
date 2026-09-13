@@ -1,0 +1,174 @@
+{
+  "id": "detailmasters-cr--getting-paid-before-you-touch-the-car--ab76f24f3f",
+  "title": "Getting paid before you touch the car",
+  "brand": "detailmasters CRM",
+  "businessId": "6a42337c717dcf4105b9f9f4",
+  "projectId": "6a7ca0a0ce67414a73772ca4",
+  "type": null,
+  "format": null,
+  "settings": null,
+  "brief": {
+    "idea": "Write every slide in English.\n\nHeadline: Getting paid before you touch the car\n\nSubhead: Your income is exactly as lumpy as your calendar, but it does not have to be.\n\nReader: Studio owners doing repeat maintenance work (monthly washes, seasonal decontamination) who are paid job-by-job and feel every quiet week\n\nFacts you may state (and ONLY these):\n- A package is defined by the studio: a session count, a price, an optional studio-set discount and an optional validity window.\n- The client buys the package themselves and pays by card — the purchase record stores the Stripe PaymentIntent that paid for it.\n- Packages can also be assigned manually by the studio, in which case there is no payment intent and no transaction economics recorded.\n- Redemption is tracked as usedSessions against totalSessions on the customer's package, with an optional expiresAt.\n- The studio's net proceeds are the price the client paid minus a platform commission, and both figures are recorded on the purchase.\n- Prepaid session packages are an Advanced-plan feature.\n\nClose with a call to action asking the reader to DM the keyword PACKAGE.\n\nDo not invent CLAIMS of any kind: no statistics, no facts, no list items the source above does not contain. Compress the given sentences — cut words, never substitute your own. When the source presents a list as ordered, keep its order and do not add or drop items.\n\nLead with the reader's problem, not with the product."
+  },
+  "models": {
+    "parse": "claude-sonnet-4-6",
+    "compose": "claude-sonnet-5"
+  },
+  "promptVersions": {
+    "parse": 6,
+    "compose": 6,
+    "caption": 1
+  },
+  "parseUser": "BRAND VOICE: Quietly confident and aspirational, addressing the studio owner directly with understated elegance — evocative fragments over hype, with a flash of urgency when revenue is on the line.\nPHOTOGRAPHY: this brand is carried by its images — most slides that show a place, a product, a person or a result should ask for one.\nDO: Speak to 'you' and 'your studio'; Short, evocative fragments; Concrete business outcomes (bookings, rebookings, revenue); Let restraint imply premium\nDON'T: Exclamation marks; Tech jargon; Overt hype or ALL-CAPS shouting; Generic SaaS clichés\nSLIDES: exactly 0 — one per SLIDE PLAN entry, in that order. Do not add a slide the plan did not ask for, and do not merge two.\nBRIEF: Write every slide in English.\n\nHeadline: Getting paid before you touch the car\n\nSubhead: Your income is exactly as lumpy as your calendar, but it does not have to be.\n\nReader: Studio owners doing repeat maintenance work (monthly washes, seasonal decontamination) who are paid job-by-job and feel every quiet week\n\nFacts you may state (and ONLY these):\n- A package is defined by the studio: a session count, a price, an optional studio-set discount and an optional validity window.\n- The client buys the package themselves and pays by card — the purchase record stores the Stripe PaymentIntent that paid for it.\n- Packages can also be assigned manually by the studio, in which case there is no payment intent and no transaction economics recorded.\n- Redemption is tracked as usedSessions against totalSessions on the customer's package, with an optional expiresAt.\n- The studio's net proceeds are the price the client paid minus a platform commission, and both figures are recorded on the purchase.\n- Prepaid session packages are an Advanced-plan feature.\n\nClose with a call to action asking the reader to DM the keyword PACKAGE.\n\nDo not invent CLAIMS of any kind: no statistics, no facts, no list items the source above does not contain. Compress the given sentences — cut words, never substitute your own. When the source presents a list as ordered, keep its order and do not add or drop items.\n\nLead with the reader's problem, not with the product.",
+  "generated": [
+    {
+      "id": "4edc47b1-86e3-4156-8a1f-b348cf591723",
+      "role": "cover",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "The quiet weeks",
+        "headline": "Getting paid before you touch the car"
+      },
+      "html": "<div class=\"logo-row\"><div class=\"monogram\"></div><div class=\"wordmark\"><b>detail</b><i>masters</i></div></div>\n<div class=\"fill\"></div>\n<div class=\"eyebrow\">The quiet weeks</div>\n<div class=\"headline\">Getting paid before you touch the car</div>\n<figure class=\"cb-shot\" data-cb-slot=\"hero\"></figure>"
+    },
+    {
+      "id": "8192d559-4e3f-409f-95ec-c5a4b0181511",
+      "role": "statement",
+      "path": "ai",
+      "parts": {
+        "headline": "Your income is exactly as lumpy as your calendar",
+        "emphasis": "exactly as lumpy as your calendar",
+        "body": "It does not have to be."
+      },
+      "html": "<div class=\"fill\"></div>\n<div class=\"headline\">Your income is <span class=\"it\">exactly as lumpy as your calendar</span></div>\n<div class=\"rule\"></div>\n<div class=\"body\">It does not have to be.</div>\n<div class=\"fill\"></div>"
+    },
+    {
+      "id": "c51eabe5-d337-4773-b283-e601bc4552eb",
+      "role": "feature",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "You set the terms",
+        "headline": "Your package, built your way"
+      },
+      "html": "<div class=\"eyebrow\">You set the terms</div>\n<div class=\"headline sm\">Your package, built your way</div>\n<div class=\"rule\"></div>\n<div class=\"fill\"></div>\n<figure class=\"cb-shot\" data-cb-slot=\"hero\"></figure>"
+    },
+    {
+      "id": "9493996a-7a80-472e-8ab4-ef32f3c976d9",
+      "role": "list",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "What you define",
+        "headline": "Every variable is yours to set",
+        "rows": [
+          {
+            "text": "A session count"
+          },
+          {
+            "text": "A price"
+          },
+          {
+            "text": "An optional discount"
+          },
+          {
+            "text": "An optional validity window"
+          }
+        ]
+      },
+      "html": "<div class=\"eyebrow\">What you define</div>\n<div class=\"fill\"></div>\n<div class=\"headline sm\">Every variable is yours to set</div>\n<div class=\"rule\"></div>\n<div class=\"panel\"><div class=\"row\">A session count</div>\n<div class=\"row\">A price</div>\n<div class=\"row\">An optional discount</div>\n<div class=\"row\">An optional validity window</div></div>"
+    },
+    {
+      "id": "30cd4c90-8045-4479-b73e-0001cf176dd0",
+      "role": "feature",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "Zero friction",
+        "headline": "The client buys and pays — before they arrive"
+      },
+      "html": "<div class=\"eyebrow\">Zero friction</div>\n<div class=\"headline sm\">The client buys and pays — before they arrive</div>\n<div class=\"rule\"></div>\n<div class=\"fill\"></div>\n<figure class=\"cb-shot\" data-cb-slot=\"hero\"></figure>"
+    },
+    {
+      "id": "5785e424-aa0d-4b60-8a3c-8430bb2a33a1",
+      "role": "statement",
+      "path": "ai",
+      "parts": {
+        "eyebrow": "Clean records",
+        "headline": "Every redemption tracked. Every session accounted for.",
+        "body": "Used sessions run against the total, with an expiry if you choose one."
+      },
+      "html": "<div class=\"fill\"></div>\n<div class=\"eyebrow\">Clean records</div>\n<div class=\"headline\">Every redemption tracked. <span class=\"it\">Every session accounted for.</span></div>\n<div class=\"rule\"></div>\n<div class=\"body\">Used sessions run against the total, with an expiry if you choose one.</div>\n<div class=\"fill\"></div>"
+    },
+    {
+      "id": "64eb8238-cb17-4e88-aec1-7c1e16ce739d",
+      "role": "stat",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "Your proceeds",
+        "headline": "What you earn is on record — exactly",
+        "body": "The price paid, the platform commission, and your net proceeds"
+      },
+      "html": "<div class=\"eyebrow\">Your proceeds</div>\n<div class=\"headline sm\">What you earn is on record — exactly</div>\n<div class=\"body\">The price paid, the platform commission, and your net proceeds</div>"
+    },
+    {
+      "id": "d4886808-d61b-43c3-899f-3fcf758830f5",
+      "role": "cta",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "Advanced plan feature",
+        "headline": "Ready to get paid before the job begins?",
+        "body": "DM the word PACKAGE and we will show you how prepaid sessions work for your studio.",
+        "cta": "DM us: PACKAGE"
+      },
+      "html": "<div class=\"logo-row\"><div class=\"monogram\"></div><div class=\"wordmark\"><b>detail</b><i>masters</i></div></div>\n<div class=\"fill\"></div>\n<div class=\"eyebrow\">Advanced plan feature</div>\n<div class=\"headline\">Ready to get paid before the job begins?</div>\n<div class=\"cta\">DM us: PACKAGE</div>\n<div class=\"body\">DM the word PACKAGE and we will show you how prepaid sessions work for your studio.</div>"
+    }
+  ],
+  "outcome": {
+    "at": "2026-08-12T22:43:59.024Z",
+    "exported": true,
+    "slides": [
+      {
+        "slideId": "4edc47b1-86e3-4156-8a1f-b348cf591723",
+        "role": "cover",
+        "verdict": "kept"
+      },
+      {
+        "slideId": "8192d559-4e3f-409f-95ec-c5a4b0181511",
+        "role": "statement",
+        "verdict": "kept"
+      },
+      {
+        "slideId": "c51eabe5-d337-4773-b283-e601bc4552eb",
+        "role": "feature",
+        "verdict": "kept"
+      },
+      {
+        "slideId": "9493996a-7a80-472e-8ab4-ef32f3c976d9",
+        "role": "list",
+        "verdict": "kept"
+      },
+      {
+        "slideId": "30cd4c90-8045-4479-b73e-0001cf176dd0",
+        "role": "feature",
+        "verdict": "kept"
+      },
+      {
+        "slideId": "5785e424-aa0d-4b60-8a3c-8430bb2a33a1",
+        "role": "statement",
+        "verdict": "kept"
+      },
+      {
+        "slideId": "64eb8238-cb17-4e88-aec1-7c1e16ce739d",
+        "role": "stat",
+        "verdict": "kept"
+      },
+      {
+        "slideId": "d4886808-d61b-43c3-899f-3fcf758830f5",
+        "role": "cta",
+        "verdict": "kept"
+      }
+    ],
+    "added": 0
+  },
+  "generationId": "6a7cf64c795f439d8150c8ba",
+  "generatedAt": "2026-08-12T22:40:12.268Z",
+  "runsOfThisBrief": 1
+}

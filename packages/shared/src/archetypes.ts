@@ -392,11 +392,14 @@ export const isSlideSurface = (v: unknown): v is SlideSurface =>
 export function slideSurfaceCss(): string {
   return [
     // Raised: the brand's own secondary ground, lifted toward the light.
-    `.cb-slide[data-surface="raised"]{background:` +
+    // `:not(.inverse)`: an inverted slide's ground IS its variation, and the
+    // inverse rule has equal specificity — whichever is emitted later won, and
+    // a raised+inverse slide rendered as a half-lit gradient over the wrong ground.
+    `.cb-slide[data-surface="raised"]:not(.inverse){background:` +
       `radial-gradient(115% 70% at 50% -12%, color-mix(in srgb, var(--cb-accent) 12%, transparent), transparent 62%),` +
       `linear-gradient(168deg, var(--cb-ground-alt, var(--cb-ground)), var(--cb-ground))}`,
     // Deep: the bloom removed and the weight moved low — the quiet frame.
-    `.cb-slide[data-surface="deep"]{background:` +
+    `.cb-slide[data-surface="deep"]:not(.inverse){background:` +
       `radial-gradient(120% 80% at 50% 118%, color-mix(in srgb, var(--cb-ink) 7%, transparent), transparent 58%),` +
       `var(--cb-ground)}`,
     // A photograph IS the surface; never paint over one.

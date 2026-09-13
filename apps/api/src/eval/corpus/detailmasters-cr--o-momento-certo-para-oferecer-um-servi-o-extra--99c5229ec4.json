@@ -1,0 +1,204 @@
+{
+  "id": "detailmasters-cr--o-momento-certo-para-oferecer-um-servi-o-extra--99c5229ec4",
+  "title": "O momento certo para oferecer um serviço extra",
+  "brand": "detailmasters CRM",
+  "businessId": "6a42337c717dcf4105b9f9f4",
+  "projectId": "6a7aeb6b0bd8d8631fe717b3",
+  "type": null,
+  "format": null,
+  "settings": null,
+  "brief": {
+    "idea": "Write every slide in European Portuguese (pt-PT, not Brazilian).\n\nHeadline: O momento certo para oferecer um serviço extra\n\nSubhead: Não é quando o cliente marca. É quando lhe entrega o carro.\n\nCover these beats, one per slide:\n- No formulário, um extra é só mais uma decisão\n- Com o carro à frente, muda tudo\n- Combine o preço antes de começar\n- Deixe os extras prontos a juntar\n- Depois veja quais é que valem a pena\n- O que fazer esta semana\n\nClose with a call to action asking the reader to DM the keyword EXTRAS.\n\nDo not invent statistics, numbers or percentages — use only facts stated above.\n\nLead with the reader's problem, not with the product."
+  },
+  "models": {
+    "parse": "claude-sonnet-4-6",
+    "compose": "claude-sonnet-5"
+  },
+  "promptVersions": {
+    "parse": 4,
+    "compose": 5,
+    "caption": 1
+  },
+  "parseUser": "BRAND VOICE: Quietly confident and aspirational. Speaks directly to the studio owner — 'your clients', 'your bookings' — with the calm authority of someone who has already solved the problem. Evocative fragments preferred; hype avoided; urgency earned by proof.\nPHOTOGRAPHY: this brand is carried by its images — most slides that show a place, a product, a person or a result should ask for one.\nDO: Address the studio owner directly ('your', 'you'); Lead with the outcome, not the feature; Let a single gold italic phrase carry the emotional weight; Use fragments and sentence-case for elegance; Pair a concrete number with a brief human consequence\nDON'T: Exclamation marks; Buzzword stacking ('revolutionary', 'game-changing'); Passive voice; More than ~28 words of body copy per slide; ALL-CAPS body text\nSLIDES: exactly 0 — one per SLIDE PLAN entry, in that order. Do not add a slide the plan did not ask for, and do not merge two.\nBRIEF: Write every slide in European Portuguese (pt-PT, not Brazilian).\n\nHeadline: O momento certo para oferecer um serviço extra\n\nSubhead: Não é quando o cliente marca. É quando lhe entrega o carro.\n\nCover these beats, one per slide:\n- No formulário, um extra é só mais uma decisão\n- Com o carro à frente, muda tudo\n- Combine o preço antes de começar\n- Deixe os extras prontos a juntar\n- Depois veja quais é que valem a pena\n- O que fazer esta semana\n\nClose with a call to action asking the reader to DM the keyword EXTRAS.\n\nDo not invent statistics, numbers or percentages — use only facts stated above.\n\nLead with the reader's problem, not with the product.",
+  "generated": [
+    {
+      "id": "aebca5d1-d42a-44f2-8209-126802ea1003",
+      "role": "cover",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "O momento certo",
+        "headline": "O momento certo para oferecer um serviço extra"
+      },
+      "html": "<div class=\"logo-row\"><div class=\"monogram\"></div><div class=\"wordmark\"><b>detail</b><span class=\"it\">masters</span></div></div>\n<div class=\"fill\"></div>\n<div class=\"eyebrow\">O momento certo</div>\n<div class=\"headline\">O momento certo para oferecer um serviço extra</div>"
+    },
+    {
+      "id": "31e1fb2b-a038-4396-a8e3-191538444c48",
+      "role": "statement",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "O problema",
+        "headline": "No formulário, um extra é só mais uma decisão",
+        "emphasis": "mais uma decisão",
+        "body": "Sem ver o carro, não há contexto — há só mais uma caixa para marcar."
+      },
+      "html": "<div class=\"eyebrow\">O problema</div>\n<div class=\"fill\"></div>\n<div class=\"headline\">No formulário, um extra é só <span class=\"it\">mais uma decisão</span></div>\n<div class=\"rule\"></div>\n<div class=\"body\">Sem ver o carro, não há contexto — há só mais uma caixa para marcar.</div>\n<div class=\"fill\"></div>"
+    },
+    {
+      "id": "5b700612-b77b-42bb-8ef7-32bfb0bcc245",
+      "role": "feature",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "A diferença",
+        "headline": "Com o carro à frente, muda tudo"
+      },
+      "html": "<div class=\"eyebrow\">A diferença</div>\n<div class=\"fill\"></div>\n<div class=\"headline sm\">Com o carro à frente, muda tudo</div>"
+    },
+    {
+      "id": "a6ceaa21-ecc6-4ea8-b284-0ad587280c73",
+      "role": "statement",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "Sem surpresas",
+        "headline": "Combine o preço antes de começar",
+        "emphasis": "antes de começar",
+        "body": "Mostre o que vai fazer e o custo. O cliente decide — e você trabalha sem mal-entendidos."
+      },
+      "html": "<div class=\"eyebrow\">Sem surpresas</div>\n<div class=\"fill\"></div>\n<div class=\"headline\">Combine o preço <span class=\"it\">antes de começar</span></div>\n<div class=\"rule\"></div>\n<div class=\"body\">Mostre o que vai fazer e o custo. O cliente decide — e você trabalha sem mal-entendidos.</div>\n<div class=\"fill\"></div>"
+    },
+    {
+      "id": "e8e305f9-1649-49c9-b22a-9e39d824f703",
+      "role": "list",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "Preparação",
+        "headline": "Deixe os extras prontos a juntar",
+        "rows": [
+          {
+            "text": "Defina dois ou três extras de referência",
+            "note": "Menos escolha, mais decisões."
+          },
+          {
+            "text": "Tenha o preço calculado à partida",
+            "note": "Sem hesitações na entrega."
+          },
+          {
+            "text": "Mostre o resultado, não a descrição",
+            "note": "Uma foto vale mais que um nome."
+          }
+        ]
+      },
+      "html": "<div class=\"eyebrow\">Preparação</div>\n<div class=\"headline sm\">Deixe os extras prontos a juntar</div>\n<div class=\"fill\"></div>\n<div class=\"panel\"><div class=\"row\">Defina dois ou três extras de referência<span class=\"sm\">Menos escolha, mais decisões.</span></div>\n<div class=\"row\">Tenha o preço calculado à partida<span class=\"sm\">Sem hesitações na entrega.</span></div>\n<div class=\"row\">Mostre o resultado, não a descrição<span class=\"sm\">Uma foto vale mais que um nome.</span></div></div>"
+    },
+    {
+      "id": "00fd5490-f976-439e-9600-9358a49d72c4",
+      "role": "stat",
+      "path": "ai",
+      "parts": {
+        "eyebrow": "O que aprender",
+        "headline": "Depois, veja quais é que valem a pena",
+        "body": "Quais os extras que os seus clientes aceitam sem hesitar?"
+      },
+      "html": "<div class=\"eyebrow\">O que aprender</div>\n<div class=\"fill\"></div>\n<div class=\"headline\">Depois, veja quais é que <span class=\"it\">valem a pena</span></div>\n<div class=\"rule\"></div>\n<div class=\"body\">Quais os extras que os seus clientes aceitam sem hesitar?</div>\n<div class=\"fill\"></div>"
+    },
+    {
+      "id": "1cce0270-fee0-4461-9698-d3e35726a570",
+      "role": "list",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "Esta semana",
+        "headline": "O que fazer esta semana",
+        "rows": [
+          {
+            "text": "Escolha um extra para testar",
+            "note": "Simples e com valor claro."
+          },
+          {
+            "text": "Apresente-o na entrega do carro",
+            "note": "Não antes, não depois."
+          },
+          {
+            "text": "Registe o que aconteceu",
+            "note": "Aceite, recusado, hesitou."
+          }
+        ]
+      },
+      "html": "<div class=\"eyebrow\">Esta semana</div>\n<div class=\"headline sm\">O que fazer esta semana</div>\n<div class=\"fill\"></div>\n<div class=\"panel\"><div class=\"row\">Escolha um extra para testar<span class=\"sm\">Simples e com valor claro.</span></div>\n<div class=\"row\">Apresente-o na entrega do carro<span class=\"sm\">Não antes, não depois.</span></div>\n<div class=\"row\">Registe o que aconteceu<span class=\"sm\">Aceite, recusado, hesitou.</span></div></div>"
+    },
+    {
+      "id": "0abb453c-b694-4df5-83ad-b53eb9c24ebd",
+      "role": "cta",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "Vamos a isso",
+        "headline": "Quer um guia para começar?",
+        "body": "Envie-nos uma mensagem com a palavra EXTRAS e recebe tudo o que precisa para testar esta",
+        "cta": "Mensagem: EXTRAS"
+      },
+      "html": "<div class=\"logo-row\"><div class=\"monogram\"></div><div class=\"wordmark\"><b>detail</b><span class=\"it\">masters</span></div></div>\n<div class=\"fill\"></div>\n<div class=\"eyebrow\">Vamos a isso</div>\n<div class=\"headline\">Quer um guia para começar?</div>\n<div class=\"cta\">Mensagem: EXTRAS</div>\n<div class=\"body\">Envie-nos uma mensagem com a palavra EXTRAS e recebe tudo o que precisa para testar esta</div>"
+    }
+  ],
+  "outcome": {
+    "at": "2026-08-11T09:33:13.022Z",
+    "exported": true,
+    "slides": [
+      {
+        "slideId": "aebca5d1-d42a-44f2-8209-126802ea1003",
+        "role": "cover",
+        "verdict": "edited",
+        "edits": [
+          {
+            "part": "eyebrow",
+            "before": "O momento certo",
+            "after": "Ticket médio"
+          }
+        ]
+      },
+      {
+        "slideId": "31e1fb2b-a038-4396-a8e3-191538444c48",
+        "role": "statement",
+        "verdict": "kept"
+      },
+      {
+        "slideId": "5b700612-b77b-42bb-8ef7-32bfb0bcc245",
+        "role": "feature",
+        "verdict": "kept"
+      },
+      {
+        "slideId": "a6ceaa21-ecc6-4ea8-b284-0ad587280c73",
+        "role": "statement",
+        "verdict": "kept"
+      },
+      {
+        "slideId": "e8e305f9-1649-49c9-b22a-9e39d824f703",
+        "role": "list",
+        "verdict": "kept"
+      },
+      {
+        "slideId": "00fd5490-f976-439e-9600-9358a49d72c4",
+        "role": "stat",
+        "verdict": "kept"
+      },
+      {
+        "slideId": "1cce0270-fee0-4461-9698-d3e35726a570",
+        "role": "list",
+        "verdict": "kept"
+      },
+      {
+        "slideId": "0abb453c-b694-4df5-83ad-b53eb9c24ebd",
+        "role": "cta",
+        "verdict": "edited",
+        "edits": [
+          {
+            "part": "body",
+            "before": "Envie-nos uma mensagem com a palavra EXTRAS e recebe tudo o que precisa para testar esta",
+            "after": "Envie-nos uma mensagem com a palavra EXTRAS e enviamos-lhe o guia para começar esta semana."
+          }
+        ]
+      }
+    ],
+    "added": 0
+  },
+  "generationId": "6a7aeba00bd8d8631fe717e6",
+  "generatedAt": "2026-08-11T09:30:08.001Z",
+  "runsOfThisBrief": 1
+}

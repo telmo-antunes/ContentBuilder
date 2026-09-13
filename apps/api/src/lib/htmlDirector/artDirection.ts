@@ -51,6 +51,8 @@ DECIDE:
 1. VARIANT — for each slide, which of its role's arrangements suits what it actually says. A slide that enumerates a right way against a wrong way wants a treatment that shows the verdict; a single monumental line wants the arrangement built to carry one; a slide with a picture wants the one that gives the picture room. When the default is already right, say nothing for that slide — an override you cannot justify is worse than the default.
 2. INVERT — at most ONE slide may sit on the brand's inverse surface, as a beat in the middle of the deck. Never the cover (it earns the swipe) and never the last slide (the close lands harder on the brand's own ground). Pick the slide whose content is the deck's turning point, or none at all.
 
+THE FORMS, when a brand authors them (the arrangement's own words say which): a ONE-LINER carries a headline and a short tagline and nothing else — never pin it for a slide with a body or rows. An EXHIBIT of figures is for NUMBERS ("40%", "3", "€120") — never for word labels, which break its cells. A NUMBERED poster is for a method or an ordered set. PRODUCT PROOF is for the slide that names a control and carries a screenshot. A CARD holds one claim and its evidence. Match the form to what the slide SAYS, and prefer that no two consecutive slides share a form.
+
 RULES
 - Vary deliberately, not decoratively. Two consecutive slides on the same arrangement is fine when the content matches; five in a row is the "every post looks the same" failure this exists to fix.
 - A variant index you were not offered is ignored, so only use the ones listed.

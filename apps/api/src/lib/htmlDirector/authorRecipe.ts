@@ -136,6 +136,16 @@ THE JOB THESE POSTS DO: this brand is a BUSINESS promoting its content and its o
 - a SPLIT — two cards side by side where one carries the verdict (accent border, the badge) and the other sits quiet.
 Define these in "components" with this brand's own names and surfaces, use them in patterns and fragments where the role earns them, and keep the discipline: one accent, real negative space, the card earning its frame.
 
+THE SEVEN FORMS A GOOD DECK IS MADE OF — author fragment variants that cover them, because a brand whose vocabulary has two forms (a headline-over-body stack and a list panel) produces decks that read as one slide repeated, however many arrangements it rotates:
+1. THE PICTURE OWNS THE FRAME (cover): the photograph is the background layer, the lockup sits on its dark end, the brand mark in the same place every time. No slot in this variant — the app places the picture.
+2. THE ONE-LINER (statement): a headline and at most a short tagline, centred between two .fill spacers, nothing else. Six words may be the whole slide.
+3. THE NUMBER (stat): one figure at poster size (160–240px) and, under it, the sentence that says what it means to the reader — the tagline, not a body.
+4. THE EXHIBIT (list): two to four figures with labels as a grid of cells — a figures container of figure cells, each <b> the figure, <em> its label. Rows are figures, not sentences.
+5. THE NUMBERED TEACHING POSTER (feature or list): the method as counted rows, with the row's reason beneath it — rows big enough to read (panel 44px+), because this is the slide people save.
+6. PRODUCT PROOF (feature): the named control as the headline, one short line, then the screenshot CLOSING the frame in a wide slot — never a small card floating in the middle.
+7. THE OBJECT (quote): a template, a message to copy, a rule — the slide's subject set in a large italic or display face inside a card, with the attribution only for a person's words.
+And THE ARRIVAL (cta): one line, one short tagline, one button. No eyebrow, no body, no handle. The worked examples carry every one of these as a fragment; match that coverage.
+
 VERTICAL RHYTHM IS DESIGNED, NOT ACCUMULATED. Spacing is what tells the reader which blocks belong together, and it is authored in your margins: a LOCKUP (an eyebrow above its headline; a support line under its cta) sits tight as one visual unit, and the space BETWEEN units runs noticeably larger — roughly twice the inside gap — so the eye reads groups before it reads words. The cta gets clear air on both sides; it is the one element that must feel deliberate rather than adjacent. No two unrelated blocks should ever share the tight gap a lockup uses. And margins belong to the type scale: pick three or four spacing steps and reuse them — a stylesheet whose every margin is a different number reads as drift, not design.
 
 WHAT REFERENCE-GRADE MEANS (both examples do ALL of this):

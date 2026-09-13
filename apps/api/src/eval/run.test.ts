@@ -24,7 +24,7 @@ vi.mock('../lib/ai', () => {
   const canned = (params: { system?: unknown; messages?: Array<{ content?: unknown }> }) => {
     const system = flat(params.system);
     const user = String(params.messages?.[0]?.content ?? '');
-    return system.startsWith('You are a social-carousel copywriter')
+    return system.startsWith('You are the copywriter for a business')
       ? mocks.parseText
       : (mocks.fragments[user.match(/^\s*role: (\w+)$/m)?.[1] ?? ''] ??
         '<div class="headline">missing test fragment</div>');

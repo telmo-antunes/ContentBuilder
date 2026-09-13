@@ -1,0 +1,206 @@
+{
+  "id": "detailmasters-cr--the-car-came-out-spotless-but-the-smell-was-back--c6e1183830",
+  "title": "The car came out spotless, but the smell was back the next week — why?",
+  "brand": "detailmasters CRM",
+  "businessId": "6a42337c717dcf4105b9f9f4",
+  "projectId": "6a8574e6bfee5cbcc1fe0a34",
+  "type": null,
+  "format": null,
+  "settings": null,
+  "brief": {
+    "idea": "Headline: The car came out spotless, but the smell was back the next week — why?\n\nSubhead: Odour work is the only job a client can fail you on by smell — a week later, in a car that still looks flawless.\n\nReader: Studios taking on interior and odour work who have had a car come back, or who quote smoke removal by guesswork because they do not know how far it will go\n\nChoose the 5 strongest of these beats — one per slide, keeping this order. The deck cannot hold all 9, so choose rather than cram:\n- The job that comes back\n- Why treating the air never works\n- The headliner holds the most, and ruins the fastest\n- Foam, carpet and the extraction that decides the result\n- The cabin filter and the ducts\n- Enzymes or fragrance?\n- Ozone: read the machine's manual\n- The cars to turn down\n- This week\n\nClose with a call to action asking the reader to DM the keyword ODOUR.\n\nDo not invent statistics, numbers or percentages — use only facts stated above.\n\nLead with the reader's problem, not with the product."
+  },
+  "models": {
+    "parse": "claude-sonnet-4-6",
+    "compose": "claude-sonnet-5"
+  },
+  "promptVersions": {
+    "parse": 9,
+    "compose": 7,
+    "caption": 1
+  },
+  "parseUser": "BRAND VOICE: Quietly confident and aspirational, addressing the studio owner directly with understated elegance — evocative fragments over hype, with a flash of urgency when revenue is on the line.\nPHOTOGRAPHY: this brand is carried by its images — most slides that show a place, a product, a person or a result should ask for one.\nDO: Speak to 'you' and 'your studio'; Short, evocative fragments; Concrete business outcomes (bookings, rebookings, revenue); Let restraint imply premium\nDON'T: Exclamation marks; Tech jargon; Overt hype or ALL-CAPS shouting; Generic SaaS clichés\nSLIDES: exactly 7. Not one more, not one fewer — split or merge your points to land on that number.\nWHAT THIS BRAND HAS TAUGHT YOU — these are corrections its owner made to your previous posts, more than once each. Follow them:\n  · This brand's body copy is always cut after it is written — aim about 53 characters shorter than the budget allows.\n  · This brand deletes the body rather than keep it — only write one when the slide is genuinely worse without it.\n  · This brand reaches for the word \"back\" — use it where it fits.\n  · This brand reaches for the word \"liner\" — use it where it fits.\n  · This brand's headline copy is always cut after it is written — aim about 26 characters shorter than the budget allows.\n  · This brand reaches for the word \"substrate\" — use it where it fits.\nBRIEF: Headline: The car came out spotless, but the smell was back the next week — why?\n\nSubhead: Odour work is the only job a client can fail you on by smell — a week later, in a car that still looks flawless.\n\nReader: Studios taking on interior and odour work who have had a car come back, or who quote smoke removal by guesswork because they do not know how far it will go\n\nChoose the 5 strongest of these beats — one per slide, keeping this order. The deck cannot hold all 9, so choose rather than cram:\n- The job that comes back\n- Why treating the air never works\n- The headliner holds the most, and ruins the fastest\n- Foam, carpet and the extraction that decides the result\n- The cabin filter and the ducts\n- Enzymes or fragrance?\n- Ozone: read the machine's manual\n- The cars to turn down\n- This week\n\nClose with a call to action asking the reader to DM the keyword ODOUR.\n\nDo not invent statistics, numbers or percentages — use only facts stated above.\n\nLead with the reader's problem, not with the product.",
+  "generated": [
+    {
+      "id": "e1404e6e-e9bf-4c16-89a8-29dbbdcc2c8b",
+      "role": "cover",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "The job that comes back",
+        "headline": "Flawless. And the smell was back"
+      },
+      "html": "<div class=\"logo-row\"><div class=\"monogram\"></div><div class=\"wordmark\"><b>detail</b><i>masters</i></div></div>\n<div class=\"fill\"></div>\n<div class=\"eyebrow\">The job that comes back</div>\n<div class=\"headline\">Flawless. And the smell was back</div>\n<figure class=\"cb-shot\" data-cb-slot=\"hero\"></figure>"
+    },
+    {
+      "id": "2cd2dea2-eef0-42a8-8bd3-dc37301e5b04",
+      "role": "statement",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "The real problem",
+        "headline": "Treating the air treats nothing.",
+        "body": "Odour lives in substrate. Masking the cabin buys days — not a result."
+      },
+      "html": "<div class=\"eyebrow\">The real problem</div>\n<div class=\"fill\"></div>\n<div class=\"headline\">Treating the air treats nothing.</div>\n<div class=\"rule\"></div>\n<div class=\"body\">Odour lives in substrate. Masking the cabin buys days — not a result.</div>\n<div class=\"fill\"></div>"
+    },
+    {
+      "id": "34d2115a-b524-4a3b-a7c2-13bd99622609",
+      "role": "feature",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "Worst offender",
+        "headline": "The headliner holds the most."
+      },
+      "html": "<div class=\"eyebrow\">Worst offender</div>\n<div class=\"headline sm\">The headliner holds the most.</div>\n<div class=\"rule\"></div>\n<div class=\"fill\"></div>\n<figure class=\"cb-shot\" data-cb-slot=\"hero\"></figure>"
+    },
+    {
+      "id": "723a9df1-256a-40f1-bf1b-5eb37ec1a04e",
+      "role": "statement",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "Below the surface",
+        "headline": "Foam and carpet decide the result.",
+        "body": "Extraction depth — not product choice — is where the job is won or lost."
+      },
+      "html": "<div class=\"eyebrow\">Below the surface</div>\n<div class=\"fill\"></div>\n<div class=\"headline\">Foam and carpet decide the result.</div>\n<div class=\"rule\"></div>\n<div class=\"body\">Extraction depth — not product choice — is where the job is won or lost.</div>\n<div class=\"fill\"></div>"
+    },
+    {
+      "id": "f49e6038-19bf-4d68-8717-855c2cc86d38",
+      "role": "list",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "Enzymes or fragrance?",
+        "headline": "Know which one you are reaching for.",
+        "rows": [
+          {
+            "text": "Fragrance buys a week",
+            "note": "The smell is back before they are."
+          },
+          {
+            "text": "Enzymes break down the source",
+            "note": "Contact time and substrate depth matter."
+          },
+          {
+            "text": "The liner needs both addressed",
+            "note": "Not one after the other — together."
+          }
+        ]
+      },
+      "html": "<div class=\"eyebrow\">Enzymes or fragrance?</div>\n<div class=\"fill\"></div>\n<div class=\"headline sm\">Know which one you are reaching for.</div>\n<div class=\"rule\"></div>\n<div class=\"panel\"><div class=\"row\">Fragrance buys a week<em>The smell is back before they are.</em></div>\n<div class=\"row\">Enzymes break down the source<em>Contact time and substrate depth matter.</em></div>\n<div class=\"row\">The liner needs both addressed<em>Not one after the other — together.</em></div></div>"
+    },
+    {
+      "id": "7d122d93-f91b-4aba-8969-7134e582e8f8",
+      "role": "statement",
+      "path": "ai",
+      "parts": {
+        "eyebrow": "The quiet risk",
+        "headline": "The job a client fails",
+        "tagline": "A week later. A car that still looks perfect."
+      },
+      "html": "<div class=\"fill\"></div>\n<div class=\"eyebrow\">The quiet risk</div>\n<h1 class=\"headline\">The job <span class=\"it\">a client fails</span></h1>\n<div class=\"rule\"></div>\n<p class=\"body\">A week later. A car that still looks perfect.</p>\n<div class=\"fill\"></div>"
+    },
+    {
+      "id": "c99117c5-271c-4000-9a7d-b250a175a48e",
+      "role": "cta",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "This week",
+        "headline": "Stop quoting smoke work",
+        "body": "DM the word ODOUR and we will walk you through it.",
+        "cta": "DM ODOUR"
+      },
+      "html": "<div class=\"logo-row\"><div class=\"monogram\"></div><div class=\"wordmark\"><b>detail</b><i>masters</i></div></div>\n<div class=\"fill\"></div>\n<div class=\"eyebrow\">This week</div>\n<div class=\"headline\">Stop quoting smoke work</div>\n<div class=\"cta\">DM ODOUR</div>\n<div class=\"body\">DM the word ODOUR and we will walk you through it.</div>"
+    }
+  ],
+  "outcome": {
+    "at": "2026-08-21T17:27:10.792Z",
+    "exported": true,
+    "slides": [
+      {
+        "slideId": "e1404e6e-e9bf-4c16-89a8-29dbbdcc2c8b",
+        "role": "cover",
+        "verdict": "edited",
+        "edits": [
+          {
+            "part": "headline",
+            "before": "Flawless. And the smell was back",
+            "after": "Flawless. And the smell was back."
+          }
+        ]
+      },
+      {
+        "slideId": "2cd2dea2-eef0-42a8-8bd3-dc37301e5b04",
+        "role": "statement",
+        "verdict": "kept",
+        "moved": 1
+      },
+      {
+        "slideId": "34d2115a-b524-4a3b-a7c2-13bd99622609",
+        "role": "feature",
+        "verdict": "edited",
+        "edits": [
+          {
+            "part": "body",
+            "before": "",
+            "after": "It absorbs the most smoke — and tolerates the least cleaning."
+          }
+        ],
+        "moved": -1
+      },
+      {
+        "slideId": "723a9df1-256a-40f1-bf1b-5eb37ec1a04e",
+        "role": "statement",
+        "verdict": "kept"
+      },
+      {
+        "slideId": "f49e6038-19bf-4d68-8717-855c2cc86d38",
+        "role": "list",
+        "verdict": "edited",
+        "edits": [
+          {
+            "part": "rows",
+            "before": "Fragrance buys a week The smell is back before they are. · Enzymes break down the source Contact time and substrate depth matter. · The liner needs both addressed Not one after the other — together.",
+            "after": "Fragrance buys a week The smell is back before they are. · Enzymes break down the source Contact time and substrate depth matter. · Fragrance last, never instead On a car you have already treated."
+          }
+        ]
+      },
+      {
+        "slideId": "7d122d93-f91b-4aba-8969-7134e582e8f8",
+        "role": "statement",
+        "verdict": "edited",
+        "edits": [
+          {
+            "part": "eyebrow",
+            "before": "The quiet risk",
+            "after": "Where it comes back from"
+          },
+          {
+            "part": "headline",
+            "before": "The job a client fails",
+            "after": "The cabin filter is part of the job."
+          },
+          {
+            "part": "body",
+            "before": "A week later. A car that still looks perfect.",
+            "after": "Months of catching smoke. Leave it in and the fan re-contaminates the car."
+          }
+        ]
+      },
+      {
+        "slideId": "c99117c5-271c-4000-9a7d-b250a175a48e",
+        "role": "cta",
+        "verdict": "edited",
+        "edits": [
+          {
+            "part": "headline",
+            "before": "Stop quoting smoke work",
+            "after": "Stop quoting smoke work blind"
+          }
+        ]
+      }
+    ],
+    "added": 0
+  },
+  "generationId": "6a86ee49fce19201b40b4bfc",
+  "generatedAt": "2026-08-20T12:08:41.261Z",
+  "runsOfThisBrief": 8
+}

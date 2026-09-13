@@ -965,7 +965,7 @@ describe('compose by example (the recipe composes its own slides)', () => {
 
     // THE PRIZE: one parse call for the deck, and nothing else.
     expect(aiCalls).toHaveLength(1);
-    expect(sysOf(aiCalls[0]!)).toContain('social-carousel copywriter');
+    expect(sysOf(aiCalls[0]!)).toContain('copywriter for a business');
     expect(out.map((s) => s.source)).toEqual(['fragment', 'fragment', 'fragment', 'fragment']);
     expect(out.map((s) => s.role)).toEqual(['cover', 'list', 'statement', 'cta']);
 

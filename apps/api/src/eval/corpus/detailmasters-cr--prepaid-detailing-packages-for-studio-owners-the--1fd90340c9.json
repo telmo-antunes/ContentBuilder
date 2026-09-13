@@ -1,0 +1,151 @@
+{
+  "id": "detailmasters-cr--prepaid-detailing-packages-for-studio-owners-the--1fd90340c9",
+  "title": "Prepaid detailing packages, for studio owners. The problem: a studio's income is whatever walked in that week, so a quiet January undoes a busy December and there is never cash to buy equipment or hire. Prepaid packages fix it — the client buys four visits up front, the studio banks the money now and owes the work later. What it changes: cash arrives before the work, the visits are already booked so slow weeks are funded, and a client who has paid for four visits does not go anywhere else. The trap to avoid: selling a discount instead of a commitment — a package priced as 'four for the price of three' trains clients to wait for a sale, while a package priced at the normal rate with the visits secured sells the certainty, not the price. Deposits are not the same thing and do not take payment; prepaid packages are what actually collect money up front. End on a free trial of detailmasters CRM.",
+  "brand": "detailmasters CRM",
+  "businessId": "6a42337c717dcf4105b9f9f4",
+  "projectId": "6a88b28a6643d1449e90d02e",
+  "type": null,
+  "format": null,
+  "settings": null,
+  "brief": {
+    "idea": "Prepaid detailing packages, for studio owners. The problem: a studio's income is whatever walked in that week, so a quiet January undoes a busy December and there is never cash to buy equipment or hire. Prepaid packages fix it — the client buys four visits up front, the studio banks the money now and owes the work later. What it changes: cash arrives before the work, the visits are already booked so slow weeks are funded, and a client who has paid for four visits does not go anywhere else. The trap to avoid: selling a discount instead of a commitment — a package priced as 'four for the price of three' trains clients to wait for a sale, while a package priced at the normal rate with the visits secured sells the certainty, not the price. Deposits are not the same thing and do not take payment; prepaid packages are what actually collect money up front. End on a free trial of detailmasters CRM."
+  },
+  "models": {
+    "parse": "claude-sonnet-4-6",
+    "compose": "claude-sonnet-5"
+  },
+  "promptVersions": {
+    "parse": 9,
+    "compose": 7,
+    "caption": 1
+  },
+  "parseUser": "BRAND VOICE: Quietly confident and aspirational, addressing the studio owner directly with understated elegance — evocative fragments over hype, with a flash of urgency when revenue is on the line.\nPHOTOGRAPHY: this brand uses images sparingly, to support the type — ask for one only where it genuinely adds proof or atmosphere.\nDO: Speak to 'you', the owner; Short evocative fragments; Concrete numbers and outcomes; Let restraint carry the confidence\nDON'T: Exclamation-heavy hype; Generic SaaS jargon; Cramming multiple claims into one line; Overusing the gold accent\nHANDLE: detailmasters.pro\nSLIDES: 7–9 (about 8 looks right for this much material). Use what the content earns; do not pad.\nWHAT THIS BRAND HAS TAUGHT YOU — these are corrections its owner made to your previous posts, more than once each. Follow them:\n  · This brand's body copy is always cut after it is written — aim about 52 characters shorter than the budget allows.\n  · This brand deletes the body rather than keep it — only write one when the slide is genuinely worse without it.\n  · This brand reaches for the word \"back\" — use it where it fits.\n  · This brand reaches for the word \"work\" — use it where it fits.\n  · This brand reaches for the word \"prepaid\" — use it where it fits.\n  · This brand reaches for the word \"package\" — use it where it fits.\nBRIEF: Prepaid detailing packages, for studio owners. The problem: a studio's income is whatever walked in that week, so a quiet January undoes a busy December and there is never cash to buy equipment or hire. Prepaid packages fix it — the client buys four visits up front, the studio banks the money now and owes the work later. What it changes: cash arrives before the work, the visits are already booked so slow weeks are funded, and a client who has paid for four visits does not go anywhere else. The trap to avoid: selling a discount instead of a commitment — a package priced as 'four for the price of three' trains clients to wait for a sale, while a package priced at the normal rate with the visits secured sells the certainty, not the price. Deposits are not the same thing and do not take payment; prepaid packages are what actually collect money up front. End on a free trial of detailmasters CRM.",
+  "generated": [
+    {
+      "id": "0f8a513f-2fce-436d-9f1c-60eb5731c9a4",
+      "role": "cover",
+      "path": "ai",
+      "parts": {
+        "eyebrow": "Prepaid packages",
+        "headline": "December can't save a quiet January.",
+        "emphasis": "can't save a quiet January",
+        "tagline": "There is a better way to work."
+      },
+      "html": "<div class=\"logo-row\">\n  <div class=\"monogram\"></div>\n  <div class=\"wordmark\"><b>detail</b><i>masters</i></div>\n</div>\n<div class=\"fill\"></div>\n<div class=\"eyebrow\">Prepaid packages</div>\n<div class=\"headline\">December <span class=\"it\">can't save a quiet January.</span></div>\n<div class=\"rule\"></div>\n<div class=\"body\">There is a better way to work.</div>"
+    },
+    {
+      "id": "40aa1991-f324-4fad-b677-bfd85b4cf5e4",
+      "role": "statement",
+      "path": "fragment",
+      "parts": {
+        "headline": "Revenue is whatever walked",
+        "body": "No bookings ahead. No cash in reserve. No buffer."
+      },
+      "html": "<div class=\"fill\"></div>\n<div class=\"headline\">Revenue is whatever walked</div>\n<div class=\"rule\"></div>\n<div class=\"body\">No bookings ahead. No cash in reserve. No buffer.</div>\n<div class=\"fill\"></div>"
+    },
+    {
+      "id": "d0fc67b1-212f-4682-8453-ea2d448c9a3b",
+      "role": "feature",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "The fix",
+        "headline": "Prepaid collects the money"
+      },
+      "html": "<div class=\"eyebrow\">The fix</div>\n<div class=\"headline\">Prepaid collects the money</div>\n<div class=\"rule\"></div>\n<div class=\"fill\"></div>\n<figure class=\"cb-shot\" data-cb-slot=\"hero\"></figure>"
+    },
+    {
+      "id": "d3fe7af3-ffc5-4edb-9bf2-133e9e799763",
+      "role": "list",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "What changes",
+        "headline": "Three things that shift",
+        "rows": [
+          {
+            "text": "Cash arrives before the work begins",
+            "note": "Not after. Not maybe."
+          },
+          {
+            "text": "Slow weeks are already funded",
+            "note": "Four visits booked is four visits certain."
+          },
+          {
+            "text": "That client isn't going anywhere else",
+            "note": "They've paid. They'll be back."
+          }
+        ]
+      },
+      "html": "<div class=\"eyebrow\">What changes</div>\n<div class=\"headline sm\">Three things that shift</div>\n<div class=\"fill\"></div>\n<div class=\"panel\"><div class=\"row\"><span class=\"tick\"></span>Cash arrives before the work begins<em>Not after. Not maybe.</em></div>\n<div class=\"row\"><span class=\"tick\"></span>Slow weeks are already funded<em>Four visits booked is four visits certain.</em></div>\n<div class=\"row\"><span class=\"tick\"></span>That client isn't going anywhere else<em>They've paid. They'll be back.</em></div></div>"
+    },
+    {
+      "id": "1dc75d6e-8e82-4d6a-8c06-f9fd97c028f4",
+      "role": "statement",
+      "path": "fragment",
+      "parts": {
+        "headline": "Deposits hold a slot.",
+        "body": "Deposits don't collect money. Prepaid packages do."
+      },
+      "html": "<div class=\"fill\"></div>\n<div class=\"headline\">Deposits hold a slot.</div>\n<div class=\"rule\"></div>\n<div class=\"body\">Deposits don't collect money. Prepaid packages do.</div>\n<div class=\"fill\"></div>"
+    },
+    {
+      "id": "f372d10b-64c5-4151-9e9c-fa88f00da8ae",
+      "role": "list",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "The trap",
+        "headline": "How you price it is everything.",
+        "rows": [
+          {
+            "text": "Four for the price of three",
+            "note": "Trains clients to wait for the discount.",
+            "state": "dont"
+          },
+          {
+            "text": "Four visits at the normal rate",
+            "note": "Sells certainty. Secures the commitment.",
+            "state": "do"
+          }
+        ]
+      },
+      "html": "<div class=\"eyebrow\">The trap</div>\n<div class=\"headline sm\">How you price it is everything.</div>\n<div class=\"fill\"></div>\n<div class=\"panel\"><div class=\"row dont\"><span class=\"tick\"></span>Four for the price of three<em>Trains clients to wait for the discount.</em></div>\n<div class=\"row do\"><span class=\"tick\"></span>Four visits at the normal rate<em>Sells certainty. Secures the commitment.</em></div></div>"
+    },
+    {
+      "id": "aeb64192-6cc4-414b-84b5-ca17b9242130",
+      "role": "stat",
+      "path": "ai",
+      "parts": {
+        "eyebrow": "Think about it",
+        "headline": "Four prepaid clients.",
+        "tagline": "Before a single car arrives.",
+        "stat": "4×"
+      },
+      "html": "<div class=\"eyebrow\">Think about it</div>\n<h1 class=\"headline\">Four <span class=\"it\">prepaid clients.</span></h1>\n<div class=\"rule\"></div>\n<div class=\"stat\">4×</div>\n<p class=\"body\">Before a single car arrives.</p>"
+    },
+    {
+      "id": "e0eb8bc3-0ac4-4152-860c-980ae5de31fd",
+      "role": "statement",
+      "path": "fragment",
+      "parts": {
+        "headline": "Buy the equipment. Make the hire.",
+        "emphasis": "Make the hire."
+      },
+      "html": "<div class=\"fill\"></div>\n<div class=\"headline\">Buy the equipment. <span class=\"it\">Make the hire.</span></div>\n<div class=\"fill\"></div>"
+    },
+    {
+      "id": "a037bab3-2cde-4a4c-b54b-5e1f3a31a4d9",
+      "role": "cta",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "Start free",
+        "headline": "Run prepaid packages inside",
+        "cta": "Try detailmasters free",
+        "handle": "detailmasters.pro"
+      },
+      "html": "<div class=\"logo-row\">\n  <div class=\"monogram\"></div>\n  <div class=\"wordmark\"><b>detail</b><i>masters</i></div>\n</div>\n<div class=\"fill\"></div>\n<div class=\"eyebrow\">Start free</div>\n<div class=\"headline\">Run prepaid packages inside</div>\n<div class=\"cta\">Try detailmasters free</div>\n<div class=\"handle\">detailmasters.pro</div>"
+    }
+  ],
+  "outcome": null,
+  "generationId": "6a895ec9a99c415173264a1a",
+  "generatedAt": "2026-08-22T08:33:13.730Z",
+  "runsOfThisBrief": 9
+}

@@ -1,0 +1,229 @@
+{
+  "id": "detailmasters-cr--the-message-to-send-after-a-ceramic-coating--3ccca23aaa",
+  "title": "The message to send after a ceramic coating",
+  "brand": "detailmasters CRM",
+  "businessId": "6a42337c717dcf4105b9f9f4",
+  "projectId": "6a8dfbc393f1f2b9ea562c27",
+  "type": "carousel",
+  "format": "1080x1350",
+  "settings": {
+    "theme": "bold",
+    "slideCounter": false,
+    "dmKeyword": "AFTERCARE",
+    "audience": "studio owner"
+  },
+  "brief": {
+    "idea": "Write every slide in English.\n\nHeadline: The message to send after a ceramic coating\n\nSubhead: What to put in a message after handover, and how to send it from the booking itself.\n\nReader: Studios applying ceramic coatings who explain the care verbally, if at all, and hear nothing until a car comes back damaged\n\nCover these beats, one per slide:\n- Why the handover conversation does not work — The client is distracted · Nothing is written down · There is no record\n- One message, at handover — What was done · The date they cannot wash it until · What not to do until then · How to wash it from that date on\n- How do you send it so it stays on the record? — The message can be sent from the booking itself. In the dashboard, the option in the booking menu is called Send update.\n- Writing so it gets read — No preambles · One date, and the rest follows from it · The date written out · A name at the end\n- What not to put in a message after the service — A warranty that is not written down anywhere else · A cure time copied from another product · A promotion\n- A template to adapt, and where to keep it — Change what is in brackets and nothing else. Car's ready: [service] done. Do not wash the car until [date] — not even by hand.\n\nFacts you may state (and ONLY these):\n- Customer profiles carry private notes and a full service history visible only to the studio.\n- Service status updates let a studio message a client about a job in progress.\n\nClose with a call to action asking the reader to DM the keyword AFTERCARE.\n\nDo not invent CLAIMS of any kind: no statistics, no facts, no list items the source above does not contain. Compress the given sentences — cut words, never substitute your own. When the source presents a list as ordered, keep its order and do not add or drop items.\n\nLead with the reader's problem, not with the product."
+  },
+  "models": {
+    "parse": "claude-sonnet-4-6",
+    "compose": "claude-sonnet-5"
+  },
+  "promptVersions": {
+    "parse": 9,
+    "compose": 7,
+    "caption": 1
+  },
+  "parseUser": "BRAND VOICE: Quietly confident and aspirational, addressing the studio owner directly with understated elegance — evocative fragments over hype, with a flash of urgency when revenue is on the line.\nPHOTOGRAPHY: this brand uses images sparingly, to support the type — ask for one only where it genuinely adds proof or atmosphere.\nDO: Speak to 'you', the owner; Short evocative fragments; Concrete numbers and outcomes; Let restraint carry the confidence\nDON'T: Exclamation-heavy hype; Generic SaaS jargon; Cramming multiple claims into one line; Overusing the gold accent\nHANDLE: detailmasters.pro\nSLIDES: exactly 8. Not one more, not one fewer — split or merge your points to land on that number.\nWHAT THIS BRAND HAS TAUGHT YOU — these are corrections its owner made to your previous posts, more than once each. Follow them:\n  · This brand's body copy is always cut after it is written — aim about 52 characters shorter than the budget allows.\n  · This brand deletes the body rather than keep it — only write one when the slide is genuinely worse without it.\n  · This brand reaches for the word \"back\" — use it where it fits.\n  · This brand reaches for the word \"work\" — use it where it fits.\n  · This brand reaches for the word \"prepaid\" — use it where it fits.\n  · This brand reaches for the word \"package\" — use it where it fits.\nBRIEF: Write every slide in English.\n\nHeadline: The message to send after a ceramic coating\n\nSubhead: What to put in a message after handover, and how to send it from the booking itself.\n\nReader: Studios applying ceramic coatings who explain the care verbally, if at all, and hear nothing until a car comes back damaged\n\nCover these beats, one per slide:\n- Why the handover conversation does not work — The client is distracted · Nothing is written down · There is no record\n- One message, at handover — What was done · The date they cannot wash it until · What not to do until then · How to wash it from that date on\n- How do you send it so it stays on the record? — The message can be sent from the booking itself. In the dashboard, the option in the booking menu is called Send update.\n- Writing so it gets read — No preambles · One date, and the rest follows from it · The date written out · A name at the end\n- What not to put in a message after the service — A warranty that is not written down anywhere else · A cure time copied from another product · A promotion\n- A template to adapt, and where to keep it — Change what is in brackets and nothing else. Car's ready: [service] done. Do not wash the car until [date] — not even by hand.\n\nFacts you may state (and ONLY these):\n- Customer profiles carry private notes and a full service history visible only to the studio.\n- Service status updates let a studio message a client about a job in progress.\n\nClose with a call to action asking the reader to DM the keyword AFTERCARE.\n\nDo not invent CLAIMS of any kind: no statistics, no facts, no list items the source above does not contain. Compress the given sentences — cut words, never substitute your own. When the source presents a list as ordered, keep its order and do not add or drop items.\n\nLead with the reader's problem, not with the product.",
+  "generated": [
+    {
+      "id": "9dc0435c-6728-4ae2-aa2b-a91977f40039",
+      "role": "cover",
+      "path": "ai",
+      "parts": {
+        "eyebrow": "After handover",
+        "headline": "The message to send after coating",
+        "tagline": "What to put in it. How to send it from the booking."
+      },
+      "html": "<div class=\"logo-row\">\n  <div class=\"monogram\"></div>\n  <div class=\"wordmark\"><b>detail</b><i>masters</i></div>\n</div>\n<div class=\"fill\"></div>\n<div class=\"eyebrow\">After handover</div>\n<h1 class=\"headline\">The message to send <span class=\"it\">after coating</span></h1>\n<div class=\"rule\"></div>\n<p class=\"body\">What to put in it. How to send it from the booking.</p>"
+    },
+    {
+      "id": "c89af0b4-078e-4726-ab0a-9ddb4ebddbe9",
+      "role": "statement",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "The real problem",
+        "headline": "The handover talk does not work.",
+        "body": "The client is distracted. Nothing is written down. There is no record."
+      },
+      "html": "<div class=\"eyebrow\">The real problem</div>\n<div class=\"fill\"></div>\n<div class=\"headline\">The handover talk does not work.</div>\n<div class=\"rule\"></div>\n<div class=\"body\">The client is distracted. Nothing is written down. There is no record.</div>\n<div class=\"fill\"></div>"
+    },
+    {
+      "id": "93278658-37dd-4aad-a5e0-70b88b725d24",
+      "role": "list",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "One message",
+        "headline": "Put these four things in it.",
+        "rows": [
+          {
+            "text": "What was done"
+          },
+          {
+            "text": "The date they cannot wash the car"
+          },
+          {
+            "text": "What to avoid before that date"
+          },
+          {
+            "text": "How to wash it once that date passes"
+          }
+        ]
+      },
+      "html": "<div class=\"eyebrow\">One message</div>\n<div class=\"headline sm\">Put these four things in it.</div>\n<div class=\"fill\"></div>\n<div class=\"panel\"><div class=\"row\"><span class=\"tick\"></span>What was done</div>\n<div class=\"row\"><span class=\"tick\"></span>The date they cannot wash the car</div>\n<div class=\"row\"><span class=\"tick\"></span>What to avoid before that date</div>\n<div class=\"row\"><span class=\"tick\"></span>How to wash it once that date passes</div></div>"
+    },
+    {
+      "id": "b3bf303a-a308-4570-93f2-2e388095c58f",
+      "role": "feature",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "Sending it",
+        "headline": "Send it from the booking itself.",
+        "body": "In the dashboard, open the booking menu and choose Send update."
+      },
+      "html": "<div class=\"eyebrow\">Sending it</div>\n<div class=\"fill\"></div>\n<div class=\"headline\">Send it from the booking itself.</div>\n<div class=\"rule\"></div>\n<div class=\"body\">In the dashboard, open the booking menu and choose Send update.</div>"
+    },
+    {
+      "id": "0c3ed473-5cf2-44b0-b3ad-cbb5ab099c9b",
+      "role": "list",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "Writing it",
+        "headline": "Four things that make it get read.",
+        "rows": [
+          {
+            "text": "No preambles"
+          },
+          {
+            "text": "One date — the rest follows"
+          },
+          {
+            "text": "Write the date out in full"
+          },
+          {
+            "text": "A name at the end"
+          }
+        ]
+      },
+      "html": "<div class=\"eyebrow\">Writing it</div>\n<div class=\"headline sm\">Four things that make it get read.</div>\n<div class=\"fill\"></div>\n<div class=\"panel\"><div class=\"row\"><span class=\"tick\"></span>No preambles</div>\n<div class=\"row\"><span class=\"tick\"></span>One date — the rest follows</div>\n<div class=\"row\"><span class=\"tick\"></span>Write the date out in full</div>\n<div class=\"row\"><span class=\"tick\"></span>A name at the end</div></div>"
+    },
+    {
+      "id": "b562a786-f626-4705-96fa-e1cca5c2759a",
+      "role": "list",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "What to leave out",
+        "headline": "Keep these out of the message.",
+        "rows": [
+          {
+            "text": "A warranty not written down elsewhere",
+            "state": "dont"
+          },
+          {
+            "text": "A cure time copied from another product",
+            "state": "dont"
+          },
+          {
+            "text": "A promotion",
+            "state": "dont"
+          }
+        ]
+      },
+      "html": "<div class=\"eyebrow\">What to leave out</div>\n<div class=\"headline sm\">Keep these out of the message.</div>\n<div class=\"fill\"></div>\n<div class=\"panel\"><div class=\"row dont\"><span class=\"tick\"></span>A warranty not written down elsewhere</div>\n<div class=\"row dont\"><span class=\"tick\"></span>A cure time copied from another product</div>\n<div class=\"row dont\"><span class=\"tick\"></span>A promotion</div></div>"
+    },
+    {
+      "id": "e65a6b52-1ad6-41ce-b0fc-d2d9066181b3",
+      "role": "feature",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "Your template",
+        "headline": "Change the brackets. Leave the rest.",
+        "body": "Car's ready: [service] done. Do not wash the car until [date] — not even by hand."
+      },
+      "html": "<div class=\"eyebrow\">Your template</div>\n<div class=\"fill\"></div>\n<div class=\"headline\">Change the brackets. Leave the rest.</div>\n<div class=\"rule\"></div>\n<div class=\"body\">Car's ready: [service] done. Do not wash the car until [date] — not even by hand.</div>"
+    },
+    {
+      "id": "b8baf7a8-a4a8-42f6-9980-bafc614f8191",
+      "role": "cta",
+      "path": "ai",
+      "parts": {
+        "headline": "DM us the word AFTERCARE.",
+        "tagline": "We'll send back a template you can put to work today.",
+        "cta": "Send AFTERCARE",
+        "handle": "detailmasters.pro"
+      },
+      "html": "<div class=\"fill\"></div>\n<h1 class=\"headline\">DM us the word <span class=\"it\">AFTERCARE.</span></h1>\n<div class=\"rule\"></div>\n<p class=\"body\">We'll send back a template you can put to work today.</p>\n<div class=\"cta\">Send AFTERCARE</div>\n<p class=\"handle\">detailmasters.pro</p>"
+    }
+  ],
+  "outcome": {
+    "at": "2026-08-27T23:17:40.016Z",
+    "exported": true,
+    "slides": [
+      {
+        "slideId": "9dc0435c-6728-4ae2-aa2b-a91977f40039",
+        "role": "cover",
+        "verdict": "edited",
+        "edits": [
+          {
+            "part": "headline",
+            "before": "The message to send after coating",
+            "after": "The message to send after a ceramic coating"
+          }
+        ]
+      },
+      {
+        "slideId": "c89af0b4-078e-4726-ab0a-9ddb4ebddbe9",
+        "role": "statement",
+        "verdict": "edited",
+        "edits": [
+          {
+            "part": "body",
+            "before": "The client is distracted. Nothing is written down. There is no record.",
+            "after": "The client is distracted. Nothing is written down. And if the car comes back damaged, you cannot prove they were warned."
+          }
+        ]
+      },
+      {
+        "slideId": "93278658-37dd-4aad-a5e0-70b88b725d24",
+        "role": "list",
+        "verdict": "kept"
+      },
+      {
+        "slideId": "b3bf303a-a308-4570-93f2-2e388095c58f",
+        "role": "feature",
+        "verdict": "edited",
+        "edits": [
+          {
+            "part": "body",
+            "before": "In the dashboard, open the booking menu and choose Send update.",
+            "after": "Open the booking menu and choose Send update. It works on completed bookings, so it still sends after the client has driven away."
+          }
+        ]
+      },
+      {
+        "slideId": "0c3ed473-5cf2-44b0-b3ad-cbb5ab099c9b",
+        "role": "list",
+        "verdict": "kept"
+      },
+      {
+        "slideId": "b562a786-f626-4705-96fa-e1cca5c2759a",
+        "role": "list",
+        "verdict": "kept"
+      },
+      {
+        "slideId": "e65a6b52-1ad6-41ce-b0fc-d2d9066181b3",
+        "role": "feature",
+        "verdict": "kept"
+      },
+      {
+        "slideId": "b8baf7a8-a4a8-42f6-9980-bafc614f8191",
+        "role": "cta",
+        "verdict": "kept"
+      }
+    ],
+    "added": 0
+  },
+  "generationId": "6a90c4f7179703156f34e58e",
+  "generatedAt": "2026-08-27T23:15:03.836Z",
+  "runsOfThisBrief": 1
+}

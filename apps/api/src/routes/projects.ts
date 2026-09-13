@@ -14,7 +14,6 @@ import {
   defaultThemeForCategory,
   dimensionsFor,
   ensureBrandMark,
-  archetypeFor,
   isSlotName,
   migrateRecipe,
   PLATE_CLASS,
@@ -36,12 +35,11 @@ import { ApiError, asyncHandler, parseBody, publicErrMessage, requireObjectId } 
 import { createProjectSchema, slideSchema, updateProjectSchema, type SlideInput } from '../lib/validation';
 import { renderSlidesToPng, slugify } from '../lib/exporter';
 import { buildContactSheet } from '../lib/contactSheet';
-import { bleedAnchorFor, hexLuminance, suitsBleedOver } from '../lib/bleedAnchor';
 import { runVideoJob, sweepExpiredVideoJobs } from '../lib/videoJobs';
 import { findImageCopyContradictions, type SlidePairing } from '../lib/imageCopyCheck';
 import { getStorage } from '../storage';
 import { generateCaption, type GeneratedCaption } from '../lib/caption';
-import { SITE_PHOTO_LABEL } from '../lib/harvest';
+import { attachPoolPhotos, brandPhotoPool, PROMO_COVER_LABEL } from '../lib/photoPool';
 import { lessonsFor, noteSlideSignal, observeOutcome, recordGeneration } from '../lib/learningLoop';
 import type { ComposeRecord, CopyCheckSummary, LayoutCheckSummary } from '../lib/htmlDirector/compose';
 import { postUpdateStatus } from '../lib/promptStatus';
@@ -76,7 +74,7 @@ const composeSchema = z.object({
 });
 
 /** Marks a rendered carousel cover in the media library, next to SITE_PHOTO_LABEL. */
-export const PROMO_COVER_LABEL = 'Carousel cover';
+export { PROMO_COVER_LABEL };
 
 export const projectsRouter = Router();
 
@@ -467,120 +465,6 @@ projectsRouter.delete(
   }),
 );
 
-/** How many of a brand's photos one compose will consider spending. */
-const PHOTO_POOL_LIMIT = 24;
-
-/**
- * THE BRAND'S OWN PICTURES, ready to be spent on a fresh deck.
- *
- * Photos harvested from the brand's website come first: they ARE the brand's
- * imagery, which is the whole reason analyze downloads them. Uploads follow,
- * newest first. Nothing from a stock library is ever in here — a composed deck
- * may arrive carrying the brand's own photographs, never a stranger's.
- *
- * EVERY CANDIDATE IS CHECKED AGAINST STORAGE. A media row whose bytes are gone
- * (a re-seed, a swapped storage dir, a manual clean-up) still lists fine and
- * renders as a broken image — which is worse than the empty slot this feature
- * exists to remove. The pool is what can actually be SHOWN, not what is merely
- * recorded, so an orphaned row can neither be attached nor talk the compose
- * step into asking for a slot it cannot fill.
- */
-async function brandPhotoPool(businessId: string) {
-  /** Below this a photo cannot fill even the smallest slot without visible softness. */
-  const MIN_POOL_DIMENSION = 800;
-
-  const docs = await MediaAssetModel.find({
-    businessId,
-    // A logo, an avatar or a favicon harvested from the site lists fine and
-    // ships as a blurry stamp — the review's "2 photos from your website" were
-    // 640px site chrome. Size is a property the query can see; usefulness is
-    // not, so the floor stands in for it.
-    $or: [{ width: { $gte: MIN_POOL_DIMENSION } }, { height: { $gte: MIN_POOL_DIMENSION } }],
-    /**
-     * A rendered carousel cover is NOT brand imagery.
-     *
-     * `promo-story` keeps its cover as an ordinary media asset so the editor's
-     * picker can swap it — but that also dropped it into this pool, newest
-     * first, so the very next deck composed for the brand auto-filled its cover
-     * slot with a picture of a different post. Seen on the first real run: an
-     * English ceramic-coating carousel opened with a shrunken Portuguese slide
-     * about add-ons.
-     */
-    label: { $ne: PROMO_COVER_LABEL },
-  })
-    .sort({ createdAt: -1 })
-    .limit(PHOTO_POOL_LIMIT * 3)
-    .lean<any[]>();
-  const site = docs.filter((d) => d.label === SITE_PHOTO_LABEL);
-  const ordered = [...site, ...docs.filter((d) => d.label !== SITE_PHOTO_LABEL)].slice(0, PHOTO_POOL_LIMIT * 2);
-  const storage = getStorage();
-  const present = await Promise.all(
-    ordered.map(async (d) => ((await storage.exists(String(d.key)).catch(() => false)) ? d : null)),
-  );
-  const usable = present.filter(Boolean).slice(0, PHOTO_POOL_LIMIT) as any[];
-  const orphaned = ordered.length - present.filter(Boolean).length;
-  if (orphaned) console.warn(`[compose] ${orphaned} media record(s) have no file in storage — not offered to the deck`);
-  return usable;
-}
-
-/**
- * Fill the holes the composer left, with the brand's own photographs.
- *
- * An empty `cb-shot` renders as a dead grey rectangle taking a third of the
- * poster, and until now every composed slide that asked for a picture shipped
- * exactly that and waited for the user to notice. The compose step now only
- * asks for a slot it can fill (`photoBudget`), and this spends the pool: one
- * photo per slot, no repeats while unused photos remain, in deck order.
- *
- * These are suggestions with a real picture in them, not decisions — every one
- * is swappable from the Studio's photo panel exactly like a manual attachment.
- */
-function fillSlotsFromPool(
-  slides: Array<{ id: string; authored?: { html: string; archetype?: string } }>,
-  pool: Array<{ _id: unknown }>,
-): { photos: SlidePhoto[][]; used: number } {
-  const photos: SlidePhoto[][] = slides.map(() => []);
-  let next = 0;
-  slides.forEach((slide, i) => {
-    const wants = archetypeFor(slide.authored?.archetype);
-
-    /**
-     * FULL-BLEED, when the archetype asks for it.
-     *
-     * A picture that is meant to carry the frame cannot do it from inside a
-     * card with margins around it — every photo being an inset rounded
-     * rectangle on a black field is the strongest "template" signal a deck can
-     * carry. The background layer already exists and already has the scrim that
-     * keeps type legible over it, so this is a placement decision rather than a
-     * new way to render.
-     */
-    if (wants?.placement === 'bleed' && wants.photo !== 'never') {
-      if (next >= pool.length) return;
-      photos[i]!.push({
-        id: randomUUID(),
-        mediaAssetId: String((pool[next++] as { _id: unknown })._id),
-        placement: 'background',
-        fit: 'cover',
-      });
-      // Any slot the fragment happened to leave stays empty, and an empty slot
-      // is removed from the render — so it costs nothing rather than punching a
-      // hole through the photograph now behind it.
-      return;
-    }
-
-    for (const slot of authoredSlots(slide.authored?.html ?? '')) {
-      if (next >= pool.length) return;
-      photos[i]!.push({
-        id: randomUUID(),
-        mediaAssetId: String((pool[next++] as { _id: unknown })._id),
-        placement: 'slot',
-        slot,
-        fit: 'cover',
-      });
-    }
-  });
-  return { photos, used: next };
-}
 
 // AI compose: turn an idea into on-brand AUTHORED slides using the brand's
 // recipe (its design system). Requires the brand to have a recipe. Replaces the
@@ -745,65 +629,19 @@ projectsRouter.post(
     // precisely so posts could use them — so a slot arrives filled and swappable
     // rather than empty and waiting.
     const base = composed.map((s, i) => ({ id: randomUUID(), order: i, authored: s.authored }));
-    const filled = fillSlotsFromPool(base, pool);
-
-    // Archetypes are assigned inside composeProject — composition is decided
-    // there, and the render check needs them before this point.
-    /**
-     * WHERE THE TYPE GOES ON EACH FULL-BLEED SLIDE.
-     *
-     * Read from the picture itself: type belongs on whichever end is already
-     * dark, so the scrim only has to finish a job the image started. Cheap
-     * (a luminance read on a thumbnail) and never fatal — a photograph that
-     * will not decode falls back to the archetype's default.
-     */
-    /**
-     * A bleed photo REPLACES the slide's own ground, and the type was coloured
-     * for that ground — so one whose tone is nowhere near it splits the frame.
-     * Measured against the recipe's `ground` here, and dropped rather than
-     * scrimmed harder: a slide with no background still renders correctly on
-     * the brand surface, which is the better of the two failures.
-     */
-    const groundLuminance = hexLuminance(String(parsedRecipe.data.tokens?.ground ?? '')) ?? 0;
-
+    const attached = await attachPoolPhotos(base, pool, String(parsedRecipe.data.tokens?.ground ?? ''));
+    const anchors = attached.anchors;
     // The decision ledger: consequential calls the code takes on the deck's
     // behalf, stored on the project and shown on the review page. A decision
     // that only ever reached console.warn was invisible to the one person who
     // could overrule it.
-    const composeNotes: Array<{ slide?: number; note: string }> = [];
-
-    const anchors = await Promise.all(
-      filled.photos.map(async (ps, i) => {
-        const bgPhoto = ps.find((ph) => ph.placement === 'background');
-        if (!bgPhoto) return undefined;
-        const asset = pool.find((m) => String((m as { _id: unknown })._id) === String(bgPhoto.mediaAssetId));
-        const key = (asset as { key?: string } | undefined)?.key;
-        if (!key) return undefined;
-        try {
-          const buffer = await getStorage().read(key);
-          if (!(await suitsBleedOver(buffer, groundLuminance))) {
-            filled.photos[i] = ps.filter((ph) => ph !== bgPhoto);
-            console.warn(
-              `[compose] slide ${i + 1}: dropped a full-bleed photo whose tone fights the brand ground`,
-            );
-            composeNotes.push({
-              slide: i + 1,
-              note: 'This composition wanted a full-bleed photograph, but the picture’s tone fights the brand ground — it was dropped rather than scrimmed harder. Attach a darker/quieter photo as the background to get the full-bleed look.',
-            });
-            return undefined;
-          }
-          return await bleedAnchorFor(buffer);
-        } catch {
-          return undefined;
-        }
-      }),
-    );
+    const composeNotes: Array<{ slide?: number; note: string }> = [...attached.notes];
 
     const slides = base.map((s, i) => ({
       ...s,
       imageNeed: 'none' as const,
       ...(anchors[i] ? { overrides: { bleedAnchor: anchors[i] } } : {}),
-      photos: filled.photos[i] ?? [],
+      photos: attached.photos[i] ?? [],
       // The copywriter's own words for the picture this slide wants — what the
       // Studio's stock picker opens on, instead of an empty search box.
       ...(composed[i]!.imageQuery ? { imageQuery: composed[i]!.imageQuery } : {}),
@@ -936,7 +774,7 @@ projectsRouter.post(
         failures,
         plan: brief.plan,
         locks: brief.locks,
-        photosAttached: filled.used,
+        photosAttached: attached.used,
       },
       /**
        * What the layout gates did — absent only when the check was switched off

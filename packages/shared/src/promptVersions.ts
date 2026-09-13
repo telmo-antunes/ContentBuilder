@@ -156,6 +156,17 @@ export const TOUCHPOINT_REGISTRY: Record<TouchpointId, Touchpoint> = {
           'Asking for "one elevation model" as a principle did not change the output; naming the token does, and makes it checkable.',
         ],
       },
+      {
+        version: 7,
+        date: '2026-09-13',
+        summary: 'The seven forms a good deck is made of, shown in the worked exemplar.',
+        improves: [
+          'The detailmasters exemplar now carries the picture-owns-the-frame cover, the one-liner, the number with its reading, the exhibit of figures, the numbered teaching poster, product proof, the object in a card, and the arrival close — as fragment variants the app rotates.',
+          'The exemplar is sized for the phone by design: body 44px, rows 46px, tagline 48px, eyebrow 34px — the audit measured the previous 33px body and 30px rows against the owner\'s bar and scored legibility 1.',
+          'A tagline and a quote are advertised components, so a cover or a close carrying one substitutes from its fragment instead of falling to the model.',
+          'The pattern cap rose from 12 to 24; a 13th pattern no longer silently discards all of them.',
+        ],
+      },
     ],
   },
 
@@ -267,6 +278,19 @@ export const TOUCHPOINT_REGISTRY: Record<TouchpointId, Touchpoint> = {
         improves: [
           'A deck shipped "Enzymes break the source. Fragrance covers" — well inside its budget, so nothing clamped it and nothing noticed. Copy that stops mid-thought is now sent back to be finished.',
           'A headline may still be a fragment, which is how most of them read. What it may not do is end on a word that leaves the phrase open.',
+        ],
+      },
+      {
+        version: 10,
+        date: '2026-09-13',
+        summary: 'Rewritten from what a good deck looks like, with a worked example.',
+        improves: [
+          'The cover is never the post\'s title — it is the reader\'s problem, an opinion or a number. Both shipped September covers were the title, with the actual hook demoted to a tagline.',
+          'A slide may be one line. A statement no longer arrives with a body written to fill the space under it.',
+          'A template, a script or a rule is an OBJECT: it goes in "quote" on its own slide so the design can set it as the thing the slide is about, instead of as muted body text.',
+          'When the material names a control, a number or a product term, that is the headline.',
+          'The close is one line and one button — no eyebrow, no body, no handle unless the brief gives one.',
+          'Every rule the machine checks is unchanged; the worked example shows a deck that passes all of them.',
         ],
       },
     ],

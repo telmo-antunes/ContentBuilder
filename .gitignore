@@ -48,3 +48,6 @@ coverage/
 
 # local .env backups
 .env.bak.*
+
+# audit working files (contact sheets, autopsies, lab runs)
+audit-out/

@@ -278,7 +278,28 @@ function ownerToDrop(html: string, from: number, to: number): ElementSpan | unde
  */
 function dropOwner(html: string, from: number, to: number): string {
   const owner = ownerToDrop(html, from, to);
-  return owner ? cut(html, owner.start, owner.end) : cut(html, from, to);
+  if (!owner) return cut(html, from, to);
+  let out = cut(html, owner.start, owner.end);
+  /**
+   * PRUNE THE WRAPPERS THE REMOVAL EMPTIED. A `{{body}}` inside a `.card` is
+   * removed with its `.body` — and the card stayed, an empty bordered box
+   * under the headline of every one-liner slide. An element that held only
+   * the removed hole's element has no reason to exist once it is gone;
+   * intentionally-empty elements (a rule, a spacer, a monogram, a photo slot)
+   * never held a hole in the first place, so they are never reached here.
+   */
+  let at = owner.start;
+  for (;;) {
+    const parent = innermostAt(out, at);
+    if (!parent) break;
+    const openEnd = out.indexOf('>', parent.start) + 1;
+    const closeStart = out.lastIndexOf('<', parent.end - 1);
+    if (openEnd <= 0 || closeStart < openEnd) break;
+    if (out.slice(openEnd, closeStart).trim() !== '') break;
+    out = cut(out, parent.start, parent.end);
+    at = parent.start;
+  }
+  return out;
 }
 
 /** Squeeze the blank lines an element removal leaves behind. */
@@ -765,9 +786,18 @@ export function fillRecipeFragmentGaps(recipe: BrandRecipe): {
   for (const [role, value] of Object.entries(fragments)) {
     const wanted = ROLE_PARTS[role];
     if (!wanted) continue;
-    // Each VARIANT is filled independently — a hole one arrangement lacks may
-    // be exactly the furniture another was designed without.
-    const variants = Array.isArray(value) ? value : [value];
+    /**
+     * VARIANTS ARE LEFT ALONE. A variant's identity is what it leaves out: the
+     * one-liner statement omits body and tagline ON PURPOSE, and filling them
+     * in made it a headline-over-body stack like the other two — so a brand
+     * could author the form and never see it. The measured filler already
+     * skips arrays for exactly this reason; the sync filler now agrees. A
+     * single-string fragment is the brand's only answer for its role, so its
+     * gaps are still filled — a slide with copy for a part the fragment cannot
+     * carry would otherwise fall to the model.
+     */
+    if (Array.isArray(value)) continue;
+    const variants = [value];
     const filledVariants: string[] = [];
     const added: string[] = [];
     for (const fragment of variants) {

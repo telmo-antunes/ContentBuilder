@@ -49,6 +49,9 @@ vi.mock('../../storage', () => ({
 
 const { authorRecipe, pairingFor } = await import('./authorRecipe');
 const { dynatosRecipe, detailMastersRecipe, halftonePressRecipe } = await import('./recipes');
+/** The model's default reply: the Dynatós exemplar WITHOUT its fragments — the
+ *  fragment tests below add their own, and one asserts none arrive uninvited. */
+const bareDynatos = { ...dynatosRecipe, fragments: undefined };
 const { PROMPT_VERSION } = await import('../promptVersion');
 
 type Params = Anthropic.MessageCreateParamsNonStreaming;
@@ -87,7 +90,7 @@ const homepagePng = async (): Promise<Buffer> =>
 let warn: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-  streamMock.mockImplementation(async () => ok(JSON.stringify(dynatosRecipe)));
+  streamMock.mockImplementation(async () => ok(JSON.stringify(bareDynatos)));
 });
 afterEach(() => {
   warn.mockRestore();
@@ -240,11 +243,11 @@ describe('the critic patches instead of re-typing', () => {
   };
 
   it('returns the draft untouched on {"verdict":"pass"} — no merge, no re-validation', async () => {
-    conversation(dynatosRecipe, '{"verdict":"pass"}');
+    conversation(bareDynatos, '{"verdict":"pass"}');
     const passed = await authorRecipe(DARK, { model: 'claude-test' });
 
     streamMock.mockReset();
-    streamMock.mockImplementation(async () => ok(JSON.stringify(dynatosRecipe)));
+    streamMock.mockImplementation(async () => ok(JSON.stringify(bareDynatos)));
     const draftOnly = await authorRecipe(DARK, RUN);
     // identical in every respect — except that the critique prompt was used, so
     // the reviewed recipe additionally carries that touchpoint's version stamp
@@ -393,7 +396,8 @@ describe('reference fragments (compose by example)', () => {
       '<div class="eyebrow">{{eyebrow}}</div><div class="headline">{{headline}}</div><div class="tagline">{{tagline}}</div>',
     cta:
       '<div class="headline">{{headline}}</div><div class="fill"></div><div class="cta">{{cta}}</div><div class="handle">{{handle}}</div>',
-    quote: '<div class="panel">{{quote}}</div>',
+    // `.ledger` is a class no exemplar defines — the fragment that must be dropped.
+    quote: '<div class="ledger">{{quote}}</div>',
   };
 
   it('forces the tool to carry one fragment per slide role', async () => {
@@ -432,7 +436,7 @@ describe('reference fragments (compose by example)', () => {
 
   it('keeps the usable fragments and drops the one naming an undefined class', async () => {
     streamMock.mockImplementation(async () =>
-      ok(JSON.stringify({ ...dynatosRecipe, fragments: FRAGMENTS })),
+      ok(JSON.stringify({ ...bareDynatos, fragments: FRAGMENTS })),
     );
     const recipe = await authorRecipe(DARK, RUN);
 
@@ -440,13 +444,13 @@ describe('reference fragments (compose by example)', () => {
     // Everything the author wrote survives, in its order…
     expect(recipe.fragments!['statement']).toContain(FRAGMENTS.statement);
     expect(warn.mock.calls.map((c) => String(c[0]))).toContainEqual(
-      expect.stringContaining('dropped the "quote" reference fragment — uses undefined class .panel'),
+      expect.stringContaining('dropped the "quote" reference fragment — uses undefined class .ledger'),
     );
   });
 
   it('fills in the holes the author left out, so those slides do not pay for a model call', async () => {
     streamMock.mockImplementation(async () =>
-      ok(JSON.stringify({ ...dynatosRecipe, fragments: FRAGMENTS })),
+      ok(JSON.stringify({ ...bareDynatos, fragments: FRAGMENTS })),
     );
     const recipe = await authorRecipe(DARK, RUN);
 
