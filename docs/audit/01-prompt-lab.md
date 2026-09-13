@@ -191,3 +191,15 @@ Findings the run raised, all in the app rather than the recipe:
 17. **The exhibit is for figures.** With word labels ("Commission") the
     112px cells break; the copywriter must only reach for it with numbers, and
     the art director should never pin it otherwise.
+
+## Attached to the live kits (owner-approved, 2026-09-13)
+
+Both upgraded reference recipes were attached to the live kits with
+`scripts/attachReferenceRecipe.ts --write`; the recipes they replaced are in
+`storage/recipe-backups/*-before-reference.json`. Decks already exported keep
+their pinned `recipeSnapshot`. Rendered against the live kits, no hand
+fragments, no model: [live--aftercare](sheets/live--aftercare.jpg),
+[live--dynatos](sheets/live--dynatos.jpg) — every slide substituted from a
+fragment; Dynatós gains the list, stat, card and exhibit vocabulary it never
+had. One thing to check on Dynatós: the `.logo` wordmark renders blank on the
+cover and the close, so the seeded kit's logo asset needs confirming.
