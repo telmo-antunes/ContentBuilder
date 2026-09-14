@@ -15,6 +15,12 @@ export class ApiError extends Error {
 }
 
 /** Wrap an async route so rejected promises reach the error middleware. */
+/** zod's flattened errors plus every issue with its dotted path — `slides.0.photos.0.id`. */
+function withIssues(error: { flatten(): unknown; issues: Array<{ path: PropertyKey[]; message: string }> }) {
+  const flat = error.flatten() as Record<string, unknown>;
+  return { ...flat, issues: error.issues.map((i) => ({ path: i.path.map(String).join('.'), message: i.message })) };
+}
+
 export function asyncHandler(
   fn: (req: Request, res: Response, next: NextFunction) => Promise<unknown>,
 ) {
@@ -27,7 +33,11 @@ export function asyncHandler(
 export function parseBody<S extends ZodTypeAny>(schema: S, body: unknown): ZodInfer<S> {
   const result = schema.safeParse(body);
   if (!result.success) {
-    throw new ApiError(400, 'Validation failed', result.error.flatten());
+    // `flatten()` names the top-level field only — a photo missing its id came
+    // back as {slides: ["Required"]} with no slide index and no field path, and
+    // every API-driving session paid a source dive to find `photos[].id`. The
+    // issues carry the path; hand them over.
+    throw new ApiError(400, 'Validation failed', withIssues(result.error));
   }
   return result.data;
 }
@@ -47,7 +57,7 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
     return;
   }
   if (err instanceof ZodError) {
-    res.status(400).json({ error: 'Validation failed', details: err.flatten() });
+    res.status(400).json({ error: 'Validation failed', details: withIssues(err) });
     return;
   }
   // Unexpected errors: full detail to the server log, generic message to the

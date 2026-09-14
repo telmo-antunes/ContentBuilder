@@ -1519,6 +1519,24 @@ function normalizeParsedDeck(
     }
 
     /**
+     * AN OBJECT IS SHORT. The quote form sets its text at display size in the
+     * brand's italic serif — right for a template or a rule, wrong for a
+     * paragraph, and the copywriter kept setting six-line paragraphs there
+     * after being told an object is under 20 words. A long quote with no
+     * attribution is prose: it becomes the body of a statement, under the
+     * headline the copywriter already wrote for it.
+     */
+    if (role === 'quote' && typeof parts.quote === 'string' && !parts.attribution) {
+      const words = parts.quote.trim().split(/\s+/).length;
+      if (words > 20 && !parts.body) {
+        console.warn(`[compose] parse: slide ${i + 1} set a ${words}-word paragraph as the quote object — composing it as a statement`);
+        parts.body = parts.quote;
+        delete parts.quote;
+        role = 'statement';
+      }
+    }
+
+    /**
      * THE HANDLE IS THE BRAND'S, NOT THE COPYWRITER'S. Every recipe styles it as
      * the small muted line at the very bottom — an @name or a URL — and a
      * copywriter handed a free text field will put a footnote in it ("Check each

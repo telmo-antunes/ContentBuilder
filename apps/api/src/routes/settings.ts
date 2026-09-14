@@ -30,6 +30,10 @@ settingsRouter.get(
         visionModel: (doc?.visionModel as string) ?? '',
         captionModel: (doc?.captionModel as string) ?? '',
         recipeModel: (doc?.recipeModel as string) ?? '',
+        // The copywriter's tier was stored and honoured but never SHOWN — which
+        // is how the arrange step came to run on a stronger model than the
+        // writer for a month without anyone seeing it.
+        parseModel: (doc?.parseModel as string) ?? '',
         composeModel: (doc?.composeModel as string) ?? '',
       },
       envModels: {

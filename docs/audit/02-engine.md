@@ -318,3 +318,28 @@ should hand over facts in the reader's words.
 
 Typecheck, lint and all 1,028 tests green; the seven tests that encoded the
 old clamping were rewritten to the new contract.
+
+### Validation after the backlog (live, Sonnet 4.6 writing, Haiku arranging)
+
+| brief | before | after | cost |
+|---|---|---|---|
+| planned-odour | 3 · 4 · 3 · 2 · 3 · 4 · 3 · 4 · $0.30 | 4 · 4 · 3 · 3 · 3 · 4 · 3 · 4 · **$0.22** | Haiku composed two slides for $0.006 |
+| smell-was-back | 3 · 4 · 3 · 2 · 3 · 4 · 3 · 4 · $0.25 | 4 · 4 · 3 · 3 · 3 · 4 · 3 · 4 · **$0.19** | one Haiku compose, $0.0035 |
+
+Fidelity and variety up one each on both, cost down a quarter, no clamped
+headline, no lost row, verdict lists rendered as verdicts, zero overflow.
+Sheets: [planned-odour](sheets/p2--planned-odour--backlog.jpg),
+[smell-was-back](sheets/p2--smell-was-back--backlog.jpg).
+
+Two things a prompt rule did not hold and are now code: a quote over 20
+words becomes a statement's body (both decks still set a paragraph as the
+object), and — not fixable in this repo — the pool simply has no foam, seat or
+headliner photograph, so those slides get the bench still life. That is a
+media-library gap the owner scoped out; the slide's `imageQuery` is now
+consulted, so the fix is to upload the pictures.
+
+One regression caught and fixed during validation: the first width check used
+`scrollWidth`, which counts the watermark that bleeds off-canvas by design,
+and flagged every slide of every deck (eight repair calls, taglines dropped).
+The probe now measures flowed descendants' right edges, the way the height
+check measures their bottoms.

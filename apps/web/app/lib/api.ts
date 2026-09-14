@@ -109,6 +109,7 @@ export interface AiSettings {
   visionModel: string;
   captionModel: string;
   recipeModel: string;
+  parseModel: string;
   composeModel: string;
 }
 export interface SettingsResponse {
