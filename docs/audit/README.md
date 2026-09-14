@@ -89,3 +89,34 @@ photographed deck), `scripts/attachReferenceRecipe.ts` (the $0 re-author),
 - [02-engine.md](02-engine.md) — the live runs, the tiering, the backlog
 - [03-ux.md](03-ux.md) — the walkthrough
 - [rubric.md](rubric.md), [scores/calibration.md](scores/calibration.md)
+
+## Follow-ups shipped after the audit (2026-09-15)
+
+Sixteen of the twenty suggestions that followed the report, on branch
+`claude/audit-followups`. What each is and where it lives:
+
+| # | what | where |
+|---|---|---|
+| 1 | Four constructed exhibits — step chevron, two-column compare, number ledger, checklist — as list variants on both recipes, chosen only when the rows suit | `recipes.ts`, `variantSuitsRows` in `compose.ts` |
+| 2 | No photo → type: a slide whose picture the tagged library lacks is composed as a one-liner or exhibit, and the owner is told which picture was missing | `photoFor` in `compose.ts`, `poolPhotoFinder` in `photoPool.ts` |
+| 3 | The media pool is tagged once by vision (kind, subjects, tone, caption); attachment is by meaning when tagged | `lib/mediaTags.ts`, `npm run media:tag` |
+| 4 | The critique is shown one or two reference strips from `inspo/` that share the deck's forms | `lib/inspo.ts`, `deckCritique.ts`, `scripts/critiqueLive.ts` |
+| 5 | A second worked example in the Dynatós register in the copywriter prompt (parse v12) | `PARSE_SYSTEM` |
+| 6 | The cover gate: a title on the cover, or a cover past ten words, goes back to the copywriter; survivors are copy faults | `coverHookFaults` in `compose.ts` |
+| 7 | Glossary: system word → the reader's word, edited on the business page, fed to the copywriter | `GlossaryCard.tsx`, `glossaryBlock` |
+| 8 | Corpus gate in CI: the frozen briefs replayed at $0 against a baseline | `scripts/corpusGate.ts`, `.github/workflows/ci.yml` |
+| 9 | Deck scores in the Studio, stored with the prompt versions (`GET /projects/scores/all`) | review page, `Project.scores` |
+| 11 | "Why this slide looks like this" — the decision trace per slide | `lib/autopsy.ts`, `GET /projects/:id/autopsy` |
+| 12 | The compose wait reads the server's phase back | `WorkingPanel` `live`, `projects/new` |
+| 13 | Series: a saved brief template + slide plan a post starts from | `Business.series`, `SeriesCard.tsx`, composer picker |
+| 14 | Stories are derived on first export, not composed | `derivePromoStory` in `routes/projects.ts` |
+| 15 | Caption checks (keyword, close, limits) and the first comment beside the deck | review page |
+| 16 | Instagram insights: link a post, read reach/saves/shares/likes/comments | `lib/instagram.ts`, Settings, the Studio's performance tile |
+| 18 | The form kit: any list/statement/feature form the author leaves out is added in the brand's own classes | `htmlDirector/formKit.ts` |
+
+Also fixed on the way: the web app's own `.panel`/`.card`/`.badge`/`.row`/
+`.chip` rules leaked into rendered slides (a light box under light text on
+every Dynatós list), the fragment-variant cap of 4 silently dropped a whole
+fragments block, and a note under a figure was flagged as unfinished prose.
+Not done, by decision: 10 (monthly spend ceiling), 17 (publish from the
+Studio), 19 (agent-first API), 20 (multi-tenant).
