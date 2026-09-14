@@ -89,6 +89,8 @@ JUDGE, IN THIS ORDER:
 4. THE CRAFT AND THE SIZE. Cramped or floating elements, a lockup whose parts have drifted apart, type that has run long, a call to action that does not feel deliberate — and any text or screenshot that would not be legible at a third of this size: a list whose rows are the smallest type on the sheet, a dashboard shrunk into a card, a body paragraph doing a headline's job.
 5. THE JOB. Would a reader know a business wrote this, and what it wants them to do?
 
+REFERENCES, when one or two contact strips from other accounts are shown BEFORE the deck: they are the bar this brand should stand beside, not the answer. Judge the deck's FORMS against them — a number at poster size, a numbered set with room to read, one line on a field, an exhibit that carries information — never its colours, its type or its words, which are this brand's own. Say in the verdict, in one clause, what the references do that this deck does not.
+
 RULES
 - Report only what you can SEE in the picture. Do not invent copy, and do not guess at what a slide "probably" says.
 - Be specific and name the slide: "slide 4's body sits so close to the photo they read as one block" beats "spacing issues".
@@ -133,6 +135,13 @@ const TOOL: AiJsonTool = {
 
 /** What one vision pass over a tiled deck costs, near enough to gate on. */
 export const CRITIQUE_ESTIMATE_USD = 0.04;
+/** What each reference strip adds to that pass. */
+export const CRITIQUE_REFERENCE_USD = 0.015;
+
+export interface CritiqueReference {
+  label: string;
+  buffer: Buffer;
+}
 
 const SEVERITIES = new Set(['blocking', 'notable', 'minor']);
 
@@ -147,8 +156,15 @@ export async function critiqueDeck(
   recipe: BrandRecipe,
   shots: ReadonlyArray<Buffer | null>,
   format: Format,
-  opts?: { model?: string },
+  opts?: { model?: string; references?: ReadonlyArray<CritiqueReference> },
 ): Promise<CritiqueOutcome> {
+  // References are optional and drop first: the deck is judged without them
+  // before it goes unjudged for their sake.
+  const offered = opts?.references ?? [];
+  const references =
+    offered.length && affordsUsd(CRITIQUE_ESTIMATE_USD + CRITIQUE_REFERENCE_USD * offered.length, 'deck-critique-references')
+      ? offered
+      : [];
   const usable = shots.filter((s): s is Buffer => Boolean(s));
   // One slide is not a sequence, and sequence is most of what this judges.
   if (usable.length < 2) return { status: 'skipped', reason: 'too-few-slides' };
@@ -189,6 +205,11 @@ export async function critiqueDeck(
           {
             role: 'user',
             content: [
+              ...references.flatMap((r, i) => [
+                { type: 'text' as const, text: `REFERENCE ${i + 1} of ${references.length} — the bar, from ${r.label}:` },
+                { type: 'image' as const, source: { type: 'base64' as const, media_type: 'image/jpeg' as const, data: r.buffer.toString('base64') } },
+              ]),
+              ...(references.length ? [{ type: 'text' as const, text: 'THE DECK UNDER REVIEW follows.' }] : []),
               {
                 type: 'image',
                 source: { type: 'base64', media_type: 'image/png', data: sheet.toString('base64') },

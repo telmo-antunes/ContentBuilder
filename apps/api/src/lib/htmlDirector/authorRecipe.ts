@@ -57,6 +57,7 @@ import {
   validateRecipeFragments,
 } from './fragments';
 import { dynatosRecipe, detailMastersRecipe, halftonePressRecipe } from './recipes';
+import { ensureSevenForms } from './formKit';
 import { checkRecipeLayout } from './verifyRecipe';
 import { openRenderProbe, renderCheckEnabledByDefault } from './renderCheck';
 import { LAYER_REMIT, RECIPE_LAYERS } from './refineLayer';
@@ -731,7 +732,20 @@ function gate(recipe: BrandRecipe, label: string, previous?: BrandRecipe): Brand
    * stands down entirely when a brand has none. Derived from the fragments
    * themselves, so the two can never disagree.
    */
-  const patterned = derivePatternsFromFragments(filled.recipe);
+  /**
+   * THE SEVEN FORMS, GUARANTEED. Whatever list, statement or feature form the
+   * author left out is added from the reference kit in this brand's own
+   * classes — so a brand gets the exhibit, the chevron, the compare, the
+   * ledger and the checklist on day one instead of after a hand-attached
+   * recipe. Runs before the patterns are derived, so each added variant gets
+   * its arrangement line.
+   */
+  const kit = ensureSevenForms(filled.recipe);
+  if (kit.added.length) console.warn(`[recipe:${label}] form kit added: ${kit.added.join(', ')}`);
+  for (const sk of kit.skipped) {
+    console.warn(`[recipe:${label}] form kit skipped "${sk.form}" — the brand has no ${sk.missing.join(', ')} class`);
+  }
+  const patterned = derivePatternsFromFragments(kit.recipe);
   if (patterned.added.length) {
     console.warn(
       `[recipe:${label}] derived ${patterned.added.length} composition pattern(s) from the fragments the author wrote`,

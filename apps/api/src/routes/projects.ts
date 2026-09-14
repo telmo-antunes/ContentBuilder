@@ -26,6 +26,7 @@ import {
 import { brandHandleFromWebsite, composeProject, composeSlide, parseSlideCopy, parseSlideDirection } from '../lib/htmlDirector/compose';
 import { withSpendLedger, withLedger, summarize, type SpendLedger } from '../lib/spend';
 import { autopsyFor } from '../lib/autopsy';
+import { deckForms, referenceSheetsFor } from '../lib/inspo';
 import { instagramCredentials, listRecentMedia, mediaInsights, permalinkCode } from '../lib/instagram';
 import { CRITIQUE_SKIP_TEXT, critiqueDeck, type CritiqueOutcome } from '../lib/htmlDirector/deckCritique';
 import { resolveBrief } from '../lib/sourceIngest';
@@ -736,13 +737,21 @@ projectsRouter.post(
         slides.map((s) => s.id),
         project.get('format'),
       );
+      // The bar as pictures: one or two reference strips sharing this deck's
+      // forms, when the inspo folder is present. Absent, the critique runs as
+      // before; unaffordable, they are dropped before the review is.
+      const references = await referenceSheetsFor(
+        deckForms(slides.map((s) => ({ role: s.authored?.role, hasPhoto: (s.photos ?? []).length > 0, html: s.authored?.html }))),
+      ).catch(() => []);
       critique = await withLedger(ledger, () =>
         critiqueDeck(
           parsedRecipe.data,
           shots.map((b64) => (b64 ? Buffer.from(b64, 'base64') : null)),
           project.get('format') as Format,
+          { references },
         ),
       );
+      if (references.length) composeNotes.push({ note: `The review was shown ${references.length} reference post(s) as the bar: ${references.map((r) => r.label).join('; ')}.` });
       project.set(
         'critique',
         critique.status === 'ok'

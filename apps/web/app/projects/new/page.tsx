@@ -150,7 +150,7 @@ function NewProjectForm() {
   }, [type, formats, format]);
 
   const selectedBiz = businesses?.find((b) => b._id === businessId);
-  const seriesList = selectedBiz?.series ?? [];
+  const seriesList = useMemo(() => selectedBiz?.series ?? [], [selectedBiz]);
   /** Start from a series: its template becomes the brief, its plan the slides, its format the format. */
   const applySeries = useCallback(
     (id: string) => {

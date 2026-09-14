@@ -69,7 +69,7 @@ export async function listRecentMedia(creds: InstagramCredentials, limit = 50): 
 
 /** Two permalinks name the same post when their shortcode matches. */
 export function permalinkCode(url: string | undefined): string | undefined {
-  const m = /instagram\.com\/(?:p|reel)\/([A-Za-z0-9_-]+)/.exec(url ?? '');
+  const m = /instagram\.com\/(?:[^/?]+\/)?(?:p|reel)\/([A-Za-z0-9_-]+)/.exec(url ?? "");
   return m?.[1];
 }
 

@@ -16,6 +16,7 @@
     "prompt:hashes": "tsx src/scripts/promptHashes.ts",
     "media:orphans": "tsx src/scripts/sweepOrphanedMedia.ts",
     "media:tag": "tsx src/scripts/tagMedia.ts",
+    "corpus:gate": "tsx src/scripts/corpusGate.ts",
     "scaffolds:orphans": "tsx src/scripts/sweepRenderScaffolds.ts",
     "layout:corpus": "tsx src/scripts/slackDistribution.ts",
     "ai:share": "tsx src/scripts/aiShare.ts",
