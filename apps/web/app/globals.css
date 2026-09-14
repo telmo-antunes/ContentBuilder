@@ -2123,3 +2123,13 @@ input[type='color'] {
   --glow-1: rgb(106 166 155 / 10%);
   --glow-2: rgb(183 147 85 / 8%);
 }
+
+/* ── Glossary card (business page) ─────────────────────────────────────── */
+.glossary { display: grid; gap: 12px; }
+.glossary-lead { margin: 0; color: var(--mo-muted, var(--muted)); font-size: 13px; }
+.glossary-rows { display: grid; gap: 8px; }
+.glossary-row { display: grid; grid-template-columns: 1fr auto 1.4fr auto; gap: 8px; align-items: center; }
+.glossary-row input { min-width: 0; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); color: inherit; font: inherit; }
+.glossary-arrow { color: var(--mo-muted, var(--muted)); }
+.glossary-actions { display: flex; gap: 8px; justify-content: flex-end; }
+@media (max-width: 640px) { .glossary-row { grid-template-columns: 1fr auto; } .glossary-arrow { display: none; } }

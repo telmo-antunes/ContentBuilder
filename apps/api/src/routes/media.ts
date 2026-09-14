@@ -8,6 +8,14 @@ import { z as zStock } from 'zod';
 import { ApiError, asyncHandler, parseBody, requireObjectId } from '../lib/http';
 import { searchStockPhotos, stockConfigured, storeStockPhoto } from '../lib/stock';
 import { sanitizeSvgUpload } from '../lib/svgSanitize';
+import { tagImage } from '../lib/mediaTags';
+
+/** Tag a stored picture in the background; never fails the request that stored it. */
+function tagLater(assetId: string, buffer: Buffer): void {
+  void tagImage(buffer)
+    .then((tags) => (tags ? MediaAssetModel.updateOne({ _id: assetId }, { $set: { tags } }) : undefined))
+    .catch((err) => console.warn(`[media] could not tag ${assetId}: ${err instanceof Error ? err.message : err}`));
+}
 
 /** Business-scoped media uploads. Mounted at /businesses/:id/media. */
 export const mediaRouter = Router({ mergeParams: true });
@@ -113,6 +121,9 @@ mediaRouter.post(
       height,
     });
     res.status(201).json(asset.toJSON());
+    // Read what is in it, after the reply: the tags are how the next deck
+    // finds this picture by the slide's words, and a failed read costs nothing.
+    if (file.mimetype !== 'image/svg+xml') tagLater(String(asset._id), uploadBuffer);
   }),
 );
 
@@ -151,5 +162,7 @@ mediaRouter.post(
     const asset = await storeStockPhoto(businessId, body);
     if (!asset) throw new ApiError(502, 'Could not download that photo — try another.');
     res.status(201).json(asset);
+    const key = (asset as { key?: string }).key;
+    if (key) void getStorage().read(key).then((buf) => tagLater(String((asset as { _id: unknown })._id), buf)).catch(() => {});
   }),
 );

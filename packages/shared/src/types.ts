@@ -20,7 +20,19 @@ export interface Business {
   name: string;
   websiteUrl?: string;
   profile?: BusinessProfile;
+  /**
+   * THE WORDS THE READER USES. The business's own system calls a thing one
+   * name ("Send update", "booking record") and the copywriter repeated it; the
+   * customer knows it by another. Left: what the system says. Right: what to
+   * write. Fed to the copywriter with the brand lessons.
+   */
+  glossary?: GlossaryEntry[];
   createdAt: string;
+}
+
+export interface GlossaryEntry {
+  system: string;
+  customer: string;
 }
 
 export interface BrandColors {
@@ -130,6 +142,15 @@ export interface MediaAsset {
   url: string;
   width: number;
   height: number;
+  /** What vision read in the picture — see the API's lib/mediaTags.ts. */
+  tags?: {
+    kind: 'photo' | 'screenshot' | 'graphic' | 'logo';
+    subjects: string[];
+    tone: 'dark' | 'mid' | 'light';
+    hasText: boolean;
+    caption: string;
+    taggedAt: string;
+  };
   createdAt: string;
 }
 

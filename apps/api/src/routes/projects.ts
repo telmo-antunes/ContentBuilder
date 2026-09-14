@@ -39,7 +39,7 @@ import { runVideoJob, sweepExpiredVideoJobs } from '../lib/videoJobs';
 import { findImageCopyContradictions, type SlidePairing } from '../lib/imageCopyCheck';
 import { getStorage } from '../storage';
 import { generateCaption, type GeneratedCaption } from '../lib/caption';
-import { attachPoolPhotos, brandPhotoPool, PROMO_COVER_LABEL } from '../lib/photoPool';
+import { attachPoolPhotos, brandPhotoPool, poolPhotoFinder, PROMO_COVER_LABEL } from '../lib/photoPool';
 import { lessonsFor, noteSlideSignal, observeOutcome, recordGeneration } from '../lib/learningLoop';
 import type { ComposeRecord, CopyCheckSummary, LayoutCheckSummary } from '../lib/htmlDirector/compose';
 import { postUpdateStatus } from '../lib/promptStatus';
@@ -558,6 +558,8 @@ projectsRouter.post(
      * everything the post costs.
      */
     let ledger: SpendLedger | undefined;
+    /** Decisions the parse step took before anything was composed — a withdrawn photo call. */
+    const earlyNotes: Array<{ slide?: number; note: string }> = [];
     try {
       const run = await withSpendLedger(
         { projectId: String(project._id), ceilingUsd: config.ai.postCeilingUsd },
@@ -568,6 +570,15 @@ projectsRouter.post(
         locks: brief.locks,
         sources,
         lessons,
+        // The reader's words for the system's things, from the business page.
+        glossary: (business as { glossary?: Array<{ system: string; customer: string }> } | null)?.glossary ?? undefined,
+        // A tagged library answers "is there a picture of X?" per slide; an
+        // untagged one says yes to everything, as before.
+        photoFor: (() => {
+          const finder = poolPhotoFinder(pool);
+          return (query: string | undefined) => finder(query);
+        })(),
+        onNote: (n) => earlyNotes.push(n),
         handle: brandHandle || undefined,
         // Stable per-project offset for the pattern/fragment variant rotation:
         // consecutive posts compose different skeletons for the same roles,
@@ -636,7 +647,7 @@ projectsRouter.post(
     // behalf, stored on the project and shown on the review page. A decision
     // that only ever reached console.warn was invisible to the one person who
     // could overrule it.
-    const composeNotes: Array<{ slide?: number; note: string }> = [...attached.notes];
+    const composeNotes: Array<{ slide?: number; note: string }> = [...earlyNotes, ...attached.notes];
 
     const slides = base.map((s, i) => ({
       ...s,

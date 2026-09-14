@@ -1,3 +1,4 @@
+import type { GlossaryEntry } from '@contentbuilder/shared';
 /**
  * The slide-compose touchpoint: turn an idea into on-brand authored slides.
  *
@@ -215,6 +216,24 @@ export interface ComposeOptions {
    * eval's behaviour, and every caller that has no library to consult).
    */
   photoBudget?: number;
+  /**
+   * DOES THE LIBRARY HOLD A PICTURE FOR THESE WORDS? Asked per slide, before
+   * anything is composed, with the copywriter's own image query. A "no" turns
+   * the slide into type — a one-liner, a number, an exhibit — instead of a
+   * slot the pool fills with the nearest wrong photograph. Absent means every
+   * query is answered "yes" (the untagged-library behaviour).
+   */
+  photoFor?: (query: string | undefined, role: string) => boolean;
+  /**
+   * A decision the code took on the deck's behalf, worth showing the owner —
+   * the review page's ledger. Same shape as the project's composeNotes.
+   */
+  onNote?: (note: { slide?: number; note: string }) => void;
+  /**
+   * THE WORDS THE READER USES. System name → the customer's name for it; the
+   * copywriter writes the right-hand words. See shared GlossaryEntry.
+   */
+  glossary?: readonly GlossaryEntry[];
   /**
    * Appended to the compose USER message. The overflow repair uses it to name
    * the failure ("the previous composition overflowed the canvas…"); nothing
@@ -791,7 +810,10 @@ export interface UnfinishedProse {
     /** The budget clamp removed a phrase-completing word: the line reads
      *  finished and may no longer mean what was approved. */
     | 'clamped mid-phrase'
-    | 'over budget after correction';
+    | 'over budget after correction'
+    /** The cover gate (see `coverHookFaults`): a title on the cover, or a cover that runs long. */
+    | 'cover reads as the post title'
+    | 'cover runs past ten words';
 }
 
 /**
@@ -899,6 +921,62 @@ export function trimToFinished(text: string): string | null {
   const last = out.split(/\s+/).pop()?.toLowerCase().replace(/[,;:]+$/, '') ?? '';
   if (INTERNAL_SENTENCE_BREAK.test(out)) return null;
   if (DANGLING_WORDS.has(last)) return null;
+  return out;
+}
+
+/**
+ * THE READER'S WORDS FOR THE SYSTEM'S THINGS. A CRM's facts arrive in the
+ * developer's names ("Send update", "booking record", "the client profile")
+ * and the copywriter, told never to invent, repeated them faithfully — the
+ * largest fidelity fault left after the audit, and not one a prompt rule can
+ * fix, because only the business knows what its customers call things.
+ */
+export function glossaryBlock(glossary: readonly GlossaryEntry[]): string {
+  const rows = glossary.filter((g) => g.system.trim() && g.customer.trim()).slice(0, 40);
+  if (!rows.length) return '';
+  return (
+    `GLOSSARY — the business's own system uses the words on the LEFT; its customers know the thing by the words on the RIGHT. Write the right-hand words. The left-hand ones may appear only when the slide is literally naming a control to press:\n` +
+    rows.map((g) => `  · ${JSON.stringify(g.system.trim())} → ${JSON.stringify(g.customer.trim())}`).join('\n')
+  );
+}
+
+/**
+ * THE COVER EARNS THE SWIPE, OR IT DOES NOT. The prompt says a cover is never
+ * the post's title and runs under ten words; the owner scored hook 1 on decks
+ * whose cover was the title anyway. Two of those failures are measurable:
+ * a headline that IS the title (the brief's first line, or the source's), and
+ * one that runs long. Both go back to the copywriter in the corrective pass;
+ * what survives is reported as a copy fault so the ship bar shows it.
+ */
+export function coverHookFaults(
+  slides: ReadonlyArray<ParsedSlide>,
+  idea: string | undefined,
+  sources: ReadonlyArray<{ title?: string }> | undefined,
+): UnfinishedProse[] {
+  const cover = slides[0];
+  const headline = cover?.parts.headline?.trim();
+  if (!cover || cover.role !== 'cover' || !headline) return [];
+  const words = (t: string) =>
+    t.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter((w) => w.length > 2);
+  const out: UnfinishedProse[] = [];
+  const hw = words(headline);
+  if (hw.length > 10) out.push({ slide: 0, label: 'headline', text: headline, reason: 'cover runs past ten words' });
+  const titles = [
+    ...(sources ?? []).map((x) => x.title ?? ''),
+    // The brief's first line is its title far more often than not.
+    (idea ?? '').split('\n').map((l) => l.trim()).find(Boolean) ?? '',
+  ]
+    .map((t) => t.trim())
+    .filter((t) => t && words(t).length >= 3 && words(t).length <= 16);
+  for (const t of titles) {
+    const tw = new Set(words(t));
+    if (hw.length < 3) continue;
+    const shared = hw.filter((w) => tw.has(w)).length;
+    if (shared / hw.length >= 0.8 || (shared >= 3 && shared / Math.max(tw.size, hw.length) >= 0.6)) {
+      out.push({ slide: 0, label: 'headline', text: headline, reason: 'cover reads as the post title' });
+      break;
+    }
+  }
   return out;
 }
 
@@ -1189,6 +1267,17 @@ DECK:
 7 cta — headline "DM us AFTERCARE." · emphasis "AFTERCARE." · tagline "We send the template back." · cta "Send AFTERCARE" · why "one line and one button"
 Notice what is NOT there: nothing the brief does not say, no body under the one-liner, no title on the cover, no eyebrow or handle on the close.
 
+A SECOND WORKED EXAMPLE, in a different register — a coaching program, condensed and direct
+BRIEF (abridged): Recovery beats grit. Reader: people in the program who train through fatigue and call it discipline. Beats: three markers say you are under-recovered (resting heart rate up · sleep under seven hours · the same weight feels heavier); the rule: two bad markers in a row means a recovery day, not a lighter session; what a recovery day is (a walk · eight hours of sleep · protein at every meal); the line to remember: "Grit is finishing the plan. Recovery is what lets you." Close: reply RECOVER for the recovery-day checklist.
+DECK:
+1 cover, image — eyebrow "Recovery" · headline "Tired is not the same as weak." · emphasis "not the same" · tagline "Three markers say which one it is." · why "the reader's own doubt; the picture is the athlete, not the program"
+2 list — eyebrow "The markers" · headline "Three numbers that say stop." · rows "Resting heart rate up" / "Sleep under seven hours" / "The same weight feels heavier" · why "the brief's three signs, in its order, no notes"
+3 statement — eyebrow "The rule" · headline "Two bad markers. One recovery day." · tagline "Not a lighter session. A day." · why "one line; the rule is the whole slide"
+4 list — eyebrow "A recovery day" · headline "What the day is made of." · rows "A walk" / "Eight hours of sleep" / "Protein at every meal" · why "three short items — a step form, not a paragraph"
+5 quote — eyebrow "Remember this" · headline "Say it before the next session." · quote "Grit is finishing the plan. Recovery is what lets you." · why "the line worth saving is the object"
+6 cta — headline "Reply RECOVER." · emphasis "RECOVER." · tagline "We send the recovery-day checklist." · cta "Send RECOVER" · why "one line and one button"
+Same discipline, different voice: short declaratives, no softening, the brand's own imperatives — and still nothing the brief did not say.
+
 THE CONTRACT — these are checked by machines after you finish, so treat them as physics
 - First slide role "cover" (the hook). Last slide role "cta". In between use statement / feature / stat / quote / list as the content wants.
 - NEVER INVENT A CLAIM. This applies to the BRIEF exactly as it applies to a SOURCE: when the brief carries sentences, facts or list items, COMPRESS them — cut words, never substitute your own. Do not introduce a noun, cause, symptom or recommendation the brief does not contain. A slide built from a heading with no material under it states the heading and stops; it does not guess what the material would have said.
@@ -1382,6 +1471,7 @@ function parseUser(
     sources: readonly SourceDoc[];
     handle?: string;
     lessons?: readonly Lesson[];
+    glossary?: readonly GlossaryEntry[];
   /**
    * Per role, how far past the usual composition variant to start. Derived from
    * the brand's `rearranges-role` lessons — see `variantBiasFromLessons`.
@@ -1414,6 +1504,7 @@ function parseUser(
     formatGuidance(format),
     countGuidance(opts.range, opts.plan.length),
     lessonsBlock(opts.lessons ?? []),
+    glossaryBlock(opts.glossary ?? []),
     ``,
     `BRIEF: ${idea || '(none — work from the source and the plan)'}`,
     plan,
@@ -1509,14 +1600,37 @@ function normalizeParsedDeck(
   recipe: BrandRecipe,
   photoBudget: number | undefined,
   handle?: string,
+  photoFor?: ComposeOptions['photoFor'],
+  onNote?: ComposeOptions['onNote'],
 ): ParsedSlide[] {
   const capable = photoCapableRoles(recipe);
   let remaining = photoBudget;
+  /** Slides whose picture the library does not hold — the floor below must not hand them one. */
+  const noPictureFor = new Set<number>();
   const out: ParsedSlide[] = slides.map((s, i) => {
     let role = s.role;
     let image = s.image;
     const parts = { ...s.parts };
     const rows = parts.rows ?? [];
+
+    /**
+     * NO PHOTO → EXHIBIT. When the library has been tagged and holds nothing
+     * for this slide's words ("foam on a car seat" in a library of dashboards
+     * and bonnets), the photo call is withdrawn HERE, before composition, so
+     * the slide is arranged as type rather than around a hole the pool then
+     * fills with the nearest wrong picture. The owner is told which picture
+     * was missing — that is the upload that fixes the next deck.
+     */
+    if (image && photoFor && !photoFor(s.imageQuery, role)) {
+      image = false;
+      noPictureFor.add(i);
+      const what = s.imageQuery ? `“${s.imageQuery}”` : 'this slide';
+      console.warn(`[compose] parse: slide ${i + 1} wanted a picture of ${what} and the library holds none — composed as type`);
+      onNote?.({
+        slide: i + 1,
+        note: `This slide asked for a picture of ${what}; the media library holds nothing like it, so it was composed as type. Upload one and re-compose to get the photo form.`,
+      });
+    }
 
     // ONE COVER PER DECK. A copywriter gave a middle beat the cover role and it
     // shipped with the logo lockup and a full-bleed photograph in the middle of
@@ -1685,7 +1799,7 @@ function normalizeParsedDeck(
    */
   const wantsPhoto = (photoBudget ?? 0) > 0;
   if (wantsPhoto && !out.some((s) => s.image)) {
-    const i = out.findIndex((s) => capable.has(s.role) && !(s.parts.rows ?? []).length);
+    const i = out.findIndex((s, k) => capable.has(s.role) && !(s.parts.rows ?? []).length && !noPictureFor.has(k));
     if (i !== -1) {
       out[i] = { ...out[i]!, image: true };
       console.warn(
@@ -1716,6 +1830,8 @@ export interface ParseRequest {
   plan: string[];
   locks: readonly string[];
   sources: readonly SourceDoc[];
+  /** The brief, as given — the hook gate compares the cover against its title line. */
+  idea: string;
 }
 
 export function buildParseRequest(recipe: BrandRecipe, idea: string, opts?: ComposeOptions): ParseRequest {
@@ -1749,11 +1865,12 @@ export function buildParseRequest(recipe: BrandRecipe, idea: string, opts?: Comp
     sources,
     handle: opts?.handle,
     lessons: opts?.lessons,
+    glossary: opts?.glossary,
   });
   // Source material makes the reply longer (more slides, richer copy) — a deck
   // truncated mid-JSON is a failed parse, so the ceiling follows the input.
   const maxTokens = sources.length || plan.length > 6 ? 2600 : 1600;
-  return { system: PARSE_SYSTEM, user, tool: PARSE_TOOL, model, maxTokens, format, range, budgets, plan, locks, sources };
+  return { system: PARSE_SYSTEM, user, tool: PARSE_TOOL, model, maxTokens, format, range, budgets, plan, locks, sources, idea };
 }
 
 /** Parse an idea into composed-slide inputs (role + verbatim parts). */
@@ -1789,7 +1906,8 @@ export async function parseForCompose(
   // Nothing here can be repaired deterministically: the missing words are the
   // point, and appending a full stop to "Fragrance covers" only hides it.
   const unfinished = unfinishedProse(slides);
-  if (flagrant.length || lost.length || repeats.length || unfinished.length) {
+  const hook = coverHookFaults(slides, req.idea, req.sources);
+  if (flagrant.length || lost.length || repeats.length || unfinished.length || hook.length) {
     if (flagrant.length) {
       console.warn(`[compose] parse: ${flagrant.length} part(s) burst their budgets — one corrective re-parse`);
     }
@@ -1802,6 +1920,7 @@ export async function parseForCompose(
         `[compose] parse: slides ${r.a + 1} and ${r.b + 1} make the same point (${Math.round(r.score * 100)}% of their words agree) — correcting`,
       );
     }
+    for (const h of hook) console.warn(`[compose] parse: the cover ${h.reason.replace(/^cover /, '')} — correcting`);
     const correction = [
       flagrant.length ? `Some parts exceed the hard copy budgets:` : '',
       ...flagrant.map((v) => `- slide ${v.slide + 1} ${v.label} is ${v.length} chars, budget ${v.budget}`),
@@ -1809,6 +1928,8 @@ export async function parseForCompose(
       ...lost.map((l) => `- ${JSON.stringify(l)}`),
       unfinished.length ? `These lines stop mid-thought. Finish the sentence — do not simply add a full stop to what is there:` : '',
       ...unfinished.map((u) => `- slide ${u.slide + 1} ${u.label}: ${JSON.stringify(u.text)} (${u.reason})`),
+      hook.length ? `The cover does not earn the swipe:` : '',
+      ...hook.map((h) => `- slide 1 headline ${JSON.stringify(h.text)}: ${h.reason.replace(/^cover /, '')}. Rewrite it as the reader's own problem, an opinion, or a number — under ten words — and move the title to the eyebrow if it belongs anywhere.`),
       repeats.length ? `These pairs of slides make the same point twice — a reader learns nothing from the second:` : '',
       ...repeats.map(
         (r) =>
@@ -1884,7 +2005,7 @@ export function finishParsedDeck(
     slides = slides.slice(0, range.max);
   }
 
-  slides = normalizeParsedDeck(slides, recipe, opts?.photoBudget, opts?.handle);
+  slides = normalizeParsedDeck(slides, recipe, opts?.photoBudget, opts?.handle, opts?.photoFor, opts?.onNote);
 
   const stillLost = missingLocks(JSON.stringify(slides), locks);
   if (stillLost.length) {
@@ -1936,7 +2057,7 @@ export function finishParsedDeck(
    * RESPONSE only — so anyone opening the review page later saw a deck whose
    * ship bar said all-clear while its closing headline stopped mid-sentence.
    */
-  const checked = unfinishedProse(slides);
+  const checked = [...unfinishedProse(slides), ...coverHookFaults(slides, req.idea, req.sources)];
   /**
    * A clamp that removed a phrase-completing word joins the report: it is the
    * one fault every detector downstream is BLIND to, because the line it
@@ -2040,7 +2161,7 @@ export async function parseSlideDirection(
   );
   const parsed = stripMarkdownFromDeck(readDeck(parsePayload(reply), 'one slide'));
   let slides = clampSlidesToBudgets(parsed.slice(0, 1), budgets, locks);
-  slides = normalizeParsedDeck(slides, recipe, opts?.photoBudget, opts?.handle);
+  slides = normalizeParsedDeck(slides, recipe, opts?.photoBudget, opts?.handle, opts?.photoFor, opts?.onNote);
   const s = slides[0]!;
   return {
     role: s.role as SlideRole,

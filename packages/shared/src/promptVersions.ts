@@ -314,6 +314,17 @@ export const TOUCHPOINT_REGISTRY: Record<TouchpointId, Touchpoint> = {
           'Headlines and taglines end with a full stop or a question mark; a tagline has a budget (70) and, like a headline, is re-asked rather than cut.',
         ],
       },
+      {
+        version: 12,
+        date: '2026-09-15',
+        summary: 'A second worked example in another register, the reader\'s glossary, and a cover that is checked.',
+        improves: [
+          'A Dynatós-register worked deck (short declaratives, condensed and direct) sits beside the detailing one, so neither brand is written in the other\'s voice.',
+          'The business\'s glossary rides in the user message: the system\'s names on the left, the customer\'s words on the right, and the copywriter writes the right-hand ones.',
+          'The cover is measured after the first pass: a headline that is the post\'s title, or runs past ten words, goes back to the copywriter, and what survives is a copy fault on the review page.',
+          'A slide whose picture the tagged library does not hold is composed as type before anything is arranged, and the owner is told which picture was missing.',
+        ],
+      },
     ],
   },
 

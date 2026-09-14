@@ -16,6 +16,7 @@ import {
 } from '../../lib/api';
 import ProfileCard from '../../components/ProfileCard';
 import BrandLessons from '../../components/BrandLessons';
+import GlossaryCard from '../../components/GlossaryCard';
 import { confirm } from '../../components/ConfirmDialog';
 import { ErrorState } from '../../components/ErrorState';
 import { OverflowMenu } from '../../components/OverflowMenu';
@@ -62,6 +63,7 @@ export default function BusinessDetailPage() {
   const [typeFilter, setTypeFilter] = useState<'all' | 'carousel' | 'story'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'rendered' | 'draft'>('all');
   const [profileOpen, setProfileOpen] = useState(false);
+  const [glossaryOpen, setGlossaryOpen] = useState(false);
   const [lessonsOpen, setLessonsOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   /** Set when an analysis just landed — the identity lines animate in, staggered. */
@@ -451,6 +453,27 @@ export default function BusinessDetailPage() {
           {profileOpen && (
             <div className="mo-drow-body">
               <ProfileCard businessId={biz._id} profile={biz.profile} onSaved={reload} />
+            </div>
+          )}
+        </div>
+
+        {/* ── Glossary: the reader's words for the system's things ── */}
+        <div className="mo-drow">
+          <span className="l">Words</span>
+          <span className="v" style={{ color: 'var(--mo-muted)' }}>
+            {biz.glossary?.length
+              ? biz.glossary.slice(0, 3).map((g) => (
+                  <span key={g.system} className="chp">{g.system} → {g.customer}</span>
+                ))
+              : 'What your customers call the things your system names — so the copywriter uses their words, not the CRM’s.'}
+            {(biz.glossary?.length ?? 0) > 3 ? <span className="chp">+{(biz.glossary?.length ?? 0) - 3}</span> : null}
+          </span>
+          <button className="edit" onClick={() => setGlossaryOpen((v) => !v)}>
+            {glossaryOpen ? 'Close' : biz.glossary?.length ? 'Edit' : 'Add words'}
+          </button>
+          {glossaryOpen && (
+            <div className="mo-drow-body">
+              <GlossaryCard businessId={biz._id} glossary={biz.glossary} onSaved={reload} />
             </div>
           )}
         </div>

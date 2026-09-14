@@ -894,8 +894,12 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
     chips.push({
       key: `copy-${i}`,
       tone: 'bad',
-      label: `Slide ${f.slide + 1}: ${f.label} stops mid-thought`,
-      hint: `“${f.text}” — ${f.reason}. Rewrite it, or shorten it to a line that finishes.`,
+      label: f.reason.startsWith('cover ')
+        ? `Cover: ${f.reason.replace(/^cover /, '')}`
+        : `Slide ${f.slide + 1}: ${f.label} stops mid-thought`,
+      hint: f.reason.startsWith('cover ')
+        ? `“${f.text}” — the cover is the reader's own problem, an opinion or a number, under ten words. The title belongs in the eyebrow.`
+        : `“${f.text}” — ${f.reason}. Rewrite it, or shorten it to a line that finishes.`,
       slide: f.slide,
     });
   }

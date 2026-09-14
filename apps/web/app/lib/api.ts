@@ -15,6 +15,7 @@ import type {
   Lesson,
   TweakSuggestion,
   UpdateStatus,
+  GlossaryEntry,
 } from '@contentbuilder/shared';
 import { api } from './config';
 
@@ -137,7 +138,7 @@ export const createBusiness = (data: { name: string; websiteUrl?: string; profil
 
 export const updateBusiness = (
   id: string,
-  data: { name?: string; websiteUrl?: string; profile?: BusinessProfile | null },
+  data: { name?: string; websiteUrl?: string; profile?: BusinessProfile | null; glossary?: GlossaryEntry[] },
 ) => request<Business>(`/businesses/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
 
 /**

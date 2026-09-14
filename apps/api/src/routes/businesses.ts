@@ -26,6 +26,10 @@ const updateSchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
   websiteUrl: z.string().trim().max(500).optional().or(z.literal('')),
   profile: profileSchema.nullable().optional(),
+  glossary: z
+    .array(z.object({ system: z.string().trim().min(1).max(80), customer: z.string().trim().min(1).max(120) }))
+    .max(40)
+    .optional(),
 });
 
 /** Attach kit-status + project-count summaries used by the list/detail UI. */
@@ -146,6 +150,7 @@ businessesRouter.patch(
     if (body.profile !== undefined) {
       update.profile = body.profile ? { ...body.profile, completedAt: new Date() } : undefined;
     }
+    if (body.glossary !== undefined) update.glossary = body.glossary;
     const doc = await BusinessModel.findByIdAndUpdate(id, update, { new: true });
     if (!doc) throw new ApiError(404, 'Business not found');
     res.json(doc.toJSON());

@@ -14,6 +14,11 @@ const businessSchema = new Schema(
      * observations it came from.
      */
     lessonMutes: { type: [String], required: false },
+    /** System word → the reader's word; fed to the copywriter. See shared/types.ts GlossaryEntry. */
+    glossary: {
+      type: [new Schema({ system: { type: String, required: true }, customer: { type: String, required: true } }, { _id: false })],
+      required: false,
+    },
     profile: {
       type: new Schema(
         {
