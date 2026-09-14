@@ -52,6 +52,13 @@ export const slidePhotoSchema = z.object({
   frame: frameSchema.optional(),
   fit: z.enum(['cover', 'contain']).catch('cover'),
   /**
+   * Magnify the picture inside its slot: 1 = as `fit` paints it, 2.5 = the
+   * picture is two and a half times the slot's width, positioned by `focal`.
+   * A product screenshot arrives whole and shrinks into a card nobody can
+   * read; zoomed to one row it proves something. Absent = 1.
+   */
+  zoom: z.number().min(1).max(4).optional(),
+  /**
    * Which part of the photo to keep when it is cropped to its box, as
    * fractions [0..1]. Defaults to dead centre — which beheads a portrait in a
    * wide slot, so it is settable per photo.

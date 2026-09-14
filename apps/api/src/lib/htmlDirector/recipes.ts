@@ -174,10 +174,6 @@ export const dynatosRecipe: BrandRecipe = brandRecipeSchema.parse({
 <div class="headline">{{headline}}</div>
 <div class="rule"></div>
 <div class="body">{{body}}</div>`,
-      `<div class="eyebrow">{{eyebrow}}</div>
-<div class="headline sm">{{headline}}</div>
-<div class="fill"></div>
-<div class="card"><div class="body">{{body}}</div></div>`,
     ],
     feature: [
       `<div class="eyebrow">{{eyebrow}}</div>
@@ -235,7 +231,6 @@ export const dynatosRecipe: BrandRecipe = brandRecipeSchema.parse({
       'cover: logo → fill → eyebrow → headline → tagline → cb-shot hero (inset hero)',
       'statement: fill → eyebrow → headline → tagline → fill (ONE LINE, centred)',
       'statement: eyebrow → fill → headline → rule → body (anchored low)',
-      'statement: eyebrow → headline.sm → fill → card holding the body (evidence framed)',
       'feature: eyebrow → headline.sm → rule → body → fill → cb-shot (type first, picture last)',
       'feature: eyebrow → headline.sm → panel.numbered of rows → fill (numbered teaching poster)',
       'feature: eyebrow → headline.sm → body → fill → cb-shot.wide (product proof closing the frame)',
@@ -471,12 +466,6 @@ export const detailMastersRecipe: BrandRecipe = brandRecipeSchema.parse({
 <div class="rule"></div>
 <div class="tagline">{{tagline}}</div>
 <div class="fill"></div>`,
-      // Claim high, its evidence in a card — the business's own artifact.
-      `<div class="eyebrow">{{eyebrow}}</div>
-<div class="headline sm">{{headline}}</div>
-<div class="rule"></div>
-<div class="fill"></div>
-<div class="card"><div class="body">{{body}}</div></div>`,
       // Anchored low: the label on the top edge, the claim on the baseline.
       `<div class="eyebrow">{{eyebrow}}</div>
 <div class="fill"></div>
@@ -557,7 +546,6 @@ export const detailMastersRecipe: BrandRecipe = brandRecipeSchema.parse({
       'cover (photo as background): logo-row → fill → eyebrow → headline(with .it) → tagline (the picture owns the frame)',
       'cover: logo-row → fill → eyebrow → headline(.it) → tagline → cb-shot hero (inset hero)',
       'statement: fill → eyebrow → headline(.it) → rule → tagline → fill (ONE LINE, centred)',
-      'statement: eyebrow → headline.sm(.it) → rule → fill → card holding the body (evidence framed)',
       'statement: eyebrow → fill → headline(.it) → rule → body (claim on the baseline)',
       'feature: eyebrow → headline(.it) → rule → body → fill → cb-shot (type first, picture last)',
       'feature: eyebrow → headline.sm(.it) → rule → panel.numbered of rows → fill (numbered teaching poster)',

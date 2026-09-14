@@ -180,6 +180,8 @@ export interface SlidePhoto {
   fit?: ImageFit;
   /** Which part of the photo survives the crop, as fractions [0..1]. */
   focal?: { x: number; y: number };
+  /** Magnify the picture inside its slot (1–4); `focal` says which part stays in frame. */
+  zoom?: number;
   /** How this photo moves in a video export; 'auto' follows the brand. */
   motion?: PhotoMove;
   /** 'slot': override the shape/size of the hole the composer authored. */

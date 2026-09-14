@@ -11,7 +11,7 @@ import { archetypeFor, authoredSlots, type SlidePhoto } from '@contentbuilder/sh
 import { MediaAssetModel } from '../models';
 import { getStorage } from '../storage';
 import { SITE_PHOTO_LABEL } from './harvest';
-import { bleedAnchorFor, hexLuminance, suitsBleedOver, type BleedAnchor } from './bleedAnchor';
+import { bleedAnchorFor, hexLuminance, meanLuminanceOf, suitsBleedOver, type BleedAnchor } from './bleedAnchor';
 
 /** The media label `promo-story` stores a rendered carousel cover under. */
 export const PROMO_COVER_LABEL = 'Carousel cover';
@@ -171,7 +171,7 @@ export interface AttachedPhotos {
  */
 export async function attachPoolPhotos(
   base: Array<{ id: string; authored?: { html: string; archetype?: string } }>,
-  pool: Array<{ _id: unknown; key?: string }>,
+  pool: Array<{ _id: unknown; key?: string; width?: number; height?: number }>,
   groundHex: string,
 ): Promise<AttachedPhotos> {
   const groundLuminance = hexLuminance(groundHex) ?? 0;
@@ -220,6 +220,35 @@ export async function attachPoolPhotos(
         return await bleedAnchorFor(buffer);
       } catch {
         return undefined;
+      }
+    }),
+  );
+  /**
+   * A SCREENSHOT IN A SLOT IS ZOOMED TO ITS TOP ROWS. A whole dashboard
+   * shrunk into a slot is the one legibility fault every critique named
+   * as blocking: the rows become the smallest type on the sheet and prove
+   * nothing. A wide, light picture is a screenshot far more often than a
+   * photograph; it opens at 1.6× on its upper-left, where a table's names and
+   * first rows sit, and the Studio slider adjusts from there.
+   */
+  await Promise.all(
+    filled.photos.map(async (ps) => {
+      for (const ph of ps) {
+        if (ph.placement !== 'slot' || ph.zoom) continue;
+        const asset = pool.find((m) => String(m._id) === String(ph.mediaAssetId));
+        if (!asset?.key || !asset.width || !asset.height || asset.width / asset.height < 1.4) continue;
+        try {
+          const mean = await meanLuminanceOf(await getStorage().read(asset.key));
+          if (mean !== undefined && mean >= 0.7) {
+            // A modest default: a table's names and first rows sit upper-left.
+            // The Studio's zoom slider and focal picker take it from here — an
+            // automatic crop cannot know which row proves the slide's point.
+            ph.zoom = 1.6;
+            ph.focal = ph.focal ?? { x: 0.3, y: 0.3 };
+          }
+        } catch {
+          /* a picture that will not decode stays as it is */
+        }
       }
     }),
   );

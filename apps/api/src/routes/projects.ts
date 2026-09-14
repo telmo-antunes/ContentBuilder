@@ -107,6 +107,7 @@ function normalizePhotos(s: SlideInput): SlidePhoto[] {
         : {}),
       fit: p.fit,
       ...(p.focal ? { focal: p.focal } : {}),
+      ...(p.zoom ? { zoom: p.zoom } : {}),
       ...(p.motion && p.motion !== 'auto' ? { motion: p.motion } : {}),
       ...(placement === 'slot' && p.shape ? { shape: p.shape } : {}),
       ...(placement === 'slot' && p.size ? { size: p.size } : {}),

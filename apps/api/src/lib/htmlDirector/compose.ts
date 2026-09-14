@@ -2336,11 +2336,51 @@ export interface ComposedSlide {
  * the slide to the model rather than to repair markup nobody wrote. Returns
  * undefined for every such case, and the caller composes it the old way.
  */
+/**
+ * Does this arrangement suit what the slide carries? Two forms are only right
+ * for particular rows: the EXHIBIT sets each row as a poster-size figure, so a
+ * text row ("Four for the price of three") hyphenates across five lines; the
+ * NUMBERED panel counts the rows in the gutter, where a verdict list draws its
+ * ✓/✕. Both landed on the wrong content in the first live runs.
+ */
+function variantSuitsRows(fragment: string, input: ComposeSlideInput): boolean {
+  const rows = input.parts.rows ?? [];
+  if (/class="figures"/.test(fragment)) {
+    return rows.length > 0 && rows.every((r) => /\d/.test(r.text) && r.text.trim().length <= 14);
+  }
+  if (/\bnumbered\b/.test(fragment) && rows.some((r) => r.state === 'do' || r.state === 'dont')) return false;
+  return true;
+}
+
 export function composeByFragment(
   recipe: BrandRecipe,
   input: ComposeSlideInput,
 ): { html: string } | undefined {
-  const filled = substituteFragment(recipe, input);
+  /**
+   * TRY EVERY ARRANGEMENT BEFORE PAYING. The rotation names one variant; when
+   * that one lacks a hole the slide needs (a list with a lead-in line, a
+   * statement with a tagline) a sibling usually has it — and the deck used
+   * to go to the model instead, at $0.03–0.07 a slide, for the same stack
+   * back. Start at the rotation's pick, walk the rest in order, skip the
+   * forms the rows do not suit.
+   */
+  const variants = fragmentVariantsFor(recipe, input.role);
+  const start = variants.length ? Math.abs(variantIndexOf(input)) % variants.length : 0;
+  let filled: ReturnType<typeof substituteFragment> | undefined;
+  for (let step = 0; step < Math.max(1, variants.length); step += 1) {
+    const k = variants.length ? (start + step) % variants.length : 0;
+    if (variants.length && !variantSuitsRows(variants[k]!, input)) continue;
+    const attempt = substituteFragment(recipe, step === 0 ? input : { ...input, variantPin: k });
+    if ('html' in attempt) {
+      if (step > 0) {
+        console.warn(`[compose] ${input.role}: arrangement ${start} cannot carry this slide — using arrangement ${k}`);
+      }
+      filled = attempt;
+      break;
+    }
+    if (step === 0) filled = attempt;
+  }
+  if (!filled) filled = { kind: 'no-fragment' } as ReturnType<typeof substituteFragment>;
   if (!('html' in filled)) {
     // 'no-fragment' is the overwhelmingly common case (no stored recipe has
     // fragments yet) and says nothing worth a line in the log.
