@@ -355,7 +355,9 @@ async function main(): Promise<void> {
   } else {
     const probe = await openRenderProbe(recipe, format, composed.map((s, i) => ({ index: i, role: s.role, html: s.authored.html, archetype: s.authored.archetype })) as any);
     try {
-      shots = await Promise.all(composed.map((s, i) => (probe.shoot ? probe.shoot(i, s.authored.html) : Promise.resolve(null))));
+      // One page, one slide at a time: shooting seven at once through a single
+      // probe raced the mounts and lost half the sheet on every run.
+      for (const [i, s] of composed.entries()) shots.push(probe.shoot ? await probe.shoot(i, s.authored.html) : null);
     } finally {
       await probe.close();
     }

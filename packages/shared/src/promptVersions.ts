@@ -167,6 +167,17 @@ export const TOUCHPOINT_REGISTRY: Record<TouchpointId, Touchpoint> = {
           'The pattern cap rose from 12 to 24; a 13th pattern no longer silently discards all of them.',
         ],
       },
+      {
+        version: 8,
+        date: '2026-09-15',
+        summary: 'The constructed exhibits: step chevron, two-column compare, number ledger, checklist.',
+        improves: [
+          'Both exemplars carry four more list forms as fragment variants — the forms the swipe-file accounts are made of — and the author is asked for them in the brand\'s own furniture.',
+          'Compose reaches for each only when the rows suit it: a chevron for two to four short steps, a compare when there are do and dont rows, a ledger for three to six numbers with labels, a checklist for plain items.',
+          'A note under a figure is a label, not prose — the full-stop rule no longer turns every exhibit into a copy fault.',
+          'The web app\'s own .panel, .card, .badge, .row and .chip rules no longer leak into rendered slides.',
+        ],
+      },
     ],
   },
 

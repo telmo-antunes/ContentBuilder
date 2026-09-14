@@ -94,6 +94,27 @@ export const dynatosRecipe: BrandRecipe = brandRecipeSchema.parse({
 .cb-slide .cta{ font-family:var(--cb-display); font-weight:600; letter-spacing:.08em; text-transform:uppercase; align-self:flex-start; background:var(--cb-accent); color:#1c1305; border-radius:var(--cb-radius); padding:28px 48px; font-size:40px; margin-top:20px; }
 .cb-slide .handle{ font-family:var(--cb-display); font-weight:600; letter-spacing:.2em; text-transform:uppercase; font-size:34px; color:#8f8778; margin-top:32px; }
 .cb-slide{ --cb-row-index-color:var(--cb-accent); --cb-row-index-size:1em; --cb-dont-opacity:.5; }
+/* CONSTRUCTED EXHIBITS (2026-09) — the forms the swipe file is made of and the
+   deck never had: a STEP CHEVRON for a short method, a two-column COMPARE for a
+   verdict, a LEDGER of numbers with their labels, a CHECKLIST with ticks. Each
+   is a list variant; compose picks it only when the content suits it. The steps
+   and the ledger use their own unit classes (.step, .line) because the app owns
+   the layout of every enumeration line — a grid with the marker in its gutter. */
+.cb-slide .steps{ display:flex; gap:8px; margin-top:36px; }
+.cb-slide .step{ flex:1 1 0; min-width:0; background:rgba(252,188,4,.12); color:var(--cb-ink); font-family:var(--cb-display); font-weight:600; text-transform:uppercase; letter-spacing:.03em; font-size:34px; line-height:1.15; padding:34px 22px 34px 48px;
+  clip-path:polygon(0 0, calc(100% - 26px) 0, 100% 50%, calc(100% - 26px) 100%, 0 100%, 26px 50%); }
+.cb-slide .step:first-child{ padding-left:30px; clip-path:polygon(0 0, calc(100% - 26px) 0, 100% 50%, calc(100% - 26px) 100%, 0 100%); }
+.cb-slide .step:last-child{ background:var(--cb-accent); color:#1c1305; }
+.cb-slide .compare{ display:grid; grid-template-columns:1fr 1fr; column-gap:28px; row-gap:16px; grid-auto-flow:row dense; margin-top:28px; }
+.cb-slide .compare .row{ padding:22px 26px; font-family:var(--cb-display); font-weight:600; text-transform:uppercase; letter-spacing:.03em; font-size:38px; line-height:1.22; color:var(--cb-ink); border:1px solid var(--cb-line); border-radius:var(--cb-radius); background:rgba(236,228,211,.04); }
+.cb-slide .compare .row.do{ grid-column:1; border-color:var(--cb-accent); }
+.cb-slide .compare .row.dont{ grid-column:2; }
+.cb-slide .compare .row em{ display:block; font-family:var(--cb-body); font-weight:400; text-transform:none; letter-spacing:0; font-style:normal; font-size:32px; line-height:1.3; color:var(--cb-ink-muted); margin-top:6px; }
+.cb-slide .ledger{ margin-top:20px; }
+.cb-slide .ledger .line{ display:flex; align-items:baseline; justify-content:space-between; gap:28px; padding:24px 0; border-bottom:1px solid var(--cb-line); }
+.cb-slide .ledger .line em{ font-style:normal; font-size:40px; line-height:1.25; color:var(--cb-ink-muted); flex:1 1 auto; }
+.cb-slide .ledger .line b{ font-family:var(--cb-display); font-weight:700; font-size:80px; line-height:.95; color:var(--cb-accent); letter-spacing:-.01em; flex:0 0 auto; white-space:nowrap; }
+.cb-slide .checks .row.row::before{ content:"✓"; width:44px; height:44px; border-radius:50%; background:var(--cb-accent); color:#1c1305; font-size:26px; font-weight:700; line-height:44px; text-align:center; align-self:center; }
 `.trim(),
   components: [
     { className: 'logo', use: 'The DYNATÓS·PROGRAM wordmark. Put on covers and the CTA, top-left.' },
@@ -108,6 +129,12 @@ export const dynatosRecipe: BrandRecipe = brandRecipeSchema.parse({
     { className: 'panel', use: 'A gold-ruled list of .row items in condensed caps (add .numbered for a counted method).' },
     { className: 'figures', use: 'A two-column exhibit of .figure cells for two to four numbers that ARE the slide.' },
     { className: 'figure', use: 'One exhibit cell: <b> the figure, <em> its label.' },
+    { className: 'steps', use: 'A horizontal chevron of .step cells — a short method as a process, two to four steps of a few words each.' },
+    { className: 'step', use: 'One arrow of the chevron; the last one is filled in the accent.' },
+    { className: 'compare', use: 'Two columns of .row items with a verdict: rows marked do sit left, dont right. The contrast is the exhibit.' },
+    { className: 'ledger', use: 'A table of .line items — <em> the label, <b> the figure right-aligned — for three to six numbers.' },
+    { className: 'line', use: 'One ledger line: label left, figure right.' },
+    { className: 'checks', use: 'Add to .panel: every .row gets a filled tick — a checklist, not a verdict.' },
     { className: 'card', use: 'A gold-ruled surface holding one claim\'s evidence or the slide\'s object.' },
     { className: 'cta', use: 'A solid gold call-to-action button. One per CTA slide.' },
     { className: 'handle', use: 'The @handle, small muted uppercase, at the very bottom.' },
@@ -207,6 +234,31 @@ export const dynatosRecipe: BrandRecipe = brandRecipeSchema.parse({
 <div class="fill"></div>
 <div class="figures">{{#rows}}<div class="figure"><b>{{row.text}}</b><em>{{row.note}}</em></div>{{/rows}}</div>
 <div class="fill"></div>`,
+      // The STEP CHEVRON: a short method as a process — two to four rows of a few words, no notes.
+      `<div class="eyebrow">{{eyebrow}}</div>
+<div class="headline sm">{{headline}}</div>
+<div class="body">{{body}}</div>
+<div class="fill"></div>
+<div class="steps">{{#rows}}<div class="step">{{row.text}}</div>{{/rows}}</div>
+<div class="fill"></div>`,
+      // The COMPARE: a verdict as two columns — do rows left, dont rows right.
+      `<div class="eyebrow">{{eyebrow}}</div>
+<div class="headline sm">{{headline}}</div>
+<div class="fill"></div>
+<div class="compare">{{#rows}}<div class="row">{{row.text}}<em>{{row.note}}</em></div>{{/rows}}</div>
+<div class="fill"></div>`,
+      // The LEDGER: three to six numbers with their labels, read as a table.
+      `<div class="eyebrow">{{eyebrow}}</div>
+<div class="headline sm">{{headline}}</div>
+<div class="fill"></div>
+<div class="ledger">{{#rows}}<div class="line"><em>{{row.note}}</em><b>{{row.text}}</b></div>{{/rows}}</div>
+<div class="fill"></div>`,
+      // The CHECKLIST: plain rows, each with a filled tick — things to have, not a verdict.
+      `<div class="eyebrow">{{eyebrow}}</div>
+<div class="headline sm">{{headline}}</div>
+<div class="rule"></div>
+<div class="panel checks">{{#rows}}<div class="row">{{row.text}}<em>{{row.note}}</em></div>{{/rows}}</div>
+<div class="fill"></div>`,
     ],
     stat: `<div class="eyebrow">{{eyebrow}}</div>
 <div class="fill"></div>
@@ -238,6 +290,10 @@ export const dynatosRecipe: BrandRecipe = brandRecipeSchema.parse({
       'list: eyebrow → headline.sm → panel of rows → fill (ruled list, verdict rows)',
       'list: eyebrow → headline → body (a lead-in line) → fill → panel.numbered of rows (a numbered method)',
       'list: eyebrow → headline.sm → fill → figures of figure cells → fill (an exhibit)',
+      'list: eyebrow → headline.sm → body → fill → steps of step cells → fill (a step chevron: a method as a process)',
+      'list: eyebrow → headline.sm → fill → compare of rows → fill (a verdict as two columns)',
+      'list: eyebrow → headline.sm → fill → ledger of line items → fill (numbers as a table)',
+      'list: eyebrow → headline.sm → rule → panel.checks of rows → fill (a checklist with ticks)',
       'stat: eyebrow → fill → stat → tagline (its reading) → body',
       'quote: eyebrow → fill → quote → attr → fill (the object, or a pull-quote)',
       'cta: logo → fill → headline → tagline → cta → fill (the arrival)',
@@ -365,6 +421,27 @@ export const detailMastersRecipe: BrandRecipe = brandRecipeSchema.parse({
 .cb-slide .badge{ position:absolute; top:-20px; left:44px; background:var(--cb-accent); color:#1c1408; border-radius:999px; padding:11px 24px; font-size:26px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; }
 .cb-slide .chip{ display:inline-block; border:1.5px solid var(--cb-line); border-radius:999px; padding:14px 26px; font-size:30px; color:var(--cb-ink-muted); letter-spacing:.06em; margin-top:28px; }
 .cb-slide{ --cb-row-index-color:var(--cb-accent); --cb-row-index-size:1.1em; --cb-dont-opacity:.55; }
+/* CONSTRUCTED EXHIBITS (2026-09) — the forms the swipe file is made of and the
+   deck never had: a STEP CHEVRON for a short method, a two-column COMPARE for a
+   verdict, a LEDGER of numbers with their labels, a CHECKLIST with ticks. Each
+   is a list variant; compose picks it only when the content suits it. The steps
+   and the ledger use their own unit classes (.step, .line) because the app owns
+   the layout of every enumeration line — a grid with the marker in its gutter. */
+.cb-slide .steps{ display:flex; gap:8px; margin-top:36px; }
+.cb-slide .step{ flex:1 1 0; min-width:0; background:rgba(212,192,157,.10); color:var(--cb-ink); font-weight:600; font-size:34px; line-height:1.15; padding:34px 22px 34px 48px;
+  clip-path:polygon(0 0, calc(100% - 26px) 0, 100% 50%, calc(100% - 26px) 100%, 0 100%, 26px 50%); }
+.cb-slide .step:first-child{ padding-left:30px; clip-path:polygon(0 0, calc(100% - 26px) 0, 100% 50%, calc(100% - 26px) 100%, 0 100%); }
+.cb-slide .step:last-child{ background:var(--cb-accent); color:#1c1408; }
+.cb-slide .compare{ display:grid; grid-template-columns:1fr 1fr; column-gap:28px; row-gap:16px; grid-auto-flow:row dense; margin-top:28px; }
+.cb-slide .compare .row{ padding:22px 26px; font-weight:600; font-size:38px; line-height:1.22; color:var(--cb-ink); border:1px solid var(--cb-line); border-radius:var(--cb-radius); background:rgba(212,192,157,.05); }
+.cb-slide .compare .row.do{ grid-column:1; border-color:var(--cb-accent); }
+.cb-slide .compare .row.dont{ grid-column:2; }
+.cb-slide .compare .row em{ display:block; font-style:normal; font-size:32px; line-height:1.3; color:var(--cb-ink-muted); margin-top:6px; }
+.cb-slide .ledger{ margin-top:20px; }
+.cb-slide .ledger .line{ display:flex; align-items:baseline; justify-content:space-between; gap:28px; padding:24px 0; border-bottom:1px solid var(--cb-line); }
+.cb-slide .ledger .line em{ font-style:normal; font-size:40px; line-height:1.25; color:var(--cb-ink-muted); flex:1 1 auto; }
+.cb-slide .ledger .line b{ font-family:var(--cb-display); font-weight:700; font-size:80px; line-height:.95; color:var(--cb-accent-alt); letter-spacing:-.01em; flex:0 0 auto; white-space:nowrap; }
+.cb-slide .checks .row.row::before{ content:"✓"; width:44px; height:44px; border-radius:50%; background:var(--cb-accent); color:#1c1408; font-size:26px; font-weight:700; line-height:44px; text-align:center; align-self:center; }
 `.trim(),
   components: [
     { className: 'logo-row', use: 'Wrapper for the DM monogram + wordmark. Contains .monogram and .wordmark.' },
@@ -381,6 +458,12 @@ export const detailMastersRecipe: BrandRecipe = brandRecipeSchema.parse({
     { className: 'panel', use: 'A gold-bordered list surface holding .row items (add .numbered for a counted method).' },
     { className: 'figures', use: 'A two-column exhibit of .figure cards — each a number with its label — for two to four figures that ARE the slide.' },
     { className: 'figure', use: 'One exhibit cell: <b> the figure, <em> its label.' },
+    { className: 'steps', use: 'A horizontal chevron of .step cells — a short method as a process, two to four steps of a few words each.' },
+    { className: 'step', use: 'One arrow of the chevron; the last one is filled in the accent.' },
+    { className: 'compare', use: 'Two columns of .row items with a verdict: rows marked do sit left, dont right. The contrast is the exhibit.' },
+    { className: 'ledger', use: 'A table of .line items — <em> the label, <b> the figure right-aligned — for three to six numbers.' },
+    { className: 'line', use: 'One ledger line: label left, figure right.' },
+    { className: 'checks', use: 'Add to .panel: every .row gets a filled tick — a checklist, not a verdict.' },
     { className: 'card', use: 'A framed surface grouping a claim\'s evidence or holding the slide\'s object. Add .win for the option that carries the verdict.' },
     { className: 'badge', use: 'A small filled label on a card\'s corner, naming the winner or the point.' },
     { className: 'chip', use: 'A bordered capsule for one piece of metadata (a topic, a read time).' },
@@ -516,6 +599,31 @@ export const detailMastersRecipe: BrandRecipe = brandRecipeSchema.parse({
 <div class="fill"></div>
 <div class="figures">{{#rows}}<div class="figure"><b>{{row.text}}</b><em>{{row.note}}</em></div>{{/rows}}</div>
 <div class="fill"></div>`,
+      // The STEP CHEVRON: a short method as a process — two to four rows of a few words, no notes.
+      `<div class="eyebrow">{{eyebrow}}</div>
+<div class="headline sm">{{headline}}</div>
+<div class="body">{{body}}</div>
+<div class="fill"></div>
+<div class="steps">{{#rows}}<div class="step">{{row.text}}</div>{{/rows}}</div>
+<div class="fill"></div>`,
+      // The COMPARE: a verdict as two columns — do rows left, dont rows right.
+      `<div class="eyebrow">{{eyebrow}}</div>
+<div class="headline sm">{{headline}}</div>
+<div class="fill"></div>
+<div class="compare">{{#rows}}<div class="row">{{row.text}}<em>{{row.note}}</em></div>{{/rows}}</div>
+<div class="fill"></div>`,
+      // The LEDGER: three to six numbers with their labels, read as a table.
+      `<div class="eyebrow">{{eyebrow}}</div>
+<div class="headline sm">{{headline}}</div>
+<div class="fill"></div>
+<div class="ledger">{{#rows}}<div class="line"><em>{{row.note}}</em><b>{{row.text}}</b></div>{{/rows}}</div>
+<div class="fill"></div>`,
+      // The CHECKLIST: plain rows, each with a filled tick — things to have, not a verdict.
+      `<div class="eyebrow">{{eyebrow}}</div>
+<div class="headline sm">{{headline}}</div>
+<div class="rule"></div>
+<div class="panel checks">{{#rows}}<div class="row">{{row.text}}<em>{{row.note}}</em></div>{{/rows}}</div>
+<div class="fill"></div>`,
     ],
     // One number at poster size, and the sentence that says what it means to you.
     stat: `<div class="eyebrow">{{eyebrow}}</div>
@@ -557,6 +665,10 @@ export const detailMastersRecipe: BrandRecipe = brandRecipeSchema.parse({
       'list: eyebrow → headline.sm(.it) → rule → panel of rows → fill (marker panel, verdict rows)',
       'list: eyebrow → headline(.it) → fill → panel.numbered of rows (a numbered method)',
       'list: eyebrow → headline.sm(.it) → fill → figures of figure cells → fill (an exhibit)',
+      'list: eyebrow → headline.sm(.it) → body → fill → steps of step cells → fill (a step chevron: a method as a process)',
+      'list: eyebrow → headline.sm(.it) → fill → compare of rows → fill (a verdict as two columns)',
+      'list: eyebrow → headline.sm(.it) → fill → ledger of line items → fill (numbers as a table)',
+      'list: eyebrow → headline.sm(.it) → rule → panel.checks of rows → fill (a checklist with ticks)',
       'stat: eyebrow → fill → stat → tagline (its reading) → body',
       'quote: eyebrow → headline.sm(.it) → fill → card holding the quote → attr → fill (the object)',
       'cta: logo-row → fill → headline(.it) → tagline → cta → fill (the arrival, centred)',

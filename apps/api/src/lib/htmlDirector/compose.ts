@@ -941,7 +941,15 @@ export function unfinishedProse(slides: ParsedSlide[]): UnfinishedProse[] {
        * rule still applies: a row that opens a second sentence must close it.
        */
       check(i, `rows[${j}].text`, r.text, false, true);
-      check(i, `rows[${j}].note`, r.note, true);
+      /**
+       * A NOTE UNDER A FIGURE IS A LABEL. In the exhibit and the ledger the
+       * row's text is the number ("€180", "1 in 7") and its note is the
+       * caption ("Average job value lost") — a label, never a sentence, and
+       * demanding a full stop of it turned every figure slide into a copy
+       * fault and a corrective re-parse. Notes on prose rows are still prose.
+       */
+      const figure = /\d/.test(r.text) && r.text.trim().length <= 14;
+      check(i, `rows[${j}].note`, r.note, !figure, figure);
     });
   });
   return out;
@@ -2388,12 +2396,35 @@ export interface ComposedSlide {
  * NUMBERED panel counts the rows in the gutter, where a verdict list draws its
  * ✓/✕. Both landed on the wrong content in the first live runs.
  */
-function variantSuitsRows(fragment: string, input: ComposeSlideInput): boolean {
+export function variantSuitsRows(fragment: string, input: ComposeSlideInput): boolean {
   const rows = input.parts.rows ?? [];
+  const numeric = (r: { text: string }) => /\d/.test(r.text) && r.text.trim().length <= 14;
+  const verdict = rows.some((r) => r.state === 'do' || r.state === 'dont');
   if (/class="figures"/.test(fragment)) {
-    return rows.length > 0 && rows.every((r) => /\d/.test(r.text) && r.text.trim().length <= 14);
+    return rows.length > 0 && rows.every(numeric);
   }
-  if (/\bnumbered\b/.test(fragment) && rows.some((r) => r.state === 'do' || r.state === 'dont')) return false;
+  /**
+   * THE CONSTRUCTED EXHIBITS (2026-09) each fit one shape of rows and no other:
+   *   steps   — a short method as a chevron: 2–4 rows of a few words, no notes
+   *             (the form has no hole for a note, and a note must never be lost);
+   *   compare — a verdict as two columns: at least one do AND one dont row;
+   *   ledger  — numbers with labels as a table: 3–6 numeric rows, every one
+   *             carrying a note (the label is the note);
+   *   checks  — a checklist with ticks: 3–6 plain rows, no verdict, not numbers.
+   */
+  if (/class="steps"/.test(fragment)) {
+    return rows.length >= 2 && rows.length <= 4 && rows.every((r) => r.text.trim().length <= 18 && !r.note?.trim()) && !verdict;
+  }
+  if (/class="compare"/.test(fragment)) {
+    return rows.some((r) => r.state === 'do') && rows.some((r) => r.state === 'dont') && rows.length <= 6;
+  }
+  if (/class="ledger"/.test(fragment)) {
+    return rows.length >= 3 && rows.length <= 6 && rows.every((r) => numeric(r) && Boolean(r.note?.trim()));
+  }
+  if (/\bchecks\b/.test(fragment)) {
+    return rows.length >= 3 && rows.length <= 6 && !verdict && !rows.every(numeric);
+  }
+  if (/\bnumbered\b/.test(fragment) && verdict) return false;
   return true;
 }
 

@@ -113,7 +113,7 @@ const SLIDE_ROLE_LIST = SLIDE_ROLES.join(', ');
 const FRAGMENTS_CONTRACT = `YOU ALSO COMPOSE THE SLIDES, ONCE. Emit "fragments" — a map of slide role (${SLIDE_ROLE_LIST}) to a worked slide of that role, written in this brand's markup with the WORDS left as placeholders.
 WHY: without them every future slide is re-invented by a cheap model reading your prose rules, which is where invented classes, drifting arrangements and duplicated copy come from. With them, a post is composed by SUBSTITUTION — your markup, this week's words, no model, no drift. Treat each fragment as the definitive layout of that role, not a hint: it is what the brand will actually look like.
 ${FRAGMENT_CONVENTION}
-VARIANTS — one skeleton per role makes every post a re-skin of the last, and followers see consecutive posts. For statement, feature and list give an ARRAY of 2–3 worked variants that are genuinely different ARRANGEMENTS — a different order, different furniture, one carrying a rule where another carries a panel, one anchored low where another sits high — not the same markup with different spacing. Variant i implements arrangement i of that role's composition.patterns, and the app rotates them per slide and per deck, so two consecutive posts compose different skeletons while staying unmistakably this brand. Other roles may stay a single string; the cover and cta are the brand's fixed handshake and one definitive layout each is right.
+VARIANTS — one skeleton per role makes every post a re-skin of the last, and followers see consecutive posts. For statement and feature give an ARRAY of 2–3 worked variants, and for list an ARRAY of up to 7 (the marker panel, numbered, the exhibit of figures, and the four constructed exhibits below), that are genuinely different ARRANGEMENTS — a different order, different furniture, one carrying a rule where another carries a panel, one anchored low where another sits high — not the same markup with different spacing. Variant i implements arrangement i of that role's composition.patterns, and the app rotates them per slide and per deck, so two consecutive posts compose different skeletons while staying unmistakably this brand. Other roles may stay a single string; the cover and cta are the brand's fixed handshake and one definitive layout each is right.
 Cover every role you can lay out well. A role you leave out (or that names a class you never defined) simply falls back to the model, so a fragment you are unsure of costs nothing to omit — but a brand with all seven is a brand whose every post is composed exactly as you designed it.`;
 
 export const RECIPE_AUTHOR_SYSTEM = `You are an elite brand & art director. From a business's brand evidence you author its complete DESIGN SYSTEM — a "recipe" that EVERY future Instagram post is composed against, authored ONCE. Deliver it by CALLING THE "author_recipe" TOOL with the whole design system as its argument, matching the shape of the worked examples EXACTLY. (If you cannot call the tool, output the same object as STRICT JSON only — no prose, no fences.)
@@ -143,6 +143,7 @@ THE SEVEN FORMS A GOOD DECK IS MADE OF — author fragment variants that cover t
 4. THE EXHIBIT (list): two to four figures with labels as a grid of cells — a figures container of figure cells, each <b> the figure, <em> its label. Rows are figures, not sentences.
 5. THE NUMBERED TEACHING POSTER (feature or list): the method as counted rows, with the row's reason beneath it — rows big enough to read (panel 44px+), because this is the slide people save.
 6. PRODUCT PROOF (feature): the named control as the headline, one short line, then the screenshot CLOSING the frame in a wide slot — never a small card floating in the middle.
+4b. THE CONSTRUCTED EXHIBITS (list): the forms the strongest accounts are made of, each a list variant the app picks only when the rows suit it — a STEP CHEVRON (a .steps row of .row items as arrows, for a method of two to four short steps), a COMPARE (a two-column .compare grid where .row.do sits left and .row.dont right, so the verdict is the picture), a LEDGER (a .ledger of .row items, each <em> the label and <b> the figure, right-aligned, for three to six numbers), and a CHECKLIST (.panel.checks, every .row with a filled tick). Author all four, in this brand's furniture.
 7. THE OBJECT (quote): a template, a message to copy, a rule — the slide's subject set in a large italic or display face inside a card, with the attribution only for a person's words.
 And THE ARRIVAL (cta): one line, one short tagline, one button. No eyebrow, no body, no handle. The worked examples carry every one of these as a fragment; match that coverage.
 
@@ -272,7 +273,7 @@ export const AUTHOR_TOOL: AiJsonTool = {
       fragments: {
         type: 'object',
         description:
-          'Worked slides per role, in this brand\'s markup with the copy left as {{placeholder}} holes — what every future post of that role is composed by substituting into. Keys are slide roles. A value is EITHER one worked slide (a string) OR, for the content roles, an ARRAY of 2–4 genuinely different arrangements of that role, which the app rotates per slide and per deck so consecutive posts are not re-skins of each other.',
+          'Worked slides per role, in this brand\'s markup with the copy left as {{placeholder}} holes — what every future post of that role is composed by substituting into. Keys are slide roles. A value is EITHER one worked slide (a string) OR, for the content roles, an ARRAY of 2–8 genuinely different arrangements of that role, which the app rotates per slide and per deck so consecutive posts are not re-skins of each other.',
         properties: Object.fromEntries(
           SLIDE_ROLES.map((role) => [
             role,
@@ -295,7 +296,7 @@ export const AUTHOR_TOOL: AiJsonTool = {
                * `brandRecipeSchema` be the actual gate — it accepts both.
                */
               description:
-                `The worked "${role}" slide, with {{…}} holes for its copy — EITHER one string, OR (for the content roles) an array of 2–4 genuinely DIFFERENT arrangements: a different order and different furniture, not one layout respaced. Variant i implements arrangement i of this role's composition.patterns.`,
+                `The worked "${role}" slide, with {{…}} holes for its copy — EITHER one string, OR (for the content roles) an array of 2–8 genuinely DIFFERENT arrangements: a different order and different furniture, not one layout respaced. Variant i implements arrangement i of this role's composition.patterns.`,
             },
           ]),
         ),

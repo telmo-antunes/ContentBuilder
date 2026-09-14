@@ -396,8 +396,8 @@ describe('reference fragments (compose by example)', () => {
       '<div class="eyebrow">{{eyebrow}}</div><div class="headline">{{headline}}</div><div class="tagline">{{tagline}}</div>',
     cta:
       '<div class="headline">{{headline}}</div><div class="fill"></div><div class="cta">{{cta}}</div><div class="handle">{{handle}}</div>',
-    // `.ledger` is a class no exemplar defines — the fragment that must be dropped.
-    quote: '<div class="ledger">{{quote}}</div>',
+    // `.pricetag` is a class no exemplar defines — the fragment that must be dropped.
+    quote: '<div class="pricetag">{{quote}}</div>',
   };
 
   it('forces the tool to carry one fragment per slide role', async () => {
@@ -444,7 +444,7 @@ describe('reference fragments (compose by example)', () => {
     // Everything the author wrote survives, in its order…
     expect(recipe.fragments!['statement']).toContain(FRAGMENTS.statement);
     expect(warn.mock.calls.map((c) => String(c[0]))).toContainEqual(
-      expect.stringContaining('dropped the "quote" reference fragment — uses undefined class .ledger'),
+      expect.stringContaining('dropped the "quote" reference fragment — uses undefined class .pricetag'),
     );
   });
 
