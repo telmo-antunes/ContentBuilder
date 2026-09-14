@@ -220,6 +220,21 @@ export const updateProjectSchema = z.object({
   slides: z.array(slideSchema).max(MAX_SLIDES_PER_PROJECT).optional(),
   settings: settingsSchema.optional(),
   caption: captionSchema.optional(),
+  /** The owner's 1–5 score on the audit's eight dimensions; `at` and the prompt versions are set by the server. */
+  scores: z
+    .object({
+      fidelity: z.number().int().min(1).max(5).optional(),
+      hook: z.number().int().min(1).max(5).optional(),
+      specificity: z.number().int().min(1).max(5).optional(),
+      variety: z.number().int().min(1).max(5).optional(),
+      hierarchy: z.number().int().min(1).max(5).optional(),
+      brand: z.number().int().min(1).max(5).optional(),
+      legibility: z.number().int().min(1).max(5).optional(),
+      cta: z.number().int().min(1).max(5).optional(),
+      note: z.string().trim().max(600).optional(),
+    })
+    .nullable()
+    .optional(),
   /** Editing a parked Ideas card before composing it. Type/format are only
    *  honoured while the project has no slides — after that they're baked in. */
   idea: z.string().trim().max(MAX_DRAFT_PARAGRAPH_CHARS).optional(),

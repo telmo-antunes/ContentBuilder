@@ -28,6 +28,25 @@ import { ErrorState } from '../../components/ErrorState';
 import { Icon } from '../../components/Icon';
 import { Skeleton } from '../../components/Skeleton';
 import { toast } from '../../components/Toast';
+import { WorkingPanel } from '../../components/WorkingPanel';
+import { COMPOSE_STAGES } from '../../components/useStagedProgress';
+
+/** The server's compose phase, as a label and a position on the timer's rail. */
+function liveProgress(p: { phase: string; done?: number; total?: number } | undefined): { label: string; index: number } | null {
+  if (!p) return null;
+  switch (p.phase) {
+    case 'parsing':
+      return { label: 'Writing the copy…', index: 2 };
+    case 'composing':
+      return { label: p.total ? `Typesetting slide ${Math.min((p.done ?? 0) + 1, p.total)} of ${p.total}…` : 'Typesetting each slide…', index: 3 };
+    case 'checking-layout':
+      return { label: p.total ? `Checking nothing overflows (${p.done ?? 0}/${p.total})…` : 'Checking nothing overflows…', index: 4 };
+    case 'done':
+      return { label: 'Attaching photographs and reviewing…', index: 5 };
+    default:
+      return null;
+  }
+}
 
 /** A cited link, shortened to the thing a person recognises. */
 function hostOf(url: string): string {
@@ -64,6 +83,7 @@ function NewProjectForm() {
   const [businesses, setBusinesses] = useState<BusinessSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [live, setLive] = useState<{ label: string; index: number } | null>(null);
 
   // Set when the Desk sent us here to pick up a parked Ideas card: we compose
   // THAT project rather than creating a second one alongside it.
@@ -71,6 +91,8 @@ function NewProjectForm() {
   const [loadingIdea, setLoadingIdea] = useState(Boolean(ideaFrom));
 
   const preselected = params.get('businessId');
+  const seriesParam = params.get('series');
+  const [seriesId, setSeriesId] = useState<string>(seriesParam ?? '');
   const [businessId, setBusinessId] = useState(preselected ?? '');
   const [title, setTitle] = useState('');
   const [type, setType] = useState<AssetType>('carousel');
@@ -128,6 +150,27 @@ function NewProjectForm() {
   }, [type, formats, format]);
 
   const selectedBiz = businesses?.find((b) => b._id === businessId);
+  const seriesList = useMemo(() => selectedBiz?.series ?? [], [selectedBiz]);
+  /** Start from a series: its template becomes the brief, its plan the slides, its format the format. */
+  const applySeries = useCallback(
+    (id: string) => {
+      setSeriesId(id);
+      const s = seriesList.find((x) => x.id === id);
+      if (!s) return;
+      setType('carousel');
+      if (s.format && (ALLOWED_FORMATS.carousel as readonly string[]).includes(s.format)) setFormat(s.format as Format);
+      setIdea(s.idea ?? '');
+      setPlan(s.plan ?? []);
+      if (s.plan?.length) setPlanOpen(true);
+      setTitle((t) => (t.trim() ? t : `${s.name} — `));
+    },
+    [seriesList],
+  );
+  // A series named in the URL applies once the business list has arrived.
+  useEffect(() => {
+    if (seriesParam && seriesList.length && idea === '' && plan.length === 0) applySeries(seriesParam);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seriesParam, seriesList.length]);
   const profileReady = Boolean(selectedBiz?.hasProfile);
   const canCompose = aiReady && profileReady;
 
@@ -194,6 +237,14 @@ function NewProjectForm() {
         });
         projectId = created._id;
       }
+      // The compose route writes its phase to the project as it goes; read it
+      // back every two seconds so the wait says what is actually happening.
+      setLive(null);
+      const poll = setInterval(() => {
+        getProject(projectId)
+          .then((p) => setLive(liveProgress(p.composeProgress)))
+          .catch(() => {});
+      }, 2000);
       try {
         const composed = await composeProjectAI(projectId, idea.trim(), filledPlan);
         // Say what actually happened to the brief — which page was read, which
@@ -211,6 +262,8 @@ function NewProjectForm() {
         toast(err instanceof Error ? err.message : 'Compose failed. Please try again.', 'error');
         setBusy(false);
         return;
+      } finally {
+        clearInterval(poll);
       }
       router.push(`/projects/${projectId}/review`);
     } catch (err) {
@@ -348,7 +401,9 @@ function NewProjectForm() {
                   <div>
                     <span className="lab">Type</span>
                     <div className="mo-toggle">
-                      {ASSET_TYPES.map((t) => (
+                      {/* Stories are derived from a carousel when it ships, not composed on
+                          their own — so the toggle only offers a story for a card that already is one. */}
+                      {(type === 'story' ? ASSET_TYPES : ASSET_TYPES.filter((t) => t !== 'story')).map((t) => (
                         <button type="button" key={t} className={type === t ? 'on' : undefined} onClick={() => setType(t)}>
                           {t === 'carousel' ? 'Carousel' : 'Story'}
                         </button>
@@ -402,6 +457,17 @@ function NewProjectForm() {
             </div>
             <div className="mo-paper">
               <div>
+                {seriesList.length > 0 && (
+                  <div className="mo-series-pick">
+                    <span className="lab">Start from a series</span>
+                    <select value={seriesId} onChange={(e) => applySeries(e.target.value)}>
+                      <option value="">— a one-off post —</option>
+                      {seriesList.map((s) => (
+                        <option key={s.id} value={s.id}>{s.name}{s.hint ? ` — ${s.hint}` : ''}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div className="writing">
                   <textarea
                     id="np-idea"
@@ -638,6 +704,15 @@ function NewProjectForm() {
                     {ideaFrom ? 'Keep as idea' : 'Save as idea instead'}
                   </button>
                 </div>
+                <WorkingPanel
+                  active={busy}
+                  stages={COMPOSE_STAGES}
+                  live={live}
+                  title="Composing"
+                  sub="The copy is written for the whole deck first, then each slide is set in the brand's own arrangements and measured."
+                  count={Math.min(3, Math.max(1, brief.plan.length || 3))}
+                  palette={selectedBiz?.kit?.colors ? [selectedBiz.kit.colors.background, selectedBiz.kit.colors.primary, selectedBiz.kit.colors.accent, selectedBiz.kit.colors.secondary, selectedBiz.kit.colors.text] : undefined}
+                />
               </div>
             )}
           </div>

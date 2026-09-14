@@ -20,7 +20,33 @@ export interface Business {
   name: string;
   websiteUrl?: string;
   profile?: BusinessProfile;
+  /**
+   * THE WORDS THE READER USES. The business's own system calls a thing one
+   * name ("Send update", "booking record") and the copywriter repeated it; the
+   * customer knows it by another. Left: what the system says. Right: what to
+   * write. Fed to the copywriter with the brand lessons.
+   */
+  glossary?: GlossaryEntry[];
+  /** Recurring forms: a saved brief template and plan a new post starts from. */
+  series?: SeriesTemplate[];
   createdAt: string;
+}
+
+export interface SeriesTemplate {
+  id: string;
+  name: string;
+  /** One line on what the series is for, shown when picking it. */
+  hint?: string;
+  /** The brief template; "{{topic}}" is where the post's own subject goes. */
+  idea?: string;
+  /** One direction per slide, fixed for every post in the series. */
+  plan?: string[];
+  format?: string;
+}
+
+export interface GlossaryEntry {
+  system: string;
+  customer: string;
 }
 
 export interface BrandColors {
@@ -130,6 +156,15 @@ export interface MediaAsset {
   url: string;
   width: number;
   height: number;
+  /** What vision read in the picture — see the API's lib/mediaTags.ts. */
+  tags?: {
+    kind: 'photo' | 'screenshot' | 'graphic' | 'logo';
+    subjects: string[];
+    tone: 'dark' | 'mid' | 'light';
+    hasText: boolean;
+    caption: string;
+    taggedAt: string;
+  };
   createdAt: string;
 }
 
@@ -249,6 +284,37 @@ export interface Caption {
   hashtags: string[];
 }
 
+/** The audit rubric's dimensions, in the order the scorecard shows them. */
+export const SCORE_DIMENSIONS = [
+  ['fidelity', 'Fidelity', 'Says what the brief said, nothing more'],
+  ['hook', 'Hook', 'The cover alone earns the swipe'],
+  ['specificity', 'Specificity', 'Concrete controls, numbers, names'],
+  ['variety', 'Variety', 'Different kinds of slide, not one repeated'],
+  ['hierarchy', 'Hierarchy', 'One idea per slide, read in one second'],
+  ['brand', 'Brand', 'Unmistakably this brand'],
+  ['legibility', 'Legibility', 'Readable on a phone at feed size'],
+  ['cta', 'Close', 'One line, one button, one keyword'],
+] as const;
+export type ScoreDimension = (typeof SCORE_DIMENSIONS)[number][0];
+
+export interface DeckScores extends Partial<Record<ScoreDimension, number>> {
+  note?: string;
+  at: string;
+  /** The prompt versions that wrote the deck, pinned when scored. */
+  pv?: Record<string, number>;
+}
+
+export interface DeckInsights {
+  reach?: number;
+  impressions?: number;
+  likes?: number;
+  comments?: number;
+  saved?: number;
+  shares?: number;
+  totalInteractions?: number;
+  fetchedAt: string;
+}
+
 export interface Project {
   _id: string;
   businessId: string;
@@ -322,6 +388,14 @@ export interface Project {
   sources?: Array<{ url: string; title?: string; byline?: string; published?: string; chars?: number }>;
   exportedAt?: string;
   postedAt?: string;
+  /** Where a running compose has got to — written per phase, cleared when it finishes. */
+  composeProgress?: { phase: 'parsing' | 'composing' | 'checking-layout' | 'done'; done?: number; total?: number; at: string };
+  /** The owner's 1–5 score on the audit's eight dimensions, with the prompt versions pinned. */
+  scores?: DeckScores;
+  /** The Instagram post this project became, once linked. */
+  instagram?: { mediaId: string; permalink?: string; postedAt?: string; linkedAt: string };
+  /** What the post did on Instagram, last synced. */
+  insights?: DeckInsights;
   createdAt: string;
   updatedAt: string;
 }

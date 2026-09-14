@@ -1,12 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type Anthropic from '@anthropic-ai/sdk';
 import sharp from 'sharp';
-import { ensureListSkeleton,
+import {
+  ensureListSkeleton,
   brandRecipeSchema,
   ensureRecipeContrast,
   validateRecipeConsistency,
   typeFloorReport,
   relativeLuminance,
+  fragmentVariantsFor,
   type BrandRecipe,
 } from '@contentbuilder/shared';
 
@@ -396,8 +398,8 @@ describe('reference fragments (compose by example)', () => {
       '<div class="eyebrow">{{eyebrow}}</div><div class="headline">{{headline}}</div><div class="tagline">{{tagline}}</div>',
     cta:
       '<div class="headline">{{headline}}</div><div class="fill"></div><div class="cta">{{cta}}</div><div class="handle">{{handle}}</div>',
-    // `.ledger` is a class no exemplar defines — the fragment that must be dropped.
-    quote: '<div class="ledger">{{quote}}</div>',
+    // `.pricetag` is a class no exemplar defines — the fragment that must be dropped.
+    quote: '<div class="pricetag">{{quote}}</div>',
   };
 
   it('forces the tool to carry one fragment per slide role', async () => {
@@ -441,10 +443,11 @@ describe('reference fragments (compose by example)', () => {
     const recipe = await authorRecipe(DARK, RUN);
 
     expect(Object.keys(recipe.fragments ?? {}).sort()).toEqual(['cta', 'statement']);
-    // Everything the author wrote survives, in its order…
-    expect(recipe.fragments!['statement']).toContain(FRAGMENTS.statement);
+    // Everything the author wrote survives, in its order — as the first
+    // variant, since the form kit adds the one-liner the author left out.
+    expect(fragmentVariantsFor(recipe, 'statement')[0]).toContain(FRAGMENTS.statement);
     expect(warn.mock.calls.map((c) => String(c[0]))).toContainEqual(
-      expect.stringContaining('dropped the "quote" reference fragment — uses undefined class .ledger'),
+      expect.stringContaining('dropped the "quote" reference fragment — uses undefined class .pricetag'),
     );
   });
 
@@ -457,9 +460,12 @@ describe('reference fragments (compose by example)', () => {
     // The authored `statement` fragment has eyebrow/headline/tagline only; a
     // statement slide routinely carries a body and a handle too, and without a
     // hole for either the whole slide fell back to the composer.
-    const statement = recipe.fragments!['statement']!;
+    const [statement, oneLiner] = fragmentVariantsFor(recipe, 'statement');
     expect(statement).toContain('{{body}}');
     expect(statement).toContain('{{handle}}');
+    // …and the form kit adds the bare one-liner beside it: a tagline, no body.
+    expect(oneLiner).toContain('{{tagline}}');
+    expect(oneLiner).not.toContain('{{body}}');
     expect(warn.mock.calls.map((c) => String(c[0]))).toContainEqual(
       expect.stringContaining('"statement" fragment gained a hole for:'),
     );

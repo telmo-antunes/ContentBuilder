@@ -37,6 +37,12 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      # The frozen briefs, replayed through the deterministic pipeline at $0:
+      # budgets, the cover gate, substitution and variety. Fails only on a
+      # finding not already in apps/api/src/scripts/corpus-gate-baseline.json.
+      - name: Corpus gate
+        run: npm run corpus:gate -- --gate
+
       - name: Build API
         run: npm run build --workspace apps/api
 

@@ -12,6 +12,7 @@ import { MediaAssetModel } from '../models';
 import { getStorage } from '../storage';
 import { SITE_PHOTO_LABEL } from './harvest';
 import { bleedAnchorFor, hexLuminance, MAX_GROUND_DRIFT, meanLuminanceOf, suitsBleedOver, type BleedAnchor } from './bleedAnchor';
+import { matchScore, matchWords, type MediaTags } from './mediaTags';
 
 /** The media label `promo-story` stores a rendered carousel cover under. */
 export const PROMO_COVER_LABEL = 'Carousel cover';
@@ -93,19 +94,32 @@ export function fillSlotsFromPool(
    * because a slot is judged by relevance the pool cannot see, not by tone.
    */
   bleedPreferred?: ReadonlySet<string>,
-  /** Per slide: pool ids a SLOT on that slide should take first, when the slide's words say what it wants. */
-  slotPreferred?: ReadonlyArray<ReadonlySet<string> | undefined>,
+  /**
+   * Per slide: pool ids a SLOT on that slide should take first, when the slide's
+   * words say what it wants. A SET means "any of these"; an ARRAY is ranked —
+   * the tagged pool orders candidates by how many of the slide's own words the
+   * picture answers, and the first unused one wins.
+   */
+  slotPreferred?: ReadonlyArray<ReadonlySet<string> | ReadonlyArray<string> | undefined>,
 ): { photos: SlidePhoto[][]; used: number } {
   const photos: SlidePhoto[][] = slides.map(() => []);
   const taken = new Set<number>();
-  const take = (prefer?: ReadonlySet<string>): { _id: unknown } | undefined => {
+  const take = (prefer?: ReadonlySet<string> | ReadonlyArray<string>): { _id: unknown } | undefined => {
     const pick = (pred: (m: { _id: unknown }) => boolean) => {
       const i = pool.findIndex((m, k) => !taken.has(k) && pred(m));
       if (i === -1) return undefined;
       taken.add(i);
       return pool[i];
     };
-    return (prefer && pick((m) => prefer.has(String(m._id)))) || pick(() => true);
+    if (Array.isArray(prefer)) {
+      for (const id of prefer as ReadonlyArray<string>) {
+        const hit = pick((m) => String(m._id) === id);
+        if (hit) return hit;
+      }
+      return pick(() => true);
+    }
+    const set = prefer as ReadonlySet<string> | undefined;
+    return (set && pick((m) => set.has(String(m._id)))) || pick(() => true);
   };
   slides.forEach((slide, i) => {
     const wants = archetypeFor(slide.authored?.archetype);
@@ -175,12 +189,43 @@ export interface AttachedPhotos {
 export const wantsScreenshot = (query: string | undefined): boolean =>
   /\b(screen|screenshot|dashboard|app|crm|software|interface|booking|menu|profile|record|table|list|button|form|settings|invoice|calendar)\b/i.test(query ?? '');
 
+export interface PoolAsset {
+  _id: unknown;
+  key?: string;
+  width?: number;
+  height?: number;
+  /** What vision read in the picture, when the library has been tagged. */
+  tags?: Pick<MediaTags, 'kind' | 'subjects' | 'tone' | 'caption'> & { taggedAt?: Date | string };
+}
+
+/** Is the pool tagged well enough to attach by meaning rather than by tone? */
+export const poolIsTagged = (pool: ReadonlyArray<PoolAsset>): boolean =>
+  pool.length > 0 && pool.filter((m) => m.tags?.taggedAt).length >= Math.ceil(pool.length / 2);
+
+/**
+ * THE QUESTION A SLIDE CAN ASK BEFORE IT IS COMPOSED: does the library hold a
+ * picture for these words at all? On an untagged pool the answer is always
+ * "unknown, assume yes" — the old behaviour. On a tagged pool a query none of
+ * the pictures answers gets "no", and the copywriter's photo call is turned
+ * into a type-only slide rather than a slot the pool fills with the nearest
+ * wrong thing. A query with no matchable words (all stopwords) also passes:
+ * the pool cannot judge it, so it should not refuse it.
+ */
+export function poolPhotoFinder(pool: ReadonlyArray<PoolAsset>): (query: string | undefined) => boolean {
+  if (!poolIsTagged(pool)) return () => true;
+  return (query) => {
+    if (!query || matchWords(query).length === 0) return true;
+    return pool.some((m) => matchScore(m.tags, query) > 0);
+  };
+}
+
 export async function attachPoolPhotos(
   base: Array<{ id: string; authored?: { html: string; archetype?: string }; imageQuery?: string }>,
-  pool: Array<{ _id: unknown; key?: string; width?: number; height?: number }>,
+  pool: Array<PoolAsset>,
   groundHex: string,
 ): Promise<AttachedPhotos> {
   const groundLuminance = hexLuminance(groundHex) ?? 0;
+  const tagged = poolIsTagged(pool);
   /**
    * PICTURES THAT SUIT THE GROUND GO FIRST. The pool used to be spent in
    * upload order, and on a near-black brand the first six uploads were pale
@@ -202,7 +247,14 @@ export async function attachPoolPhotos(
       }
     }),
   );
-  const suited = means.map((mean) => mean === undefined || Math.abs(mean - groundLuminance) <= MAX_GROUND_DRIFT);
+  const suited = means.map((mean, i) => {
+    // A tagged picture's tone is a judgement, not a mean: "dark" and "mid" sit
+    // on a dark ground, "light" on a light one. The measurement stays as the
+    // fallback for anything untagged.
+    const tone = tagged ? pool[i]?.tags?.tone : undefined;
+    if (tone) return groundLuminance < 0.5 ? tone !== 'light' : tone !== 'dark';
+    return mean === undefined || Math.abs(mean - groundLuminance) <= MAX_GROUND_DRIFT;
+  });
   const bleedPreferred = new Set(pool.filter((_, i) => suited[i]).map((m) => String(m._id)));
   /**
    * SCREENSHOT OR PHOTOGRAPH. The pool could not tell them apart, so a slide
@@ -210,12 +262,30 @@ export async function attachPoolPhotos(
    * slide got a bench still life. A wide, light picture is a screenshot far
    * more often than not; the slide's own imageQuery says which kind it wants.
    */
-  const isScreenshot = pool.map(
-    (m, i) => Boolean(m.width && m.height && m.width / m.height >= 1.4) && (means[i] ?? 0) >= 0.7,
+  const isScreenshot = pool.map((m, i) =>
+    tagged && m.tags?.kind
+      ? m.tags.kind === 'screenshot'
+      : Boolean(m.width && m.height && m.width / m.height >= 1.4) && (means[i] ?? 0) >= 0.7,
   );
   const screenshots = new Set(pool.filter((_, i) => isScreenshot[i]).map((m) => String(m._id)));
   const photographs = new Set(pool.filter((_, i) => !isScreenshot[i]).map((m) => String(m._id)));
-  const slotPreferred = base.map((s) => (s.imageQuery ? (wantsScreenshot(s.imageQuery) ? screenshots : photographs) : undefined));
+  /**
+   * BY MEANING WHEN THE POOL IS TAGGED. The slide's own words are scored
+   * against every picture's subjects and caption; candidates that answer at
+   * least one word come first, best first, then the rest of the right kind.
+   * Untagged, the kind sets stand alone as before.
+   */
+  const slotPreferred = base.map((s) => {
+    if (!s.imageQuery) return undefined;
+    const kindSet = wantsScreenshot(s.imageQuery) ? screenshots : photographs;
+    if (!tagged) return kindSet;
+    const ranked = pool
+      .map((m) => ({ id: String(m._id), score: matchScore(m.tags, s.imageQuery) }))
+      .filter((c) => c.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .map((c) => c.id);
+    return [...ranked, ...[...kindSet].filter((id) => !ranked.includes(id))];
+  });
   const filled = fillSlotsFromPool(base, pool, bleedPreferred, slotPreferred);
   const notes: AttachedPhotos['notes'] = [];
   const anchors = await Promise.all(

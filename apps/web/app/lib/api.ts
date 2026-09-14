@@ -15,6 +15,9 @@ import type {
   Lesson,
   TweakSuggestion,
   UpdateStatus,
+  GlossaryEntry,
+  ScoreDimension,
+  SeriesTemplate,
 } from '@contentbuilder/shared';
 import { api } from './config';
 
@@ -111,11 +114,15 @@ export interface AiSettings {
   recipeModel: string;
   parseModel: string;
   composeModel: string;
+  /** Instagram Graph API; the token is write-only (never read back). */
+  instagramAccessToken?: string;
+  instagramUserId?: string;
 }
 export interface SettingsResponse {
   settings: AiSettings;
   envModels: { model: string; modelSmall: string; modelLarge: string; modelDesign: string };
   stock?: { configured: boolean };
+  instagram?: { configured: boolean; userId: string };
 }
 export const getSettings = () => request<SettingsResponse>('/settings');
 export const updateSettings = (s: Partial<AiSettings>) =>
@@ -137,7 +144,7 @@ export const createBusiness = (data: { name: string; websiteUrl?: string; profil
 
 export const updateBusiness = (
   id: string,
-  data: { name?: string; websiteUrl?: string; profile?: BusinessProfile | null },
+  data: { name?: string; websiteUrl?: string; profile?: BusinessProfile | null; glossary?: GlossaryEntry[]; series?: SeriesTemplate[] },
 ) => request<Business>(`/businesses/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
 
 /**
@@ -166,6 +173,43 @@ export const listProjects = (businessId: string) =>
 
 export const getProject = (id: string) => request<ProjectDetail>(`/projects/${id}`);
 
+/** Why each slide looks like this — the compose decision trace. */
+export interface SlideAutopsy {
+  index: number;
+  id: string;
+  role?: string;
+  path?: 'fragment' | 'ai';
+  archetype?: string;
+  surface?: string;
+  align?: string;
+  variant?: number;
+  photos: Array<{ placement: string; slot?: string; zoom?: number }>;
+  parts?: Record<string, unknown>;
+  rationale?: string;
+  edited: boolean;
+  notes: string[];
+  faults: Array<{ label: string; text: string; reason: string }>;
+  critique: Array<{ severity: string; fault: string; fix: string }>;
+}
+export interface DeckAutopsy {
+  projectId: string;
+  models?: { parse?: string; compose?: string };
+  promptVersions?: Record<string, number>;
+  recipe: 'pinned snapshot' | 'live kit';
+  fragmentsFor: string[];
+  spend?: { spentUsd: number; ceilingUsd: number | null; skipped: string[] };
+  deckNotes: string[];
+  slides: SlideAutopsy[];
+  summary: { fragment: number; ai: number; withPicture: number; forms: number };
+}
+export const getProjectAutopsy = (id: string) => request<DeckAutopsy>(`/projects/${id}/autopsy`);
+
+/** Link a project to the Instagram post it became (by permalink), and read its numbers. */
+export const linkInstagramPost = (id: string, permalink: string) =>
+  request<Project>(`/projects/${id}/instagram/link`, { method: 'POST', body: JSON.stringify({ permalink }) });
+export const syncInstagramInsights = (id: string) =>
+  request<Project>(`/projects/${id}/instagram/sync`, { method: 'POST', body: '{}' });
+
 export const createProject = (data: {
   businessId: string;
   title: string;
@@ -190,6 +234,8 @@ export const updateProject = (
     slides?: Slide[];
     settings?: ProjectSettings;
     caption?: Caption;
+    /** The owner's 1–5 score on the audit's dimensions; null clears it. */
+    scores?: Partial<Record<ScoreDimension, number>> & { note?: string } | null;
     /** Re-editing a parked Ideas card before composing it. Type/format only
      *  take effect while the project still has no slides. */
     idea?: string;

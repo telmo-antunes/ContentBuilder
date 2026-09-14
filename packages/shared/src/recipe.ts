@@ -121,6 +121,14 @@ export type RecipeMotion = z.infer<typeof recipeMotionSchema>;
  */
 /** Patterns a recipe may carry: seven roles × three arrangements. */
 export const MAX_PATTERNS = 24;
+/**
+ * Variants per role. Was 4 until the constructed exhibits (steps, compare,
+ * ledger, checks) joined the list role's three — and the whole fragments
+ * block silently vanished through the `.catch(undefined)` below. Eight is
+ * room for every form a role can take, and the cap still stops a runaway
+ * author payload.
+ */
+export const MAX_FRAGMENT_VARIANTS = 8;
 export const recipeFormatVariantSchema = z.object({
   /** CSS appended after the base stylesheet for this format — same `.cb-slide`
    *  scope, overriding vertical padding / sizes for the canvas's aspect. */
@@ -260,7 +268,8 @@ export const brandRecipeSchema = z.object({
    * present), and the whole point is that a brand may fill in as few roles as it
    * can express well.
    *
-   * A role's value may be ONE fragment (string) or VARIANTS (array of up to 4):
+   * A role's value may be ONE fragment (string) or VARIANTS (array of up to
+   * MAX_FRAGMENT_VARIANTS):
    * genuinely different arrangements of the same role, rotated per slide and
    * per deck exactly like `composition.patterns` — variant i implements
    * pattern i. One fragment per role made every deck reuse the same seven
@@ -268,7 +277,7 @@ export const brandRecipeSchema = z.object({
    * consecutive posts from being re-skins of each other.
    */
   fragments: z
-    .record(z.string(), z.union([z.string().max(4000), z.array(z.string().max(4000)).min(1).max(4)]))
+    .record(z.string(), z.union([z.string().max(4000), z.array(z.string().max(4000)).min(1).max(MAX_FRAGMENT_VARIANTS)]))
     .optional()
     .catch(undefined),
 

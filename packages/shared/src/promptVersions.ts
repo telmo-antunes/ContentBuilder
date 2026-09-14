@@ -167,6 +167,17 @@ export const TOUCHPOINT_REGISTRY: Record<TouchpointId, Touchpoint> = {
           'The pattern cap rose from 12 to 24; a 13th pattern no longer silently discards all of them.',
         ],
       },
+      {
+        version: 8,
+        date: '2026-09-15',
+        summary: 'The constructed exhibits: step chevron, two-column compare, number ledger, checklist.',
+        improves: [
+          'Both exemplars carry four more list forms as fragment variants — the forms the swipe-file accounts are made of — and the author is asked for them in the brand\'s own furniture.',
+          'Compose reaches for each only when the rows suit it: a chevron for two to four short steps, a compare when there are do and dont rows, a ledger for three to six numbers with labels, a checklist for plain items.',
+          'A note under a figure is a label, not prose — the full-stop rule no longer turns every exhibit into a copy fault.',
+          'The web app\'s own .panel, .card, .badge, .row and .chip rules no longer leak into rendered slides.',
+        ],
+      },
     ],
   },
 
@@ -301,6 +312,17 @@ export const TOUCHPOINT_REGISTRY: Record<TouchpointId, Touchpoint> = {
           'A quote is an object under 20 words — a paragraph set in italics on a cream card was the heaviest slide in three decks.',
           'A brief with no lists and no numbers still gets one bare one-liner or a stat, so six text frames in a row cannot happen.',
           'Headlines and taglines end with a full stop or a question mark; a tagline has a budget (70) and, like a headline, is re-asked rather than cut.',
+        ],
+      },
+      {
+        version: 12,
+        date: '2026-09-15',
+        summary: 'A second worked example in another register, the reader\'s glossary, and a cover that is checked.',
+        improves: [
+          'A Dynatós-register worked deck (short declaratives, condensed and direct) sits beside the detailing one, so neither brand is written in the other\'s voice.',
+          'The business\'s glossary rides in the user message: the system\'s names on the left, the customer\'s words on the right, and the copywriter writes the right-hand ones.',
+          'The cover is measured after the first pass: a headline that is the post\'s title, or runs past ten words, goes back to the copywriter, and what survives is a copy fault on the review page.',
+          'A slide whose picture the tagged library does not hold is composed as type before anything is arranged, and the owner is told which picture was missing.',
         ],
       },
     ],

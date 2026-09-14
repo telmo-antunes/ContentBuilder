@@ -23,9 +23,16 @@ export function WorkingPanel({
   count = 1,
   notes,
   palette,
+  live,
 }: {
   active: boolean;
   stages: ProgressStage[];
+  /**
+   * What the SERVER says is happening, when it says anything: the compose
+   * route writes its phase per step, and a measured phase beats a timer's
+   * guess. Absent, the timer stages stand as before.
+   */
+  live?: { label: string; index: number } | null;
   title: string;
   sub: string;
   /** Drop the panel's own border/background — for nesting inside another card. */
@@ -37,7 +44,10 @@ export function WorkingPanel({
   /** The brand's real colours, so the ghost is this brand and not any brand. */
   palette?: string[];
 }) {
-  const { label, index, seconds } = useStagedProgressState(active, stages);
+  const timed = useStagedProgressState(active, stages);
+  const label = live?.label ?? timed.label;
+  const index = live ? Math.max(live.index, timed.index) : timed.index;
+  const seconds = timed.seconds;
   if (!active) return null;
   const cards = Array.from({ length: Math.max(1, count) }, (_, i) => i);
   const swatches = (palette && palette.length ? palette : [null, null, null, null, null]).slice(0, 5);

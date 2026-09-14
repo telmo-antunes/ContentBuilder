@@ -25,6 +25,9 @@ import {
 } from '@contentbuilder/shared';
 import { brandHandleFromWebsite, composeProject, composeSlide, parseSlideCopy, parseSlideDirection } from '../lib/htmlDirector/compose';
 import { withSpendLedger, withLedger, summarize, type SpendLedger } from '../lib/spend';
+import { autopsyFor } from '../lib/autopsy';
+import { deckForms, referenceSheetsFor } from '../lib/inspo';
+import { instagramCredentials, listRecentMedia, mediaInsights, permalinkCode } from '../lib/instagram';
 import { CRITIQUE_SKIP_TEXT, critiqueDeck, type CritiqueOutcome } from '../lib/htmlDirector/deckCritique';
 import { resolveBrief } from '../lib/sourceIngest';
 import { authoredShape, partsFromAuthored, rewriteAuthoredCopy } from '../lib/htmlDirector/reparse';
@@ -39,7 +42,7 @@ import { runVideoJob, sweepExpiredVideoJobs } from '../lib/videoJobs';
 import { findImageCopyContradictions, type SlidePairing } from '../lib/imageCopyCheck';
 import { getStorage } from '../storage';
 import { generateCaption, type GeneratedCaption } from '../lib/caption';
-import { attachPoolPhotos, brandPhotoPool, PROMO_COVER_LABEL } from '../lib/photoPool';
+import { attachPoolPhotos, brandPhotoPool, poolPhotoFinder, PROMO_COVER_LABEL } from '../lib/photoPool';
 import { lessonsFor, noteSlideSignal, observeOutcome, recordGeneration } from '../lib/learningLoop';
 import type { ComposeRecord, CopyCheckSummary, LayoutCheckSummary } from '../lib/htmlDirector/compose';
 import { postUpdateStatus } from '../lib/promptStatus';
@@ -438,6 +441,12 @@ projectsRouter.patch(
       project.set('slides', normalized);
     }
     if (body.caption !== undefined) project.set('caption', body.caption);
+    if (body.scores !== undefined) {
+      // Pin the prompt versions that wrote the deck beside the score, so a
+      // prompt change can be judged against what people thought of its decks.
+      const pv = (project.get('slides') ?? [])[0]?.authored?.pv;
+      project.set('scores', body.scores ? { ...body.scores, at: new Date(), ...(pv ? { pv } : {}) } : undefined);
+    }
     if (body.settings !== undefined) {
       project.set('settings', { ...(project.get('settings') ?? {}), ...body.settings });
     }
@@ -558,6 +567,8 @@ projectsRouter.post(
      * everything the post costs.
      */
     let ledger: SpendLedger | undefined;
+    /** Decisions the parse step took before anything was composed — a withdrawn photo call. */
+    const earlyNotes: Array<{ slide?: number; note: string }> = [];
     try {
       const run = await withSpendLedger(
         { projectId: String(project._id), ceilingUsd: config.ai.postCeilingUsd },
@@ -568,6 +579,15 @@ projectsRouter.post(
         locks: brief.locks,
         sources,
         lessons,
+        // The reader's words for the system's things, from the business page.
+        glossary: (business as { glossary?: Array<{ system: string; customer: string }> } | null)?.glossary ?? undefined,
+        // A tagged library answers "is there a picture of X?" per slide; an
+        // untagged one says yes to everything, as before.
+        photoFor: (() => {
+          const finder = poolPhotoFinder(pool);
+          return (query: string | undefined) => finder(query);
+        })(),
+        onNote: (n) => earlyNotes.push(n),
         handle: brandHandle || undefined,
         // Stable per-project offset for the pattern/fragment variant rotation:
         // consecutive posts compose different skeletons for the same roles,
@@ -636,7 +656,7 @@ projectsRouter.post(
     // behalf, stored on the project and shown on the review page. A decision
     // that only ever reached console.warn was invisible to the one person who
     // could overrule it.
-    const composeNotes: Array<{ slide?: number; note: string }> = [...attached.notes];
+    const composeNotes: Array<{ slide?: number; note: string }> = [...earlyNotes, ...attached.notes];
 
     const slides = base.map((s, i) => ({
       ...s,
@@ -717,13 +737,21 @@ projectsRouter.post(
         slides.map((s) => s.id),
         project.get('format'),
       );
+      // The bar as pictures: one or two reference strips sharing this deck's
+      // forms, when the inspo folder is present. Absent, the critique runs as
+      // before; unaffordable, they are dropped before the review is.
+      const references = await referenceSheetsFor(
+        deckForms(slides.map((s) => ({ role: s.authored?.role, hasPhoto: (s.photos ?? []).length > 0, html: s.authored?.html }))),
+      ).catch(() => []);
       critique = await withLedger(ledger, () =>
         critiqueDeck(
           parsedRecipe.data,
           shots.map((b64) => (b64 ? Buffer.from(b64, 'base64') : null)),
           project.get('format') as Format,
+          { references },
         ),
       );
+      if (references.length) composeNotes.push({ note: `The review was shown ${references.length} reference post(s) as the bar: ${references.map((r) => r.label).join('; ')}.` });
       project.set(
         'critique',
         critique.status === 'ok'
@@ -1221,6 +1249,151 @@ projectsRouter.get(
   }),
 );
 
+/**
+ * WHY EACH SLIDE LOOKS LIKE THIS — the compose decision trace, per slide,
+ * for the Studio's "why" panel. Read-only, derived from what the project and
+ * its generation record already store.
+ */
+projectsRouter.get(
+  '/:id/autopsy',
+  asyncHandler(async (req, res) => {
+    const id = requireObjectId(req.params.id, 'Project');
+    const trace = await autopsyFor(id);
+    if (!trace) throw new ApiError(404, 'Project not found');
+    res.json(trace);
+  }),
+);
+
+/**
+ * EVERY SCORED DECK, with the prompt versions and the spend beside the
+ * score — the table that says whether a prompt change moved what people
+ * thought of the decks it wrote.
+ */
+projectsRouter.get(
+  '/scores/all',
+  asyncHandler(async (_req, res) => {
+    const docs = await ProjectModel.find({ scores: { $exists: true } })
+      .select('title businessId type format scores spend exportedAt updatedAt slides.authored.pv')
+      .sort({ 'scores.at': -1 })
+      .lean();
+    res.json({
+      scored: docs.map((p: any) => ({
+        _id: String(p._id),
+        title: p.title,
+        businessId: String(p.businessId),
+        type: p.type,
+        format: p.format,
+        scores: p.scores,
+        promptVersions: p.scores?.pv ?? p.slides?.[0]?.authored?.pv,
+        spentUsd: p.spend?.spentUsd,
+        exportedAt: p.exportedAt,
+      })),
+    });
+  }),
+);
+
+/**
+ * LINK A PROJECT TO THE POST IT BECAME. The owner pastes the post's
+ * permalink; the media id is found in the account's recent posts and kept,
+ * so insights can be synced from then on without the URL.
+ */
+const instagramLinkSchema = z.object({
+  permalink: z.string().trim().url().max(300).optional(),
+  mediaId: z.string().trim().max(40).optional(),
+});
+projectsRouter.post(
+  '/:id/instagram/link',
+  asyncHandler(async (req, res) => {
+    const id = requireObjectId(req.params.id, 'Project');
+    const body = parseBody(instagramLinkSchema, req.body ?? {});
+    const project = await ProjectModel.findById(id);
+    if (!project) throw new ApiError(404, 'Project not found');
+    const creds = await instagramCredentials();
+    if (!creds) throw new ApiError(400, 'Instagram is not connected — add the access token and account id in Settings.');
+    let mediaId = body.mediaId;
+    let permalink = body.permalink;
+    let postedAt: Date | undefined;
+    if (!mediaId) {
+      const code = permalinkCode(body.permalink);
+      if (!code) throw new ApiError(400, 'Paste the post’s Instagram link (instagram.com/p/… or /reel/…).');
+      let media;
+      try {
+        media = await listRecentMedia(creds, 100);
+      } catch (err) {
+        throw new ApiError(502, publicErrMessage(err, 'Instagram error'));
+      }
+      const hit = media.find((m) => permalinkCode(m.permalink) === code);
+      if (!hit) throw new ApiError(404, 'That post is not among the account’s last 100 — check the link, or that the token belongs to the same account.');
+      mediaId = hit.id;
+      permalink = hit.permalink ?? permalink;
+      postedAt = hit.timestamp ? new Date(hit.timestamp) : undefined;
+    }
+    project.set('instagram', { mediaId, ...(permalink ? { permalink } : {}), ...(postedAt ? { postedAt } : {}), linkedAt: new Date() });
+    if (postedAt && !project.get('postedAt')) project.set('postedAt', postedAt);
+    // A linked post has, by definition, been posted.
+    if (project.get('stage') !== 'shipped') project.set('stage', 'shipped');
+    let insights;
+    try {
+      insights = await mediaInsights(creds, mediaId!);
+      project.set('insights', insights);
+    } catch (err) {
+      console.warn(`[instagram] linked ${id} but could not read insights yet: ${err instanceof Error ? err.message : err}`);
+    }
+    await project.save();
+    res.json(project.toJSON());
+  }),
+);
+
+/** Refresh the linked post's numbers. */
+projectsRouter.post(
+  '/:id/instagram/sync',
+  asyncHandler(async (req, res) => {
+    const id = requireObjectId(req.params.id, 'Project');
+    const project = await ProjectModel.findById(id);
+    if (!project) throw new ApiError(404, 'Project not found');
+    const link = project.get('instagram') as { mediaId?: string } | undefined;
+    if (!link?.mediaId) throw new ApiError(400, 'This post is not linked to an Instagram post yet.');
+    const creds = await instagramCredentials();
+    if (!creds) throw new ApiError(400, 'Instagram is not connected — add the access token and account id in Settings.');
+    try {
+      project.set('insights', await mediaInsights(creds, link.mediaId));
+    } catch (err) {
+      throw new ApiError(502, publicErrMessage(err, 'Instagram error'));
+    }
+    await project.save();
+    res.json(project.toJSON());
+  }),
+);
+
+/**
+ * EVERY LINKED POST with its numbers, its score and the prompt versions that
+ * wrote it — the table that closes the loop from prompt to reader.
+ */
+projectsRouter.get(
+  '/insights/all',
+  asyncHandler(async (_req, res) => {
+    const docs = await ProjectModel.find({ 'instagram.mediaId': { $exists: true } })
+      .select('title businessId type format instagram insights scores spend slides.authored.pv slides.authored.role')
+      .sort({ 'instagram.postedAt': -1 })
+      .lean();
+    res.json({
+      posts: docs.map((p: any) => ({
+        _id: String(p._id),
+        title: p.title,
+        businessId: String(p.businessId),
+        type: p.type,
+        format: p.format,
+        instagram: p.instagram,
+        insights: p.insights,
+        scores: p.scores,
+        promptVersions: p.scores?.pv ?? p.slides?.[0]?.authored?.pv,
+        roles: (p.slides ?? []).map((s: any) => s.authored?.role).filter(Boolean),
+        spentUsd: p.spend?.spentUsd,
+      })),
+    });
+  }),
+);
+
 // Regenerate the caption for a project's current slides (manual "Regenerate" button).
 projectsRouter.post(
   '/:id/caption',
@@ -1289,6 +1462,18 @@ projectsRouter.post(
     // state, was good enough to ship.
     await observeOutcome(String(project._id), project.get('slides') as never, { exported: true });
     await project.save();
+    /**
+     * STORIES ARE DERIVED, NOT COMPOSED. The first export of a carousel makes
+     * its promo story — the cover as a picture, one frame around it — so the
+     * Desk carries the poster for every post that ships, without anyone
+     * composing a second thing. Best-effort and after the save: an export
+     * never fails because a story could not be drawn.
+     */
+    if (project.get('type') === 'carousel' && !(await ProjectModel.exists({ promotes: project._id }))) {
+      derivePromoStory(String(project._id), {})
+        .then((r) => console.warn(`[export] derived the promo story ${r.storyProjectId} for ${project._id}`))
+        .catch((err) => console.warn(`[export] could not derive the promo story: ${err instanceof Error ? err.message : err}`));
+    }
     // What was shipped should always be recoverable.
     await saveVersion(project, 'Exported').catch(() => {});
 
@@ -1588,167 +1773,176 @@ const promoStorySchema = z.object({
  * The result is a normal draft story project — editable, exportable, and
  * deletable — not a special kind of object. Posting stays the user's.
  */
+/**
+ * Build the promo story for a carousel — the cover rendered as a picture, one
+ * cta frame around it. Called by the route below and, since stories are
+ * DERIVED rather than composed, by the export route the first time a
+ * carousel ships. Throws ApiErrors the route can pass straight through.
+ */
+async function derivePromoStory(id: string, body: z.infer<typeof promoStorySchema>) {
+  const carousel = await ProjectModel.findById(id);
+  if (!carousel) throw new ApiError(404, 'Project not found');
+  if (carousel.get('type') !== 'carousel') {
+    throw new ApiError(400, 'Only a carousel can be promoted with a story.');
+  }
+
+  const slides = (carousel.get('slides') ?? []) as Array<{ id: string; order: number; authored?: { html?: string } }>;
+  const cover = [...slides].sort((a, b) => a.order - b.order)[0];
+  if (!cover) throw new ApiError(400, 'This carousel has no slides yet.');
+  if (!cover.authored?.html) {
+    // Rendering it anyway would produce the blank ~7KB frame that the
+    // pre-recipe slide format is known for, and a promo story showing an
+    // empty rectangle is worse than no promo story.
+    throw new ApiError(400, 'The carousel cover has no authored markup — compose the carousel first.');
+  }
+
+  const businessId = String(carousel.get('businessId'));
+  const kit = await approvedKitFor(businessId);
+  const stored = kit && (kit as { recipe?: unknown }).recipe;
+  let recipe: BrandRecipe | null = null;
+  if (stored) {
+    try { recipe = migrateRecipe(stored); } catch { recipe = null; }
+  }
+  if (!recipe) throw new ApiError(400, 'This brand has no design recipe yet — generate the brand recipe first.');
+
+  // 1. Render ONLY the cover, at the CAROUSEL's dimensions — this is a
+  //    picture OF the carousel, so it keeps the carousel's shape and sits
+  //    inside the story rather than being stretched to fill it.
+  let rendered;
+  try {
+    rendered = await renderSlidesToPng({
+      _id: String(carousel._id),
+      format: carousel.get('format') as never,
+      slides: [{ id: cover.id, order: 0 }],
+    });
+  } catch (err) {
+    throw new ApiError(502, `Could not render the carousel cover: ${publicErrMessage(err, 'render error')}`);
+  }
+  const shot = rendered[0];
+  if (!shot) throw new ApiError(502, 'The cover rendered to nothing.');
+
+  // 2. Keep it as an ordinary media asset, so the editor's own picker can
+  //    swap or reuse it and orphan sweeping treats it like anything else.
+  const { width, height } = dimensionsFor(carousel.get('format') as never);
+  const asset = await MediaAssetModel.create({
+    businessId,
+    type: 'upload',
+    key: shot.key,
+    url: shot.url,
+    width,
+    height,
+    label: PROMO_COVER_LABEL,
+  });
+
+  // 3. Compose one frame. `cta` is the role whose whole job is to point
+  //    somewhere else, which is exactly what this frame does.
+  const carouselTitle = String(carousel.get('title') ?? '').trim();
+
+  /**
+   * NO HEADLINE BY DEFAULT.
+   *
+   * Defaulting it to the carousel's title printed the same sentence twice —
+   * once inside the cover the frame is showing, once underneath it in the
+   * largest type on the slide. The cover already says what the post is; the
+   * frame's job is to say it is new and where to go.
+   *
+   * A caller may still pass one, and should when it can add a hook the cover
+   * does not have. Passing an empty string is the same as passing nothing.
+   */
+  const parts = {
+    eyebrow: body.eyebrow ?? 'NOVO POST',
+    cta: body.cta ?? 'Vê o carrossel completo',
+    headline: body.headline?.trim() ?? '',
+  };
+
+  /**
+   * AUTHORED HERE, DETERMINISTICALLY — no model call.
+   *
+   * This frame has no creative decision in it: an eyebrow, a button label, a
+   * picture of the cover. Handing that to the copywriter bought nothing and
+   * cost correctness — asked for a slide with only two copy parts, the model
+   * reasoned in prose about the missing ones and its reasoning rendered ON
+   * the story ("Wait, I need to re-examine. The copy parts provided are only
+   * eyebrow and cta…"), with the whole frame duplicated beneath it.
+   *
+   * The classes are the brand's own, in the brand's own order, exactly as the
+   * `cta` fragment uses them. `sanitizeAuthoredHtml` still runs on save.
+   */
+  const esc = (v: string) =>
+    v.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] as string);
+
+  const composed = {
+    html: [
+      '<div class="logo-row"><div class="monogram"></div>'
+        + '<div class="wordmark"><b>detail</b><span class="it">masters</span></div></div>',
+      '<div class="fill"></div>',
+      `<figure class="${SLOT_CLASS} ${PLATE_CLASS}" data-cb-slot="hero"></figure>`,
+      `<div class="eyebrow">${esc(parts.eyebrow)}</div>`,
+      ...(parts.headline ? [`<div class="headline">${esc(parts.headline)}</div>`] : []),
+      `<div class="cta">${esc(parts.cta)}</div>`,
+      '<div class="fill"></div>',
+    ].join('\n'),
+    source: 'authored' as const,
+  };
+
+  const slotNames = authoredSlots(composed.html);
+  const slot = slotNames[0];
+  const html = composed.html;
+
+  const photo: SlidePhoto = slidePhotoSchema.parse({
+    id: randomUUID(),
+    mediaAssetId: String(asset._id),
+    ...(slot ? { placement: 'slot', slot } : { placement: 'background' }),
+    // `contain` keeps the whole cover visible; cropping a picture of a poster
+    // to fill a box loses the thing being recognised.
+    fit: 'contain',
+    // The carousel is 4:5; `tall` (3:4) is the closest slot shape and the one
+    // with the height budget to show it at a readable size.
+    shape: 'tall',
+    alt: `Cover of the carousel “${carouselTitle}”`,
+  });
+
+  const story = await ProjectModel.create({
+    businessId,
+    title: body.title ?? `${carouselTitle || 'Carousel'} — promo story`,
+    type: 'story',
+    format: STORY_FORMAT,
+    status: 'draft',
+    stage: 'ready',
+    promotes: String(carousel._id),
+    slides: [{
+      id: randomUUID(),
+      order: 0,
+      photos: [photo],
+      authored: {
+        html,
+                  role: 'cta',
+      },
+    }],
+    settings: { theme: carousel.get('settings')?.theme, slideCounter: false },
+  });
+
+  return {
+    storyProjectId: String(story._id),
+    story: story.toJSON(),
+    coverAssetId: String(asset._id),
+    composedBy: composed.source,
+    /** Where the cover landed, so a caller can tell a slot fill from a fallback. */
+    placement: photo.placement,
+    /**
+     * Nothing drawn in a story export is tappable. The button is a visual
+     * anchor for a link sticker the poster must place by hand — said here so
+     * every hand-off can repeat it instead of rediscovering it.
+     */
+    note: 'The CTA button is not tappable in a story — place a link sticker over it when posting.',
+  };
+}
+
 projectsRouter.post(
   '/:id/promo-story',
   asyncHandler(async (req, res) => {
     const id = requireObjectId(req.params.id, 'Project');
     const body = parseBody(promoStorySchema, req.body ?? {});
-
-    const carousel = await ProjectModel.findById(id);
-    if (!carousel) throw new ApiError(404, 'Project not found');
-    if (carousel.get('type') !== 'carousel') {
-      throw new ApiError(400, 'Only a carousel can be promoted with a story.');
-    }
-
-    const slides = (carousel.get('slides') ?? []) as Array<{ id: string; order: number; authored?: { html?: string } }>;
-    const cover = [...slides].sort((a, b) => a.order - b.order)[0];
-    if (!cover) throw new ApiError(400, 'This carousel has no slides yet.');
-    if (!cover.authored?.html) {
-      // Rendering it anyway would produce the blank ~7KB frame that the
-      // pre-recipe slide format is known for, and a promo story showing an
-      // empty rectangle is worse than no promo story.
-      throw new ApiError(400, 'The carousel cover has no authored markup — compose the carousel first.');
-    }
-
-    const businessId = String(carousel.get('businessId'));
-    const kit = await approvedKitFor(businessId);
-    const stored = kit && (kit as { recipe?: unknown }).recipe;
-    let recipe: BrandRecipe | null = null;
-    if (stored) {
-      try { recipe = migrateRecipe(stored); } catch { recipe = null; }
-    }
-    if (!recipe) throw new ApiError(400, 'This brand has no design recipe yet — generate the brand recipe first.');
-
-    // 1. Render ONLY the cover, at the CAROUSEL's dimensions — this is a
-    //    picture OF the carousel, so it keeps the carousel's shape and sits
-    //    inside the story rather than being stretched to fill it.
-    let rendered;
-    try {
-      rendered = await renderSlidesToPng({
-        _id: String(carousel._id),
-        format: carousel.get('format') as never,
-        slides: [{ id: cover.id, order: 0 }],
-      });
-    } catch (err) {
-      throw new ApiError(502, `Could not render the carousel cover: ${publicErrMessage(err, 'render error')}`);
-    }
-    const shot = rendered[0];
-    if (!shot) throw new ApiError(502, 'The cover rendered to nothing.');
-
-    // 2. Keep it as an ordinary media asset, so the editor's own picker can
-    //    swap or reuse it and orphan sweeping treats it like anything else.
-    const { width, height } = dimensionsFor(carousel.get('format') as never);
-    const asset = await MediaAssetModel.create({
-      businessId,
-      type: 'upload',
-      key: shot.key,
-      url: shot.url,
-      width,
-      height,
-      label: PROMO_COVER_LABEL,
-    });
-
-    // 3. Compose one frame. `cta` is the role whose whole job is to point
-    //    somewhere else, which is exactly what this frame does.
-    const carouselTitle = String(carousel.get('title') ?? '').trim();
-
-    /**
-     * NO HEADLINE BY DEFAULT.
-     *
-     * Defaulting it to the carousel's title printed the same sentence twice —
-     * once inside the cover the frame is showing, once underneath it in the
-     * largest type on the slide. The cover already says what the post is; the
-     * frame's job is to say it is new and where to go.
-     *
-     * A caller may still pass one, and should when it can add a hook the cover
-     * does not have. Passing an empty string is the same as passing nothing.
-     */
-    const parts = {
-      eyebrow: body.eyebrow ?? 'NOVO POST',
-      cta: body.cta ?? 'Vê o carrossel completo',
-      headline: body.headline?.trim() ?? '',
-    };
-
-    /**
-     * AUTHORED HERE, DETERMINISTICALLY — no model call.
-     *
-     * This frame has no creative decision in it: an eyebrow, a button label, a
-     * picture of the cover. Handing that to the copywriter bought nothing and
-     * cost correctness — asked for a slide with only two copy parts, the model
-     * reasoned in prose about the missing ones and its reasoning rendered ON
-     * the story ("Wait, I need to re-examine. The copy parts provided are only
-     * eyebrow and cta…"), with the whole frame duplicated beneath it.
-     *
-     * The classes are the brand's own, in the brand's own order, exactly as the
-     * `cta` fragment uses them. `sanitizeAuthoredHtml` still runs on save.
-     */
-    const esc = (v: string) =>
-      v.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] as string);
-
-    const composed = {
-      html: [
-        '<div class="logo-row"><div class="monogram"></div>'
-          + '<div class="wordmark"><b>detail</b><span class="it">masters</span></div></div>',
-        '<div class="fill"></div>',
-        `<figure class="${SLOT_CLASS} ${PLATE_CLASS}" data-cb-slot="hero"></figure>`,
-        `<div class="eyebrow">${esc(parts.eyebrow)}</div>`,
-        ...(parts.headline ? [`<div class="headline">${esc(parts.headline)}</div>`] : []),
-        `<div class="cta">${esc(parts.cta)}</div>`,
-        '<div class="fill"></div>',
-      ].join('\n'),
-      source: 'authored' as const,
-    };
-
-    const slotNames = authoredSlots(composed.html);
-    const slot = slotNames[0];
-    const html = composed.html;
-
-    const photo: SlidePhoto = slidePhotoSchema.parse({
-      id: randomUUID(),
-      mediaAssetId: String(asset._id),
-      ...(slot ? { placement: 'slot', slot } : { placement: 'background' }),
-      // `contain` keeps the whole cover visible; cropping a picture of a poster
-      // to fill a box loses the thing being recognised.
-      fit: 'contain',
-      // The carousel is 4:5; `tall` (3:4) is the closest slot shape and the one
-      // with the height budget to show it at a readable size.
-      shape: 'tall',
-      alt: `Cover of the carousel “${carouselTitle}”`,
-    });
-
-    const story = await ProjectModel.create({
-      businessId,
-      title: body.title ?? `${carouselTitle || 'Carousel'} — promo story`,
-      type: 'story',
-      format: STORY_FORMAT,
-      status: 'draft',
-      stage: 'ready',
-      promotes: String(carousel._id),
-      slides: [{
-        id: randomUUID(),
-        order: 0,
-        photos: [photo],
-        authored: {
-          html,
-                    role: 'cta',
-        },
-      }],
-      settings: { theme: carousel.get('settings')?.theme, slideCounter: false },
-    });
-
-    res.status(201).json({
-      storyProjectId: String(story._id),
-      story: story.toJSON(),
-      coverAssetId: String(asset._id),
-      composedBy: composed.source,
-      /** Where the cover landed, so a caller can tell a slot fill from a fallback. */
-      placement: photo.placement,
-      /**
-       * Nothing drawn in a story export is tappable. The button is a visual
-       * anchor for a link sticker the poster must place by hand — said here so
-       * every hand-off can repeat it instead of rediscovering it.
-       */
-      note: 'The CTA button is not tappable in a story — place a link sticker over it when posting.',
-    });
+    res.status(201).json(await derivePromoStory(id, body));
   }),
 );

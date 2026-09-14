@@ -355,7 +355,9 @@ async function main(): Promise<void> {
   } else {
     const probe = await openRenderProbe(recipe, format, composed.map((s, i) => ({ index: i, role: s.role, html: s.authored.html, archetype: s.authored.archetype })) as any);
     try {
-      shots = await Promise.all(composed.map((s, i) => (probe.shoot ? probe.shoot(i, s.authored.html) : Promise.resolve(null))));
+      // One page, one slide at a time: shooting seven at once through a single
+      // probe raced the mounts and lost half the sheet on every run.
+      for (const [i, s] of composed.entries()) shots.push(probe.shoot ? await probe.shoot(i, s.authored.html) : null);
     } finally {
       await probe.close();
     }
@@ -366,8 +368,13 @@ async function main(): Promise<void> {
   let critiqueLine = '';
   if (cliHas('--critique') && !noModel && shots.some(Boolean)) {
     const { critiqueDeck } = await import('../lib/htmlDirector/deckCritique');
+    const { deckForms, referenceSheetsFor } = await import('../lib/inspo');
+    const references = cliHas('--no-references')
+      ? []
+      : await referenceSheetsFor(deckForms(composed.map((s) => ({ role: s.role, hasPhoto: /data-cb-slot=|cb-photo/.test(s.authored.html), html: s.authored.html }))));
+    if (references.length) say(`- references shown to the critique: ${references.map((r) => r.label).join('; ')}`);
     const outcome = await withLedger(ledger, () =>
-      critiqueDeck(recipe, shots.map((b64) => (b64 ? Buffer.from(b64, 'base64') : null)), format),
+      critiqueDeck(recipe, shots.map((b64) => (b64 ? Buffer.from(b64, 'base64') : null)), format, { references }),
     );
     if (outcome.status === 'ok') {
       const r = outcome.critique;
