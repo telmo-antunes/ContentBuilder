@@ -1,0 +1,141 @@
+{
+ "visualcap": {
+  "_about": "Data visualisation publisher. Single dense infographics; the chart IS the post.",
+  "DdJlSvSDnZr": ["Wealth per capita by country, 2025", "exhibit", "One ranked bar chart, flags as row labels, the title set huge in the empty corner, one annotation box. Nothing else."],
+  "Dc3jvZAjiwD": ["Workdays to buy an iPhone 17 Pro", "exhibit · product proof", "The product photo sits inside the chart; bars read top to bottom, one takeaway sentence bottom-right."],
+  "Dc0-8aIjlGh": ["Top import partner of every US state", "exhibit", "A map, and directly under the title the one sentence that says what it shows (Canada for 23 states)."],
+  "DdHphuODnqS": ["Live event: how we doubled our audience", "product proof · promo", "Event card: green LIVE badge, date, title + dek, speaker portrait, previous work fanned under a curved panel."],
+  "Dc_SBf7jkVu": ["More seniors than children by 2029", "number · picture owns the frame", "The stat is the headline; chart lines are drawn over a photo of five ages, callout chips carry the numbers."]
+ },
+ "ourworldindata": {
+  "_about": "Charts with prose. Alternates a chart slide and a big-quote-mark prose slide; the close is a conclusion, not a plea.",
+  "DTBCppdkfve": ["All three statements are true at the same time", "exhibit series · numbered teaching", "Venn cover, then one tinted chart per statement: same layout three times, only the tint and the sentence change."],
+  "DdQkpTPAgeX": ["Is organic farming better for the environment?", "close as an arrival", "Cover = chart + question + byline; alternating prose and chart slides; the last slide answers the question."],
+  "Dc-n0UUgnBU": ["A never-ending childhood of malaria", "exhibit · quote", "Chart bleeds behind the title on the cover; quotation slides use one giant quote mark as the only decoration."],
+  "Dcagt-LIETf": ["The rise of electoral democracy", "exhibit", "Four slides: chart behind title, prose, chart, prose."],
+  "DcskuXNI9gS": ["Beef production in Brazil and deforestation", "exhibit", "A sankey as the cover picture; the bar chart slide carries its own full title and source line."],
+  "DdIyqViArv8": ["Where Indians are living abroad", "exhibit", "Single ranked bar exhibit with flags; the subtitle explains the measure so the chart needs no caption."],
+  "Dc3AHBcDz0O": ["US data-centre spend grew 5-fold since 2022", "number · exhibit", "One line chart with both endpoints labelled ($868m → $4.36bn) and the ChatGPT release marked."]
+ },
+ "mckinseyco": {
+  "_about": "Dark navy, serif headlines, photography or 3D render on every slide, one idea per slide.",
+  "DdL78_UCUrf": ["Four foundations of the AI economy", "number", "A 2×2 grid of four stats, each with a bold label and a two-line sub-label; nothing else on the slide."],
+  "Dc56ZWujq8D": ["Will you fly—or freeze?", "numbered teaching poster · close as an arrival", "Question cover, one numbered point per slide alternating dark and light snow photography, close repeats the cover with a CTA button."],
+  "DcL_nxUGj1X": ["The future of robotics", "numbered teaching poster", "Eyebrow + big title cover; one sentence per slide with the key word in accent blue; a 3D render carries every slide; close = Learn more."],
+  "Db_HrC7nFw_": ["Creating opportunity that lasts", "number · exhibit", "Photo top / copy bottom; stat pairs (83% / 76%); a three-step chevron; close is a URL over a photo."]
+ },
+ "whoop": {
+  "_about": "Photography-led. Kept for the metric-badge idiom, not as the constructed-visual bar.",
+  "DdMcyXNAXwo": ["Trust where the work can take you", "picture owns the frame", "Silhouette photography; three words placed across the frame. Poster frames of a video post."],
+  "DdHJb6cltoE": ["One destination, two strategies", "exhibit · comparison", "Two travel strategies as thin vertical photo strips with a dotted timeline; a yardage ruler on the close; ends on a question."],
+  "DdPRlNlmn4v": ["S. Lowry −23", "number · picture owns the frame", "The same photo three times; only the metric badge changes (score, sleep 82%, strain 15.0)."]
+ },
+ "theeconomist": {
+  "_about": "Eyebrow · serif headline · italic dek, top third; illustration owns the rest. Carousels use split slides.",
+  "DdPJ6_ikYes": ["The assassination of the world's only openly gay imam", "close as an arrival · quote", "1843 eyebrow; split slides (photo top, caption below); a pull-quote slide in bold display; close = tap the link in bio."],
+  "DdOZW4wDlal": ["The many mysteries of the Bayeux tapestry", "exhibit", "Numbered tapestry panels on black with a caption under each; the last slide is text only."],
+  "DdOnjomDmRx": ["The economic folly of free buses", "one-liner", "Eyebrow, headline, italic dek; the illustration takes the lower two thirds on a yellow ground."],
+  "DdP59IXlWkS": ["Only children in China prefer to marry other only children", "one-liner", "Same template on black; the dek adds the twist."]
+ },
+ "quantamag": {
+  "_about": "Science explained in two paragraphs per slide with the key phrase in bold or a highlight colour.",
+  "DdHYYRAFj6c": ["The four-colour theorem", "numbered teaching poster · exhibit", "Purple ground; two short paragraphs top, an exhibit inset below (illustration, diagram, photo, map, portrait); highlight words in yellow and pink."],
+  "DdEhvnIlurS": ["The Langlands program", "picture owns the frame", "Illustration bleeds; the text sits in a small dark box that moves position every slide; one word in orange."],
+  "Dcg6Z-glgqm": ["Hilbert space", "exhibit · close as an arrival", "Illustration inset, bold-word paragraph, a spot illustration on slide 2, close = tap the link in our bio."],
+  "DdKC1hylgZv": ["Plankton shells flipped in unison", "exhibit · quote", "Scientific image with a scale bar; a bold phrase inside the paragraph; slide 2 is a quote over specimen photos."]
+ },
+ "blinkist": {
+  "_about": "Text-only teaching carousels on one warm gradient; every slide carries a small arrow bottom-right.",
+  "DYpc-qSCfAS": ["Why burnout happens to high achievers", "numbered teaching poster · product proof", "Seven slides: headline + two short paragraphs each; the close is the book cover with the pitch (15 minutes on Blinkist)."],
+  "DZDGDL3jtT8": ["8 books for people who can't stop overthinking at 2 AM", "list · product proof", "Cover counts; one numbered item per slide with a one-line pitch and the cover; close = CTA in a yellow marker box."],
+  "DZNcbBJjdOZ": ["Plot twist: being busy is a form of laziness", "one-liner", "Italic serif, a soft blur blob behind. Nothing else."],
+  "DYfXvtCAhbc": ["Your brain doesn't filter. You have to.", "exhibit · diagram", "An inverted funnel with four labelled layers; headline has one accent phrase."]
+ },
+ "headspace": {
+  "_about": "Flat colour, one sentence, a single icon; carousels repeat the template with one change per slide.",
+  "DdHAZjMFAhB": ["You are loved / worthy / enough", "one-liner series", "Three slides on the same green; one word changes and changes colour."],
+  "DcxPsFSCSvr": ["Journaling prompts", "numbered teaching poster", "Six slides: one question per slide over a single icon; tiny arrow bottom-right."],
+  "DcrXV3QnzSS": ["Your value has nothing to do with your productivity", "one-liner", "Hand-drawn arrow, parenthetical '(Read that again)'."],
+  "Dc_dxKikVUB": ["Things I did this week instead of doomscrolling", "picture owns the frame · product proof", "Phone photos with an app-card sticker on each; the product appears as a real-scale card, not a mockup."]
+ },
+ "morningbrew": {
+  "_about": "News covers (photo + headline bar) followed by tweet screenshots or bullet slides on brand blue.",
+  "DdO1TIYm9yM": ["Altman and Amodei agree on need to slow AI", "exhibit · tweet", "News cover, then two tweet screenshots as the whole slide."],
+  "DdKwe4Eiinf": ["Morning Brew tweets", "exhibit · tweet", "Seven tweet screenshots on blue; humour carries it; the cover is a tweet too."],
+  "DdKHORJlI0D": ["Anthropic says it blocked attempts at researching bioweapons", "numbered teaching poster", "Photo cover with headline bar; 'What happened' / 'More context' bullet slides with bold key phrases and an arrow."]
+ },
+ "finimize": {
+  "_about": "Blue grid ground, monospace labels, stats with up/down triangles, analyst quote with portrait, close = product proof.",
+  "DbYp4o2iH7a": ["Big Tech earnings, Q2 2026", "numbered teaching poster · number", "Cover with logos, a calendar slide, a stat slide, a quote with analyst portrait; close = Repost / link in bio."],
+  "Dci8r95CGZ2": ["Nvidia exceeds predictions again", "number · quote · product proof", "Illustrated cover, Q2 report stats with triangles, quote boxes with portrait, close = the newsletter on a phone."],
+  "DdJWlsDCKdM": ["History's most expensive IPO valuations", "exhibit · product proof", "Bar chart with a dashed projected bar; slide 2 sells the research on a phone."]
+ },
+ "mailchimp": {
+  "_about": "Trading-card system: portrait, name, nickname sticker; numbered quote slides; close = the playbook.",
+  "DbT1g-QHHd9": ["The Ecommerce Playbook: the Capture King", "numbered teaching poster · quote · product proof", "Card cover, four numbered quotes on dark with yellow badges, close = playbook cover with a download button."],
+  "Da0nDjZn0U6": ["The Ecommerce Playbook: the Checkout Kid", "numbered teaching poster · quote · product proof", "Same system, two portraits on the cover."],
+  "DcRMJNOPUBK": ["OPEN RATE", "picture owns the frame", "One visual joke (knuckle tattoos), no copy at all."]
+ },
+ "wired": {
+  "_about": "Condensed uppercase headlines, eyebrow label, black text slides, pull quotes with a giant quote mark.",
+  "DHV77wxODHe": ["WIRED is dropping paywalls for FOIA-based reporting", "one-liner", "Text only on acid green: eyebrow, headline, body pinned to the bottom."],
+  "DdJmXlVgLvG": ["WIRED World Fair", "numbered teaching poster · promo", "Twelve slides: a question with the first word highlighted, portrait, name/role, same template every time."],
+  "DdMsJI9ksI6": ["Why so many AI researchers think the machines could kill everyone", "close as an arrival · quote", "Photo cover, black text slides, pull-quote slides with attribution in small caps; one phrase in red."],
+  "DdKKV3UGJq9": ["Meta sued over training data", "quote", "The same system at four slides."]
+ },
+ "precisionnutrition": {
+  "_about": "Infographic templates repeated with the variable swapped; clean white teaching slides.",
+  "DDCjeBCgF0e": ["The cost of getting lean", "exhibit · comparison", "The same infographic six times with the body-fat tier changed; red/green header, do more / do less columns, 'swipe left' footer."],
+  "DS-ZPmJEpiR": ["How to achieve any goal", "exhibit · diagram", "Goal → skills → practices tree; one example filled in."],
+  "Dc3f2vkDpOG": ["Creatine has decades of research behind it", "numbered teaching poster", "Dark cover, white body slides with one headline + a paragraph, a checklist slide, a blue close."],
+  "Dc83JXQm6sU": ["Healthy habits get easier when your environment helps", "list", "Five icon rows with dividers; one word of the headline in blue."]
+ },
+ "notionhq": {
+  "_about": "Cropped UI at real scale bleeding off the slide; step badges; a summary list as the close.",
+  "DcjRsxVFJvp": ["How to make AI agents useful at work", "numbered teaching poster · product proof · close as an arrival", "Step badge, headline, two short paragraphs, a real-scale UI crop bleeding off the bottom; close = the five lessons as pills."],
+  "DbwOGcOCQ3z": ["Notion × La Cabra", "picture owns the frame", "Four photographs, a logo lockup on the first only."]
+ },
+ "thebrandidentity": {
+  "_about": "Cover = object photo + one-line caption; then flat identity artefacts. Video-heavy posts keep only poster frames.",
+  "DdOREGxDZfF": ["The weight of a button", "promo", "Portraits in circles, names in condensed red caps; two slides."],
+  "DdKHnccj9vC": ["The Atlantic turned 169 years of print into a festival identity", "exhibit", "Object cover with caption, then poster, medal, iconography sheet, archive, ornaments, print."],
+  "DdJy_XLiDMV": ["Giro: aerodynamic letters", "exhibit", "Logo construction, product shots, tag, poster, app screen; caption only on the cover."],
+  "DdJBeR0jSYb": ["Talks schedule", "exhibit · table", "Two-column timetable, breaks greyed, one accent colour."],
+  "DdI1JIwjGBl": ["Home cinema branding that leads with films", "exhibit", "Laptop mock-up cover, then tickets, popcorn bucket, coasters, mug."]
+ },
+ "monzo": {
+  "_about": "Coral accent, italic emphasis word in the headline, real product inside the story, close asks a question.",
+  "DdJJZDpCAhc": ["How to make your student loan last all term", "numbered teaching poster · number · product proof", "Photo cover with 'swipe' dek; white slides with coral headline; 50/30/20 with the pounds bolded; Monzo Split as the product slide; close = photo + 'Ready to…?'."],
+  "DdGhPL-iAwA": ["What money advice would you give to new students?", "list", "The Instagram question sticker reused as a template over the same photo; one answer per slide."],
+  "Dc3YlmXCGBs": ["What is a bad credit score?", "numbered teaching poster · close as an arrival", "Card-on-a-fork cover; headline with an italic emphasis word; two-column body with an inset photo; close = 'Take control of your credit today'."],
+  "DdEfDIgI4g8": ["An extra slice for students", "product proof", "Pizza-box promo, headline on the box, terms in small print."]
+ },
+ "pentagramdesign": {
+  "_about": "Studio work shown as a system: one graphic language across many slides, then in-situ photos.",
+  "DdJFhAziJaK": ["Cass Art identity", "exhibit", "Fifteen slides of one system (pigment formulas as diagrams, artwork titles in frames), then the shop."],
+  "DdB7sNqFNw6": ["Archive conference", "numbered teaching poster · promo", "Label eyebrow (Speaker / Archive / Venue), one colour per slide, a giant date + arrow slide, speaker list."],
+  "Dc4lDKHiEmK": ["Xsolla", "exhibit", "Object grid and signage; video post, poster frames only."],
+  "DdJhQRmCPkU": ["London Design Festival", "exhibit", "One poster frame of a video post."]
+ },
+ "axios": {
+  "_about": "Photo cover + headline + arrow, then navy text slides with labelled sections (BEHIND THE SCENES:, THE INTRIGUE:).",
+  "DcvwSn3laL5": ["Why Army Secretary Dan Driscoll resigned", "numbered teaching poster · list", "Centred headline over a photo with an arrow; a numbered list slide; labelled paragraphs after."],
+  "DdEgPAZiFaA": ["Anthropic insiders warn AI could kill all humans", "exhibit · tweet", "A tweet screenshot is the exhibit above headline + dek."],
+  "Dc1bcMMnFGt": ["OpenAI releases new Astra model", "one-liner", "Illustration top, headline + dek bottom."],
+  "DcgYMKuivzy": ["Meta agrees to settlement over child safety", "one-liner · number", "Same template; the dek carries the number ($17 billion)."]
+ },
+ "nytcooking": {
+  "_about": "Food photography with a serif title; reader comments as cards; countdown lists.",
+  "Da2fKMwFo3d": ["Our 25 most popular recipes of 2026 so far", "list · quote · close as an arrival", "Title card over photos; each slide = number + name, photo, reader quote; close = blurred photo + 'link in bio for #1'."],
+  "DdOujQMm7Sn": ["The fudgiest peanut butter brownies", "picture owns the frame", "Serif title over the photo; the second slide is pure photo."],
+  "DdPXsjNgYb_": ["Madhur Jaffrey's Goan shrimp curry", "picture owns the frame · quote", "Photo with a reader-comment card as the only copy besides the title."],
+  "DdMlJHKGulR": ["Chocolate cake", "picture owns the frame · quote", "A comment card on top of the photo; no headline at all."]
+ },
+ "dezeen": {
+  "_about": "Photo owns the frame; headline with a bold lead phrase moves top or bottom to suit the picture; one grey text slide per story.",
+  "Dc-9O4DjBPC": ["Five anti-AI designs", "list · picture owns the frame", "Bold lead phrase in the headline; one design per slide with a small caption over the photo."],
+  "Dc5zkTfkSVs": ["Nine must-see exhibitions at London Design Festival", "list · picture owns the frame", "Ten slides; the headline block moves to wherever the photo is quiet."],
+  "DdGcap-l8M1": ["Apple releases its first folding smartphone", "picture owns the frame", "Cover photo + headline, then a grey slide with three short paragraphs."],
+  "DdOrfIrnG4F": ["MAD's Lucas Museum revealed", "picture owns the frame", "Seven slides: cover, aerial, one text slide on a muted tone, then photographs."]
+ }
+}
