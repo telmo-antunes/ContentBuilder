@@ -14,6 +14,28 @@ const businessSchema = new Schema(
      * observations it came from.
      */
     lessonMutes: { type: [String], required: false },
+    /**
+     * SERIES — recurring forms with a fixed shape and variable content, the
+     * way the swipe-file accounts build recognition (Blinkist's "Plot twist",
+     * Monzo's question sticker). A series is a saved brief template and a
+     * per-slide plan; a new post starts from one and only the topic changes.
+     */
+    series: {
+      type: [
+        new Schema(
+          {
+            id: { type: String, required: true },
+            name: { type: String, required: true },
+            hint: { type: String, required: false },
+            idea: { type: String, required: false },
+            plan: { type: [String], default: undefined },
+            format: { type: String, required: false },
+          },
+          { _id: false },
+        ),
+      ],
+      required: false,
+    },
     /** System word → the reader's word; fed to the copywriter. See shared/types.ts GlossaryEntry. */
     glossary: {
       type: [new Schema({ system: { type: String, required: true }, customer: { type: String, required: true } }, { _id: false })],

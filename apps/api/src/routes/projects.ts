@@ -1350,6 +1350,18 @@ projectsRouter.post(
     // state, was good enough to ship.
     await observeOutcome(String(project._id), project.get('slides') as never, { exported: true });
     await project.save();
+    /**
+     * STORIES ARE DERIVED, NOT COMPOSED. The first export of a carousel makes
+     * its promo story — the cover as a picture, one frame around it — so the
+     * Desk carries the poster for every post that ships, without anyone
+     * composing a second thing. Best-effort and after the save: an export
+     * never fails because a story could not be drawn.
+     */
+    if (project.get('type') === 'carousel' && !(await ProjectModel.exists({ promotes: project._id }))) {
+      derivePromoStory(String(project._id), {})
+        .then((r) => console.warn(`[export] derived the promo story ${r.storyProjectId} for ${project._id}`))
+        .catch((err) => console.warn(`[export] could not derive the promo story: ${err instanceof Error ? err.message : err}`));
+    }
     // What was shipped should always be recoverable.
     await saveVersion(project, 'Exported').catch(() => {});
 
@@ -1649,167 +1661,176 @@ const promoStorySchema = z.object({
  * The result is a normal draft story project — editable, exportable, and
  * deletable — not a special kind of object. Posting stays the user's.
  */
+/**
+ * Build the promo story for a carousel — the cover rendered as a picture, one
+ * cta frame around it. Called by the route below and, since stories are
+ * DERIVED rather than composed, by the export route the first time a
+ * carousel ships. Throws ApiErrors the route can pass straight through.
+ */
+async function derivePromoStory(id: string, body: z.infer<typeof promoStorySchema>) {
+  const carousel = await ProjectModel.findById(id);
+  if (!carousel) throw new ApiError(404, 'Project not found');
+  if (carousel.get('type') !== 'carousel') {
+    throw new ApiError(400, 'Only a carousel can be promoted with a story.');
+  }
+
+  const slides = (carousel.get('slides') ?? []) as Array<{ id: string; order: number; authored?: { html?: string } }>;
+  const cover = [...slides].sort((a, b) => a.order - b.order)[0];
+  if (!cover) throw new ApiError(400, 'This carousel has no slides yet.');
+  if (!cover.authored?.html) {
+    // Rendering it anyway would produce the blank ~7KB frame that the
+    // pre-recipe slide format is known for, and a promo story showing an
+    // empty rectangle is worse than no promo story.
+    throw new ApiError(400, 'The carousel cover has no authored markup — compose the carousel first.');
+  }
+
+  const businessId = String(carousel.get('businessId'));
+  const kit = await approvedKitFor(businessId);
+  const stored = kit && (kit as { recipe?: unknown }).recipe;
+  let recipe: BrandRecipe | null = null;
+  if (stored) {
+    try { recipe = migrateRecipe(stored); } catch { recipe = null; }
+  }
+  if (!recipe) throw new ApiError(400, 'This brand has no design recipe yet — generate the brand recipe first.');
+
+  // 1. Render ONLY the cover, at the CAROUSEL's dimensions — this is a
+  //    picture OF the carousel, so it keeps the carousel's shape and sits
+  //    inside the story rather than being stretched to fill it.
+  let rendered;
+  try {
+    rendered = await renderSlidesToPng({
+      _id: String(carousel._id),
+      format: carousel.get('format') as never,
+      slides: [{ id: cover.id, order: 0 }],
+    });
+  } catch (err) {
+    throw new ApiError(502, `Could not render the carousel cover: ${publicErrMessage(err, 'render error')}`);
+  }
+  const shot = rendered[0];
+  if (!shot) throw new ApiError(502, 'The cover rendered to nothing.');
+
+  // 2. Keep it as an ordinary media asset, so the editor's own picker can
+  //    swap or reuse it and orphan sweeping treats it like anything else.
+  const { width, height } = dimensionsFor(carousel.get('format') as never);
+  const asset = await MediaAssetModel.create({
+    businessId,
+    type: 'upload',
+    key: shot.key,
+    url: shot.url,
+    width,
+    height,
+    label: PROMO_COVER_LABEL,
+  });
+
+  // 3. Compose one frame. `cta` is the role whose whole job is to point
+  //    somewhere else, which is exactly what this frame does.
+  const carouselTitle = String(carousel.get('title') ?? '').trim();
+
+  /**
+   * NO HEADLINE BY DEFAULT.
+   *
+   * Defaulting it to the carousel's title printed the same sentence twice —
+   * once inside the cover the frame is showing, once underneath it in the
+   * largest type on the slide. The cover already says what the post is; the
+   * frame's job is to say it is new and where to go.
+   *
+   * A caller may still pass one, and should when it can add a hook the cover
+   * does not have. Passing an empty string is the same as passing nothing.
+   */
+  const parts = {
+    eyebrow: body.eyebrow ?? 'NOVO POST',
+    cta: body.cta ?? 'Vê o carrossel completo',
+    headline: body.headline?.trim() ?? '',
+  };
+
+  /**
+   * AUTHORED HERE, DETERMINISTICALLY — no model call.
+   *
+   * This frame has no creative decision in it: an eyebrow, a button label, a
+   * picture of the cover. Handing that to the copywriter bought nothing and
+   * cost correctness — asked for a slide with only two copy parts, the model
+   * reasoned in prose about the missing ones and its reasoning rendered ON
+   * the story ("Wait, I need to re-examine. The copy parts provided are only
+   * eyebrow and cta…"), with the whole frame duplicated beneath it.
+   *
+   * The classes are the brand's own, in the brand's own order, exactly as the
+   * `cta` fragment uses them. `sanitizeAuthoredHtml` still runs on save.
+   */
+  const esc = (v: string) =>
+    v.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] as string);
+
+  const composed = {
+    html: [
+      '<div class="logo-row"><div class="monogram"></div>'
+        + '<div class="wordmark"><b>detail</b><span class="it">masters</span></div></div>',
+      '<div class="fill"></div>',
+      `<figure class="${SLOT_CLASS} ${PLATE_CLASS}" data-cb-slot="hero"></figure>`,
+      `<div class="eyebrow">${esc(parts.eyebrow)}</div>`,
+      ...(parts.headline ? [`<div class="headline">${esc(parts.headline)}</div>`] : []),
+      `<div class="cta">${esc(parts.cta)}</div>`,
+      '<div class="fill"></div>',
+    ].join('\n'),
+    source: 'authored' as const,
+  };
+
+  const slotNames = authoredSlots(composed.html);
+  const slot = slotNames[0];
+  const html = composed.html;
+
+  const photo: SlidePhoto = slidePhotoSchema.parse({
+    id: randomUUID(),
+    mediaAssetId: String(asset._id),
+    ...(slot ? { placement: 'slot', slot } : { placement: 'background' }),
+    // `contain` keeps the whole cover visible; cropping a picture of a poster
+    // to fill a box loses the thing being recognised.
+    fit: 'contain',
+    // The carousel is 4:5; `tall` (3:4) is the closest slot shape and the one
+    // with the height budget to show it at a readable size.
+    shape: 'tall',
+    alt: `Cover of the carousel “${carouselTitle}”`,
+  });
+
+  const story = await ProjectModel.create({
+    businessId,
+    title: body.title ?? `${carouselTitle || 'Carousel'} — promo story`,
+    type: 'story',
+    format: STORY_FORMAT,
+    status: 'draft',
+    stage: 'ready',
+    promotes: String(carousel._id),
+    slides: [{
+      id: randomUUID(),
+      order: 0,
+      photos: [photo],
+      authored: {
+        html,
+                  role: 'cta',
+      },
+    }],
+    settings: { theme: carousel.get('settings')?.theme, slideCounter: false },
+  });
+
+  return {
+    storyProjectId: String(story._id),
+    story: story.toJSON(),
+    coverAssetId: String(asset._id),
+    composedBy: composed.source,
+    /** Where the cover landed, so a caller can tell a slot fill from a fallback. */
+    placement: photo.placement,
+    /**
+     * Nothing drawn in a story export is tappable. The button is a visual
+     * anchor for a link sticker the poster must place by hand — said here so
+     * every hand-off can repeat it instead of rediscovering it.
+     */
+    note: 'The CTA button is not tappable in a story — place a link sticker over it when posting.',
+  };
+}
+
 projectsRouter.post(
   '/:id/promo-story',
   asyncHandler(async (req, res) => {
     const id = requireObjectId(req.params.id, 'Project');
     const body = parseBody(promoStorySchema, req.body ?? {});
-
-    const carousel = await ProjectModel.findById(id);
-    if (!carousel) throw new ApiError(404, 'Project not found');
-    if (carousel.get('type') !== 'carousel') {
-      throw new ApiError(400, 'Only a carousel can be promoted with a story.');
-    }
-
-    const slides = (carousel.get('slides') ?? []) as Array<{ id: string; order: number; authored?: { html?: string } }>;
-    const cover = [...slides].sort((a, b) => a.order - b.order)[0];
-    if (!cover) throw new ApiError(400, 'This carousel has no slides yet.');
-    if (!cover.authored?.html) {
-      // Rendering it anyway would produce the blank ~7KB frame that the
-      // pre-recipe slide format is known for, and a promo story showing an
-      // empty rectangle is worse than no promo story.
-      throw new ApiError(400, 'The carousel cover has no authored markup — compose the carousel first.');
-    }
-
-    const businessId = String(carousel.get('businessId'));
-    const kit = await approvedKitFor(businessId);
-    const stored = kit && (kit as { recipe?: unknown }).recipe;
-    let recipe: BrandRecipe | null = null;
-    if (stored) {
-      try { recipe = migrateRecipe(stored); } catch { recipe = null; }
-    }
-    if (!recipe) throw new ApiError(400, 'This brand has no design recipe yet — generate the brand recipe first.');
-
-    // 1. Render ONLY the cover, at the CAROUSEL's dimensions — this is a
-    //    picture OF the carousel, so it keeps the carousel's shape and sits
-    //    inside the story rather than being stretched to fill it.
-    let rendered;
-    try {
-      rendered = await renderSlidesToPng({
-        _id: String(carousel._id),
-        format: carousel.get('format') as never,
-        slides: [{ id: cover.id, order: 0 }],
-      });
-    } catch (err) {
-      throw new ApiError(502, `Could not render the carousel cover: ${publicErrMessage(err, 'render error')}`);
-    }
-    const shot = rendered[0];
-    if (!shot) throw new ApiError(502, 'The cover rendered to nothing.');
-
-    // 2. Keep it as an ordinary media asset, so the editor's own picker can
-    //    swap or reuse it and orphan sweeping treats it like anything else.
-    const { width, height } = dimensionsFor(carousel.get('format') as never);
-    const asset = await MediaAssetModel.create({
-      businessId,
-      type: 'upload',
-      key: shot.key,
-      url: shot.url,
-      width,
-      height,
-      label: PROMO_COVER_LABEL,
-    });
-
-    // 3. Compose one frame. `cta` is the role whose whole job is to point
-    //    somewhere else, which is exactly what this frame does.
-    const carouselTitle = String(carousel.get('title') ?? '').trim();
-
-    /**
-     * NO HEADLINE BY DEFAULT.
-     *
-     * Defaulting it to the carousel's title printed the same sentence twice —
-     * once inside the cover the frame is showing, once underneath it in the
-     * largest type on the slide. The cover already says what the post is; the
-     * frame's job is to say it is new and where to go.
-     *
-     * A caller may still pass one, and should when it can add a hook the cover
-     * does not have. Passing an empty string is the same as passing nothing.
-     */
-    const parts = {
-      eyebrow: body.eyebrow ?? 'NOVO POST',
-      cta: body.cta ?? 'Vê o carrossel completo',
-      headline: body.headline?.trim() ?? '',
-    };
-
-    /**
-     * AUTHORED HERE, DETERMINISTICALLY — no model call.
-     *
-     * This frame has no creative decision in it: an eyebrow, a button label, a
-     * picture of the cover. Handing that to the copywriter bought nothing and
-     * cost correctness — asked for a slide with only two copy parts, the model
-     * reasoned in prose about the missing ones and its reasoning rendered ON
-     * the story ("Wait, I need to re-examine. The copy parts provided are only
-     * eyebrow and cta…"), with the whole frame duplicated beneath it.
-     *
-     * The classes are the brand's own, in the brand's own order, exactly as the
-     * `cta` fragment uses them. `sanitizeAuthoredHtml` still runs on save.
-     */
-    const esc = (v: string) =>
-      v.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] as string);
-
-    const composed = {
-      html: [
-        '<div class="logo-row"><div class="monogram"></div>'
-          + '<div class="wordmark"><b>detail</b><span class="it">masters</span></div></div>',
-        '<div class="fill"></div>',
-        `<figure class="${SLOT_CLASS} ${PLATE_CLASS}" data-cb-slot="hero"></figure>`,
-        `<div class="eyebrow">${esc(parts.eyebrow)}</div>`,
-        ...(parts.headline ? [`<div class="headline">${esc(parts.headline)}</div>`] : []),
-        `<div class="cta">${esc(parts.cta)}</div>`,
-        '<div class="fill"></div>',
-      ].join('\n'),
-      source: 'authored' as const,
-    };
-
-    const slotNames = authoredSlots(composed.html);
-    const slot = slotNames[0];
-    const html = composed.html;
-
-    const photo: SlidePhoto = slidePhotoSchema.parse({
-      id: randomUUID(),
-      mediaAssetId: String(asset._id),
-      ...(slot ? { placement: 'slot', slot } : { placement: 'background' }),
-      // `contain` keeps the whole cover visible; cropping a picture of a poster
-      // to fill a box loses the thing being recognised.
-      fit: 'contain',
-      // The carousel is 4:5; `tall` (3:4) is the closest slot shape and the one
-      // with the height budget to show it at a readable size.
-      shape: 'tall',
-      alt: `Cover of the carousel “${carouselTitle}”`,
-    });
-
-    const story = await ProjectModel.create({
-      businessId,
-      title: body.title ?? `${carouselTitle || 'Carousel'} — promo story`,
-      type: 'story',
-      format: STORY_FORMAT,
-      status: 'draft',
-      stage: 'ready',
-      promotes: String(carousel._id),
-      slides: [{
-        id: randomUUID(),
-        order: 0,
-        photos: [photo],
-        authored: {
-          html,
-                    role: 'cta',
-        },
-      }],
-      settings: { theme: carousel.get('settings')?.theme, slideCounter: false },
-    });
-
-    res.status(201).json({
-      storyProjectId: String(story._id),
-      story: story.toJSON(),
-      coverAssetId: String(asset._id),
-      composedBy: composed.source,
-      /** Where the cover landed, so a caller can tell a slot fill from a fallback. */
-      placement: photo.placement,
-      /**
-       * Nothing drawn in a story export is tappable. The button is a visual
-       * anchor for a link sticker the poster must place by hand — said here so
-       * every hand-off can repeat it instead of rediscovering it.
-       */
-      note: 'The CTA button is not tappable in a story — place a link sticker over it when posting.',
-    });
+    res.status(201).json(await derivePromoStory(id, body));
   }),
 );

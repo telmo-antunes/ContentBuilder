@@ -27,7 +27,21 @@ export interface Business {
    * write. Fed to the copywriter with the brand lessons.
    */
   glossary?: GlossaryEntry[];
+  /** Recurring forms: a saved brief template and plan a new post starts from. */
+  series?: SeriesTemplate[];
   createdAt: string;
+}
+
+export interface SeriesTemplate {
+  id: string;
+  name: string;
+  /** One line on what the series is for, shown when picking it. */
+  hint?: string;
+  /** The brief template; "{{topic}}" is where the post's own subject goes. */
+  idea?: string;
+  /** One direction per slide, fixed for every post in the series. */
+  plan?: string[];
+  format?: string;
 }
 
 export interface GlossaryEntry {

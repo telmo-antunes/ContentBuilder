@@ -91,6 +91,8 @@ function NewProjectForm() {
   const [loadingIdea, setLoadingIdea] = useState(Boolean(ideaFrom));
 
   const preselected = params.get('businessId');
+  const seriesParam = params.get('series');
+  const [seriesId, setSeriesId] = useState<string>(seriesParam ?? '');
   const [businessId, setBusinessId] = useState(preselected ?? '');
   const [title, setTitle] = useState('');
   const [type, setType] = useState<AssetType>('carousel');
@@ -148,6 +150,27 @@ function NewProjectForm() {
   }, [type, formats, format]);
 
   const selectedBiz = businesses?.find((b) => b._id === businessId);
+  const seriesList = selectedBiz?.series ?? [];
+  /** Start from a series: its template becomes the brief, its plan the slides, its format the format. */
+  const applySeries = useCallback(
+    (id: string) => {
+      setSeriesId(id);
+      const s = seriesList.find((x) => x.id === id);
+      if (!s) return;
+      setType('carousel');
+      if (s.format && (ALLOWED_FORMATS.carousel as readonly string[]).includes(s.format)) setFormat(s.format as Format);
+      setIdea(s.idea ?? '');
+      setPlan(s.plan ?? []);
+      if (s.plan?.length) setPlanOpen(true);
+      setTitle((t) => (t.trim() ? t : `${s.name} — `));
+    },
+    [seriesList],
+  );
+  // A series named in the URL applies once the business list has arrived.
+  useEffect(() => {
+    if (seriesParam && seriesList.length && idea === '' && plan.length === 0) applySeries(seriesParam);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seriesParam, seriesList.length]);
   const profileReady = Boolean(selectedBiz?.hasProfile);
   const canCompose = aiReady && profileReady;
 
@@ -378,7 +401,9 @@ function NewProjectForm() {
                   <div>
                     <span className="lab">Type</span>
                     <div className="mo-toggle">
-                      {ASSET_TYPES.map((t) => (
+                      {/* Stories are derived from a carousel when it ships, not composed on
+                          their own — so the toggle only offers a story for a card that already is one. */}
+                      {(type === 'story' ? ASSET_TYPES : ASSET_TYPES.filter((t) => t !== 'story')).map((t) => (
                         <button type="button" key={t} className={type === t ? 'on' : undefined} onClick={() => setType(t)}>
                           {t === 'carousel' ? 'Carousel' : 'Story'}
                         </button>
@@ -432,6 +457,17 @@ function NewProjectForm() {
             </div>
             <div className="mo-paper">
               <div>
+                {seriesList.length > 0 && (
+                  <div className="mo-series-pick">
+                    <span className="lab">Start from a series</span>
+                    <select value={seriesId} onChange={(e) => applySeries(e.target.value)}>
+                      <option value="">— a one-off post —</option>
+                      {seriesList.map((s) => (
+                        <option key={s.id} value={s.id}>{s.name}{s.hint ? ` — ${s.hint}` : ''}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div className="writing">
                   <textarea
                     id="np-idea"

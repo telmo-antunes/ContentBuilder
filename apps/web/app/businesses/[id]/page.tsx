@@ -17,6 +17,7 @@ import {
 import ProfileCard from '../../components/ProfileCard';
 import BrandLessons from '../../components/BrandLessons';
 import GlossaryCard from '../../components/GlossaryCard';
+import SeriesCard from '../../components/SeriesCard';
 import { confirm } from '../../components/ConfirmDialog';
 import { ErrorState } from '../../components/ErrorState';
 import { OverflowMenu } from '../../components/OverflowMenu';
@@ -64,6 +65,7 @@ export default function BusinessDetailPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'rendered' | 'draft'>('all');
   const [profileOpen, setProfileOpen] = useState(false);
   const [glossaryOpen, setGlossaryOpen] = useState(false);
+  const [seriesOpen, setSeriesOpen] = useState(false);
   const [lessonsOpen, setLessonsOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   /** Set when an analysis just landed — the identity lines animate in, staggered. */
@@ -474,6 +476,24 @@ export default function BusinessDetailPage() {
           {glossaryOpen && (
             <div className="mo-drow-body">
               <GlossaryCard businessId={biz._id} glossary={biz.glossary} onSaved={reload} />
+            </div>
+          )}
+        </div>
+
+        {/* ── Series: recurring forms, the same shape with a new topic ── */}
+        <div className="mo-drow">
+          <span className="l">Series</span>
+          <span className="v" style={{ color: 'var(--mo-muted)' }}>
+            {biz.series?.length
+              ? biz.series.map((s) => <span key={s.id} className="chp">{s.name}</span>)
+              : 'Post shapes you repeat — the same brief template and slide plan, a new topic each time.'}
+          </span>
+          <button className="edit" onClick={() => setSeriesOpen((v) => !v)}>
+            {seriesOpen ? 'Close' : biz.series?.length ? 'Manage' : 'Create one'}
+          </button>
+          {seriesOpen && (
+            <div className="mo-drow-body">
+              <SeriesCard businessId={biz._id} series={biz.series} onSaved={reload} />
             </div>
           )}
         </div>

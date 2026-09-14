@@ -17,6 +17,7 @@ import type {
   UpdateStatus,
   GlossaryEntry,
   ScoreDimension,
+  SeriesTemplate,
 } from '@contentbuilder/shared';
 import { api } from './config';
 
@@ -139,7 +140,7 @@ export const createBusiness = (data: { name: string; websiteUrl?: string; profil
 
 export const updateBusiness = (
   id: string,
-  data: { name?: string; websiteUrl?: string; profile?: BusinessProfile | null; glossary?: GlossaryEntry[] },
+  data: { name?: string; websiteUrl?: string; profile?: BusinessProfile | null; glossary?: GlossaryEntry[]; series?: SeriesTemplate[] },
 ) => request<Business>(`/businesses/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
 
 /**
