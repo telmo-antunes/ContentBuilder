@@ -16,6 +16,7 @@ import type {
   TweakSuggestion,
   UpdateStatus,
   GlossaryEntry,
+  ScoreDimension,
 } from '@contentbuilder/shared';
 import { api } from './config';
 
@@ -167,6 +168,37 @@ export const listProjects = (businessId: string) =>
 
 export const getProject = (id: string) => request<ProjectDetail>(`/projects/${id}`);
 
+/** Why each slide looks like this — the compose decision trace. */
+export interface SlideAutopsy {
+  index: number;
+  id: string;
+  role?: string;
+  path?: 'fragment' | 'ai';
+  archetype?: string;
+  surface?: string;
+  align?: string;
+  variant?: number;
+  photos: Array<{ placement: string; slot?: string; zoom?: number }>;
+  parts?: Record<string, unknown>;
+  rationale?: string;
+  edited: boolean;
+  notes: string[];
+  faults: Array<{ label: string; text: string; reason: string }>;
+  critique: Array<{ severity: string; fault: string; fix: string }>;
+}
+export interface DeckAutopsy {
+  projectId: string;
+  models?: { parse?: string; compose?: string };
+  promptVersions?: Record<string, number>;
+  recipe: 'pinned snapshot' | 'live kit';
+  fragmentsFor: string[];
+  spend?: { spentUsd: number; ceilingUsd: number | null; skipped: string[] };
+  deckNotes: string[];
+  slides: SlideAutopsy[];
+  summary: { fragment: number; ai: number; withPicture: number; forms: number };
+}
+export const getProjectAutopsy = (id: string) => request<DeckAutopsy>(`/projects/${id}/autopsy`);
+
 export const createProject = (data: {
   businessId: string;
   title: string;
@@ -191,6 +223,8 @@ export const updateProject = (
     slides?: Slide[];
     settings?: ProjectSettings;
     caption?: Caption;
+    /** The owner's 1–5 score on the audit's dimensions; null clears it. */
+    scores?: Partial<Record<ScoreDimension, number>> & { note?: string } | null;
     /** Re-editing a parked Ideas card before composing it. Type/format only
      *  take effect while the project still has no slides. */
     idea?: string;

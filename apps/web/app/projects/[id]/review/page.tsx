@@ -21,6 +21,8 @@ import {
   type MediaAsset,
   type Slide,
   type SlidePhoto,
+  SCORE_DIMENSIONS,
+  type ScoreDimension,
 } from '@contentbuilder/shared';
 import {
   cancelVideoExport,
@@ -39,6 +41,8 @@ import {
   tweakSlide,
   type ProjectDetail,
   type ProjectVersion,
+  getProjectAutopsy,
+  type DeckAutopsy,
 } from '../../../lib/api';
 import { api } from '../../../lib/config';
 import { SlideRenderer } from '../../../../lib/render/SlideRenderer';
@@ -157,6 +161,13 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
   >(null);
   // Version history drawer.
   const [histOpen, setHistOpen] = useState(false);
+  /** Why each slide looks like this — the compose decision trace, per slide. */
+  const [autopsy, setAutopsy] = useState<DeckAutopsy | null>(null);
+  const [whyOpen, setWhyOpen] = useState(false);
+  /** The owner's score, edited locally until saved. */
+  const [scoreDraft, setScoreDraft] = useState<Partial<Record<ScoreDimension, number>> & { note?: string }>({});
+  const [scoreBusy, setScoreBusy] = useState(false);
+  const [scoreDirty, setScoreDirty] = useState(false);
   const [histVersions, setHistVersions] = useState<ProjectVersion[] | null>(null);
   const [histLabel, setHistLabel] = useState('');
   const [histBusy, setHistBusy] = useState<string | null>(null);
@@ -242,7 +253,12 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
   const load = useCallback(() => {
     setError(null);
     getProject(projectId)
-      .then(setProject)
+      .then((p) => {
+        setProject(p);
+        // The trace is derived from what the project already stores; a missing
+        // one is an older deck, not an error worth a toast.
+        getProjectAutopsy(projectId).then(setAutopsy).catch(() => setAutopsy(null));
+      })
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load project'));
   }, [projectId]);
 
@@ -255,6 +271,12 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
       .then((h) => setAiReady(Boolean(h.ai?.draft)))
       .catch(() => setAiReady(false));
   }, []);
+
+  useEffect(() => {
+    if (!project || scoreDirty) return;
+    const sc = project.scores;
+    setScoreDraft(sc ? Object.fromEntries(Object.entries(sc).filter(([k]) => k !== 'at' && k !== 'pv')) as never : {});
+  }, [project, scoreDirty]);
 
   // Mirror the saved caption into the editor whenever the server state changes,
   // unless the user is mid-edit — their typing must never be clobbered.
@@ -902,6 +924,33 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
         : `“${f.text}” — ${f.reason}. Rewrite it, or shorten it to a line that finishes.`,
       slide: f.slide,
     });
+  }
+  /**
+   * THE CAPTION IS PART OF THE POST. The close slide, the DM keyword and the
+   * caption must say the same thing, and Instagram has limits the editor did
+   * not know about. Checked against the DRAFT, so a fix shows before saving.
+   */
+  {
+    const capNow = capText.trim();
+    const tagsNow = parseTags(capTags);
+    const kw = project.settings?.dmKeyword?.trim();
+    const lastHtml = slides[slides.length - 1]?.authored?.html ?? '';
+    const chip = /<div class="cta">([^<]{3,60})<\/div>/.exec(lastHtml)?.[1]?.trim();
+    if (capNow && kw && !capNow.toUpperCase().includes(kw.toUpperCase())) {
+      chips.push({ key: 'cap-kw', tone: 'warn', label: `Caption never says ${kw}`, hint: `The close asks readers to DM ${kw}; the caption does not mention it. Add the DM line so the two agree.` });
+    }
+    if (capNow && chip && !capNow.toLowerCase().includes(chip.toLowerCase().slice(0, 18))) {
+      chips.push({ key: 'cap-cta', tone: 'warn', label: 'Caption skips the close', hint: `The last slide says “${chip}”; the caption should repeat that ask, not a different one.` });
+    }
+    if (capNow.length > 2200) {
+      chips.push({ key: 'cap-len', tone: 'bad', label: 'Caption over 2,200 characters', hint: `Instagram cuts a caption at 2,200 characters; this one is ${capNow.length}.` });
+    }
+    if (tagsNow.length > 30) {
+      chips.push({ key: 'cap-tags', tone: 'bad', label: 'More than 30 hashtags', hint: `Instagram allows 30; there are ${tagsNow.length}. The rest are dropped or the post is refused.` });
+    }
+    if (/#\w/.test(capNow) && tagsNow.length) {
+      chips.push({ key: 'cap-inline', tone: 'info', label: 'Hashtags in the caption and the first comment', hint: 'The hashtags field is the first comment; hashtags inside the caption itself are usually redundant.' });
+    }
   }
   if (project.critique?.status === 'skipped') {
     chips.push({
@@ -1673,6 +1722,37 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                       </div>
                     ))}
 
+                    {/* ── Why this slide looks like this: the compose decision trace ── */}
+                    {(() => {
+                      const w = autopsy?.slides.find((x) => x.id === selectedWorking.id);
+                      if (!w) return null;
+                      const rows: Array<[string, string]> = [];
+                      rows.push(['Built by', w.path === 'fragment' ? 'the brand’s own arrangement — no model call' : w.path === 'ai' ? 'the model, composed for this slide alone' : 'unknown']);
+                      if (w.role) rows.push(['Role', w.role + (w.variant !== undefined ? ` · arrangement ${w.variant + 1}` : '')]);
+                      if (w.archetype) rows.push(['Composition', w.archetype + (w.surface ? ` on the ${w.surface} surface` : '') + (w.align ? `, ${w.align}` : '')]);
+                      if (w.photos.length) rows.push(['Pictures', w.photos.map((ph) => ph.placement === 'background' ? 'full-bleed background' : `${ph.placement}${ph.slot ? ` “${ph.slot}”` : ''}${ph.zoom ? ` at ${ph.zoom.toFixed(1)}×` : ''}`).join(', ')]);
+                      if (w.edited) rows.push(['Edited', 'by hand since it was composed']);
+                      return (
+                        <div className="mo-why">
+                          <button type="button" className="mo-why-toggle" onClick={() => setWhyOpen((v) => !v)} aria-expanded={whyOpen}>
+                            <Icon name={whyOpen ? 'arrow-down' : 'chevron-right'} size={12} /> Why this slide looks like this
+                          </button>
+                          {whyOpen && (
+                            <dl>
+                              {rows.map(([k, v]) => (
+                                <div key={k}><dt>{k}</dt><dd>{v}</dd></div>
+                              ))}
+                              {w.rationale && <div><dt>Copywriter</dt><dd>{w.rationale}</dd></div>}
+                              {w.notes.map((n, i) => <div key={`n${i}`}><dt>Decided</dt><dd>{n}</dd></div>)}
+                              {autopsy?.promptVersions && (
+                                <div><dt>Prompts</dt><dd>{Object.entries(autopsy.promptVersions).map(([k, v]) => `${k} v${v}`).join(' · ')}{autopsy.models?.parse ? ` · ${autopsy.models.parse}` : ''}</dd></div>
+                              )}
+                            </dl>
+                          )}
+                        </div>
+                      );
+                    })()}
+
                     {/* Photos: fill the composer's slots, set a background, or
                         drop images anywhere on the canvas. */}
                     {selected?.authored?.html && (
@@ -1849,6 +1929,26 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                   ? 'Written against the brand voice.'
                   : 'No caption yet — the post ships silent without one.'}
               </span>
+              {(() => {
+                const cover = slides[0]?.authored?.html ?? '';
+                const line = /class="headline[^"]*"[^>]*>([\s\S]*?)<\/div>/.exec(cover)?.[1]?.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+                return line ? <span className="st">Cover reads: <b>“{line}”</b> — the caption should pick up where it leaves off.</span> : null;
+              })()}
+              {parseTags(capTags).length > 0 && (
+                <div className="mo-firstcomment">
+                  <span className="st">First comment ({parseTags(capTags).length} hashtag{parseTags(capTags).length === 1 ? '' : 's'})</span>
+                  <code>{parseTags(capTags).map((t) => (t.startsWith('#') ? t : `#${t}`)).join(' ')}</code>
+                  <button
+                    className="mo-btn sm"
+                    type="button"
+                    onClick={() => {
+                      void navigator.clipboard?.writeText(parseTags(capTags).map((t) => (t.startsWith('#') ? t : `#${t}`)).join(' ')).then(() => toast('First comment copied.'));
+                    }}
+                  >
+                    Copy first comment
+                  </button>
+                </div>
+              )}
               <div className="row">
                 <button
                   className="mo-btn sm"
@@ -1872,6 +1972,79 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                   onClick={() => void saveCaption()}
                 >
                   {capBusy === 'save' ? 'Saving…' : 'Save caption'}
+                </button>
+              </div>
+            </div>
+          </section>
+
+          {/* ── Score it: the owner's read, stored beside the prompt versions that wrote it ── */}
+          <section className="mo-captile mo-score" aria-label="Score this deck">
+            <div>
+              <h3 className="colh" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                Score this deck
+                {scoreDirty && <span className="mo-cap-unsaved">Unsaved</span>}
+              </h3>
+              <div className="mo-score-grid">
+                {SCORE_DIMENSIONS.map(([key, label, hint]) => (
+                  <div className="mo-score-row" key={key}>
+                    <span className="k" title={hint}>{label}</span>
+                    <div className="dots" role="radiogroup" aria-label={label}>
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <button
+                          type="button"
+                          key={n}
+                          role="radio"
+                          aria-checked={scoreDraft[key] === n}
+                          className={scoreDraft[key] === n ? 'on' : undefined}
+                          onClick={() => {
+                            setScoreDraft((d) => ({ ...d, [key]: n }));
+                            setScoreDirty(true);
+                          }}
+                        >
+                          {n}
+                        </button>
+                      ))}
+                    </div>
+                    <span className="h">{hint}</span>
+                  </div>
+                ))}
+              </div>
+              <input
+                placeholder="A line on what you would change (optional)"
+                maxLength={600}
+                value={scoreDraft.note ?? ''}
+                onChange={(e) => {
+                  setScoreDraft((d) => ({ ...d, note: e.target.value }));
+                  setScoreDirty(true);
+                }}
+              />
+            </div>
+            <div className="side">
+              <h3 className="colh">&nbsp;</h3>
+              <span className="st">
+                {project.scores
+                  ? `Scored ${timeAgo(project.scores.at)}${project.scores.pv ? ` under ${Object.entries(project.scores.pv).map(([k, v]) => `${k} v${v}`).join(', ')}` : ''}.`
+                  : 'Phone in hand, one second per slide. Your score is stored with the prompt versions that wrote the deck, so a prompt change can be judged against it.'}
+              </span>
+              <div className="row">
+                <button
+                  className="mo-btn sm prim"
+                  disabled={scoreBusy || !scoreDirty}
+                  onClick={async () => {
+                    setScoreBusy(true);
+                    try {
+                      const updated = await updateProject(projectId, { scores: scoreDraft });
+                      setProject((p) => (p ? { ...p, scores: updated.scores } : p));
+                      setScoreDirty(false);
+                      toast('Score saved.');
+                    } catch (e) {
+                      toast(e instanceof Error ? e.message : 'Could not save the score', 'error');
+                    } finally {
+                      setScoreBusy(false);
+                    }
+                  }}
+                >
+                  {scoreBusy ? 'Saving…' : 'Save score'}
                 </button>
               </div>
             </div>

@@ -221,6 +221,61 @@ const projectSchema = new Schema(
     exportedAt: { type: Date, required: false },
     postedAt: { type: Date, required: false },
     /**
+     * THE OWNER'S SCORE for the deck as shipped — the audit's eight dimensions,
+     * 1–5 each, with the prompt versions that made the deck pinned beside
+     * them, so a prompt change can be judged against what people actually
+     * thought of the decks it wrote. Absent until scored.
+     */
+    scores: {
+      type: new Schema(
+        {
+          fidelity: { type: Number, min: 1, max: 5 },
+          hook: { type: Number, min: 1, max: 5 },
+          specificity: { type: Number, min: 1, max: 5 },
+          variety: { type: Number, min: 1, max: 5 },
+          hierarchy: { type: Number, min: 1, max: 5 },
+          brand: { type: Number, min: 1, max: 5 },
+          legibility: { type: Number, min: 1, max: 5 },
+          cta: { type: Number, min: 1, max: 5 },
+          note: { type: String, maxlength: 600 },
+          at: { type: Date, required: true },
+          pv: { type: Schema.Types.Mixed, required: false },
+        },
+        { _id: false },
+      ),
+      required: false,
+    },
+    /** The Instagram post this project became, once the owner links it. */
+    instagram: {
+      type: new Schema(
+        {
+          mediaId: { type: String, required: true },
+          permalink: { type: String, required: false },
+          postedAt: { type: Date, required: false },
+          linkedAt: { type: Date, required: true },
+        },
+        { _id: false },
+      ),
+      required: false,
+    },
+    /** What the post did on Instagram, last synced. See lib/instagram.ts. */
+    insights: {
+      type: new Schema(
+        {
+          reach: { type: Number },
+          impressions: { type: Number },
+          likes: { type: Number },
+          comments: { type: Number },
+          saved: { type: Number },
+          shares: { type: Number },
+          totalInteractions: { type: Number },
+          fetchedAt: { type: Date, required: true },
+        },
+        { _id: false },
+      ),
+      required: false,
+    },
+    /**
      * THE DECISION LEDGER for the last compose: consequential calls the CODE
      * took on the deck's behalf (a full-bleed photo dropped for fighting the
      * brand ground, and whatever joins it). These used to live in console.warn

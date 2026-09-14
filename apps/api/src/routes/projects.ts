@@ -25,6 +25,7 @@ import {
 } from '@contentbuilder/shared';
 import { brandHandleFromWebsite, composeProject, composeSlide, parseSlideCopy, parseSlideDirection } from '../lib/htmlDirector/compose';
 import { withSpendLedger, withLedger, summarize, type SpendLedger } from '../lib/spend';
+import { autopsyFor } from '../lib/autopsy';
 import { CRITIQUE_SKIP_TEXT, critiqueDeck, type CritiqueOutcome } from '../lib/htmlDirector/deckCritique';
 import { resolveBrief } from '../lib/sourceIngest';
 import { authoredShape, partsFromAuthored, rewriteAuthoredCopy } from '../lib/htmlDirector/reparse';
@@ -438,6 +439,12 @@ projectsRouter.patch(
       project.set('slides', normalized);
     }
     if (body.caption !== undefined) project.set('caption', body.caption);
+    if (body.scores !== undefined) {
+      // Pin the prompt versions that wrote the deck beside the score, so a
+      // prompt change can be judged against what people thought of its decks.
+      const pv = (project.get('slides') ?? [])[0]?.authored?.pv;
+      project.set('scores', body.scores ? { ...body.scores, at: new Date(), ...(pv ? { pv } : {}) } : undefined);
+    }
     if (body.settings !== undefined) {
       project.set('settings', { ...(project.get('settings') ?? {}), ...body.settings });
     }
@@ -1228,6 +1235,49 @@ projectsRouter.get(
       shareUrl: `${base}/share/${id}`,
       onLan: Boolean(lan),
       hasRenders: ((project as Record<string, unknown>).renders as string[] | undefined)?.length ?? 0,
+    });
+  }),
+);
+
+/**
+ * WHY EACH SLIDE LOOKS LIKE THIS — the compose decision trace, per slide,
+ * for the Studio's "why" panel. Read-only, derived from what the project and
+ * its generation record already store.
+ */
+projectsRouter.get(
+  '/:id/autopsy',
+  asyncHandler(async (req, res) => {
+    const id = requireObjectId(req.params.id, 'Project');
+    const trace = await autopsyFor(id);
+    if (!trace) throw new ApiError(404, 'Project not found');
+    res.json(trace);
+  }),
+);
+
+/**
+ * EVERY SCORED DECK, with the prompt versions and the spend beside the
+ * score — the table that says whether a prompt change moved what people
+ * thought of the decks it wrote.
+ */
+projectsRouter.get(
+  '/scores/all',
+  asyncHandler(async (_req, res) => {
+    const docs = await ProjectModel.find({ scores: { $exists: true } })
+      .select('title businessId type format scores spend exportedAt updatedAt slides.authored.pv')
+      .sort({ 'scores.at': -1 })
+      .lean();
+    res.json({
+      scored: docs.map((p: any) => ({
+        _id: String(p._id),
+        title: p.title,
+        businessId: String(p.businessId),
+        type: p.type,
+        format: p.format,
+        scores: p.scores,
+        promptVersions: p.scores?.pv ?? p.slides?.[0]?.authored?.pv,
+        spentUsd: p.spend?.spentUsd,
+        exportedAt: p.exportedAt,
+      })),
     });
   }),
 );

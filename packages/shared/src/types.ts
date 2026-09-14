@@ -270,6 +270,37 @@ export interface Caption {
   hashtags: string[];
 }
 
+/** The audit rubric's dimensions, in the order the scorecard shows them. */
+export const SCORE_DIMENSIONS = [
+  ['fidelity', 'Fidelity', 'Says what the brief said, nothing more'],
+  ['hook', 'Hook', 'The cover alone earns the swipe'],
+  ['specificity', 'Specificity', 'Concrete controls, numbers, names'],
+  ['variety', 'Variety', 'Different kinds of slide, not one repeated'],
+  ['hierarchy', 'Hierarchy', 'One idea per slide, read in one second'],
+  ['brand', 'Brand', 'Unmistakably this brand'],
+  ['legibility', 'Legibility', 'Readable on a phone at feed size'],
+  ['cta', 'Close', 'One line, one button, one keyword'],
+] as const;
+export type ScoreDimension = (typeof SCORE_DIMENSIONS)[number][0];
+
+export interface DeckScores extends Partial<Record<ScoreDimension, number>> {
+  note?: string;
+  at: string;
+  /** The prompt versions that wrote the deck, pinned when scored. */
+  pv?: Record<string, number>;
+}
+
+export interface DeckInsights {
+  reach?: number;
+  impressions?: number;
+  likes?: number;
+  comments?: number;
+  saved?: number;
+  shares?: number;
+  totalInteractions?: number;
+  fetchedAt: string;
+}
+
 export interface Project {
   _id: string;
   businessId: string;
@@ -343,6 +374,14 @@ export interface Project {
   sources?: Array<{ url: string; title?: string; byline?: string; published?: string; chars?: number }>;
   exportedAt?: string;
   postedAt?: string;
+  /** Where a running compose has got to — written per phase, cleared when it finishes. */
+  composeProgress?: { phase: 'parsing' | 'composing' | 'checking-layout' | 'done'; done?: number; total?: number; at: string };
+  /** The owner's 1–5 score on the audit's eight dimensions, with the prompt versions pinned. */
+  scores?: DeckScores;
+  /** The Instagram post this project became, once linked. */
+  instagram?: { mediaId: string; permalink?: string; postedAt?: string; linkedAt: string };
+  /** What the post did on Instagram, last synced. */
+  insights?: DeckInsights;
   createdAt: string;
   updatedAt: string;
 }
