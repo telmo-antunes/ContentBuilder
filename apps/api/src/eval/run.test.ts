@@ -193,12 +193,11 @@ describe('runEval (mocked ai boundary)', () => {
 
     const run = report.runs[0]!;
     // the parse-side metrics.
-    // The 70-char headline IS over the 60-char budget, but parseForCompose now
-    // re-parses once and then clamps deterministically, so nothing over-budget
-    // survives into its output. Reading 0 here is the guard working — a nonzero
-    // count would mean the mechanical clamp had sprung a leak. (The clamp's own
-    // mechanics are covered in compose.test.ts's "parse budgets enforced in code".)
-    expect(run.parse!.budget).toEqual([]);
+    // The 70-char headline IS over the 60-char budget. Since 2026-09 a headline
+    // is never cut — a mid-phrase cut shipped as a cover twice — so after the
+    // one corrective re-parse it is kept whole and REPORTED, and the eval counts
+    // it. (The clamp still cuts prose; compose.test.ts covers its mechanics.)
+    expect(run.parse!.budget).toEqual([{ slide: 0, role: 'cover', part: 'headline', length: 70, limit: 60 }]);
     expect(run.parse!.shape).toEqual([{ type: 'last-not-cta', role: 'statement' }]);
     // composeSlide plugged the missing hole on the photo slide
     expect(run.slides[0]!.metrics.slots).toEqual(['photo']);
@@ -216,7 +215,7 @@ describe('runEval (mocked ai boundary)', () => {
     expect(run.slides[2]!.metrics.slotIssue).toBe('unexpected-slot');
 
     expect(report.aggregate).toMatchObject({
-      budgetViolations: 0,
+      budgetViolations: 1,
       roleShapeViolations: 1,
       // 0 because the guard repaired it; composerVerbatimWarnings below is the
       // signal that the composer misbehaved in the first place.

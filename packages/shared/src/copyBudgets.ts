@@ -20,6 +20,8 @@ export interface ComposeBudgets {
    * {@link EXPLAIN_ROLES}. Always >= `body`.
    */
   explainBody: number;
+  /** The short payoff line under a headline. Unbudgeted, it became a six-line paragraph over a busy photo on a close. */
+  tagline: number;
   cta: number;
   /** One enumeration row's `text`. */
   rowText: number;
@@ -31,6 +33,7 @@ export const BASE_BUDGETS: ComposeBudgets = {
   headline: 60,
   body: 90,
   explainBody: 150,
+  tagline: 70,
   cta: 24,
   rowText: 42,
 };

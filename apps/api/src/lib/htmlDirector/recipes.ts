@@ -199,6 +199,7 @@ export const dynatosRecipe: BrandRecipe = brandRecipeSchema.parse({
 <div class="fill"></div>`,
       `<div class="eyebrow">{{eyebrow}}</div>
 <div class="headline">{{headline}}</div>
+<div class="body">{{body}}</div>
 <div class="fill"></div>
 <div class="panel numbered">{{#rows}}<div class="row">{{row.text}}<em>{{row.note}}</em></div>{{/rows}}</div>`,
       `<div class="eyebrow">{{eyebrow}}</div>
@@ -235,7 +236,7 @@ export const dynatosRecipe: BrandRecipe = brandRecipeSchema.parse({
       'feature: eyebrow → headline.sm → panel.numbered of rows → fill (numbered teaching poster)',
       'feature: eyebrow → headline.sm → body → fill → cb-shot.wide (product proof closing the frame)',
       'list: eyebrow → headline.sm → panel of rows → fill (ruled list, verdict rows)',
-      'list: eyebrow → headline → fill → panel.numbered of rows (a numbered method)',
+      'list: eyebrow → headline → body (a lead-in line) → fill → panel.numbered of rows (a numbered method)',
       'list: eyebrow → headline.sm → fill → figures of figure cells → fill (an exhibit)',
       'stat: eyebrow → fill → stat → tagline (its reading) → body',
       'quote: eyebrow → fill → quote → attr → fill (the object, or a pull-quote)',
@@ -501,9 +502,12 @@ export const detailMastersRecipe: BrandRecipe = brandRecipeSchema.parse({
 <div class="rule"></div>
 <div class="panel">{{#rows}}<div class="row">{{row.text}}<em>{{row.note}}</em></div>{{/rows}}</div>
 <div class="fill"></div>`,
-      // Numbered: the app counts the rows in the gutter, which turns a list into a method.
+      // Numbered: the app counts the rows in the gutter, which turns a list into a
+      // method. Carries a lead-in body line — a planned brief writes one for every
+      // beat, and without a hole for it every list went to the model.
       `<div class="eyebrow">{{eyebrow}}</div>
 <div class="headline">{{headline}}</div>
+<div class="body">{{body}}</div>
 <div class="fill"></div>
 <div class="panel numbered">{{#rows}}<div class="row">{{row.text}}<em>{{row.note}}</em></div>{{/rows}}</div>`,
       // The EXHIBIT: the rows are figures with labels, two to a line.

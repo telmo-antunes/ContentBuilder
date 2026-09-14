@@ -629,7 +629,7 @@ projectsRouter.post(
     // OWN pictures are a different question — they were harvested from its site
     // precisely so posts could use them — so a slot arrives filled and swappable
     // rather than empty and waiting.
-    const base = composed.map((s, i) => ({ id: randomUUID(), order: i, authored: s.authored }));
+    const base = composed.map((s, i) => ({ id: randomUUID(), order: i, authored: s.authored, imageQuery: s.imageQuery }));
     const attached = await attachPoolPhotos(base, pool, String(parsedRecipe.data.tokens?.ground ?? ''));
     const anchors = attached.anchors;
     // The decision ledger: consequential calls the code takes on the deck's

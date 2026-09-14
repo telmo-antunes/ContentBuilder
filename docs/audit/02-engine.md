@@ -284,3 +284,37 @@ statement. Typecheck, lint and all 1,428 tests green.
 - Settings: move `composeModel` to Haiku 4.5, leave the copywriter on
   Sonnet 4.6 (the tiering verdict)
 - upstream (CRM): hand over facts in the reader's words, not the schema's
+
+## The backlog, applied (2026-09-14, $0)
+
+All ten deterministic items from the runs above, plus the tiering verdict:
+
+- **rows are verbatim-guarded on the AI path** — a row the model altered
+  triggers the one retry like any scalar part, and a row still wrong after
+  it is reported rather than shipped silently (`digestReply`)
+- **a headline is never clamped** — any overage on a headline or a tagline
+  triggers the corrective re-parse; what is still over is kept whole and
+  reported as a copy fault, and the layout ladder's smaller-headline rung
+  keeps it on the canvas. The dead "clamped headline lost its emphasis"
+  branch is gone with it
+- **a tagline budget of 70** in the shared budgets, the copywriter's rules and
+  the per-format line
+- **the numbered list carries a lead-in body line** in both reference recipes,
+  so a planned brief's lists stay on the free path
+- **a second cover is a statement** (`normalizeParsedDeck`)
+- **screenshot or photograph** — the pool classifies each asset once (wide and
+  light = screenshot) and a slot takes the kind the slide's own `imageQuery`
+  asks for; the route and the lab hand the query to the attach
+- **the probe measures width** — `scrollWidth` past `clientWidth` is an
+  overflow, so a clipped exhibit cell can no longer ship as "fits"
+- **copywriter v11**: an object is under 20 words; a prose brief with no lists
+  still gets one one-liner or a stat; headlines and taglines close with
+  punctuation; the tagline budget is stated
+- **Settings**: `composeModel` → `claude-haiku-4-5-20251001`; the copywriter
+  stays on the env tier (Sonnet 4.6)
+
+Not applied here, because it lives upstream: the CRM's `content:instagram`
+should hand over facts in the reader's words.
+
+Typecheck, lint and all 1,028 tests green; the seven tests that encoded the
+old clamping were rewritten to the new contract.

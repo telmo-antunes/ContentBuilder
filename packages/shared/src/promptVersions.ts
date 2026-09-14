@@ -293,6 +293,16 @@ export const TOUCHPOINT_REGISTRY: Record<TouchpointId, Touchpoint> = {
           'Every rule the machine checks is unchanged; the worked example shows a deck that passes all of them.',
         ],
       },
+      {
+        version: 11,
+        date: '2026-09-14',
+        summary: 'Three things the first real runs taught: objects are short, prose briefs still change pace, lines close.',
+        improves: [
+          'A quote is an object under 20 words — a paragraph set in italics on a cream card was the heaviest slide in three decks.',
+          'A brief with no lists and no numbers still gets one bare one-liner or a stat, so six text frames in a row cannot happen.',
+          'Headlines and taglines end with a full stop or a question mark; a tagline has a budget (70) and, like a headline, is re-asked rather than cut.',
+        ],
+      },
     ],
   },
 

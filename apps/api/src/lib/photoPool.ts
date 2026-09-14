@@ -11,7 +11,7 @@ import { archetypeFor, authoredSlots, type SlidePhoto } from '@contentbuilder/sh
 import { MediaAssetModel } from '../models';
 import { getStorage } from '../storage';
 import { SITE_PHOTO_LABEL } from './harvest';
-import { bleedAnchorFor, hexLuminance, meanLuminanceOf, suitsBleedOver, type BleedAnchor } from './bleedAnchor';
+import { bleedAnchorFor, hexLuminance, MAX_GROUND_DRIFT, meanLuminanceOf, suitsBleedOver, type BleedAnchor } from './bleedAnchor';
 
 /** The media label `promo-story` stores a rendered carousel cover under. */
 export const PROMO_COVER_LABEL = 'Carousel cover';
@@ -93,6 +93,8 @@ export function fillSlotsFromPool(
    * because a slot is judged by relevance the pool cannot see, not by tone.
    */
   bleedPreferred?: ReadonlySet<string>,
+  /** Per slide: pool ids a SLOT on that slide should take first, when the slide's words say what it wants. */
+  slotPreferred?: ReadonlyArray<ReadonlySet<string> | undefined>,
 ): { photos: SlidePhoto[][]; used: number } {
   const photos: SlidePhoto[][] = slides.map(() => []);
   const taken = new Set<number>();
@@ -134,7 +136,7 @@ export function fillSlotsFromPool(
     }
 
     for (const slot of authoredSlots(slide.authored?.html ?? '')) {
-      const m = take();
+      const m = take(slotPreferred?.[i]);
       if (!m) return;
       photos[i]!.push({
         id: randomUUID(),
@@ -169,8 +171,12 @@ export interface AttachedPhotos {
  * surface, which is the better of the two failures. The type on a kept bleed
  * goes to whichever end of the picture is already dark.
  */
+/** Does the slide's own image query ask for the product on a screen? */
+export const wantsScreenshot = (query: string | undefined): boolean =>
+  /\b(screen|screenshot|dashboard|app|crm|software|interface|booking|menu|profile|record|table|list|button|form|settings|invoice|calendar)\b/i.test(query ?? '');
+
 export async function attachPoolPhotos(
-  base: Array<{ id: string; authored?: { html: string; archetype?: string } }>,
+  base: Array<{ id: string; authored?: { html: string; archetype?: string }; imageQuery?: string }>,
   pool: Array<{ _id: unknown; key?: string; width?: number; height?: number }>,
   groundHex: string,
 ): Promise<AttachedPhotos> {
@@ -186,18 +192,31 @@ export async function attachPoolPhotos(
    * them — ordering the whole pool by tone put car photographs on the
    * product-proof slots where the screenshots belong.
    */
-  const suited = await Promise.all(
+  const means = await Promise.all(
     pool.map(async (m) => {
-      if (!m.key) return true;
+      if (!m.key) return undefined;
       try {
-        return await suitsBleedOver(await getStorage().read(m.key), groundLuminance);
+        return await meanLuminanceOf(await getStorage().read(m.key));
       } catch {
-        return true;
+        return undefined;
       }
     }),
   );
+  const suited = means.map((mean) => mean === undefined || Math.abs(mean - groundLuminance) <= MAX_GROUND_DRIFT);
   const bleedPreferred = new Set(pool.filter((_, i) => suited[i]).map((m) => String(m._id)));
-  const filled = fillSlotsFromPool(base, pool, bleedPreferred);
+  /**
+   * SCREENSHOT OR PHOTOGRAPH. The pool could not tell them apart, so a slide
+   * about the car's headliner received the packages table and the product
+   * slide got a bench still life. A wide, light picture is a screenshot far
+   * more often than not; the slide's own imageQuery says which kind it wants.
+   */
+  const isScreenshot = pool.map(
+    (m, i) => Boolean(m.width && m.height && m.width / m.height >= 1.4) && (means[i] ?? 0) >= 0.7,
+  );
+  const screenshots = new Set(pool.filter((_, i) => isScreenshot[i]).map((m) => String(m._id)));
+  const photographs = new Set(pool.filter((_, i) => !isScreenshot[i]).map((m) => String(m._id)));
+  const slotPreferred = base.map((s) => (s.imageQuery ? (wantsScreenshot(s.imageQuery) ? screenshots : photographs) : undefined));
+  const filled = fillSlotsFromPool(base, pool, bleedPreferred, slotPreferred);
   const notes: AttachedPhotos['notes'] = [];
   const anchors = await Promise.all(
     filled.photos.map(async (ps, i) => {
@@ -238,7 +257,7 @@ export async function attachPoolPhotos(
         const asset = pool.find((m) => String(m._id) === String(ph.mediaAssetId));
         if (!asset?.key || !asset.width || !asset.height || asset.width / asset.height < 1.4) continue;
         try {
-          const mean = await meanLuminanceOf(await getStorage().read(asset.key));
+          const mean = means[pool.indexOf(asset)];
           if (mean !== undefined && mean >= 0.7) {
             // A modest default: a table's names and first rows sit upper-left.
             // The Studio's zoom slider and focal picker take it from here — an

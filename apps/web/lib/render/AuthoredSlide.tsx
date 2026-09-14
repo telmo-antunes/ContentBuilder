@@ -221,7 +221,33 @@ export function AuthoredSlide({
         }))
         .sort((a, b) => a.top - b.top);
 
-      const over = boxes.some((b) => b.bottom > contentBottom + TOL || b.top < padTop - TOL);
+      /**
+       * WIDTH TOO. The probe measured height, collisions and slack and never
+       * width, so an exhibit grid pushed a whole cell off the right edge and
+       * shipped as "fits".
+       *
+       * NOT `scrollWidth`: a first version used it and every slide of every
+       * deck "overflowed" — a brand's watermark deliberately bleeds off the
+       * canvas (the same trap `scrollHeight` set, above), and the ladder spent
+       * eight calls a deck repairing nothing. So this asks the same question
+       * the height check asks, of the same kind of element: does any flowed
+       * descendant's box end past the content edge? Descendants rather than
+       * children, because a grid item that overflows its container is the
+       * case that shipped, and the container's own box fits. Compared in
+       * rendered pixels with the root's scale factored in, since the studio
+       * shows slides through a transform.
+       */
+      const rootRect = el.getBoundingClientRect();
+      const scale = el.offsetWidth ? rootRect.width / el.offsetWidth : 1;
+      const padRight = parseFloat(getComputedStyle(el).paddingRight || '0') || 0;
+      const contentRightPx = rootRect.right - padRight * scale;
+      const overX = Array.from(el.querySelectorAll<HTMLElement>('*')).some((d) => {
+        const dcs = getComputedStyle(d);
+        if (dcs.position === 'absolute' || dcs.position === 'fixed' || dcs.visibility === 'hidden') return false;
+        if (!d.offsetWidth) return false;
+        return d.getBoundingClientRect().right > contentRightPx + TOL * scale;
+      });
+      const over = overX || boxes.some((b) => b.bottom > contentBottom + TOL || b.top < padTop - TOL);
 
       /**
        * COLLISION. Two painted boxes that touch or overlap.

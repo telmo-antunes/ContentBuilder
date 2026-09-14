@@ -298,7 +298,7 @@ async function main(): Promise<void> {
     const { ProjectModel } = await import('../models');
     const { attachPoolPhotos, brandPhotoPool } = await import('../lib/photoPool');
     const pool = await brandPhotoPool(resolved.businessId);
-    const base = composed.map((s, i) => ({ id: randomUUID(), order: i, authored: s.authored }));
+    const base = composed.map((s, i) => ({ id: randomUUID(), order: i, authored: s.authored, imageQuery: s.imageQuery }));
     const photosFile = cliArg('--photos');
     let attached: Awaited<ReturnType<typeof attachPoolPhotos>>;
     if (photosFile) {
