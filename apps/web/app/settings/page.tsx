@@ -87,7 +87,8 @@ export default function SettingsPage() {
   const designDefault = env.modelDesign || env.modelLarge || env.modelSmall || env.model || 'env default';
   const rows: Array<{ key: keyof AiSettings; label: string; hint: string; ph: string }> = [
     { key: 'recipeModel', label: 'Brand recipe', hint: 'designs the look — once per brand', ph: designDefault },
-    { key: 'composeModel', label: 'Slide compose', hint: 'writes & arranges the deck', ph: smallDefault },
+    { key: 'parseModel', label: 'Copywriter', hint: 'writes every headline, row and close — the call that decides a post', ph: judgmentDefault },
+    { key: 'composeModel', label: 'Slide arrange', hint: 'sets the words in the brand\'s layouts when no fragment can — cheap', ph: smallDefault },
     { key: 'visionModel', label: 'Brand analysis', hint: 'reads colors, type & voice from websites', ph: visionDefault },
     { key: 'captionModel', label: 'Captions', hint: 'writes the caption in the brand voice', ph: judgmentDefault },
   ];

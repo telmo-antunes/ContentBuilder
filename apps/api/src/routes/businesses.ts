@@ -92,7 +92,14 @@ async function enrich(businesses: Array<Record<string, any>>) {
 businessesRouter.get(
   '/',
   asyncHandler(async (_req, res) => {
-    const docs = await BusinessModel.find().sort({ createdAt: -1 }).limit(200).lean();
+    // A render-check scaffold is a throwaway business the probe creates and
+    // disposes; one left behind by a hung compose showed up on the Desk as a
+    // brand with an approved kit. The sweep runs at start-up; the list never
+    // shows one either way.
+    const docs = await BusinessModel.find({ name: { $not: /^__render-check-/ } })
+      .sort({ createdAt: -1 })
+      .limit(200)
+      .lean();
     res.json(await enrich(docs));
   }),
 );

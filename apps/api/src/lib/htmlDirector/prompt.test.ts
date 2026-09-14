@@ -12,7 +12,9 @@ describe('the arrangement reaches the composer', () => {
     const { user } = slidePrompt(detailMastersRecipe, input({ archetype: 'list' }));
     expect(user).toContain('arrangement: list');
     // The policy token `bottom` says nothing to a writer; the words do.
-    expect(user).toContain('pack it from the top');
+    // The list archetype centres its block since 2026-09 (a short list over an
+    // empty half-frame was the commonest hierarchy failure).
+    expect(user).toContain('optically centred');
     expect(user).toContain('may run to 2 lines');
   });
 

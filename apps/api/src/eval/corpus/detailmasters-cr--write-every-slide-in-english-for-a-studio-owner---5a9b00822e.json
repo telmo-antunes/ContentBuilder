@@ -1,0 +1,255 @@
+{
+  "id": "detailmasters-cr--write-every-slide-in-english-for-a-studio-owner---5a9b00822e",
+  "title": "Write every slide in English, for a studio owner who takes on odour work and has had a car come back.",
+  "brand": "detailmasters CRM",
+  "businessId": "6a42337c717dcf4105b9f9f4",
+  "projectId": "6a847ab5e505dfe3fe01dffb",
+  "type": null,
+  "format": null,
+  "settings": null,
+  "brief": {
+    "idea": "Write every slide in English, for a studio owner who takes on odour work and has had a car come back.\n\nADVICE, NOT A PITCH. A reader who saves this should be able to scope and price an odour job. Every slide must carry something actionable in its BODY. A headline and a mood is a wasted slide. Lead with the reader's problem, not the product.\n\nThe material, and all you may assert:\n\n- The cleaning is usually fine. The smell was never visible, so what got treated was what could be seen. The job is judged with the nose, days later, in a car closed in the sun.\n- Smoke does not hang in the air waiting to be neutralised. It settles into the porous materials: fabric, foam, carpet, headliner. Treating only the air lasts as long as the product; heat and humidity bring the smell back.\n- The headliner holds the most and ruins fastest. It is bonded to a substrate, so soaking lifts that bond: staining, creasing, sagging. Minimum moisture, no pressure, never extracted like a seat.\n- In seats and carpet the smell is in the foam under the fabric. A surface clean returns clean fabric on foam that still smells. Extraction — pulling back out what you put in — decides the result. Left damp too long trades one odour problem for another.\n- The cabin filter has caught months of smoke. Leaving it in re-contaminates the interior the moment the fan runs, so replacing it is part of the job, not an upsell. The ducts hold odour too.\n- An enzyme treatment works on the organic matter making the smell. A fragrance covers it. Covering belongs at the end, in an already treated car; as the solution it is what brings the client back on Friday.\n- Some interiors do not go back to zero. Years of daily smoking take the odour into the foam and behind the liner, and past that point full recovery is no longer a question of method. That belongs in the quote, not at handover: a warned client pays, a surprised one asks for the money back.\n\nInvent nothing beyond this: no times, percentages, prices or brand names.",
+    "plan": [
+      "Cover. The hook: the car left spotless and smelled the same by Friday. Name it as the job that comes back.",
+      "Where the smell actually lives. It is not in the air — it settles into fabric, foam, carpet and the headliner. Treating the air lasts exactly as long as the product does.",
+      "The headliner: holds the most, ruins the fastest. Bonded to a substrate, so soaking it lifts the bond — staining, creasing, sagging. Minimum moisture, no pressure, and never extract it like a seat.",
+      "Foam and carpet: the smell is in the foam under the fabric, so a surface clean hands back clean fabric on foam that still smells. Extraction is pulling back out what you put in — and left damp too long you have traded one problem for another.",
+      "The cabin filter and the ducts: months of caught smoke, re-contaminating the interior the moment the fan runs. Replacing it is part of the job, not an upsell. The ducts hold odour too.",
+      "Enzymes versus fragrance — know which one you just sold. An enzyme works on the organic matter making the smell; a fragrance covers it. Covering belongs at the end of a treated car, never as the solution.",
+      "The slide that earns the deck: some cars do not go back to zero. Years of daily smoking put the odour in the foam and behind the liner. Say so in the QUOTE, not at handover — a warned client pays, a surprised one asks for the money back.",
+      "Close: ask the reader to DM the keyword ODOUR for the full guide."
+    ]
+  },
+  "models": {
+    "parse": "claude-sonnet-4-6",
+    "compose": "claude-sonnet-5"
+  },
+  "promptVersions": {
+    "parse": 6,
+    "compose": 6,
+    "caption": 1
+  },
+  "parseUser": "BRAND VOICE: Quietly confident and aspirational, addressing the studio owner directly with understated elegance — evocative fragments over hype, with a flash of urgency when revenue is on the line.\nPHOTOGRAPHY: this brand is carried by its images — most slides that show a place, a product, a person or a result should ask for one.\nDO: Speak to 'you' and 'your studio'; Short, evocative fragments; Concrete business outcomes (bookings, rebookings, revenue); Let restraint imply premium\nDON'T: Exclamation marks; Tech jargon; Overt hype or ALL-CAPS shouting; Generic SaaS clichés\nSLIDES: exactly 8 — one per SLIDE PLAN entry, in that order. Do not add a slide the plan did not ask for, and do not merge two.\nWHAT THIS BRAND HAS TAUGHT YOU — these are corrections its owner made to your previous posts, more than once each. Follow them:\n  · This brand's body copy is always cut after it is written — aim about 52 characters shorter than the budget allows.\n  · This brand reaches for the word \"price\" — use it where it fits.\nBRIEF: Write every slide in English, for a studio owner who takes on odour work and has had a car come back.\n\nADVICE, NOT A PITCH. A reader who saves this should be able to scope and price an odour job. Every slide must carry something actionable in its BODY. A headline and a mood is a wasted slide. Lead with the reader's problem, not the product.\n\nThe material, and all you may assert:\n\n- The cleaning is usually fine. The smell was never visible, so what got treated was what could be seen. The job is judged with the nose, days later, in a car closed in the sun.\n- Smoke does not hang in the air waiting to be neutralised. It settles into the porous materials: fabric, foam, carpet, headliner. Treating only the air lasts as long as the product; heat and humidity bring the smell back.\n- The headliner holds the most and ruins fastest. It is bonded to a substrate, so soaking lifts that bond: staining, creasing, sagging. Minimum moisture, no pressure, never extracted like a seat.\n- In seats and carpet the smell is in the foam under the fabric. A surface clean returns clean fabric on foam that still smells. Extraction — pulling back out what you put in — decides the result. Left damp too long trades one odour problem for another.\n- The cabin filter has caught months of smoke. Leaving it in re-contaminates the interior the moment the fan runs, so replacing it is part of the job, not an upsell. The ducts hold odour too.\n- An enzyme treatment works on the organic matter making the smell. A fragrance covers it. Covering belongs at the end, in an already treated car; as the solution it is what brings the client back on Friday.\n- Some interiors do not go back to zero. Years of daily smoking take the odour into the foam and behind the liner, and past that point full recovery is no longer a question of method. That belongs in the quote, not at handover: a warned client pays, a surprised one asks for the money back.\n\nInvent nothing beyond this: no times, percentages, prices or brand names.\nSLIDE PLAN (one slide per entry, in this order):\n  1. Cover. The hook: the car left spotless and smelled the same by Friday. Name it as the job that comes back.   [reads as role \"cover\"]\n  2. Where the smell actually lives. It is not in the air — it settles into fabric, foam, carpet and the headliner. Treating the air lasts exactly as long as the product does.\n  3. The headliner: holds the most, ruins the fastest. Bonded to a substrate, so soaking it lifts the bond — staining, creasing, sagging. Minimum moisture, no pressure, and never extract it like a seat.\n  4. Foam and carpet: the smell is in the foam under the fabric, so a surface clean hands back clean fabric on foam that still smells. Extraction is pulling back out what you put in — and left damp too long you have traded one problem for another.\n  5. The cabin filter and the ducts: months of caught smoke, re-contaminating the interior the moment the fan runs. Replacing it is part of the job, not an upsell. The ducts hold odour too.\n  6. Enzymes versus fragrance — know which one you just sold. An enzyme works on the organic matter making the smell; a fragrance covers it. Covering belongs at the end of a treated car, never as the solution.\n  7. The slide that earns the deck: some cars do not go back to zero. Years of daily smoking put the odour in the foam and behind the liner. Say so in the QUOTE, not at handover — a warned client pays, a surprised one asks for the money back.\n  8. Close: ask the reader to DM the keyword ODOUR for the full guide.   [reads as role \"cta\"]",
+  "generated": [
+    {
+      "id": "466ed926-c91e-456e-aed2-863d6da06917",
+      "role": "cover",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "The job that comes back",
+        "headline": "Left spotless. Smelled the same by Friday."
+      },
+      "html": "<div class=\"logo-row\">\n  <div class=\"monogram\"></div>\n  <div class=\"wordmark\"><b>detail</b><i>masters</i></div>\n</div>\n<div class=\"fill\"></div>\n<div class=\"eyebrow\">The job that comes back</div>\n<div class=\"headline\">Left spotless. Smelled the same by Friday.</div>\n<figure class=\"cb-shot\" data-cb-slot=\"hero\"></figure>"
+    },
+    {
+      "id": "b9ed5570-ae0e-4fb7-9ca0-76efc1109b1a",
+      "role": "statement",
+      "path": "ai",
+      "parts": {
+        "eyebrow": "Where it lives",
+        "headline": "The smell was never in the air.",
+        "body": "It settled into fabric, foam, carpet, headliner."
+      },
+      "html": "<div class=\"fill\"></div>\n<div class=\"headline\">The smell was never in the air.</div>\n<div class=\"eyebrow\">Where it lives</div>\n<div class=\"headline\">The smell was <span class=\"it\">never in the air</span>.</div>\n<figure class=\"cb-shot\" data-cb-slot=\"interior\"></figure>\n<div class=\"rule\"></div>\n<div class=\"body\">It settled into fabric, foam, carpet, headliner.</div>\n<div class=\"fill\"></div>"
+    },
+    {
+      "id": "c2d1edb8-f3b6-46df-9816-41720ac190c7",
+      "role": "feature",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "The headliner",
+        "headline": "Holds the most. Ruins the fastest.",
+        "body": "Soaking lifts the bond. No pressure, never extracted."
+      },
+      "html": "<div class=\"eyebrow\">The headliner</div>\n<div class=\"fill\"></div>\n<div class=\"headline sm\">Holds the most. Ruins the fastest.</div>\n<div class=\"rule\"></div>\n<div class=\"body\">Soaking lifts the bond. No pressure, never extracted.</div>"
+    },
+    {
+      "id": "d8f5deb0-cdf6-4b71-b428-928c27e111a1",
+      "role": "feature",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "Foam and carpet",
+        "headline": "A surface clean returns clean fabric on foam that still",
+        "body": "Extraction decides the result."
+      },
+      "html": "<div class=\"eyebrow\">Foam and carpet</div>\n<div class=\"fill\"></div>\n<div class=\"headline sm\">A surface clean returns clean fabric on foam that still</div>\n<div class=\"rule\"></div>\n<div class=\"body\">Extraction decides the result.</div>"
+    },
+    {
+      "id": "ce8bb10b-3aa4-4635-a08a-d66dd79fbd63",
+      "role": "list",
+      "path": "ai",
+      "parts": {
+        "eyebrow": "Cabin filter and ducts",
+        "headline": "Two things re-contaminating every job you leave in.",
+        "tagline": "Both belong in the scope, not the upsell column.",
+        "rows": [
+          {
+            "text": "Replace the cabin filter",
+            "note": "Months of caught smoke — the fan does the rest."
+          },
+          {
+            "text": "Address the ducts",
+            "note": "They hold odour and stay out of sight."
+          }
+        ]
+      },
+      "html": "<div class=\"logo-row\">\n  <div class=\"monogram\"></div>\n  <div class=\"wordmark\"><b>detail</b><i>masters</i></div>\n</div>\n<div class=\"eyebrow\">Cabin filter and ducts</div>\n<div class=\"headline sm\">Two things <span class=\"it\">re-contaminating</span> every job you leave in.</div>\n<div class=\"rule\"></div>\n<div class=\"body\">Both belong in the scope, not the upsell column.</div>\n<div class=\"panel\">\n  <div class=\"row\"><span class=\"tick\"></span>Replace the cabin filter<span class=\"note\">Months of caught smoke — the fan does the rest.</span></div>\n  <div class=\"row\"><span class=\"tick\"></span>Address the ducts<span class=\"note\">They hold odour and stay out of sight.</span></div>\n</div>\n<div class=\"fill\"></div>"
+    },
+    {
+      "id": "749980c2-c97e-44e4-b31d-386a89864377",
+      "role": "statement",
+      "path": "ai",
+      "parts": {
+        "eyebrow": "Enzymes vs fragrance",
+        "headline": "Know which one you just sold.",
+        "body": "An enzyme treats the smell.A fragrance only covers it."
+      },
+      "html": "<div class=\"eyebrow\">Enzymes vs fragrance</div>\n<div class=\"fill\"></div>\n<div class=\"headline\">Know <span class=\"it\">which one you just sold.</span></div>\n<div class=\"rule\"></div>\n<div class=\"body\">An enzyme treats the smell.A fragrance only covers it.</div>\n<div class=\"fill\"></div>"
+    },
+    {
+      "id": "ce50f2a3-0a01-40aa-b91d-2f43545c4b70",
+      "role": "statement",
+      "path": "ai",
+      "parts": {
+        "eyebrow": "Price this honestly",
+        "headline": "Some cars do not go back to zero.",
+        "body": "Say so in the quote — not at handover."
+      },
+      "html": "<div class=\"fill\"></div>\n<div class=\"eyebrow\">Price this honestly</div>\n<div class=\"headline\">Some cars <span class=\"it\">do not go back to zero.</span></div>\n<figure class=\"cb-shot\" data-cb-slot=\"hero\"></figure>\n<div class=\"body\">Say so in the quote — not at handover.</div>\n<div class=\"fill\"></div>"
+    },
+    {
+      "id": "4149457f-8db3-4cec-bf85-d737a58603e4",
+      "role": "cta",
+      "path": "ai",
+      "parts": {
+        "eyebrow": "Get the full guide",
+        "headline": "DM the word ODOUR.",
+        "tagline": "Scope it. Price it. Keep it off your calendar.",
+        "cta": "Send ODOUR"
+      },
+      "html": "<div class=\"logo-row\">\n<div class=\"monogram\"></div>\n<div class=\"wordmark\"><b>detail</b><i>masters</i></div>\n</div>\n<div class=\"fill\"></div>\n<div class=\"eyebrow\">Get the full guide</div>\n<div class=\"headline\">DM the word <span class=\"it\">ODOUR</span>.</div>\n<div class=\"headline\">DM the word ODOUR.</div>\n<div class=\"body\">Scope it. Price it. Keep it off your calendar.</div>\n<div class=\"cta\">Send ODOUR</div>"
+    }
+  ],
+  "outcome": {
+    "at": "2026-08-18T15:34:54.381Z",
+    "exported": true,
+    "slides": [
+      {
+        "slideId": "466ed926-c91e-456e-aed2-863d6da06917",
+        "role": "cover",
+        "verdict": "kept"
+      },
+      {
+        "slideId": "b9ed5570-ae0e-4fb7-9ca0-76efc1109b1a",
+        "role": "statement",
+        "verdict": "edited",
+        "edits": [
+          {
+            "part": "body",
+            "before": "It settled into fabric, foam, carpet, headliner.",
+            "after": "It settles into fabric, foam, carpet and the headliner."
+          },
+          {
+            "part": "rows",
+            "before": "",
+            "after": "Treat the air It lasts exactly as long as the product does. · Heat and humidity Bring the smell straight back out of the material."
+          }
+        ]
+      },
+      {
+        "slideId": "c2d1edb8-f3b6-46df-9816-41720ac190c7",
+        "role": "feature",
+        "verdict": "edited",
+        "edits": [
+          {
+            "part": "body",
+            "before": "Soaking lifts the bond. No pressure, never extracted.",
+            "after": ""
+          },
+          {
+            "part": "rows",
+            "before": "",
+            "after": "Minimum moisture It is bonded to a substrate, and soaking lifts the bond. · No pressure Staining, creasing, or a liner that starts to sag. · Never like a seat It is not a surface you extract."
+          }
+        ]
+      },
+      {
+        "slideId": "d8f5deb0-cdf6-4b71-b428-928c27e111a1",
+        "role": "feature",
+        "verdict": "edited",
+        "edits": [
+          {
+            "part": "headline",
+            "before": "A surface clean returns clean fabric on foam that still",
+            "after": "The smell is in the foam, not the fabric"
+          },
+          {
+            "part": "body",
+            "before": "Extraction decides the result.",
+            "after": ""
+          },
+          {
+            "part": "rows",
+            "before": "",
+            "after": "A surface clean Hands back clean fabric on foam that still smells. · Extraction Pulls back out what you put in. That decides it."
+          }
+        ]
+      },
+      {
+        "slideId": "ce8bb10b-3aa4-4635-a08a-d66dd79fbd63",
+        "role": "list",
+        "verdict": "edited",
+        "edits": [
+          {
+            "part": "headline",
+            "before": "Two things re-contaminating every job you leave in.",
+            "after": "Two things that undo the job if you leave them in."
+          }
+        ]
+      },
+      {
+        "slideId": "749980c2-c97e-44e4-b31d-386a89864377",
+        "role": "statement",
+        "verdict": "edited",
+        "edits": [
+          {
+            "part": "body",
+            "before": "An enzyme treats the smell.A fragrance only covers it.",
+            "after": ""
+          },
+          {
+            "part": "rows",
+            "before": "",
+            "after": "An enzyme Works on the organic matter making the smell. · A fragrance Covers it. Fine at the end, never as the fix."
+          }
+        ]
+      },
+      {
+        "slideId": "ce50f2a3-0a01-40aa-b91d-2f43545c4b70",
+        "role": "statement",
+        "verdict": "edited",
+        "edits": [
+          {
+            "part": "body",
+            "before": "Say so in the quote — not at handover.",
+            "after": "Years of daily smoking put it in the foam and behind the liner."
+          },
+          {
+            "part": "rows",
+            "before": "",
+            "after": "In the quote Say what you can do, and what you cannot. · At handover Too late. A surprised client asks for the money back."
+          }
+        ]
+      },
+      {
+        "slideId": "4149457f-8db3-4cec-bf85-d737a58603e4",
+        "role": "cta",
+        "verdict": "kept"
+      }
+    ],
+    "added": 0
+  },
+  "generationId": "6a847affe505dfe3fe01e043",
+  "generatedAt": "2026-08-18T15:32:15.059Z",
+  "runsOfThisBrief": 1
+}

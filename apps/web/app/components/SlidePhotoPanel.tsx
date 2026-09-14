@@ -507,6 +507,23 @@ export default function SlidePhotoPanel({
             />
 
             {kind === 'slot' && (
+              <label className="spc-field">
+                <span className="spc-label">
+                  Zoom in — {p.zoom && p.zoom > 1 ? `×${p.zoom.toFixed(1)}, framed by the focal point` : 'off (the whole picture)'}
+                </span>
+                <input
+                  type="range"
+                  min={1}
+                  max={4}
+                  step={0.1}
+                  value={p.zoom ?? 1}
+                  onChange={(e) => patch(p.id, { zoom: Number(e.target.value) })}
+                  aria-label="Zoom the picture inside its slot"
+                />
+              </label>
+            )}
+
+            {kind === 'slot' && (
               <>
                 <Choice
                   label="Size"

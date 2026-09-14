@@ -117,7 +117,7 @@ export async function meanLuminanceOf(buffer: Buffer): Promise<number | undefine
  * Generous on purpose. The background layer carries a scrim that can rescue a
  * moderate mismatch; this only rejects photographs the scrim cannot save.
  */
-const MAX_GROUND_DRIFT = 0.42;
+export const MAX_GROUND_DRIFT = 0.42;
 
 /**
  * Can this photograph carry the frame on a surface of `groundLuminance`?

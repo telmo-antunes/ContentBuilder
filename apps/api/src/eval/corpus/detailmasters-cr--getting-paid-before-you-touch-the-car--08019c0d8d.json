@@ -1,0 +1,251 @@
+{
+  "id": "detailmasters-cr--getting-paid-before-you-touch-the-car--08019c0d8d",
+  "title": "Getting paid before you touch the car",
+  "brand": "detailmasters CRM",
+  "businessId": "6a42337c717dcf4105b9f9f4",
+  "projectId": "6aa5f23ddf9566ea05afc0ae",
+  "type": "carousel",
+  "format": "1080x1350",
+  "settings": {
+    "theme": "bold",
+    "slideCounter": false,
+    "dmKeyword": "PACKAGE",
+    "audience": "studio owner"
+  },
+  "brief": {
+    "idea": "Write every slide in English.\n\nHeadline: Getting paid before you touch the car\n\nSubhead: Your income is exactly as lumpy as your calendar, but it does not have to be.\n\nReader: Studio owners doing repeat maintenance work (monthly washes, seasonal decontamination) who are paid job-by-job and feel every quiet week\n\nCover these beats, one per slide:\n- A quiet week is not a marketing problem\n- What is a package?\n- The part that matters\n- How do you use the sessions?\n- Using discounts without losing margin\n- What lands in your account\n- This week\n\nFacts you may state (and ONLY these):\n- A package is defined by the studio: a session count, a price, an optional studio-set discount and an optional validity window.\n- The client buys the package themselves and pays by card — the purchase record stores the Stripe PaymentIntent that paid for it.\n- Packages can also be assigned manually by the studio, in which case there is no payment intent and no transaction economics recorded.\n- Redemption is tracked as usedSessions against totalSessions on the customer's package, with an optional expiresAt.\n- The studio's net proceeds are the price the client paid minus a platform commission, and both figures are recorded on the purchase.\n- Prepaid session packages are an Advanced-plan feature.\n\nClose with a call to action asking the reader to DM the keyword PACKAGE.\n\nDo not invent CLAIMS of any kind: no statistics, no facts, no list items the source above does not contain. Compress the given sentences — cut words, never substitute your own. When the source presents a list as ordered, keep its order and do not add or drop items.\n\nLead with the reader's problem, not with the product."
+  },
+  "models": {
+    "parse": "claude-sonnet-4-6",
+    "compose": "claude-sonnet-5"
+  },
+  "promptVersions": {
+    "parse": 9,
+    "compose": 7,
+    "caption": 1
+  },
+  "parseUser": "BRAND VOICE: Quietly confident and aspirational, addressing the studio owner directly with understated elegance — evocative fragments over hype, with a flash of urgency when revenue is on the line.\nPHOTOGRAPHY: this brand uses images sparingly, to support the type — ask for one only where it genuinely adds proof or atmosphere.\nDO: Speak to 'you', the owner; Short evocative fragments; Concrete numbers and outcomes; Let restraint carry the confidence\nDON'T: Exclamation-heavy hype; Generic SaaS jargon; Cramming multiple claims into one line; Overusing the gold accent\nHANDLE: detailmasters.pro\nSLIDES: exactly 8. Not one more, not one fewer — split or merge your points to land on that number.\nWHAT THIS BRAND HAS TAUGHT YOU — these are corrections its owner made to your previous posts, more than once each. Follow them:\n  · This brand's body copy is always cut after it is written — aim about 52 characters shorter than the budget allows.\n  · This brand reaches for the word \"back\" — use it where it fits.\n  · This brand deletes the body rather than keep it — only write one when the slide is genuinely worse without it.\n  · This brand reaches for the word \"work\" — use it where it fits.\n  · This brand reaches for the word \"cannot\" — use it where it fits.\n  · This brand reaches for the word \"prepaid\" — use it where it fits.\nBRIEF: Write every slide in English.\n\nHeadline: Getting paid before you touch the car\n\nSubhead: Your income is exactly as lumpy as your calendar, but it does not have to be.\n\nReader: Studio owners doing repeat maintenance work (monthly washes, seasonal decontamination) who are paid job-by-job and feel every quiet week\n\nCover these beats, one per slide:\n- A quiet week is not a marketing problem\n- What is a package?\n- The part that matters\n- How do you use the sessions?\n- Using discounts without losing margin\n- What lands in your account\n- This week\n\nFacts you may state (and ONLY these):\n- A package is defined by the studio: a session count, a price, an optional studio-set discount and an optional validity window.\n- The client buys the package themselves and pays by card — the purchase record stores the Stripe PaymentIntent that paid for it.\n- Packages can also be assigned manually by the studio, in which case there is no payment intent and no transaction economics recorded.\n- Redemption is tracked as usedSessions against totalSessions on the customer's package, with an optional expiresAt.\n- The studio's net proceeds are the price the client paid minus a platform commission, and both figures are recorded on the purchase.\n- Prepaid session packages are an Advanced-plan feature.\n\nClose with a call to action asking the reader to DM the keyword PACKAGE.\n\nDo not invent CLAIMS of any kind: no statistics, no facts, no list items the source above does not contain. Compress the given sentences — cut words, never substitute your own. When the source presents a list as ordered, keep its order and do not add or drop items.\n\nLead with the reader's problem, not with the product.",
+  "generated": [
+    {
+      "id": "18bf1bf1-399b-4ed0-beb5-f2d13ea8549f",
+      "role": "cover",
+      "path": "ai",
+      "parts": {
+        "eyebrow": "The quiet week",
+        "headline": "Getting paid before you touch",
+        "tagline": "Your income does not have to follow your calendar."
+      },
+      "html": "<div class=\"fill\"></div>\n<div class=\"logo-row\">\n  <div class=\"monogram\"></div>\n  <div class=\"wordmark\"><b>detail</b><i>masters</i></div>\n</div>\n<div class=\"eyebrow\">The quiet week</div>\n<div class=\"headline\">Getting paid <span class=\"it\">before you touch</span></div>\n<div class=\"rule\"></div>\n<div class=\"body\">Your income does not have to follow your calendar.</div>"
+    },
+    {
+      "id": "53e2c2f8-18b2-4be4-9c6a-211915f5036d",
+      "role": "statement",
+      "path": "fragment",
+      "parts": {
+        "headline": "A quiet week is not a marketing",
+        "body": "It is a pricing structure problem. The work was always there."
+      },
+      "html": "<div class=\"fill\"></div>\n<div class=\"headline\">A quiet week is not a marketing</div>\n<div class=\"rule\"></div>\n<div class=\"body\">It is a pricing structure problem. The work was always there.</div>\n<div class=\"fill\"></div>"
+    },
+    {
+      "id": "fd5f62f1-34dd-4482-8b1c-91dfdb24740a",
+      "role": "feature",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "What is a package?",
+        "headline": "Sessions. A price. Your rules.",
+        "body": "You set the session count, the price, an optional discount"
+      },
+      "html": "<div class=\"eyebrow\">What is a package?</div>\n<div class=\"fill\"></div>\n<div class=\"headline\">Sessions. A price. Your rules.</div>\n<div class=\"rule\"></div>\n<div class=\"body\">You set the session count, the price, an optional discount</div>"
+    },
+    {
+      "id": "f65da43c-7fd7-4ad4-afca-79738de60655",
+      "role": "statement",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "The part that matters",
+        "headline": "Money lands before the work begins.",
+        "emphasis": "before the work begins"
+      },
+      "html": "<div class=\"eyebrow\">The part that matters</div>\n<div class=\"fill\"></div>\n<div class=\"headline\">Money lands <span class=\"it\">before the work begins</span>.</div>\n<div class=\"fill\"></div>"
+    },
+    {
+      "id": "14d12417-6473-4738-85c8-7f0c36572b1a",
+      "role": "list",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "Using the sessions",
+        "headline": "You cannot lose count.",
+        "rows": [
+          {
+            "text": "Sessions used vs total — always visible",
+            "note": "Tracked as usedSessions against totalSessions."
+          },
+          {
+            "text": "Optional expiry on every package",
+            "note": "Set an expiresAt if the work has a window."
+          },
+          {
+            "text": "Manual assignment when there is no card",
+            "note": "Studio assigns — no payment intent recorded."
+          }
+        ]
+      },
+      "html": "<div class=\"eyebrow\">Using the sessions</div>\n<div class=\"headline sm\">You cannot lose count.</div>\n<div class=\"fill\"></div>\n<div class=\"panel\"><div class=\"row\"><span class=\"tick\"></span>Sessions used vs total — always visible<em>Tracked as usedSessions against totalSessions.</em></div>\n<div class=\"row\"><span class=\"tick\"></span>Optional expiry on every package<em>Set an expiresAt if the work has a window.</em></div>\n<div class=\"row\"><span class=\"tick\"></span>Manual assignment when there is no card<em>Studio assigns — no payment intent recorded.</em></div></div>"
+    },
+    {
+      "id": "d0f98ba1-0dd4-4e5e-989f-7ed60ed73719",
+      "role": "feature",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "Discounts and margin",
+        "headline": "You set it. You see the economics.",
+        "body": "Net proceeds — what you keep after commission — are recorded on every prepaid purchase."
+      },
+      "html": "<div class=\"eyebrow\">Discounts and margin</div>\n<div class=\"fill\"></div>\n<div class=\"headline\">You set it. You see the economics.</div>\n<div class=\"rule\"></div>\n<div class=\"body\">Net proceeds — what you keep after commission — are recorded on every prepaid purchase.</div>"
+    },
+    {
+      "id": "6ef69988-6497-401b-8af8-e589e408edf2",
+      "role": "statement",
+      "path": "ai",
+      "parts": {
+        "eyebrow": "What lands in your account",
+        "headline": "Price. Commission. Your net.",
+        "tagline": "Prepaid packages are an Advanced-plan feature."
+      },
+      "html": "<div class=\"fill\"></div>\n<p class=\"eyebrow\">What lands in your account</p>\n<h1 class=\"headline\">Price. Commission. <span class=\"it\">Your net.</span></h1>\n<div class=\"rule\"></div>\n<p class=\"body\">Prepaid packages are an Advanced-plan feature.</p>\n<div class=\"fill\"></div>"
+    },
+    {
+      "id": "84f9deda-7e33-400c-8fdc-5d8e8771b0cc",
+      "role": "cta",
+      "path": "ai",
+      "parts": {
+        "eyebrow": "This week",
+        "headline": "DM us the word PACKAGE.",
+        "tagline": "Stop selling job by job.",
+        "cta": "DM PACKAGE",
+        "handle": "detailmasters.pro"
+      },
+      "html": "<div class=\"fill\"></div>\n<div class=\"eyebrow\">This week</div>\n<div class=\"headline\">DM us the word <span class=\"it\">PACKAGE.</span></div>\n<div class=\"rule\"></div>\n<div class=\"body\">Stop selling job by job.</div>\n<div class=\"cta\">DM PACKAGE</div>\n<div class=\"handle\">detailmasters.pro</div>"
+    }
+  ],
+  "outcome": {
+    "at": "2026-09-13T00:50:04.937Z",
+    "exported": true,
+    "slides": [
+      {
+        "slideId": "18bf1bf1-399b-4ed0-beb5-f2d13ea8549f",
+        "role": "cover",
+        "verdict": "edited",
+        "edits": [
+          {
+            "part": "headline",
+            "before": "Getting paid before you touch",
+            "after": "Getting paid before you touch the car"
+          }
+        ]
+      },
+      {
+        "slideId": "53e2c2f8-18b2-4be4-9c6a-211915f5036d",
+        "role": "statement",
+        "verdict": "edited",
+        "edits": [
+          {
+            "part": "headline",
+            "before": "A quiet week is not a marketing",
+            "after": "Not a marketing problem"
+          },
+          {
+            "part": "body",
+            "before": "It is a pricing structure problem. The work was always there.",
+            "after": "Your income mirrors your calendar. It is not a lack of clients, it is a lack of strategy."
+          }
+        ]
+      },
+      {
+        "slideId": "fd5f62f1-34dd-4482-8b1c-91dfdb24740a",
+        "role": "feature",
+        "verdict": "edited",
+        "edits": [
+          {
+            "part": "body",
+            "before": "You set the session count, the price, an optional discount",
+            "after": "You set the session count, the price, an optional discount and an optional validity window."
+          }
+        ]
+      },
+      {
+        "slideId": "f65da43c-7fd7-4ad4-afca-79738de60655",
+        "role": "statement",
+        "verdict": "kept"
+      },
+      {
+        "slideId": "14d12417-6473-4738-85c8-7f0c36572b1a",
+        "role": "list",
+        "verdict": "edited",
+        "edits": [
+          {
+            "part": "body",
+            "before": "",
+            "after": "Who holds a package, how many sessions are left, and when it expires."
+          }
+        ]
+      },
+      {
+        "slideId": "d0f98ba1-0dd4-4e5e-989f-7ed60ed73719",
+        "role": "feature",
+        "verdict": "edited",
+        "edits": [
+          {
+            "part": "eyebrow",
+            "before": "Discounts and margin",
+            "after": "Discounts"
+          },
+          {
+            "part": "headline",
+            "before": "You set it. You see the economics.",
+            "after": "Buying commitment, not charity."
+          },
+          {
+            "part": "body",
+            "before": "Net proceeds — what you keep after commission — are recorded on every prepaid purchase.",
+            "after": "A small discount on five sessions is enough. Start at 5% — the client already decided to come back."
+          }
+        ]
+      },
+      {
+        "slideId": "6ef69988-6497-401b-8af8-e589e408edf2",
+        "role": "statement",
+        "verdict": "edited",
+        "edits": [
+          {
+            "part": "body",
+            "before": "Prepaid packages are an Advanced-plan feature.",
+            "after": "Every online purchase records all three. Judge the discount on the net."
+          }
+        ]
+      },
+      {
+        "slideId": "84f9deda-7e33-400c-8fdc-5d8e8771b0cc",
+        "role": "cta",
+        "verdict": "edited",
+        "edits": [
+          {
+            "part": "headline",
+            "before": "DM us the word PACKAGE.",
+            "after": "Build one five-session package."
+          },
+          {
+            "part": "body",
+            "before": "Stop selling job by job.",
+            "after": "Around your most repeated service, at 5%, offered to the clients who already come back."
+          }
+        ]
+      }
+    ],
+    "added": 0
+  },
+  "generationId": "6aa5f2a5df9566ea05afc130",
+  "generatedAt": "2026-09-13T00:47:33.676Z",
+  "runsOfThisBrief": 1
+}

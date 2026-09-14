@@ -46,11 +46,16 @@ export const dynatosRecipe: BrandRecipe = brandRecipeSchema.parse({
     description:
       'A gold (accent) italic-serif line that punctuates each slide — sits under the headline or stands alone as the payoff. Uses --cb-accent-family, italic, --cb-accent.',
   },
+  /**
+   * SIZED FOR THE PHONE (2026-09): body 44, rows 46, tagline 46, eyebrow 34,
+   * cta 40 — and a list / figures / card vocabulary this brand never had, so a
+   * "three traits" post is a numbered poster rather than a paragraph.
+   */
   stylesheet: `
 .cb-slide{ position:absolute; inset:0; padding:96px 88px 100px; display:flex; flex-direction:column; isolation:isolate;
   color:var(--cb-ink); font-family:var(--cb-body);
   background:
-    radial-gradient(78% 50% at 50% -8%, rgba(252,188,4,.24), transparent 62%),
+    radial-gradient(78% 50% at var(--cb-glow-x,50%) var(--cb-glow-y,-8%), rgba(252,188,4,.24), transparent 62%),
     radial-gradient(125% 88% at 50% 126%, rgba(0,0,0,.62), transparent 58%),
     radial-gradient(100% 100% at 15% 8%, rgba(148,108,12,.12), transparent 46%),
     linear-gradient(178deg,#231b0d,#0b0803); }
@@ -59,72 +64,183 @@ export const dynatosRecipe: BrandRecipe = brandRecipeSchema.parse({
 .cb-slide::after{ content:""; position:absolute; inset:0; z-index:0; pointer-events:none;
   background:linear-gradient(108deg, transparent 42%, rgba(253,220,123,.07) 52%, transparent 61%); }
 .cb-slide > *{ position:relative; z-index:1; }
+.cb-slide.photo{ background:
+    linear-gradient(180deg, rgba(15,11,6,.30), rgba(11,8,3,.60) 44%, rgba(11,8,3,.94) 88%),
+    var(--cb-photo, none) center/cover no-repeat,
+    linear-gradient(178deg,#231b0d,#0b0803); }
 .cb-slide .logo{ height:60px; width:420px; max-width:70%; background:var(--cb-logo, none) left center/contain no-repeat; align-self:flex-start; }
 .cb-slide .fill{ flex:1 1 auto; }
-.cb-slide .eyebrow{ font-family:var(--cb-display); font-weight:600; font-size:27px; letter-spacing:.26em; text-transform:uppercase; color:var(--cb-accent); }
+.cb-slide .eyebrow{ font-family:var(--cb-display); font-weight:600; font-size:34px; letter-spacing:.22em; text-transform:uppercase; color:var(--cb-accent); }
 .cb-slide .headline{ font-family:var(--cb-display); font-weight:var(--cb-display-weight,700); text-transform:var(--cb-display-case,uppercase); font-size:112px; line-height:.94; letter-spacing:var(--cb-display-tracking,.005em); color:var(--cb-ink); margin-top:calc(26px * var(--cb-step,1)); }
 .cb-slide .headline.sm{ font-size:82px; }
-.cb-slide .tagline{ font-family:var(--cb-accent-family); font-style:italic; color:var(--cb-accent); font-size:44px; line-height:1.28; margin-top:34px; max-width:24ch; }
-.cb-slide .rule{ height:6px; width:132px; background:var(--cb-accent); margin:36px 0; border-radius:3px; }
-.cb-slide .body{ font-size:34px; line-height:1.5; color:var(--cb-ink-muted); margin-top:28px; max-width:24ch; }
-.cb-slide .quote{ font-family:var(--cb-accent-family); font-style:italic; font-size:72px; line-height:1.22; color:var(--cb-ink); letter-spacing:-.01em; }
+.cb-slide .tagline{ font-family:var(--cb-accent-family); font-style:italic; color:var(--cb-accent); font-size:46px; line-height:1.28; margin-top:32px; max-width:24ch; }
+.cb-slide .rule{ height:6px; width:132px; background:var(--cb-accent); margin:34px 0; border-radius:3px; }
+.cb-slide .body{ font-size:44px; line-height:1.45; color:var(--cb-ink-muted); margin-top:26px; max-width:22ch; }
+.cb-slide .quote{ font-family:var(--cb-accent-family); font-style:italic; font-size:68px; line-height:1.22; color:var(--cb-ink); letter-spacing:-.01em; }
 .cb-slide .quote .em{ color:var(--cb-accent); }
-.cb-slide .attr{ font-family:var(--cb-display); font-weight:600; text-transform:uppercase; letter-spacing:.16em; font-size:26px; color:#a07d16; margin-top:38px; }
-.cb-slide .cta{ font-family:var(--cb-display); font-weight:600; letter-spacing:.08em; text-transform:uppercase; align-self:flex-start; background:var(--cb-accent); color:#1c1305; border-radius:var(--cb-radius); padding:28px 46px; font-size:32px; margin-top:14px; }
-.cb-slide .handle{ font-family:var(--cb-display); font-weight:600; letter-spacing:.2em; text-transform:uppercase; font-size:26px; color:#8f8778; margin-top:32px; }
+.cb-slide .attr{ font-family:var(--cb-display); font-weight:600; text-transform:uppercase; letter-spacing:.16em; font-size:34px; color:#a07d16; margin-top:34px; }
+.cb-slide .stat{ font-family:var(--cb-display); font-weight:700; font-size:240px; line-height:.86; color:var(--cb-accent); letter-spacing:-.01em; margin-top:8px; }
+.cb-slide .stat + .tagline{ margin-top:16px; }
+.cb-slide .panel{ border-left:6px solid var(--cb-accent); padding:6px 0 6px 40px; margin-top:12px; }
+.cb-slide .panel .row{ font-family:var(--cb-display); font-weight:600; text-transform:uppercase; letter-spacing:.03em; padding:20px 0; font-size:46px; line-height:1.2; color:var(--cb-ink); }
+.cb-slide .panel .row + .row{ border-top:1px solid var(--cb-line); }
+.cb-slide .panel .row em{ display:block; font-family:var(--cb-body); font-weight:400; text-transform:none; letter-spacing:0; font-style:normal; font-size:34px; line-height:1.35; color:var(--cb-ink-muted); margin-top:6px; }
+.cb-slide .figures{ display:grid; grid-template-columns:1fr 1fr; gap:22px; margin-top:8px; }
+.cb-slide .figure{ border:1px solid var(--cb-line); border-radius:var(--cb-radius); padding:30px 32px 26px; background:rgba(252,188,4,.05); }
+.cb-slide .figure b{ display:block; font-family:var(--cb-display); font-weight:700; font-size:120px; line-height:.9; color:var(--cb-accent); }
+.cb-slide .figure em{ display:block; font-style:normal; font-size:34px; line-height:1.3; color:var(--cb-ink-muted); margin-top:14px; }
+.cb-slide .card{ border:1px solid var(--cb-line); border-left:6px solid var(--cb-accent); border-radius:var(--cb-radius); padding:38px 42px; background:rgba(252,188,4,.05); margin-top:28px; }
+.cb-slide .card .body, .cb-slide .card .quote{ margin-top:0; }
+.cb-slide .cta{ font-family:var(--cb-display); font-weight:600; letter-spacing:.08em; text-transform:uppercase; align-self:flex-start; background:var(--cb-accent); color:#1c1305; border-radius:var(--cb-radius); padding:28px 48px; font-size:40px; margin-top:20px; }
+.cb-slide .handle{ font-family:var(--cb-display); font-weight:600; letter-spacing:.2em; text-transform:uppercase; font-size:34px; color:#8f8778; margin-top:32px; }
+.cb-slide{ --cb-row-index-color:var(--cb-accent); --cb-row-index-size:1em; --cb-dont-opacity:.5; }
 `.trim(),
   components: [
     { className: 'logo', use: 'The DYNATÓS·PROGRAM wordmark. Put on covers and the CTA, top-left.' },
     { className: 'eyebrow', use: 'Small gold uppercase kicker above the headline (a section/label).' },
     { className: 'headline', use: 'The main statement — condensed uppercase. Add .sm for longer lines.' },
-    { className: 'tagline', use: 'THE SIGNATURE: a gold italic-serif payoff line. Use on most slides.' },
+    { className: 'tagline', use: 'THE SIGNATURE: a gold italic-serif payoff line. Under a headline, or the reading under a stat.' },
     { className: 'rule', use: 'A short gold underline; separates headline from body when both are present.' },
-    { className: 'body', use: 'Supporting sentence(s), muted. Keep to ~2 lines.' },
-    { className: 'quote', use: 'A large italic-serif pull-quote; wrap the punchy phrase in <span class="em">.' },
-    { className: 'attr', use: 'Quote attribution, small gold uppercase.' },
+    { className: 'body', use: 'Supporting sentence(s), muted. Never the only thing on a slide.' },
+    { className: 'quote', use: 'A large italic-serif line — the slide\'s OBJECT (a rule to live by, a line to keep) or a pull-quote; wrap the punchy phrase in <span class="em">.' },
+    { className: 'attr', use: 'Quote attribution, small gold uppercase — only for a person\'s words.' },
+    { className: 'stat', use: 'One giant gold number at poster size; the .tagline after it is its reading.' },
+    { className: 'panel', use: 'A gold-ruled list of .row items in condensed caps (add .numbered for a counted method).' },
+    { className: 'figures', use: 'A two-column exhibit of .figure cells for two to four numbers that ARE the slide.' },
+    { className: 'figure', use: 'One exhibit cell: <b> the figure, <em> its label.' },
+    { className: 'card', use: 'A gold-ruled surface holding one claim\'s evidence or the slide\'s object.' },
     { className: 'cta', use: 'A solid gold call-to-action button. One per CTA slide.' },
     { className: 'handle', use: 'The @handle, small muted uppercase, at the very bottom.' },
-    { className: 'fill', use: 'An empty spacer div that pushes content down (flex-grow). Use to bottom-anchor.' },
+    { className: 'fill', use: 'An empty spacer div (flex-grow). Use to bottom-anchor or centre.' },
   ],
   // Same 1080-wide type scale; only the vertical rhythm changes per canvas.
   formats: {
-    // Story 9:16 — tall. Respect Instagram's top/bottom UI safe zones and let the
-    // extra height breathe (bigger headline, roomier spacing).
     '1080x1920': {
       stylesheet: `
 .cb-slide{ padding:210px 88px 240px; }
 .cb-slide .headline{ font-size:124px; margin-top:30px; }
 .cb-slide .headline.sm{ font-size:92px; }
-.cb-slide .tagline{ font-size:48px; margin-top:42px; }
-.cb-slide .body{ font-size:36px; margin-top:32px; }
-.cb-slide .quote{ font-size:82px; }
+.cb-slide .tagline{ font-size:50px; margin-top:40px; }
+.cb-slide .body{ font-size:46px; margin-top:32px; }
+.cb-slide .quote{ font-size:78px; }
+.cb-slide .panel .row{ font-size:48px; }
+.cb-slide .stat{ font-size:260px; }
 `.trim(),
     },
-    // Square 1:1 — short. Tighten padding and pull type down a notch so a full
-    // composition still fits without overflow.
     '1080x1080': {
       stylesheet: `
 .cb-slide{ padding:72px 84px 76px; }
-.cb-slide .eyebrow{ font-size:24px; }
 .cb-slide .headline{ font-size:92px; line-height:.96; margin-top:20px; }
 .cb-slide .headline.sm{ font-size:68px; }
-.cb-slide .tagline{ font-size:38px; margin-top:24px; }
-.cb-slide .rule{ margin:26px 0; }
-.cb-slide .body{ font-size:30px; margin-top:22px; }
-.cb-slide .quote{ font-size:60px; }
-.cb-slide .cta{ padding:22px 40px; font-size:29px; }
+.cb-slide .tagline{ font-size:44px; margin-top:22px; }
+.cb-slide .rule{ margin:24px 0; }
+.cb-slide .body{ font-size:44px; margin-top:20px; }
+.cb-slide .quote{ font-size:58px; }
+.cb-slide .panel .row{ font-size:42px; padding:14px 0; }
+.cb-slide .stat{ font-size:180px; }
+.cb-slide .figure b{ font-size:96px; }
+.cb-slide .cta{ padding:22px 40px; font-size:40px; }
 `.trim(),
     },
+  },
+  /**
+   * WORKED FRAGMENTS — the seven forms, in this brand's blunter register:
+   * cover (bleed · inset) · statement (one-liner · anchored low · card) ·
+   * feature (type first · numbered poster · product proof) · list (ruled
+   * panel · numbered · exhibit) · stat · quote (the object) · cta (the arrival).
+   */
+  fragments: {
+    cover: [
+      `<div class="logo"></div>
+<div class="fill"></div>
+<div class="eyebrow">{{eyebrow}}</div>
+<div class="headline">{{headline}}</div>
+<div class="tagline">{{tagline}}</div>`,
+      `<div class="logo"></div>
+<div class="fill"></div>
+<div class="eyebrow">{{eyebrow}}</div>
+<div class="headline">{{headline}}</div>
+<div class="tagline">{{tagline}}</div>
+<figure class="cb-shot" data-cb-slot="hero"></figure>`,
+    ],
+    statement: [
+      `<div class="fill"></div>
+<div class="eyebrow">{{eyebrow}}</div>
+<div class="headline">{{headline}}</div>
+<div class="tagline">{{tagline}}</div>
+<div class="fill"></div>`,
+      `<div class="eyebrow">{{eyebrow}}</div>
+<div class="fill"></div>
+<div class="headline">{{headline}}</div>
+<div class="rule"></div>
+<div class="body">{{body}}</div>`,
+    ],
+    feature: [
+      `<div class="eyebrow">{{eyebrow}}</div>
+<div class="headline sm">{{headline}}</div>
+<div class="rule"></div>
+<div class="body">{{body}}</div>
+<div class="fill"></div>
+<figure class="cb-shot" data-cb-slot="hero"></figure>`,
+      `<div class="eyebrow">{{eyebrow}}</div>
+<div class="headline sm">{{headline}}</div>
+<div class="panel numbered">{{#rows}}<div class="row">{{row.text}}<em>{{row.note}}</em></div>{{/rows}}</div>
+<div class="fill"></div>`,
+      `<div class="eyebrow">{{eyebrow}}</div>
+<div class="headline sm">{{headline}}</div>
+<div class="body">{{body}}</div>
+<div class="fill"></div>
+<figure class="cb-shot wide" data-cb-slot="proof"></figure>`,
+    ],
+    list: [
+      `<div class="eyebrow">{{eyebrow}}</div>
+<div class="headline sm">{{headline}}</div>
+<div class="panel">{{#rows}}<div class="row">{{row.text}}<em>{{row.note}}</em></div>{{/rows}}</div>
+<div class="fill"></div>`,
+      `<div class="eyebrow">{{eyebrow}}</div>
+<div class="headline">{{headline}}</div>
+<div class="body">{{body}}</div>
+<div class="fill"></div>
+<div class="panel numbered">{{#rows}}<div class="row">{{row.text}}<em>{{row.note}}</em></div>{{/rows}}</div>`,
+      `<div class="eyebrow">{{eyebrow}}</div>
+<div class="headline sm">{{headline}}</div>
+<div class="fill"></div>
+<div class="figures">{{#rows}}<div class="figure"><b>{{row.text}}</b><em>{{row.note}}</em></div>{{/rows}}</div>
+<div class="fill"></div>`,
+    ],
+    stat: `<div class="eyebrow">{{eyebrow}}</div>
+<div class="fill"></div>
+<div class="stat">{{stat}}</div>
+<div class="tagline">{{tagline}}</div>
+<div class="body">{{body}}</div>`,
+    quote: `<div class="eyebrow">{{eyebrow}}</div>
+<div class="fill"></div>
+<div class="quote">{{quote}}</div>
+<div class="attr">{{attribution}}</div>
+<div class="fill"></div>`,
+    cta: `<div class="logo"></div>
+<div class="fill"></div>
+<div class="headline">{{headline}}</div>
+<div class="tagline">{{tagline}}</div>
+<div class="cta">{{cta}}</div>
+<div class="fill"></div>`,
   },
   composition: {
     align: 'flush-left',
     patterns: [
-      'cover: logo → fill → eyebrow → headline → tagline',
-      'cover: logo → fill → headline → rule → tagline (no eyebrow — a colder, blunter open)',
-      'statement: eyebrow → fill → headline → rule → tagline',
-      'statement: fill → headline → tagline → fill (centred, nothing else)',
-      'quote: fill → quote → attr → fill',
-      'cta: logo → fill → eyebrow → headline → cta → handle',
+      'cover (photo as background): logo → fill → eyebrow → headline → tagline (the picture owns the frame)',
+      'cover: logo → fill → eyebrow → headline → tagline → cb-shot hero (inset hero)',
+      'statement: fill → eyebrow → headline → tagline → fill (ONE LINE, centred)',
+      'statement: eyebrow → fill → headline → rule → body (anchored low)',
+      'feature: eyebrow → headline.sm → rule → body → fill → cb-shot (type first, picture last)',
+      'feature: eyebrow → headline.sm → panel.numbered of rows → fill (numbered teaching poster)',
+      'feature: eyebrow → headline.sm → body → fill → cb-shot.wide (product proof closing the frame)',
+      'list: eyebrow → headline.sm → panel of rows → fill (ruled list, verdict rows)',
+      'list: eyebrow → headline → body (a lead-in line) → fill → panel.numbered of rows (a numbered method)',
+      'list: eyebrow → headline.sm → fill → figures of figure cells → fill (an exhibit)',
+      'stat: eyebrow → fill → stat → tagline (its reading) → body',
+      'quote: eyebrow → fill → quote → attr → fill (the object, or a pull-quote)',
+      'cta: logo → fill → headline → tagline → cta → fill (the arrival)',
     ],
   },
   imagery: {
@@ -192,11 +308,20 @@ export const detailMastersRecipe: BrandRecipe = brandRecipeSchema.parse({
     description:
       'The second half of a headline set in gold italic Playfair (via <span class="it">) — an elegant emphasis, as on the site ("výjimečnou péči"). One per headline.',
   },
+  /**
+   * SIZED FOR THE PHONE, NOT THE CANVAS — every size here clears the type
+   * floor by design rather than by repair: body 44 (16pt), rows 46 (17pt),
+   * tagline 48, cta 40, eyebrow/handle 34. The 2026-09 audit measured the
+   * previous 33px body and 30px rows against the owner's bar and scored
+   * legibility 1; the floor was raising them at render, which is a safety
+   * net, not a design. A row is styled as a SURFACE only (no flex, no
+   * margin-left:auto) — the app owns its gutter and marker.
+   */
   stylesheet: `
 .cb-slide{ position:absolute; inset:0; padding:88px 84px 92px; display:flex; flex-direction:column; isolation:isolate;
   color:var(--cb-ink); font-family:var(--cb-body);
   background:
-    radial-gradient(64% 44% at 82% 6%, rgba(193,154,92,.30), transparent 60%),
+    radial-gradient(64% 44% at var(--cb-glow-x,82%) var(--cb-glow-y,6%), rgba(193,154,92,.30), transparent 60%),
     radial-gradient(120% 92% at 50% 124%, rgba(0,0,0,.58), transparent 56%),
     linear-gradient(158deg,#2f2415,#100a04); }
 .cb-slide::before{ content:""; position:absolute; inset:0; z-index:0; pointer-events:none; opacity:.06; mix-blend-mode:overlay;
@@ -213,25 +338,33 @@ export const detailMastersRecipe: BrandRecipe = brandRecipeSchema.parse({
 .cb-slide .wordmark{ font-weight:600; font-size:40px; letter-spacing:.01em; }
 .cb-slide .wordmark b{ color:var(--cb-ink); font-weight:600; } .cb-slide .wordmark i{ font-style:normal; color:var(--cb-accent); }
 .cb-slide .fill{ flex:1 1 auto; }
-.cb-slide .eyebrow{ font-size:25px; letter-spacing:.26em; text-transform:uppercase; color:var(--cb-accent); font-weight:600; }
-.cb-slide .headline{ font-family:var(--cb-display); font-weight:var(--cb-display-weight,600); text-transform:var(--cb-display-case,none); letter-spacing:var(--cb-display-tracking,-.01em); line-height:1.06; color:var(--cb-ink); font-size:88px; margin-top:calc(30px * var(--cb-step,1)); }
-.cb-slide .headline.sm{ font-size:70px; }
+.cb-slide .eyebrow{ font-size:34px; letter-spacing:.22em; text-transform:uppercase; color:var(--cb-accent); font-weight:600; }
+.cb-slide .headline{ font-family:var(--cb-display); font-weight:var(--cb-display-weight,600); text-transform:var(--cb-display-case,none); letter-spacing:var(--cb-display-tracking,-.01em); line-height:1.06; color:var(--cb-ink); font-size:96px; margin-top:calc(28px * var(--cb-step,1)); }
+.cb-slide .headline.sm{ font-size:72px; }
 .cb-slide .headline .it{ font-family:var(--cb-accent-family); font-style:italic; font-weight:400; color:var(--cb-accent-alt); }
-.cb-slide .rule{ height:2px; width:132px; background:var(--cb-accent); opacity:.85; margin:34px 0; }
-.cb-slide .body{ font-size:33px; line-height:1.55; color:var(--cb-ink-muted); margin-top:28px; max-width:26ch; }
-.cb-slide .stat{ font-family:var(--cb-display); font-weight:700; font-size:200px; line-height:.86; color:var(--cb-accent-alt); letter-spacing:-.02em; margin-top:8px; }
-.cb-slide .panel{ border:1px solid var(--cb-line); border-radius:var(--cb-radius); padding:30px 32px; background:rgba(212,192,157,.05); margin-top:8px; }
-.cb-slide .panel .row{ display:flex; align-items:center; gap:22px; padding:16px 0; font-size:30px; color:var(--cb-ink); }
+.cb-slide .rule{ height:2px; width:132px; background:var(--cb-accent); opacity:.85; margin:32px 0; }
+.cb-slide .tagline{ font-family:var(--cb-accent-family); font-style:italic; font-size:48px; line-height:1.3; color:var(--cb-accent-alt); margin-top:28px; max-width:20ch; }
+.cb-slide .body{ font-size:44px; line-height:1.45; color:var(--cb-ink-muted); margin-top:26px; max-width:22ch; }
+.cb-slide .quote{ font-family:var(--cb-accent-family); font-style:italic; font-size:64px; line-height:1.25; color:var(--cb-ink); letter-spacing:-.01em; }
+.cb-slide .attr{ font-size:34px; font-weight:600; letter-spacing:.14em; text-transform:uppercase; color:var(--cb-accent); margin-top:32px; }
+.cb-slide .stat{ font-family:var(--cb-display); font-weight:700; font-size:220px; line-height:.86; color:var(--cb-accent-alt); letter-spacing:-.02em; margin-top:8px; }
+.cb-slide .stat + .tagline{ margin-top:18px; max-width:24ch; }
+.cb-slide .panel{ border:1px solid var(--cb-line); border-radius:var(--cb-radius); padding:22px 34px; background:rgba(212,192,157,.05); margin-top:8px; }
+.cb-slide .panel .row{ padding:22px 0; font-size:46px; line-height:1.25; color:var(--cb-ink); }
 .cb-slide .panel .row + .row{ border-top:1px solid var(--cb-line); }
-.cb-slide .panel .row .tick{ color:var(--cb-accent); font-size:30px; }
-.cb-slide .panel .row em{ margin-left:auto; font-style:normal; font-size:26px; color:#8c857a; }
-.cb-slide .cta{ align-self:flex-start; background:var(--cb-accent); color:#1c1408; font-weight:600; font-size:32px; border-radius:var(--cb-radius); padding:28px 46px; margin-top:14px; }
-.cb-slide .handle{ color:#8c857a; font-size:26px; margin-top:32px; letter-spacing:.06em; }
+.cb-slide .panel .row em{ display:block; font-style:normal; font-size:34px; line-height:1.35; color:#a89f8f; margin-top:6px; }
+.cb-slide .figures{ display:grid; grid-template-columns:1fr 1fr; gap:24px; margin-top:8px; }
+.cb-slide .figure{ border:1px solid var(--cb-line); border-radius:var(--cb-radius); padding:34px 36px 30px; background:rgba(212,192,157,.05); }
+.cb-slide .figure b{ display:block; font-family:var(--cb-display); font-weight:700; font-size:112px; line-height:.9; color:var(--cb-accent-alt); letter-spacing:-.02em; }
+.cb-slide .figure em{ display:block; font-style:normal; font-size:34px; line-height:1.3; color:var(--cb-ink-muted); margin-top:16px; }
+.cb-slide .cta{ align-self:flex-start; background:var(--cb-accent); color:#1c1408; font-weight:600; font-size:40px; border-radius:var(--cb-radius); padding:28px 48px; margin-top:22px; }
+.cb-slide .handle{ color:#8c857a; font-size:34px; margin-top:32px; letter-spacing:.06em; }
 .cb-slide .card{ border:1.5px solid var(--cb-line); border-radius:var(--cb-radius); padding:40px 44px; background:linear-gradient(180deg, rgba(212,192,157,.06), rgba(212,192,157,.02)); position:relative; margin-top:30px; }
+.cb-slide .card .body, .cb-slide .card .quote{ margin-top:0; }
 .cb-slide .card.win{ border-color:var(--cb-accent); box-shadow:0 18px 60px rgba(193,154,92,.12); }
-.cb-slide .badge{ position:absolute; top:-20px; left:44px; background:var(--cb-accent); color:#1c1408; border-radius:999px; padding:11px 24px; font-size:24px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; }
-.cb-slide .chip{ display:inline-block; border:1.5px solid var(--cb-line); border-radius:999px; padding:14px 26px; font-size:25px; color:var(--cb-ink-muted); letter-spacing:.06em; margin-top:28px; }
-.cb-slide{ --cb-row-index-color:var(--cb-accent); --cb-row-index-size:1.5em; --cb-dont-opacity:.55; }
+.cb-slide .badge{ position:absolute; top:-20px; left:44px; background:var(--cb-accent); color:#1c1408; border-radius:999px; padding:11px 24px; font-size:26px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; }
+.cb-slide .chip{ display:inline-block; border:1.5px solid var(--cb-line); border-radius:999px; padding:14px 26px; font-size:30px; color:var(--cb-ink-muted); letter-spacing:.06em; margin-top:28px; }
+.cb-slide{ --cb-row-index-color:var(--cb-accent); --cb-row-index-size:1.1em; --cb-dont-opacity:.55; }
 `.trim(),
   components: [
     { className: 'logo-row', use: 'Wrapper for the DM monogram + wordmark. Contains .monogram and .wordmark.' },
@@ -240,15 +373,20 @@ export const detailMastersRecipe: BrandRecipe = brandRecipeSchema.parse({
     { className: 'eyebrow', use: 'Gold uppercase kicker above the headline.' },
     { className: 'headline', use: 'Serif statement. Wrap the emphasis phrase in <span class="it"> for the gold italic signature. Add .sm for long lines.' },
     { className: 'rule', use: 'A thin gold hairline under the headline.' },
-    { className: 'body', use: 'Supporting sentence(s), muted.' },
-    { className: 'stat', use: 'A giant gold serif number (e.g. a percentage) for a results slide.' },
-    { className: 'panel', use: 'An elegant gold-bordered card; rows via .row with a .tick and trailing <em> status.' },
-    { className: 'card', use: 'A framed surface grouping a claim\'s evidence. Add .win for the option that carries the verdict.' },
+    { className: 'tagline', use: 'One short payoff line in gold italic serif — the second voice under a headline, or the reading under a stat.' },
+    { className: 'body', use: 'Supporting sentence(s), muted. Never the only thing on a slide.' },
+    { className: 'quote', use: 'The slide\'s OBJECT in large italic serif — a template, a message to copy, a rule, or a testimonial. Usually inside a .card.' },
+    { className: 'attr', use: 'Small gold uppercase attribution under a quote — only for a person\'s words.' },
+    { className: 'stat', use: 'A giant gold serif number at poster size; the .tagline after it is its reading.' },
+    { className: 'panel', use: 'A gold-bordered list surface holding .row items (add .numbered for a counted method).' },
+    { className: 'figures', use: 'A two-column exhibit of .figure cards — each a number with its label — for two to four figures that ARE the slide.' },
+    { className: 'figure', use: 'One exhibit cell: <b> the figure, <em> its label.' },
+    { className: 'card', use: 'A framed surface grouping a claim\'s evidence or holding the slide\'s object. Add .win for the option that carries the verdict.' },
     { className: 'badge', use: 'A small filled label on a card\'s corner, naming the winner or the point.' },
     { className: 'chip', use: 'A bordered capsule for one piece of metadata (a topic, a read time).' },
     { className: 'cta', use: 'A solid gold call-to-action button.' },
     { className: 'handle', use: 'The url / @handle at the bottom, muted.' },
-    { className: 'fill', use: 'An empty flex-grow spacer to bottom-anchor content.' },
+    { className: 'fill', use: 'An empty flex-grow spacer to bottom-anchor or centre content.' },
   ],
   // Same 1080-wide serif scale; only vertical rhythm changes per canvas.
   formats: {
@@ -256,136 +394,176 @@ export const detailMastersRecipe: BrandRecipe = brandRecipeSchema.parse({
     '1080x1920': {
       stylesheet: `
 .cb-slide{ padding:210px 84px 240px; }
-.cb-slide .headline{ font-size:98px; margin-top:34px; }
+.cb-slide .headline{ font-size:100px; margin-top:34px; }
 .cb-slide .headline.sm{ font-size:76px; }
-.cb-slide .body{ font-size:35px; margin-top:32px; }
-.cb-slide .stat{ font-size:230px; }
+.cb-slide .tagline{ font-size:50px; }
+.cb-slide .body{ font-size:46px; margin-top:32px; }
+.cb-slide .panel .row{ font-size:48px; }
+.cb-slide .stat{ font-size:240px; }
 `.trim(),
     },
-    // Square 1:1 — short. Tighten everything so a full composition fits.
+    // Square 1:1 — short. Tighten the rhythm, never the floors.
     '1080x1080': {
       stylesheet: `
 .cb-slide{ padding:68px 80px 72px; }
-.cb-slide .eyebrow{ font-size:23px; }
 .cb-slide .monogram{ height:48px; width:48px; }
-.cb-slide .wordmark{ font-size:34px; }
-.cb-slide .headline{ font-size:72px; line-height:1.08; margin-top:22px; }
-.cb-slide .headline.sm{ font-size:58px; }
-.cb-slide .rule{ margin:24px 0; }
-.cb-slide .body{ font-size:29px; margin-top:22px; }
-.cb-slide .stat{ font-size:150px; }
-.cb-slide .panel{ padding:24px 26px; }
-.cb-slide .panel .row{ font-size:26px; padding:12px 0; }
-.cb-slide .cta{ padding:22px 40px; font-size:29px; }
-.cb-slide .handle{ font-size:24px; }
+.cb-slide .wordmark{ font-size:36px; }
+.cb-slide .headline{ font-size:76px; line-height:1.08; margin-top:22px; }
+.cb-slide .headline.sm{ font-size:60px; }
+.cb-slide .rule{ margin:22px 0; }
+.cb-slide .tagline{ font-size:44px; margin-top:20px; }
+.cb-slide .body{ font-size:44px; margin-top:20px; }
+.cb-slide .quote{ font-size:56px; }
+.cb-slide .stat{ font-size:160px; }
+.cb-slide .panel{ padding:16px 28px; }
+.cb-slide .panel .row{ font-size:42px; padding:16px 0; }
+.cb-slide .figure b{ font-size:92px; }
+.cb-slide .cta{ padding:22px 40px; font-size:40px; }
 `.trim(),
     },
   },
   /**
-   * WORKED FRAGMENTS — and the reason they exist here.
+   * WORKED FRAGMENTS — the seven forms a good deck is made of.
    *
-   * The author prompt has always ASKED for fragments and no exemplar has ever
-   * shown one, so every authored brand invented them from one generic prose
-   * snippet: exactly one skeleton per role, which is why a deck of seven
-   * slides read as one slide repeated six times. Prose lost to the exemplar,
-   * as it did for ground tone before Halftone Press was written.
-   *
-   * So statement, feature and list carry ARRAYS here: genuinely different
-   * arrangements of the same role — a different order, different furniture,
-   * one anchored low where another sits high, a marker panel against a
-   * numbered one. Variant i implements arrangement i of that role's patterns,
-   * and the app rotates them per slide and per deck.
-   *
-   * `quote` is deliberately absent: this brand defines no quote vocabulary, and
-   * the prompt says a role you cannot lay out well costs nothing to omit — the
-   * omission is part of what this teaches.
+   * The author prompt has always ASKED for fragments and no exemplar had
+   * shown the FORMS, so every authored brand produced one eyebrow/headline/
+   * body stack and one list panel — and every post read as the last one with
+   * the words swapped. Prose lost to the exemplar, as it did for ground tone
+   * before Halftone Press. So this exemplar carries, as variants the app
+   * rotates per slide and per deck:
+   *   cover     — the picture owns the frame (bleed) · an inset hero
+   *   statement — a bare ONE-LINER · the claim with its evidence in a card ·
+   *               the claim anchored low
+   *   feature   — type first, picture last · a NUMBERED teaching poster ·
+   *               PRODUCT PROOF (the screenshot closing the frame)
+   *   list      — the marker panel · numbered · an EXHIBIT of figures
+   *   stat      — one number at poster size with its reading
+   *   quote     — the slide's OBJECT (a template, a rule) in a card
+   *   cta       — an ARRIVAL: one line, one italic tagline, one button
+   * Variant i implements arrangement i of that role's patterns.
    */
   fragments: {
-    cover: `<div class="logo-row"><div class="monogram"></div><div class="wordmark"><b>detail</b><i>masters</i></div></div>
+    cover: [
+      // The picture owns the frame: no slot — the app places the photograph as
+      // the background layer under the scrim, and the lockup sits on the dark end.
+      `<div class="logo-row"><div class="monogram"></div><div class="wordmark"><b>detail</b><i>masters</i></div></div>
 <div class="fill"></div>
 <div class="eyebrow">{{eyebrow}}</div>
 <div class="headline">{{headline}}</div>
-<div class="body">{{body}}</div>
+<div class="tagline">{{tagline}}</div>`,
+      // An inset hero under the lockup — the picture as evidence for the line.
+      `<div class="logo-row"><div class="monogram"></div><div class="wordmark"><b>detail</b><i>masters</i></div></div>
+<div class="fill"></div>
+<div class="eyebrow">{{eyebrow}}</div>
+<div class="headline">{{headline}}</div>
+<div class="tagline">{{tagline}}</div>
 <figure class="cb-shot" data-cb-slot="hero"></figure>`,
+    ],
     statement: [
-      // Anchored low: the label sits on the top edge, the claim on the baseline.
+      // ONE LINE, nothing under it — centred in the frame by the spacers.
+      `<div class="fill"></div>
+<div class="eyebrow">{{eyebrow}}</div>
+<div class="headline">{{headline}}</div>
+<div class="rule"></div>
+<div class="tagline">{{tagline}}</div>
+<div class="fill"></div>`,
+      // Anchored low: the label on the top edge, the claim on the baseline.
       `<div class="eyebrow">{{eyebrow}}</div>
 <div class="fill"></div>
 <div class="headline">{{headline}}</div>
 <div class="rule"></div>
 <div class="body">{{body}}</div>`,
-      // Claim high, evidence in a card — the business's own artifact.
-      `<div class="eyebrow">{{eyebrow}}</div>
-<div class="headline sm">{{headline}}</div>
-<div class="rule"></div>
-<div class="fill"></div>
-<div class="card"><div class="body">{{body}}</div></div>`,
     ],
     feature: [
-      // Type first, the picture closing the frame.
+      // Type first, the picture last — a different silhouette, not the same one respaced.
       `<div class="eyebrow">{{eyebrow}}</div>
 <div class="headline">{{headline}}</div>
 <div class="rule"></div>
 <div class="body">{{body}}</div>
 <div class="fill"></div>
 <figure class="cb-shot" data-cb-slot="hero"></figure>`,
-      // Picture first — a different silhouette, not the same one respaced.
-      `<div class="eyebrow">{{eyebrow}}</div>
-<figure class="cb-shot wide" data-cb-slot="hero"></figure>
-<div class="headline sm">{{headline}}</div>
-<div class="body">{{body}}</div>
-<div class="fill"></div>`,
-    ],
-    list: [
-      // The marker panel: quiet, scannable, the default.
+      // The numbered teaching poster: the method as counted rows, big enough to read.
       `<div class="eyebrow">{{eyebrow}}</div>
 <div class="headline sm">{{headline}}</div>
 <div class="rule"></div>
+<div class="panel numbered">{{#rows}}<div class="row">{{row.text}}<em>{{row.note}}</em></div>{{/rows}}</div>
+<div class="fill"></div>`,
+      // PRODUCT PROOF: the control as the headline, one line, the screenshot closing the frame.
+      `<div class="eyebrow">{{eyebrow}}</div>
+<div class="headline sm">{{headline}}</div>
 <div class="body">{{body}}</div>
+<div class="fill"></div>
+<figure class="cb-shot wide" data-cb-slot="proof"></figure>`,
+    ],
+    list: [
+      // The marker panel: quiet, scannable, the default. Verdict rows draw ✓/✕ here.
+      `<div class="eyebrow">{{eyebrow}}</div>
+<div class="headline sm">{{headline}}</div>
+<div class="rule"></div>
 <div class="panel">{{#rows}}<div class="row">{{row.text}}<em>{{row.note}}</em></div>{{/rows}}</div>
 <div class="fill"></div>`,
-      // Numbered: the app counts the rows in the gutter (see `numbered`), which
-      // turns a list into a method worth saving.
+      // Numbered: the app counts the rows in the gutter, which turns a list into a
+      // method. Carries a lead-in body line — a planned brief writes one for every
+      // beat, and without a hole for it every list went to the model.
       `<div class="eyebrow">{{eyebrow}}</div>
 <div class="headline">{{headline}}</div>
 <div class="body">{{body}}</div>
 <div class="fill"></div>
 <div class="panel numbered">{{#rows}}<div class="row">{{row.text}}<em>{{row.note}}</em></div>{{/rows}}</div>`,
+      // The EXHIBIT: the rows are figures with labels, two to a line.
+      `<div class="eyebrow">{{eyebrow}}</div>
+<div class="headline sm">{{headline}}</div>
+<div class="fill"></div>
+<div class="figures">{{#rows}}<div class="figure"><b>{{row.text}}</b><em>{{row.note}}</em></div>{{/rows}}</div>
+<div class="fill"></div>`,
     ],
+    // One number at poster size, and the sentence that says what it means to you.
     stat: `<div class="eyebrow">{{eyebrow}}</div>
 <div class="fill"></div>
 <div class="stat">{{stat}}</div>
-<div class="headline sm">{{headline}}</div>
+<div class="tagline">{{tagline}}</div>
 <div class="body">{{body}}</div>`,
+    // The OBJECT: a template, a message, a rule — set as the thing the slide is about.
+    quote: `<div class="eyebrow">{{eyebrow}}</div>
+<div class="headline sm">{{headline}}</div>
+<div class="fill"></div>
+<div class="card"><div class="quote">{{quote}}</div></div>
+<div class="attr">{{attribution}}</div>
+<div class="fill"></div>`,
+    // The ARRIVAL: one line, one italic tagline, one button — and nothing else.
     cta: `<div class="logo-row"><div class="monogram"></div><div class="wordmark"><b>detail</b><i>masters</i></div></div>
 <div class="fill"></div>
-<div class="eyebrow">{{eyebrow}}</div>
 <div class="headline">{{headline}}</div>
+<div class="tagline">{{tagline}}</div>
 <div class="cta">{{cta}}</div>
-<div class="body">{{body}}</div>
-<div class="handle">{{handle}}</div>`,
+<div class="fill"></div>`,
   },
   composition: {
     align: 'flush-left',
+    roles: { cta: 'center' },
     /**
-     * ONE LINE PER ARRANGEMENT, role-prefixed — and the content roles carry
-     * TWO, matching their fragment variants index for index. A role with a
-     * single pattern gives the rotation nothing to rotate.
+     * ONE LINE PER ARRANGEMENT, role-prefixed, matching the fragment variants
+     * index for index. A role with a single pattern gives the rotation nothing
+     * to rotate.
      */
     patterns: [
-      'cover (add class "photo" to slide): logo-row → fill → eyebrow → headline(with .it) → body',
+      'cover (photo as background): logo-row → fill → eyebrow → headline(with .it) → tagline (the picture owns the frame)',
+      'cover: logo-row → fill → eyebrow → headline(.it) → tagline → cb-shot hero (inset hero)',
+      'statement: fill → eyebrow → headline(.it) → rule → tagline → fill (ONE LINE, centred)',
       'statement: eyebrow → fill → headline(.it) → rule → body (claim on the baseline)',
-      'statement: eyebrow → headline.sm(.it) → rule → fill → card holding the body (evidence framed)',
-      'feature: eyebrow → headline(.it) → rule → body → fill → cb-shot (type first)',
-      'feature: eyebrow → cb-shot.wide → headline.sm(.it) → body → fill (picture first)',
-      'list: eyebrow → headline.sm(.it) → rule → panel of rows → fill (marker panel)',
+      'feature: eyebrow → headline(.it) → rule → body → fill → cb-shot (type first, picture last)',
+      'feature: eyebrow → headline.sm(.it) → rule → panel.numbered of rows → fill (numbered teaching poster)',
+      'feature: eyebrow → headline.sm(.it) → body → fill → cb-shot.wide (product proof closing the frame)',
+      'list: eyebrow → headline.sm(.it) → rule → panel of rows → fill (marker panel, verdict rows)',
       'list: eyebrow → headline(.it) → fill → panel.numbered of rows (a numbered method)',
-      'stat: eyebrow → fill → stat → headline.sm → body',
-      'cta: logo-row → fill → eyebrow → headline(.it) → cta → handle',
+      'list: eyebrow → headline.sm(.it) → fill → figures of figure cells → fill (an exhibit)',
+      'stat: eyebrow → fill → stat → tagline (its reading) → body',
+      'quote: eyebrow → headline.sm(.it) → fill → card holding the quote → attr → fill (the object)',
+      'cta: logo-row → fill → headline(.it) → tagline → cta → fill (the arrival, centred)',
     ],
   },
   imagery: {
-    treatment: 'Cinematic premium-car photography, dusk-lit, with a dark gradient overlay so serif type stays legible.',
+    treatment: 'Cinematic premium-car photography, dusk-lit, with a dark gradient overlay so serif type stays legible; product screenshots cropped tight to the one control the slide is about.',
     photoRole: 'hero',
     texture: 'subtle grain on photo covers',
     subjects: ['luxury car detailing', 'polished car paint macro', 'car showroom dusk'],

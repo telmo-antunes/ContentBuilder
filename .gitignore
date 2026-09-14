@@ -48,3 +48,11 @@ coverage/
 
 # local .env backups
 .env.bak.*
+
+# audit working files (contact sheets, autopsies, lab runs)
+audit-out/
+
+# inspo — captured reference posts (58 MB of JPEGs; index + tools stay tracked)
+inspo/**/*.jpg
+inspo/**/meta.json
+inspo/.scratch/

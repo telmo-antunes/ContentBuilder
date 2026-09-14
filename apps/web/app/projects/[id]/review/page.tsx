@@ -1109,7 +1109,7 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                     <b>
                       {checksLeft} check{checksLeft === 1 ? '' : 's'} left
                     </b>{' '}
-                    — clear them and Export lights up
+                    — worth clearing before you post
                   </>
                 ) : (
                   <b className="done">All clear — ready to export</b>

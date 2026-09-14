@@ -330,8 +330,12 @@ export function filledSlotCss(
   url: string,
   fit: 'cover' | 'contain',
   focal?: { x: number; y: number },
+  zoom?: number,
 ): string {
   const pos = `${((focal?.x ?? 0.5) * 100).toFixed(1)}% ${((focal?.y ?? 0.5) * 100).toFixed(1)}%`;
+  // A zoom is a width multiple: 2.5 paints the picture at 250% of the slot's
+  // width, and `focal` says which part of it stays in the frame.
+  const size = zoom && zoom > 1 ? `${Math.round(zoom * 100)}% auto` : fit;
   // The photo lives on ::before rather than on the element, so ambient motion
   // can TRANSFORM it inside the slot's overflow clip. Painting it on the
   // element itself would mean transforming the box (moving the hole, not the
@@ -340,7 +344,7 @@ export function filledSlotCss(
   return (
     `.${scope} .cb-slide [${SLOT_ATTR}="${slot}"]::before{` +
     `content:"";position:absolute;inset:0;` +
-    `background-image:url("${url}");background-size:${fit};background-position:${pos};` +
+    `background-image:url("${url}");background-size:${size};background-position:${pos};` +
     `background-repeat:no-repeat;}`
   );
 }

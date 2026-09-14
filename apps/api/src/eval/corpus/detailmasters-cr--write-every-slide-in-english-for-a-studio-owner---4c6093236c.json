@@ -1,0 +1,265 @@
+{
+  "id": "detailmasters-cr--write-every-slide-in-english-for-a-studio-owner---4c6093236c",
+  "title": "Write every slide in English, for a studio owner doing repeat maintenance work who is paid job-by-job and feels every quiet week.",
+  "brand": "detailmasters CRM",
+  "businessId": "6a42337c717dcf4105b9f9f4",
+  "projectId": "6a7d71b4e505dfe3fe01dc33",
+  "type": null,
+  "format": null,
+  "settings": null,
+  "brief": {
+    "idea": "Write every slide in English, for a studio owner doing repeat maintenance work who is paid job-by-job and feels every quiet week.\n\nTHIS DECK IS ADVICE, NOT A PITCH. Someone who saves it should be able to build their first package from these slides alone. Every slide must carry something actionable in its BODY — a decision, a rule, a concrete example. A slide that is only a headline and a mood is a wasted slide.\n\nThe material, which is all you may assert:\n\n- Paid job by job, income is the exact shape of the calendar. The problem is not a lack of clients, it is a lack of strategy.\n- A package is sessions the client pays for up front. The studio sets the session count, the price, an optional discount and an optional expiry.\n- ONE session sells several services together: a full detail plus a ceramic coating. SEVERAL sessions sell the same service repeatedly: five interior details.\n- The price must cover every session. On a single-session package, price it so the package beats buying those services separately.\n- The discount is the easiest part to get wrong. You are buying commitment, not doing charity. A small discount on a five-session package is enough: the client has already decided to come back five times, and that is worth more than any discount. A large discount turns a loyal client into one who shops on price.\n- An expiry on a multi-session package is what makes clients actually come back.\n- The client buys and pays online before anything is booked. A package can also be assigned by hand as compensation: no payment to process, recorded either way.\n- Each use takes one session off the total, and you always see who holds a package and how many sessions remain.\n- An online purchase records three figures: the price paid, the platform's commission, and your net.\n\nInvent no statistics, percentages or facts beyond this. The only numbers available: one session, five sessions, three visits, 5%, one month, three figures.",
+    "plan": [
+      "Cover. The hook: getting paid before you touch the car. Name the quiet week as the problem.",
+      "The problem, stated plainly: paid job by job, income is the exact shape of the calendar — a lack of strategy, not a lack of clients.",
+      "What a package is: sessions paid for up front, with the studio setting the session count, price, optional discount and optional expiry.",
+      "The first decision — HOW MANY SESSIONS. Give both cases with their examples: one session to sell several services together (full detail + ceramic coating); several to sell the same service repeatedly (five interior details).",
+      "The second decision — PRICE. It must cover every session; on a single-session package price it so the package beats buying those services separately.",
+      "The third decision — DISCOUNT. You are buying commitment, not doing charity. Small is enough on five sessions; a large discount turns a loyal client into one who shops on price. Say to start at 5%.",
+      "The fourth decision — EXPIRY, and what you get back: an expiry is what makes clients return; each use takes a session off the total, you always see who holds what, and the purchase records the price paid, the commission and your net.",
+      "Close: this week, build a five-session package around your most repeated service, start the discount at 5%, offer it to clients who have returned three times or more, and after a month compare your net against billing job by job. Ask the reader to DM the keyword PACKAGE."
+    ]
+  },
+  "models": {
+    "parse": "claude-sonnet-4-6",
+    "compose": "claude-sonnet-5"
+  },
+  "promptVersions": {
+    "parse": 6,
+    "compose": 6,
+    "caption": 1
+  },
+  "parseUser": "BRAND VOICE: Quietly confident and aspirational, addressing the studio owner directly with understated elegance — evocative fragments over hype, with a flash of urgency when revenue is on the line.\nPHOTOGRAPHY: this brand is carried by its images — most slides that show a place, a product, a person or a result should ask for one.\nDO: Speak to 'you' and 'your studio'; Short, evocative fragments; Concrete business outcomes (bookings, rebookings, revenue); Let restraint imply premium\nDON'T: Exclamation marks; Tech jargon; Overt hype or ALL-CAPS shouting; Generic SaaS clichés\nSLIDES: exactly 8 — one per SLIDE PLAN entry, in that order. Do not add a slide the plan did not ask for, and do not merge two.\nBRIEF: Write every slide in English, for a studio owner doing repeat maintenance work who is paid job-by-job and feels every quiet week.\n\nTHIS DECK IS ADVICE, NOT A PITCH. Someone who saves it should be able to build their first package from these slides alone. Every slide must carry something actionable in its BODY — a decision, a rule, a concrete example. A slide that is only a headline and a mood is a wasted slide.\n\nThe material, which is all you may assert:\n\n- Paid job by job, income is the exact shape of the calendar. The problem is not a lack of clients, it is a lack of strategy.\n- A package is sessions the client pays for up front. The studio sets the session count, the price, an optional discount and an optional expiry.\n- ONE session sells several services together: a full detail plus a ceramic coating. SEVERAL sessions sell the same service repeatedly: five interior details.\n- The price must cover every session. On a single-session package, price it so the package beats buying those services separately.\n- The discount is the easiest part to get wrong. You are buying commitment, not doing charity. A small discount on a five-session package is enough: the client has already decided to come back five times, and that is worth more than any discount. A large discount turns a loyal client into one who shops on price.\n- An expiry on a multi-session package is what makes clients actually come back.\n- The client buys and pays online before anything is booked. A package can also be assigned by hand as compensation: no payment to process, recorded either way.\n- Each use takes one session off the total, and you always see who holds a package and how many sessions remain.\n- An online purchase records three figures: the price paid, the platform's commission, and your net.\n\nInvent no statistics, percentages or facts beyond this. The only numbers available: one session, five sessions, three visits, 5%, one month, three figures.\nSLIDE PLAN (one slide per entry, in this order):\n  1. Cover. The hook: getting paid before you touch the car. Name the quiet week as the problem.   [reads as role \"cover\"]\n  2. The problem, stated plainly: paid job by job, income is the exact shape of the calendar — a lack of strategy, not a lack of clients.\n  3. What a package is: sessions paid for up front, with the studio setting the session count, price, optional discount and optional expiry.\n  4. The first decision — HOW MANY SESSIONS. Give both cases with their examples: one session to sell several services together (full detail + ceramic coating); several to sell the same service repeatedly (five interior details).\n  5. The second decision — PRICE. It must cover every session; on a single-session package price it so the package beats buying those services separately.   [reads as role \"cover\"]\n  6. The third decision — DISCOUNT. You are buying commitment, not doing charity. Small is enough on five sessions; a large discount turns a loyal client into one who shops on price. Say to start at 5%.\n  7. The fourth decision — EXPIRY, and what you get back: an expiry is what makes clients return; each use takes a session off the total, you always see who holds what, and the purchase records the price paid, the commission and your net.\n  8. Close: this week, build a five-session package around your most repeated service, start the discount at 5%, offer it to clients who have returned three times or more, and after a month compare your net against billing job by job. Ask the reader to DM the keyword PACKAGE.   [reads as role \"cta\"]",
+  "generated": [
+    {
+      "id": "eeb29bf9-e0cc-45a9-80dc-4e76a5021f9e",
+      "role": "cover",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "Quiet weeks cost you",
+        "headline": "What if you got paid before you touched the car?"
+      },
+      "html": "<div class=\"logo-row\"><div class=\"monogram\"></div><div class=\"wordmark\"><b>detail</b><i>masters</i></div></div>\n<div class=\"fill\"></div>\n<div class=\"eyebrow\">Quiet weeks cost you</div>\n<div class=\"headline\">What if you got paid before you touched the car?</div>\n<figure class=\"cb-shot\" data-cb-slot=\"hero\"></figure>"
+    },
+    {
+      "id": "180d639f-5771-483c-933e-b06c009bc95e",
+      "role": "statement",
+      "path": "ai",
+      "parts": {
+        "eyebrow": "The real problem",
+        "headline": "Your income is the exact shape of your calendar.",
+        "body": "It is not a lack of clients. It is a lack of strategy — and that is the part you can fix."
+      },
+      "html": "<div class=\"fill\"></div>\n<div class=\"headline\">Your income is the exact shape of your calendar.</div>\n<div class=\"eyebrow\">The real problem</div>\n<h1 class=\"headline\">Your income is the exact shape of <span class=\"it\">your calendar</span>.</h1>\n<div class=\"rule\"></div>\n<p class=\"body\">It is not a lack of clients. It is a lack of strategy — and that is the part you can fix.</p>\n<div class=\"fill\"></div>"
+    },
+    {
+      "id": "9f1895e5-6a61-48f7-9368-a496328b9e31",
+      "role": "feature",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "What a package is",
+        "headline": "Sessions your client pays for before anything is booked.",
+        "body": "You set the count, the price, an optional discount and an optional expiry."
+      },
+      "html": "<div class=\"eyebrow\">What a package is</div>\n<div class=\"fill\"></div>\n<div class=\"headline sm\">Sessions your client pays for before anything is booked.</div>\n<div class=\"rule\"></div>\n<div class=\"body\">You set the count, the price, an optional discount and an optional expiry.</div>"
+    },
+    {
+      "id": "5f96b966-a3eb-4e48-84ac-8c0a570b4529",
+      "role": "list",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "Decision one",
+        "headline": "How many sessions?",
+        "body": "Choose the shape before you name a price.",
+        "rows": [
+          {
+            "text": "One session",
+            "note": "Sells several services together — full detail + ceramic coating."
+          },
+          {
+            "text": "Several sessions",
+            "note": "Sells the same service repeatedly — five interior details."
+          }
+        ]
+      },
+      "html": "<div class=\"eyebrow\">Decision one</div>\n<div class=\"headline sm\">How many sessions?</div>\n<div class=\"rule\"></div>\n<div class=\"panel\"><div class=\"row\">One session<em>Sells several services together — full detail + ceramic coating.</em></div>\n<div class=\"row\">Several sessions<em>Sells the same service repeatedly — five interior details.</em></div></div>\n<div class=\"fill\"></div>\n<div class=\"body\">Choose the shape before you name a price.</div>"
+    },
+    {
+      "id": "32d1093c-601f-4ee2-9a18-9fd60945cc79",
+      "role": "cover",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "Decision two",
+        "headline": "Price it to cover every session"
+      },
+      "html": "<div class=\"logo-row\"><div class=\"monogram\"></div><div class=\"wordmark\"><b>detail</b><i>masters</i></div></div>\n<div class=\"fill\"></div>\n<div class=\"eyebrow\">Decision two</div>\n<div class=\"headline\">Price it to cover every session</div>\n<figure class=\"cb-shot\" data-cb-slot=\"hero\"></figure>"
+    },
+    {
+      "id": "e7ede4a1-1629-40b3-bc5f-cfb6439df1b5",
+      "role": "statement",
+      "path": "ai",
+      "parts": {
+        "eyebrow": "Decision three",
+        "headline": "You are buying commitment, not doing charity.",
+        "body": "Start at 5%. On five sessions the client has already agreed to return"
+      },
+      "html": "<div class=\"headline\">You are buying commitment, not doing charity.</div>\n<div class=\"eyebrow\">Decision three</div>\n<div class=\"fill\"></div>\n<div class=\"headline\">You are buying <span class=\"it\">commitment</span>, not doing charity.</div>\n<div class=\"rule\"></div>\n<div class=\"body\">Start at 5%. On five sessions the client has already agreed to return</div>"
+    },
+    {
+      "id": "2bc397dd-320a-43b7-be7a-cbad9c5f8be3",
+      "role": "list",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "Decision four",
+        "headline": "Set an expiry — then watch what happens.",
+        "rows": [
+          {
+            "text": "Clients actually come back",
+            "note": "An expiry is what creates that pull."
+          },
+          {
+            "text": "Each use is tracked automatically",
+            "note": "You always see who holds a package and how many sessions remain."
+          },
+          {
+            "text": "Every purchase records three figures",
+            "note": "Price paid, platform commission, your net."
+          }
+        ]
+      },
+      "html": "<div class=\"eyebrow\">Decision four</div>\n<div class=\"fill\"></div>\n<div class=\"headline sm\">Set an expiry — then watch what happens.</div>\n<div class=\"rule\"></div>\n<div class=\"panel\"><div class=\"row\">Clients actually come back<em>An expiry is what creates that pull.</em></div>\n<div class=\"row\">Each use is tracked automatically<em>You always see who holds a package and how many sessions remain.</em></div>\n<div class=\"row\">Every purchase records three figures<em>Price paid, platform commission, your net.</em></div></div>"
+    },
+    {
+      "id": "fa9d214f-15ec-4965-8967-3199635ed10b",
+      "role": "cta",
+      "path": "ai",
+      "parts": {
+        "eyebrow": "This week",
+        "headline": "Build your first package — before another quiet week finds",
+        "tagline": "DM the word PACKAGE and we will walk you through it.",
+        "cta": "DM us: PACKAGE",
+        "rows": [
+          {
+            "text": "Pick your most repeated service"
+          },
+          {
+            "text": "Build a five-session package around it"
+          },
+          {
+            "text": "Start the discount at 5%"
+          },
+          {
+            "text": "Offer it to clients who have returned 3+"
+          },
+          {
+            "text": "After a month, compare net vs. job-by-job"
+          }
+        ]
+      },
+      "html": "<div class=\"logo-row\"><div class=\"monogram\"></div><div class=\"wordmark\"><b>detail</b><i>masters</i></div></div>\n<div class=\"fill\"></div>\n<div class=\"eyebrow\">This week</div>\n<h1 class=\"headline\">Build your first package — <span class=\"it\">before another quiet week finds</span></h1>\n<div class=\"panel\">\n  <div class=\"row\">Pick your most repeated service</div>\n  <div class=\"row\">Build a five-session package around it</div>\n  <div class=\"row\">Start the discount at 5%</div>\n  <div class=\"row\">Offer it to clients who have returned 3+</div>\n  <div class=\"row\">After a month, compare net vs. job-by-job</div>\n</div>\n<div class=\"body\">DM the word PACKAGE and we will walk you through it.</div>\n<div class=\"cta\">DM us: PACKAGE</div>"
+    }
+  ],
+  "outcome": {
+    "at": "2026-08-13T13:53:21.417Z",
+    "exported": true,
+    "slides": [
+      {
+        "slideId": "eeb29bf9-e0cc-45a9-80dc-4e76a5021f9e",
+        "role": "cover",
+        "verdict": "kept"
+      },
+      {
+        "slideId": "180d639f-5771-483c-933e-b06c009bc95e",
+        "role": "statement",
+        "verdict": "edited",
+        "edits": [
+          {
+            "part": "body",
+            "before": "It is not a lack of clients. It is a lack of strategy — and that is the part you can fix.",
+            "after": "It is not a lack of clients. It is a lack of strategy."
+          },
+          {
+            "part": "rows",
+            "before": "",
+            "after": "Paid job by job A quiet week is a smaller month. You control neither. · Paid up front The work is already paid for before it is booked."
+          }
+        ]
+      },
+      {
+        "slideId": "9f1895e5-6a61-48f7-9368-a496328b9e31",
+        "role": "feature",
+        "verdict": "kept"
+      },
+      {
+        "slideId": "5f96b966-a3eb-4e48-84ac-8c0a570b4529",
+        "role": "list",
+        "verdict": "kept"
+      },
+      {
+        "slideId": "32d1093c-601f-4ee2-9a18-9fd60945cc79",
+        "role": "cover",
+        "verdict": "edited",
+        "edits": [
+          {
+            "part": "body",
+            "before": "",
+            "after": "Choose the price before you think about a discount."
+          },
+          {
+            "part": "rows",
+            "before": "",
+            "after": "Several sessions The price has to cover every one of them, not the first visit. · One session Make the package beat buying those services separately."
+          }
+        ]
+      },
+      {
+        "slideId": "e7ede4a1-1629-40b3-bc5f-cfb6439df1b5",
+        "role": "statement",
+        "verdict": "edited",
+        "edits": [
+          {
+            "part": "body",
+            "before": "Start at 5%. On five sessions the client has already agreed to return",
+            "after": ""
+          },
+          {
+            "part": "rows",
+            "before": "",
+            "after": "Start small — 5% The client has already decided to come back five times. That is worth more than any discount. · Go large and you lose A big discount turns a client who was already loyal into one who shops on price."
+          }
+        ]
+      },
+      {
+        "slideId": "2bc397dd-320a-43b7-be7a-cbad9c5f8be3",
+        "role": "list",
+        "verdict": "kept"
+      },
+      {
+        "slideId": "fa9d214f-15ec-4965-8967-3199635ed10b",
+        "role": "cta",
+        "verdict": "edited",
+        "edits": [
+          {
+            "part": "headline",
+            "before": "Build your first package — before another quiet week finds",
+            "after": "Build your first package"
+          },
+          {
+            "part": "body",
+            "before": "DM the word PACKAGE and we will walk you through it.",
+            "after": ""
+          },
+          {
+            "part": "rows",
+            "before": "Pick your most repeated service · Build a five-session package around it · Start the discount at 5% · Offer it to clients who have returned 3+ · After a month, compare net vs. job-by-job",
+            "after": "Pick your most repeated service · Build a five-session package around it · Start the discount at 5% · Offer it to clients who returned 3+ times · After a month, compare net vs job-by-job"
+          }
+        ]
+      }
+    ],
+    "added": 0
+  },
+  "generationId": "6a7d71dee505dfe3fe01dc7f",
+  "generatedAt": "2026-08-13T07:27:26.871Z",
+  "runsOfThisBrief": 1
+}

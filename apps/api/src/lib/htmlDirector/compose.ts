@@ -14,6 +14,7 @@
 import { z } from 'zod';
 import {
   RECIPE_REVEAL_ORDER,
+  fragmentVariantFor,
   SLOT_ATTR,
   SLOT_CLASS,
   authoredSlots,
@@ -41,7 +42,6 @@ import {
   BASE_BUDGETS,
   EXPLAIN_ROLES,
   type ComposeBudgets,
-  type Format,
 } from '@contentbuilder/shared';
 import { aiJson, aiMessage, cachedSystem, modelFor, textOf, type AiJsonResult, type AiJsonTool } from '../ai';
 import { improveByLooking, slidesWorthDesigning } from './designPass';
@@ -162,10 +162,17 @@ const parseResultSchema = z.object({
     .min(1)
     .max(12),
 });
-type ParsedSlide = z.infer<typeof parseResultSchema>['slides'][number];
+export type ParsedSlide = z.infer<typeof parseResultSchema>['slides'][number];
 
 export interface ComposeOptions {
   format?: string;
+  /**
+   * Set false to bypass fragment substitution and have the model compose EVERY
+   * slide against the recipe. The audit's A/B switch — the fragment path is
+   * free and coherent, and the reason consecutive decks look like re-skins.
+   * Absent: substitution runs as it always has.
+   */
+  useFragments?: boolean;
   /**
    * Pin the deck length. Normally ABSENT: how many slides a brief is worth is
    * derived from the brief itself (`slideCountFor`), which is what replaced the
@@ -375,7 +382,7 @@ function parsePayload(reply: AiJsonResult): unknown {
  * schema reached the user as, in full, `Compose failed: [`. The issues go to the
  * log where they can be read; the person gets a sentence.
  */
-function readDeck(payload: unknown, where: string): ParsedSlide[] {
+export function readDeck(payload: unknown, where: string): ParsedSlide[] {
   const result = parseResultSchema.safeParse(payload);
   if (result.success) return result.data.slides;
   const issues = result.error.issues;
@@ -539,12 +546,13 @@ export function composeBudgetsFor(format: string): ComposeBudgets {
     headline: Math.round(BASE_BUDGETS.headline * scale),
     body: Math.round(BASE_BUDGETS.body * scale),
     explainBody: Math.round(BASE_BUDGETS.explainBody * scale),
+    tagline: Math.round(BASE_BUDGETS.tagline * scale),
     cta: Math.round(BASE_BUDGETS.cta * scale),
     rowText: Math.round(BASE_BUDGETS.rowText * scale),
   };
 }
 
-interface BudgetViolation {
+export interface BudgetViolation {
   slide: number;
   label: string;
   length: number;
@@ -633,7 +641,7 @@ export function repeatedSlides(slides: ParsedSlide[]): RepeatedPair[] {
 }
 
 /** Every budgeted part that is over its budget (by any amount). */
-function budgetViolationsOf(slides: ParsedSlide[], budgets: ComposeBudgets): BudgetViolation[] {
+export function budgetViolationsOf(slides: ParsedSlide[], budgets: ComposeBudgets): BudgetViolation[] {
   const out: BudgetViolation[] = [];
   slides.forEach((s, i) => {
     const check = (label: string, value: string | undefined, budget: number) => {
@@ -643,6 +651,7 @@ function budgetViolationsOf(slides: ParsedSlide[], budgets: ComposeBudgets): Bud
     };
     check('eyebrow', s.parts.eyebrow, budgets.eyebrow);
     check('headline', s.parts.headline, budgets.headline);
+    check('tagline', s.parts.tagline, budgets.tagline);
     check('body', s.parts.body, bodyBudgetFor(budgets, s));
     check('cta', s.parts.cta, budgets.cta);
     (s.parts.rows ?? []).forEach((r, j) => check(`rows[${j}].text`, r.text, budgets.rowText));
@@ -691,7 +700,7 @@ export function stripInlineMarks(text: string): { text: string; marked: string[]
  * that will be printed rather than in the asterisks that will not, and before
  * the verbatim-lock check, so a locked line is compared against real copy.
  */
-function stripMarkdownFromDeck(slides: ParsedSlide[]): ParsedSlide[] {
+export function stripMarkdownFromDeck(slides: ParsedSlide[]): ParsedSlide[] {
   return slides.map((s, i) => {
     const parts = { ...s.parts };
     let touched = false;
@@ -781,7 +790,8 @@ export interface UnfinishedProse {
     | 'starts a sentence it never finishes'
     /** The budget clamp removed a phrase-completing word: the line reads
      *  finished and may no longer mean what was approved. */
-    | 'clamped mid-phrase';
+    | 'clamped mid-phrase'
+    | 'over budget after correction';
 }
 
 /**
@@ -898,7 +908,13 @@ export function unfinishedProse(slides: ParsedSlide[]): UnfinishedProse[] {
     const last = v.replace(/[,;]+$/, '').split(/\s+/).pop()?.toLowerCase() ?? '';
     return DANGLING_WORDS.has(last);
   };
-  const check = (slide: number, label: string, value: string | undefined, needsFullStop: boolean) => {
+  const check = (
+    slide: number,
+    label: string,
+    value: string | undefined,
+    needsFullStop: boolean,
+    mayDangle = false,
+  ) => {
     const v = (value ?? '').trim();
     // One word is a label however it is punctuated; two words can still dangle.
     if (!v || v.split(/\s+/).length < 2) return;
@@ -909,13 +925,22 @@ export function unfinishedProse(slides: ParsedSlide[]): UnfinishedProse[] {
       return;
     }
     if (needsFullStop) out.push({ slide, label, text: v, reason: 'no terminal punctuation' });
-    else if (dangles(v)) out.push({ slide, label, text: v, reason: 'ends on a dangling word' });
+    else if (!mayDangle && dangles(v)) out.push({ slide, label, text: v, reason: 'ends on a dangling word' });
   };
   slides.forEach((s, i) => {
     for (const part of PROSE_PARTS) check(i, part, s.parts[part], part === 'body');
     check(i, 'headline', s.parts.headline, false);
     (s.parts.rows ?? []).forEach((r, j) => {
-      check(i, `rows[${j}].text`, r.text, false);
+      /**
+       * A ROW MAY END ON A PREPOSITION. "The date they cannot wash it until",
+       * "What not to do until then", "How to wash it from that date on" are a
+       * brief's own items, scanned rather than read, and the dangling-word
+       * rule fired on all three — first as blocking copy faults on
+       * source-verbatim text, then, worse, as a corrective re-parse that had
+       * the copywriter REWORD the source to satisfy it. The sentence-break
+       * rule still applies: a row that opens a second sentence must close it.
+       */
+      check(i, `rows[${j}].text`, r.text, false, true);
       check(i, `rows[${j}].note`, r.note, true);
     });
   });
@@ -1065,8 +1090,7 @@ function clampSlidesToBudgets(
   return slides.map((s, i) => {
     const parts = { ...s.parts };
     if (parts.rows) parts.rows = parts.rows.map((r) => ({ ...r }));
-    let headlineClamped = false;
-    const clamp = (key: 'eyebrow' | 'headline' | 'body' | 'cta', budget: number) => {
+    const clamp = (key: 'eyebrow' | 'body' | 'cta', budget: number) => {
       const v = parts[key];
       if (typeof v !== 'string' || v.length <= budget) return;
       if (isLocked(v)) {
@@ -1088,10 +1112,24 @@ function clampSlidesToBudgets(
         `[compose] parse: clamped slide ${i + 1} ${key} ${v.length} → ${clamped.length} chars (budget ${budget})`,
       );
       parts[key] = clamped;
-      if (key === 'headline') headlineClamped = true;
     };
     clamp('eyebrow', budgets.eyebrow);
-    clamp('headline', budgets.headline);
+    // The headline is re-asked, never cut (see the flagrant filter). What is
+    // still over budget after the correction is reported as a fault so the
+    // review page can say so; the layout ladder's smaller-headline rung keeps
+    // it on the canvas.
+    if (typeof parts.headline === 'string' && parts.headline.length > budgets.headline) {
+      if (isLocked(parts.headline)) {
+        console.warn(`[compose] parse: slide ${i + 1} headline is over budget but carries locked copy — kept whole`);
+      } else {
+        console.warn(`[compose] parse: slide ${i + 1} headline is ${parts.headline.length} chars against ${budgets.headline} — kept whole, not cut`);
+        onSuspect?.({ slide: i, label: 'headline', text: parts.headline, reason: 'over budget after correction' });
+      }
+    }
+    if (typeof parts.tagline === 'string' && parts.tagline.length > budgets.tagline && !isLocked(parts.tagline)) {
+      console.warn(`[compose] parse: slide ${i + 1} tagline is ${parts.tagline.length} chars against ${budgets.tagline} — kept whole, not cut`);
+      onSuspect?.({ slide: i, label: 'tagline', text: parts.tagline, reason: 'over budget after correction' });
+    }
     clamp('cta', budgets.cta);
     clamp('body', bodyBudgetFor(budgets, s));
     parts.rows?.forEach((r, j) => {
@@ -1105,25 +1143,13 @@ function clampSlidesToBudgets(
       );
       r.text = line.text;
     });
-    // A clamped headline may have lost its emphasis phrase; an emphasis that is
-    // no longer inside the headline can never be composed verbatim, so drop it
-    // rather than sending the composer an impossible instruction.
-    if (
-      headlineClamped &&
-      parts.emphasis &&
-      parts.headline &&
-      !parts.headline.toLowerCase().includes(parts.emphasis.toLowerCase())
-    ) {
-      console.warn(`[compose] parse: dropped slide ${i + 1} emphasis — no longer inside the clamped headline`);
-      delete parts.emphasis;
-    }
     return { ...s, parts };
   });
 }
 
 // ── The parse step ──────────────────────────────────────────────────────────
 
-export const PARSE_SYSTEM = `You are a social-carousel copywriter + editor. Turn the user's brief — and the SOURCE material, when one is supplied — into a tight, scroll-stopping Instagram carousel, written in the brand's voice. Deliver it by CALLING THE "write_slides" TOOL. (If you cannot call the tool, return the same object as STRICT JSON only — no prose, no fences.)
+export const PARSE_SYSTEM = `You are the copywriter for a business's Instagram carousel. You turn a brief — and the SOURCE it cites, when there is one — into the words for every slide, and you decide what each slide IS: its role, whether it wants a picture, how it sits. A designer who has never read the brief will set your words in the brand's own layouts, so everything the reader will ever know arrives in what you write here. Deliver the deck by CALLING THE "write_slides" TOOL. (If you cannot call the tool, return the same object as STRICT JSON only — no prose, no fences.)
 {"slides":[{"role":"cover|statement|quote|feature|stat|list|cta","image":true|false,"parts":{...}}]}
 
 WHAT YOU ARE GIVEN
@@ -1132,29 +1158,50 @@ WHAT YOU ARE GIVEN
 - SLIDE PLAN (optional) — one direction per slide, in order. When it is present it FIXES the deck: exactly one slide per entry, in that order, each slide doing what its entry says. An entry that enumerates is a "list" slide with those items as rows.
 - VERBATIM (optional) — exact strings the user quoted. Each must appear EXACTLY, character for character, inside the part it belongs to (usually a headline, a body line or a row). Never reword, retitle, re-punctuate, translate or shorten a verbatim string: build the slide around it.
 
-RULES
-- First slide role "cover" (a hook). Last slide role "cta". In between use statement / feature / stat / quote / list as the content wants.
+WHAT A GOOD DECK LOOKS LIKE — it is read on a phone, one second per slide, thumb ready to leave
+- The cover is never the post's title. It is the reader's own problem, an opinion, or a number, in under ten words. "The message to send after a ceramic coating" is a title; "You explained the care. They were distracted." is a cover. If the title belongs anywhere, it is the eyebrow.
+- One slide says one thing, at display size. A slide may be a single line with nothing under it — a headline and a five-word tagline is a complete, strong slide. Never add a body to fill space.
+- Each slide is a different KIND of slide. In a good deck the reader meets, in some order: a picture with one line over it, a bare one-liner, a numbered set, the product doing the thing, a verdict (what works against what fails), an object worth saving (a template, a message, a rule), and a close. Two slides of the same kind in a row is fine when the material is a pair; four is a template.
+- When the material names a control, a number, a date or a product term, THAT is the headline. "Booking menu, then Send update." beats "You can send it from the dashboard".
+- A template, a script, a message to copy, a rule to remember is an OBJECT: give it role "quote" and put the text in "quote" (not "body"), on its own slide, so the designer sets it as the thing the slide is about. "attribution" stays empty unless it is a person's words. An object is short — under 20 words. A paragraph set in italics is not an object; if the material only has a paragraph, it is a body on a statement.
+- When the brief is prose with no lists and no numbers, the deck still needs a change of pace: make one slide a bare one-liner (a headline and a short tagline, nothing else) or, if the material has any figure at all, a "stat". Six text frames in a row is an article, not a carousel.
+- Headlines and taglines end with a full stop or a question mark. Two fragments make a line ("Spotless car. Smell back in a week.") and both close. A line that trails off with no punctuation reads as cut.
+- A list is items the reader will scan, so a row says the thing, never that the thing matters. A row's "note" is the reason or the detail behind it — only when the brief gives one.
+- The close is one line and one button: "headline" (the action, carrying the keyword), "cta" (the button text), and at most one short "tagline". No eyebrow, no body, no handle unless the brief gives one.
+
+WORKED EXAMPLE — a brief and the deck it earns
+BRIEF (abridged): The message to send after a ceramic coating. Reader: studios that explain the care verbally and hear nothing until a car comes back damaged. Beats: the handover talk does not work (client distracted · nothing written down · no record); one message at handover (what was done · the no-wash date · what to avoid until then · how to wash after); send it from the booking (booking menu → Send update; it stays on the client's record, visible only to the studio); leave out (a warranty not written elsewhere · a cure time from another product · a promotion); a template: "Car's ready: [service] done. Do not wash the car until [date] — not even by hand." Close: DM AFTERCARE.
+DECK:
+1 cover, image — eyebrow "Coating aftercare" · headline "You explained the care. They were distracted." · emphasis "They were distracted." · tagline "Nothing written down. No record when the car comes back." · why "the reader's failure over the handover photo; the title is gone"
+2 statement — eyebrow "The fix" · headline "One message. Sent at handover." · tagline "Four lines. The whole job." · why "one line, nothing else: the answer to slide 1"
+3 list — eyebrow "What goes in it" · headline "Four lines, in this order." · rows "What was done" / "The date they cannot wash it until" / "What not to do until then" / "How to wash it from that date on" · why "the source's four items, in its order; no notes because the brief gives no reasons"
+4 feature, image — eyebrow "Send it from the booking" · headline "Booking menu, then Send update." · body "It stays on the client's record — visible only to the studio." · why "the control is the headline; the picture is the product doing it"
+5 list — eyebrow "Leave these out" · headline "Three things that do not belong." · rows, each state "dont": "A warranty not written down elsewhere" / "A cure time copied from another product" / "A promotion" · why "an exclusion list is a verdict"
+6 quote — eyebrow "Your template" · headline "Change the brackets. Nothing else." · quote "Car's ready: [service] done. Do not wash the car until [date] — not even by hand." · why "the template is the object worth saving"
+7 cta — headline "DM us AFTERCARE." · emphasis "AFTERCARE." · tagline "We send the template back." · cta "Send AFTERCARE" · why "one line and one button"
+Notice what is NOT there: nothing the brief does not say, no body under the one-liner, no title on the cover, no eyebrow or handle on the close.
+
+THE CONTRACT — these are checked by machines after you finish, so treat them as physics
+- First slide role "cover" (the hook). Last slide role "cta". In between use statement / feature / stat / quote / list as the content wants.
 - NEVER INVENT A CLAIM. This applies to the BRIEF exactly as it applies to a SOURCE: when the brief carries sentences, facts or list items, COMPRESS them — cut words, never substitute your own. Do not introduce a noun, cause, symptom or recommendation the brief does not contain. A slide built from a heading with no material under it states the heading and stops; it does not guess what the material would have said.
 - THE SAME RULE BINDS EVERY SMALL LINE: row notes, taglines, bodies. A row's "note" exists ONLY when the brief explains that item; an unexplained item is a bare row, and a bare row is correct output, not a gap to fill. Plausible domain knowledge is still an invention — the readers most likely to notice are the ones who know the field.
 - When the brief presents a list as ordered ("in order of impact", numbered), keep its order and do not add, drop or re-rank items — and never assert a ranking word ("fastest", "worst", "number one") the brief does not use.
-- USE "list" WHEN THE CONTENT ENUMERATES. If a slide is "four things", "three ways", "what you get" — anything that is a set of parallel items — give it role "list" and put the items in "rows" (2–5 of them), NOT in "body". Never write a paragraph that is secretly a list: "Cash in the bank. Repeat visits secured. Slow weeks funded." is three rows, not one body. If your headline announces a number, the slide almost certainly wants rows.
-- A "list" slide MUST carry rows. A list with no rows is an empty card — if you cannot fill it, the slide is not a list.
+- USE "list" WHEN THE CONTENT ENUMERATES: "four things", "three ways", "what you get" — any set of parallel items — is role "list" with the items in "rows" (2–5), NOT in "body". Never write a paragraph that is secretly a list. If your headline announces a number, the slide almost certainly wants rows. A "list" slide MUST carry rows; if you cannot fill them, the slide is not a list.
 - rows entries are {"text": "the item", "note": "optional half-line of detail"}. Keep text under 42 characters — these are scanned, not read.
-- WHEN THE MATERIAL IS A VERDICT, SAY SO STRUCTURALLY: if the source contrasts a way that works with a way that fails ("masking buys days, extraction wins the job"), give each row a "state" — "do" or "dont" — instead of burying the contrast in prose. The design renders the verdict (tick against cross, the winning row emphasised) so it lands at feed speed. Use it only when the contrast is the source's own; a plain enumeration takes no states.
-- parts keys (include only what a slide needs): eyebrow (2–4 word kicker), headline (the line — punchy), emphasis (the sub-phrase inside headline to accent), tagline (a short payoff line), body (1 short sentence — 2 on a statement or feature slide that is doing the explaining), rows (a list — see above), quote, attribution, stat (e.g. "40%"), cta (button text), handle.
+- WHEN THE MATERIAL IS A VERDICT, SAY SO STRUCTURALLY: if the source contrasts a way that works with a way that fails, give each row a "state" — "do" or "dont" — instead of burying the contrast in prose. The design renders the verdict. Use it only when the contrast is the source's own; a plain enumeration takes no states.
+- parts keys (include only what a slide needs): eyebrow (2–4 word label), headline (the line), emphasis (the sub-phrase inside headline to accent), tagline (a short payoff line), body (1 short sentence — 2 on a statement or feature slide that is doing the explaining), rows (a list — see above), quote (the object, or a testimonial), attribution, stat (e.g. "40%"), cta (button text), handle.
 - ONE IDEA PER SLIDE, and one supporting element at most: a body sentence, OR rows, OR a stat. Never a paragraph and a list on the same poster, and never a big number beside the list that already makes its point.
-- "handle" is the brand's @name or web address and nothing else. It is set in the smallest, faintest type on the poster, so a sentence put there ships as an afterthought nobody can read. If you have something to say, it is a body, a tagline or a row.
+- "handle" is the brand's @name or web address and nothing else. It is set in the smallest, faintest type on the poster; a sentence put there ships as an afterthought nobody can read.
 - Every slide must tell the reader something the slide before it did not. If two slides make the same point, cut one.
-- This is a POSTER read on a phone at arm's length, not an article. Hard budgets: eyebrow <= 26 characters, headline <= 60, body <= 90, cta <= 24. Going over does not get truncated — it pushes the design off the canvas.
-- ONE EXCEPTION, and it is the important one: on a "statement" or a "feature" slide the body may run to 150 characters — two sentences — PROVIDED that slide carries no tagline. Those are the slides where the deck explains itself, and a deck of nine hooks with nothing under them is the most common way this comes out thin. Use the room when you have something to say; a slide that only needs six words still only gets six.
+- HARD BUDGETS, because this is a poster read at arm's length: eyebrow <= 26 characters, headline <= 60, tagline <= 70, body <= 90, cta <= 24, rows text <= 42. On a "statement" or "feature" slide that carries no tagline, the body may run to 150 characters — two sentences — because those are the slides where a deck explains itself. Write TO the budget; never cut a phrase to land inside it, and going over is not truncated — it pushes the design off the canvas.
 - The eyebrow is a LABEL, not a summary: 2–4 words naming what this slide is about. If you find yourself compressing the headline into it, drop it.
 - HOW MANY SLIDES: you are told the range the material looks like it needs. Give the deck the number of slides the content actually earns inside that range — never pad a thin idea out to hit a quota, never cram two ideas onto one slide to come in under it.
 - Write in the brand voice provided. No hashtags, no emoji.
-- "image": set true when this slide would be genuinely STRONGER with a photograph — it shows a place, a product, a person, a result, a before/after. Set false when the slide is a pure typographic statement, a pulled quote, or a big number, where a photo would only decorate. Judge each slide on its own; a deck may have several, one, or none.
-- With "image": true, also give "imageQuery" — 2–5 words naming the picture as you would search a stock library for it ("ceramic coating applied to car bonnet", not "a nice photo"). It is what the user's photo picker opens on.
-- A slide marked "image": true gets an eyebrow and a headline ONLY. Omit "body" AND "rows" entirely on those slides — a photograph takes nearly half the canvas, and neither a paragraph nor a list can share what is left. If the content is a list, it is not a photo slide: keep the rows and set "image": false.
-- "align": the brand has a default alignment and it usually stands — but it is a default, not a law. You see the whole deck, so when ONE slide's content earns a different alignment, say so: a cta or a monumental one-line statement often lands harder centred; a quote can centre; a list and any running body copy always read flush. Set "align" ("flush-left" | "center" | "flush-right") only on the slides that deviate, and let the rest inherit. Used well this is a beat in the deck's rhythm, not a theme — deviating on most slides means the brand default is wrong, not the slides.
-- "why": one short line per slide, written for the brand owner who will read it on the review page: the calls you made — why this role, why image true or false (and what the picture would be doing), why any align deviation. Plain words, no hedging, no restating the copy. This is how your judgment becomes visible and improvable, so treat it as part of the work, not an afterthought.`;
+- "image": true when this slide is genuinely STRONGER with a photograph — it shows a place, a product, a person, a result, a before/after, or the product doing the thing. False for a pure typographic statement, a pulled quote, an object, a big number. Judge each slide on its own; a deck may have several, one, or none.
+- With "image": true, also give "imageQuery" — 2–5 words naming the picture as you would search a stock library for it ("ceramic coating applied to car bonnet", not "a nice photo").
+- A slide marked "image": true carries an eyebrow, a headline and at most ONE short line — a tagline, or a body under 90 characters. Never rows: a photograph takes nearly half the canvas, and a list cannot share what is left. If the content is a list, it is not a photo slide.
+- "align": the brand has a default alignment and it usually stands — but it is a default, not a law. You see the whole deck, so when ONE slide's content earns a different alignment, say so: a cta or a monumental one-line statement often lands harder centred; a quote can centre; a list and any running body copy always read flush. Set "align" ("flush-left" | "center" | "flush-right") only on the slides that deviate. Used well this is a beat in the deck's rhythm, not a theme.
+- "why": one short line per slide, written for the brand owner who will read it on the review page: the calls you made — why this role, why image true or false (and what the picture is doing), why any align deviation. Plain words, no hedging, no restating the copy.`;
 
 /**
  * The copywriter's rules are the longest constant in the pipeline and were
@@ -1215,14 +1262,14 @@ const PARSE_TOOL: AiJsonTool = {
               description: 'Only the parts this slide actually needs — omit the rest entirely.',
               properties: {
                 eyebrow: { type: 'string', description: 'A 2–4 word kicker.' },
-                headline: { type: 'string', description: 'The line — punchy.' },
+                headline: { type: 'string', description: "The line, under ten words — never the post's title: the reader's problem, an opinion, a number, or the control the material names." },
                 emphasis: { type: 'string', description: 'The sub-phrase INSIDE headline to accent.' },
                 tagline: { type: 'string', description: 'A short payoff line.' },
-                body: { type: 'string', description: 'One short sentence.' },
-                quote: { type: 'string' },
+                body: { type: 'string', description: 'One short supporting sentence, only when the slide needs one. A one-liner slide has none.' },
+                quote: { type: 'string', description: 'The object the slide is about — a template, a script, a message to copy, a rule — or a testimonial. Role "quote".' },
                 attribution: { type: 'string' },
                 stat: { type: 'string', description: 'One number, e.g. "40%".' },
-                cta: { type: 'string', description: 'Button text.' },
+                cta: { type: 'string', description: 'Button text, under 24 characters, carrying the keyword when there is one.' },
                 handle: { type: 'string' },
                 rows: {
                   type: 'array',
@@ -1285,7 +1332,7 @@ export function formatGuidance(format: string): string {
   const numbers =
     `eyebrow <= ${b.eyebrow}, headline <= ${b.headline}, body <= ${b.body} ` +
     `(<= ${b.explainBody} on a statement or feature slide that has no tagline), ` +
-    `cta <= ${b.cta}, rows text <= ${b.rowText}`;
+    `tagline <= ${b.tagline}, cta <= ${b.cta}, rows text <= ${b.rowText}`;
   if (format === '1080x1920') {
     return `FORMAT: 1080×1920 story (9:16). Instagram overlays its UI over the top and bottom, and the layout already reserves that band — what is left is a TALLER canvas than a post, so the copy budgets are the same, not smaller: ${numbers}. Use the height for air and scale, not for more words.`;
   }
@@ -1463,6 +1510,32 @@ function normalizeParsedDeck(
     const parts = { ...s.parts };
     const rows = parts.rows ?? [];
 
+    // ONE COVER PER DECK. A copywriter gave a middle beat the cover role and it
+    // shipped with the logo lockup and a full-bleed photograph in the middle of
+    // the argument. The first slide is the cover; any other is a statement.
+    if (role === 'cover' && i > 0) {
+      console.warn(`[compose] parse: slide ${i + 1} was written as a second cover — composing it as a statement`);
+      role = 'statement';
+    }
+
+    /**
+     * AN OBJECT IS SHORT. The quote form sets its text at display size in the
+     * brand's italic serif — right for a template or a rule, wrong for a
+     * paragraph, and the copywriter kept setting six-line paragraphs there
+     * after being told an object is under 20 words. A long quote with no
+     * attribution is prose: it becomes the body of a statement, under the
+     * headline the copywriter already wrote for it.
+     */
+    if (role === 'quote' && typeof parts.quote === 'string' && !parts.attribution) {
+      const words = parts.quote.trim().split(/\s+/).length;
+      if (words > 20 && !parts.body) {
+        console.warn(`[compose] parse: slide ${i + 1} set a ${words}-word paragraph as the quote object — composing it as a statement`);
+        parts.body = parts.quote;
+        delete parts.quote;
+        role = 'statement';
+      }
+    }
+
     /**
      * THE HANDLE IS THE BRAND'S, NOT THE COPYWRITER'S. Every recipe styles it as
      * the small muted line at the very bottom — an @name or a URL — and a
@@ -1615,12 +1688,29 @@ function normalizeParsedDeck(
   return out;
 }
 
-/** Parse an idea into composed-slide inputs (role + verbatim parts). */
-export async function parseForCompose(
-  recipe: BrandRecipe,
-  idea: string,
-  opts?: ComposeOptions,
-): Promise<ComposeSlideInput[]> {
+/**
+ * EVERYTHING THE COPYWRITER CALL IS MADE OF, built without making it.
+ *
+ * `parseForCompose` assembles this and sends it; the prompt lab dumps it so a
+ * person can answer the exact request the model would see, at no cost, and
+ * the eval can diff two prompt versions byte for byte. One assembly, two
+ * readers — a dump that drifted from the real call would measure nothing.
+ */
+export interface ParseRequest {
+  system: string;
+  user: string;
+  tool: AiJsonTool;
+  model: string;
+  maxTokens: number;
+  format: string;
+  range: { min: number; max: number; target: number; fixed: boolean };
+  budgets: ComposeBudgets;
+  plan: string[];
+  locks: readonly string[];
+  sources: readonly SourceDoc[];
+}
+
+export function buildParseRequest(recipe: BrandRecipe, idea: string, opts?: ComposeOptions): ParseRequest {
   const format = opts?.format ?? '1080x1350';
   const plan = (opts?.plan ?? []).filter((p) => p.trim().length > 0);
   const locks = opts?.locks ?? [];
@@ -1652,10 +1742,21 @@ export async function parseForCompose(
     handle: opts?.handle,
     lessons: opts?.lessons,
   });
-  opts?.onParsePrompt?.(user);
   // Source material makes the reply longer (more slides, richer copy) — a deck
   // truncated mid-JSON is a failed parse, so the ceiling follows the input.
   const maxTokens = sources.length || plan.length > 6 ? 2600 : 1600;
+  return { system: PARSE_SYSTEM, user, tool: PARSE_TOOL, model, maxTokens, format, range, budgets, plan, locks, sources };
+}
+
+/** Parse an idea into composed-slide inputs (role + verbatim parts). */
+export async function parseForCompose(
+  recipe: BrandRecipe,
+  idea: string,
+  opts?: ComposeOptions,
+): Promise<ComposeSlideInput[]> {
+  const req = buildParseRequest(recipe, idea, opts);
+  const { locks, model, budgets, maxTokens, user } = req;
+  opts?.onParsePrompt?.(user);
   const reply = await aiJson(
     { model, max_tokens: maxTokens, system: PARSE_SYSTEM_CACHED, messages: [{ role: 'user', content: user }] },
     PARSE_TOOL,
@@ -1668,7 +1769,13 @@ export async function parseForCompose(
   // milder is clamped below), copy the user LOCKED that came back reworded, and
   // two slides that make the same point in different words.
   // A clean parse pays for exactly one call.
-  const flagrant = budgetViolationsOf(slides, budgets).filter((v) => v.length > v.budget * 1.1);
+  // A HEADLINE IS NEVER CLAMPED. 67 characters against 60 sat under the old
+  // 10% threshold, so the clamp cut "…on foam that still smells" at "still" and
+  // the cover-grade fault shipped twice. Any overage on a display line goes back
+  // to the copywriter; only prose is ever cut.
+  const flagrant = budgetViolationsOf(slides, budgets).filter((v) =>
+    v.label === 'headline' || v.label === 'tagline' ? v.length > v.budget : v.length > v.budget * 1.1,
+  );
   const lost = missingLocks(JSON.stringify(slides), locks);
   const repeats = repeatedSlides(slides);
   // Nothing here can be repaired deterministically: the missing words are the
@@ -1732,6 +1839,25 @@ export async function parseForCompose(
       console.warn('[compose] parse: corrective re-parse failed — clamping the original instead');
     }
   }
+  return finishParsedDeck(recipe, slides, req, opts);
+}
+
+/**
+ * THE DETERMINISTIC TAIL OF A PARSE — everything that happens to the
+ * copywriter's deck after the model has answered: the budget clamp, the hard
+ * count, the brand/photo normalisation, the unfinished-prose repair and the
+ * copy-fault report. Split out so a deck that did NOT come from the model — a
+ * stored parse replayed, or one a person wrote in the prompt lab — is held to
+ * exactly the same rules before it is composed.
+ */
+export function finishParsedDeck(
+  recipe: BrandRecipe,
+  slidesIn: ParsedSlide[],
+  req: ParseRequest,
+  opts?: ComposeOptions,
+): ComposeSlideInput[] {
+  const { format, locks, budgets, range } = req;
+  let slides = slidesIn;
   const clampSuspects: UnfinishedProse[] = [];
   slides = clampSlidesToBudgets(slides, budgets, locks, (u) => clampSuspects.push(u));
 
@@ -2208,6 +2334,13 @@ function digestReply(raw: string, input: ComposeSlideInput): { html: string; mis
     if (typeof v !== 'string' || v.length <= 2) continue;
     if (!hay.includes(plain(v))) missing.push([k, v]);
   }
+  // ROWS TOO. The guard covered the scalar parts and left rows to the model's
+  // conscience, and a list that went to the model shipped "Extraction depth
+  // sets the outcome" as "Extraction". A row is copy like any other part.
+  (input.parts.rows ?? []).forEach((r, j) => {
+    if (r.text.length > 2 && !hay.includes(plain(r.text))) missing.push([`rows[${j}].text`, r.text]);
+    if (r.note && r.note.length > 2 && !hay.includes(plain(r.note))) missing.push([`rows[${j}].note`, r.note]);
+  });
   return { html, missing };
 }
 
@@ -2248,11 +2381,51 @@ export interface ComposedSlide {
  * the slide to the model rather than to repair markup nobody wrote. Returns
  * undefined for every such case, and the caller composes it the old way.
  */
-function composeByFragment(
+/**
+ * Does this arrangement suit what the slide carries? Two forms are only right
+ * for particular rows: the EXHIBIT sets each row as a poster-size figure, so a
+ * text row ("Four for the price of three") hyphenates across five lines; the
+ * NUMBERED panel counts the rows in the gutter, where a verdict list draws its
+ * ✓/✕. Both landed on the wrong content in the first live runs.
+ */
+function variantSuitsRows(fragment: string, input: ComposeSlideInput): boolean {
+  const rows = input.parts.rows ?? [];
+  if (/class="figures"/.test(fragment)) {
+    return rows.length > 0 && rows.every((r) => /\d/.test(r.text) && r.text.trim().length <= 14);
+  }
+  if (/\bnumbered\b/.test(fragment) && rows.some((r) => r.state === 'do' || r.state === 'dont')) return false;
+  return true;
+}
+
+export function composeByFragment(
   recipe: BrandRecipe,
   input: ComposeSlideInput,
 ): { html: string } | undefined {
-  const filled = substituteFragment(recipe, input);
+  /**
+   * TRY EVERY ARRANGEMENT BEFORE PAYING. The rotation names one variant; when
+   * that one lacks a hole the slide needs (a list with a lead-in line, a
+   * statement with a tagline) a sibling usually has it — and the deck used
+   * to go to the model instead, at $0.03–0.07 a slide, for the same stack
+   * back. Start at the rotation's pick, walk the rest in order, skip the
+   * forms the rows do not suit.
+   */
+  const variants = fragmentVariantsFor(recipe, input.role);
+  const start = variants.length ? Math.abs(variantIndexOf(input)) % variants.length : 0;
+  let filled: ReturnType<typeof substituteFragment> | undefined;
+  for (let step = 0; step < Math.max(1, variants.length); step += 1) {
+    const k = variants.length ? (start + step) % variants.length : 0;
+    if (variants.length && !variantSuitsRows(variants[k]!, input)) continue;
+    const attempt = substituteFragment(recipe, step === 0 ? input : { ...input, variantPin: k });
+    if ('html' in attempt) {
+      if (step > 0) {
+        console.warn(`[compose] ${input.role}: arrangement ${start} cannot carry this slide — using arrangement ${k}`);
+      }
+      filled = attempt;
+      break;
+    }
+    if (step === 0) filled = attempt;
+  }
+  if (!filled) filled = { kind: 'no-fragment' } as ReturnType<typeof substituteFragment>;
   if (!('html' in filled)) {
     // 'no-fragment' is the overwhelmingly common case (no stored recipe has
     // fragments yet) and says nothing worth a line in the log.
@@ -2298,7 +2471,7 @@ export async function composeSlide(
   // A repair NOTE means the deterministic composition already failed on the
   // canvas (the render check's ladder), so re-substituting would hand back the
   // very markup that overflowed. Those — and only those — always go to the model.
-  if (!opts?.note) {
+  if (!opts?.note && opts?.useFragments !== false) {
     const substituted = composeByFragment(recipe, input);
     if (substituted) {
       console.warn(`[compose] ${input.role}: composed from the recipe fragment — no model call`);
@@ -2340,7 +2513,11 @@ export async function composeSlide(
       `[compose] ${input.role}: parts not verbatim in output: ${result.missing.map(([k]) => k).join(', ')}`,
     );
   }
-  const retryable = result.missing.filter(([k]) => PART_TO_CLASS[k] !== undefined);
+  // A row can be re-asked for (the model re-emits the list) but not spliced
+  // (there is no single element to home it in), so it is retryable and, if it
+  // is still wrong after the retry, reported rather than silently shipped.
+  const isRow = (k: string) => k.startsWith('rows[');
+  const retryable = result.missing.filter(([k]) => PART_TO_CLASS[k] !== undefined || isRow(k));
   if (retryable.length) {
     console.warn(`[compose] ${input.role}: retrying once with an explicit correction`);
     const violation =
@@ -2359,6 +2536,12 @@ export async function composeSlide(
     // Keep whichever attempt lost less copy (the retry on a tie — it followed
     // the correction), then splice whatever is still missing.
     const better = retried.missing.length <= result.missing.length ? retried : result;
+    const stillRows = better.missing.filter(([k]) => isRow(k));
+    if (stillRows.length) {
+      console.warn(
+        `[compose] ${input.role}: ${stillRows.length} row(s) still not verbatim after the retry (${stillRows.map(([k]) => k).join(', ')}) — the fragment path would have carried them exactly`,
+      );
+    }
     const still = better.missing.filter(([k]) => PART_TO_CLASS[k] !== undefined);
     if (still.length) {
       console.warn(
@@ -2427,22 +2610,23 @@ export async function composeSlide(
 }
 
 /** Full path: idea → authored slides (role + authored markup). */
+/** One composed slide of a deck, as `composeProject` hands it to the route. */
+export interface ComposedProjectSlide {
+  role: SlideRole;
+  authored: { html: string; bg?: string; role?: string; archetype?: string; align?: string; surface?: string; source?: ComposePath };
+  /** The parse step's stock-search phrase for this slide's picture, if any. */
+  imageQuery?: string;
+  /** The parse step's one-line reasoning for this slide's calls, if given. */
+  rationale?: string;
+  /** Which path composed this slide — telemetry only; nothing stores it. */
+  source: ComposePath;
+}
+
 export async function composeProject(
   recipeIn: BrandRecipe,
   idea: string,
   opts?: ComposeOptions,
-): Promise<
-  Array<{
-    role: SlideRole;
-    authored: { html: string; bg?: string; role?: string; archetype?: string; align?: string; surface?: string };
-    /** The parse step's stock-search phrase for this slide's picture, if any. */
-    imageQuery?: string;
-    /** The parse step's one-line reasoning for this slide's calls, if given. */
-    rationale?: string;
-    /** Which path composed this slide — telemetry only; nothing stores it. */
-    source: ComposePath;
-  }>
-> {
+): Promise<ComposedProjectSlide[]> {
   // Resolve BOTH tiers once and thread them through: the parse writes the copy
   // (quality tier, once per deck), the per-slide composes typeset it (cheap
   // tier, once per slide). One lookup each, no per-slide Settings round-trip.
@@ -2483,6 +2667,31 @@ export async function composeProject(
       o.onParsePrompt?.(u);
     },
   });
+  return composeFromInputs(recipe, inputs, o, { idea: brief?.idea ?? idea, parseUser: lastParseUser });
+}
+
+/**
+ * THE HALF OF A COMPOSE THAT FOLLOWS THE COPY.
+ *
+ * `composeProject` is "write the copy, then lay it out"; this is the second
+ * clause on its own, so a caller that already HAS the copy — the Studio's
+ * re-entry, a replay of a stored parse, a person acting as the copywriter in
+ * the prompt lab — runs exactly the production path from art direction through
+ * the render-check ladder, with nothing re-implemented and nothing skipped.
+ *
+ * `recipe` must already have had its fragment gaps filled (see
+ * `fillRecipeFragmentGaps`): the parse that produced `inputs` was told which
+ * roles can hold a photograph on that basis. `o` is the RESOLVED options —
+ * models set, plan and locks lifted — as `composeProject` builds them.
+ */
+export async function composeFromInputs(
+  recipe: BrandRecipe,
+  inputs: ComposeSlideInput[],
+  o: ComposeOptions,
+  ctx: { idea: string; parseUser?: string },
+): Promise<ComposedProjectSlide[]> {
+  const opts: ComposeOptions | undefined = o;
+  const lastParseUser = ctx.parseUser ?? '';
   /**
    * ART DIRECTION, once, before anything is composed. It has read the whole
    * deck's copy and may override the POSITIONAL variant rotation where the
@@ -2500,7 +2709,34 @@ export async function composeProject(
   if (plan) {
     inputs.forEach((input, i) => {
       const p = plan.slides[i];
-      if (p?.variant !== undefined) input.variantPin = p.variant;
+      if (p?.variant === undefined) return;
+      /**
+       * A PIN MUST STILL COMPOSE FOR FREE. The director chooses from the
+       * arrangements' one-line descriptions and cannot see their holes, so it
+       * pinned a statement with a tagline to the card variant (no tagline
+       * hole) and a feature with a body to the numbered poster (no body hole)
+       * — and both fell to a paid model call plus a verbatim retry, $0.10 of
+       * a $0.28 deck. A pin the fragment cannot carry is dropped with a note;
+       * the rotation's default is then tried, and the model only if that
+       * fails too.
+       */
+      const pinned = { ...input, variantPin: p.variant };
+      // A verdict list draws ✓/✕ in the gutter; the numbered variant draws
+      // 01/02/03 there instead, and the verdict is lost. The director pinned
+      // exactly that on a "leave these out" list.
+      const verdict = (input.parts.rows ?? []).some((r) => r.state === 'do' || r.state === 'dont');
+      const pinnedFragment = fragmentVariantFor(recipe, input.role, p.variant);
+      if (verdict && pinnedFragment && /\bnumbered\b/.test(pinnedFragment)) {
+        console.warn(`[art-direction] slide ${i + 1}: a verdict list cannot take the numbered arrangement — keeping the default`);
+        return;
+      }
+      if (recipe.fragments?.[input.role] && !composeByFragment(recipe, pinned)) {
+        console.warn(
+          `[art-direction] slide ${i + 1}: variant ${p.variant} cannot carry this slide's parts — keeping the default arrangement`,
+        );
+        return;
+      }
+      input.variantPin = p.variant;
     });
     if (plan.note) console.warn(`[art-direction] ${plan.note}`);
   }
@@ -2794,7 +3030,7 @@ export async function composeProject(
           ...o,
           role: input.role,
           index: input.index,
-          post: { idea: brief?.idea ?? idea, says: input.parts },
+          post: { idea: ctx.idea, says: input.parts },
         });
         return (await composeSlide(recipe, richer, { ...o, renderCheck: false })).html;
       },

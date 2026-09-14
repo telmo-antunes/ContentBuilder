@@ -20,6 +20,7 @@ const slidePhotoSchema = new Schema(
     frame: { type: frameSchema, required: false },
     fit: { type: String, enum: ['cover', 'contain'], required: false },
     /** Which part of the photo survives the crop, as fractions [0..1]. */
+    zoom: { type: Number, required: false },
     focal: {
       type: new Schema({ x: { type: Number }, y: { type: Number } }, { _id: false }),
       required: false,

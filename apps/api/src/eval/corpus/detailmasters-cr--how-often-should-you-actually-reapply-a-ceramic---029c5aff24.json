@@ -1,0 +1,250 @@
+{
+  "id": "detailmasters-cr--how-often-should-you-actually-reapply-a-ceramic---029c5aff24",
+  "title": "How often should you actually reapply a ceramic coating?",
+  "brand": "detailmasters CRM",
+  "businessId": "6a42337c717dcf4105b9f9f4",
+  "projectId": "6a7af79ec381f38b6361a0d1",
+  "type": null,
+  "format": null,
+  "settings": null,
+  "brief": {
+    "idea": "Write every slide in English.\n\nHeadline: How often should you actually reapply a ceramic coating?\n\nSubhead: Less often than the marketing suggests, and later than most owners assume.\n\nCover these beats, one per slide:\n- Read the water, not the calendar\n- One thing that is not a failure signal\n- What actually shortens a coating's life\n- A workable rule of thumb\n- Why a detailer will often tell you to wait\n\nClose with a call to action asking the reader to DM the keyword COATING.\n\nDo not invent statistics, numbers or percentages — use only facts stated above.\n\nReader: a car owner who paid for a ceramic coating and does not know when it needs redoing. Not a detailing business — do not mention CRM, bookings or software.\n\nLead with the reader's problem, not with the product.\n\nThis is a car-care guide: put a photograph on the cover and on one other slide."
+  },
+  "models": {
+    "parse": "claude-sonnet-4-6",
+    "compose": "claude-sonnet-5"
+  },
+  "promptVersions": {
+    "parse": 4,
+    "compose": 5,
+    "caption": 1
+  },
+  "parseUser": "BRAND VOICE: Quietly confident and aspirational. Speaks directly to the studio owner — 'your clients', 'your bookings' — with the calm authority of someone who has already solved the problem. Evocative fragments preferred; hype avoided; urgency earned by proof.\nPHOTOGRAPHY: this brand is carried by its images — most slides that show a place, a product, a person or a result should ask for one.\nDO: Address the studio owner directly ('your', 'you'); Lead with the outcome, not the feature; Let a single gold italic phrase carry the emotional weight; Use fragments and sentence-case for elegance; Pair a concrete number with a brief human consequence\nDON'T: Exclamation marks; Buzzword stacking ('revolutionary', 'game-changing'); Passive voice; More than ~28 words of body copy per slide; ALL-CAPS body text\nSLIDES: exactly 0 — one per SLIDE PLAN entry, in that order. Do not add a slide the plan did not ask for, and do not merge two.\nBRIEF: Write every slide in English.\n\nHeadline: How often should you actually reapply a ceramic coating?\n\nSubhead: Less often than the marketing suggests, and later than most owners assume.\n\nCover these beats, one per slide:\n- Read the water, not the calendar\n- One thing that is not a failure signal\n- What actually shortens a coating's life\n- A workable rule of thumb\n- Why a detailer will often tell you to wait\n\nClose with a call to action asking the reader to DM the keyword COATING.\n\nDo not invent statistics, numbers or percentages — use only facts stated above.\n\nReader: a car owner who paid for a ceramic coating and does not know when it needs redoing. Not a detailing business — do not mention CRM, bookings or software.\n\nLead with the reader's problem, not with the product.\n\nThis is a car-care guide: put a photograph on the cover and on one other slide.",
+  "generated": [
+    {
+      "id": "880a22d6-ed67-484b-aac7-d9a0f5dd4e11",
+      "role": "cover",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "Ceramic coating",
+        "headline": "How often should you actually reapply a ceramic coating?",
+        "emphasis": "actually reapply"
+      },
+      "html": "<div class=\"logo-row\"><div class=\"monogram\"></div><div class=\"wordmark\"><b>detail</b><span class=\"it\">masters</span></div></div>\n<div class=\"fill\"></div>\n<div class=\"eyebrow\">Ceramic coating</div>\n<div class=\"headline\">How often should you <span class=\"it\">actually reapply</span> a ceramic coating?</div>\n<figure class=\"cb-shot\" data-cb-slot=\"hero\"></figure>"
+    },
+    {
+      "id": "5a9691a4-3634-40be-ac57-9927b4549a77",
+      "role": "statement",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "The real test",
+        "headline": "Read the water, not the calendar.",
+        "emphasis": "water, not the calendar",
+        "body": "When water sheets off cleanly, your coating is working. The date means nothing."
+      },
+      "html": "<div class=\"eyebrow\">The real test</div>\n<div class=\"fill\"></div>\n<div class=\"headline\">Read the <span class=\"it\">water, not the calendar</span>.</div>\n<div class=\"rule\"></div>\n<div class=\"body\">When water sheets off cleanly, your coating is working. The date means nothing.</div>\n<div class=\"fill\"></div>"
+    },
+    {
+      "id": "a5971c36-ecb9-46b7-89b8-b069b222c6c1",
+      "role": "feature",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "Not a warning sign",
+        "headline": "Light swirls are not a failure signal.",
+        "emphasis": "not a failure signal",
+        "body": "Surface marks can sit on top of the coating — the layer beneath may still be intact."
+      },
+      "html": "<div class=\"eyebrow\">Not a warning sign</div>\n<div class=\"fill\"></div>\n<div class=\"headline sm\">Light swirls are <span class=\"it\">not a failure signal</span>.</div>\n<div class=\"rule\"></div>\n<div class=\"body\">Surface marks can sit on top of the coating — the layer beneath may still be intact.</div>"
+    },
+    {
+      "id": "4979f522-c817-4c5e-8818-7bdc7f74b340",
+      "role": "list",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "What shortens it",
+        "headline": "These are what actually shorten a coating's life.",
+        "emphasis": "actually shorten",
+        "rows": [
+          {
+            "text": "Harsh or alkaline wash chemicals",
+            "note": "Strip the hydrophobic layer over time."
+          },
+          {
+            "text": "Skipping maintenance washes",
+            "note": "Bonded contamination degrades the surface."
+          },
+          {
+            "text": "Prolonged UV exposure",
+            "note": "Without shade or a top coat."
+          },
+          {
+            "text": "Abrasive drying or buffing",
+            "note": "Removes what the coating sits on."
+          }
+        ]
+      },
+      "html": "<div class=\"eyebrow\">What shortens it</div>\n<div class=\"headline sm\">These are what <span class=\"it\">actually shorten</span> a coating's life.</div>\n<div class=\"fill\"></div>\n<div class=\"panel\"><div class=\"row\">Harsh or alkaline wash chemicals<span class=\"sm\">Strip the hydrophobic layer over time.</span></div>\n<div class=\"row\">Skipping maintenance washes<span class=\"sm\">Bonded contamination degrades the surface.</span></div>\n<div class=\"row\">Prolonged UV exposure<span class=\"sm\">Without shade or a top coat.</span></div>\n<div class=\"row\">Abrasive drying or buffing<span class=\"sm\">Removes what the coating sits on.</span></div></div>"
+    },
+    {
+      "id": "7a43e4c9-de43-4e97-8bfa-57563abb7e7e",
+      "role": "stat",
+      "path": "ai",
+      "parts": {
+        "eyebrow": "Rule of thumb",
+        "headline": "If it still beads, it still works.",
+        "emphasis": "still beads, it still works",
+        "body": "A simple pour-water test at home tells you more than any fixed schedule ever could."
+      },
+      "html": "<div class=\"eyebrow\">Rule of thumb</div>\n<div class=\"fill\"></div>\n<div class=\"headline\">If it <span class=\"it\">still beads, it still works</span>.</div>\n<div class=\"headline\">If it still beads, it still works.</div>\n<div class=\"rule\"></div>\n<div class=\"body\">A simple pour-water test at home tells you more than any fixed schedule ever could.</div>\n<div class=\"fill\"></div>"
+    },
+    {
+      "id": "8fa1e629-204e-4a91-9e61-8658d2c9189a",
+      "role": "statement",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "Why detailers say wait",
+        "headline": "A good detailer will often tell you to hold off.",
+        "emphasis": "hold off",
+        "body": "Reapplying too soon wastes money. They would rather you return when it genuinely needs it."
+      },
+      "html": "<div class=\"eyebrow\">Why detailers say wait</div>\n<div class=\"fill\"></div>\n<div class=\"headline\">A good detailer will often tell you to <span class=\"it\">hold off</span>.</div>\n<div class=\"rule\"></div>\n<div class=\"body\">Reapplying too soon wastes money. They would rather you return when it genuinely needs it.</div>\n<div class=\"fill\"></div>"
+    },
+    {
+      "id": "6252d6b6-b0a2-4e27-bda5-251f1f1bb894",
+      "role": "cta",
+      "path": "fragment",
+      "parts": {
+        "eyebrow": "Get the full guide",
+        "headline": "Not sure where your coating stands?",
+        "tagline": "DM us the word COATING and we will walk you through it.",
+        "cta": "DM COATING"
+      },
+      "html": "<div class=\"logo-row\"><div class=\"monogram\"></div><div class=\"wordmark\"><b>detail</b><span class=\"it\">masters</span></div></div>\n<div class=\"fill\"></div>\n<div class=\"eyebrow\">Get the full guide</div>\n<div class=\"headline\">Not sure where your coating stands?</div>\n<div class=\"tagline\">DM us the word COATING and we will walk you through it.</div>\n<div class=\"cta\">DM COATING</div>"
+    }
+  ],
+  "outcome": {
+    "at": "2026-08-11T17:03:39.267Z",
+    "exported": true,
+    "slides": [
+      {
+        "slideId": "880a22d6-ed67-484b-aac7-d9a0f5dd4e11",
+        "role": "cover",
+        "verdict": "edited",
+        "edits": [
+          {
+            "part": "headline",
+            "before": "How often should you actually reapply a ceramic coating?",
+            "after": "Your coating is probably fine."
+          },
+          {
+            "part": "tagline",
+            "before": "",
+            "after": "Here’s how to actually tell."
+          }
+        ]
+      },
+      {
+        "slideId": "5a9691a4-3634-40be-ac57-9927b4549a77",
+        "role": "statement",
+        "verdict": "kept"
+      },
+      {
+        "slideId": "a5971c36-ecb9-46b7-89b8-b069b222c6c1",
+        "role": "feature",
+        "verdict": "edited",
+        "edits": [
+          {
+            "part": "eyebrow",
+            "before": "Not a warning sign",
+            "after": "Not a failure signal"
+          },
+          {
+            "part": "headline",
+            "before": "Light swirls are not a failure signal.",
+            "after": "A dull-looking car is usually a dirty car."
+          },
+          {
+            "part": "body",
+            "before": "Surface marks can sit on top of the coating — the layer beneath may still be intact.",
+            "after": "Contamination sits on top of the coating and flattens the gloss. Judge it after a proper decontamination wash — never before."
+          }
+        ]
+      },
+      {
+        "slideId": "4979f522-c817-4c5e-8818-7bdc7f74b340",
+        "role": "list",
+        "verdict": "edited",
+        "edits": [
+          {
+            "part": "headline",
+            "before": "These are what actually shorten a coating's life.",
+            "after": "These are what actually shorten a coating’s life."
+          },
+          {
+            "part": "rows",
+            "before": "Harsh or alkaline wash chemicals Strip the hydrophobic layer over time. · Skipping maintenance washes Bonded contamination degrades the surface. · Prolonged UV exposure Without shade or a top coat. · Abrasive drying or buffing Removes what the coating sits on.",
+            "after": "Automatic washes with brushes · Washing in direct sun, or air-drying · Bird droppings and tree sap left on paint · Aggressive or high-pH cleaners"
+          }
+        ]
+      },
+      {
+        "slideId": "7a43e4c9-de43-4e97-8bfa-57563abb7e7e",
+        "role": "stat",
+        "verdict": "edited",
+        "edits": [
+          {
+            "part": "headline",
+            "before": "If it still beads, it still works.",
+            "after": "Tight beads: healthy. Flat, clinging beads: book an inspection."
+          },
+          {
+            "part": "body",
+            "before": "A simple pour-water test at home tells you more than any fixed schedule ever could.",
+            "after": "Check panel by panel: the roof and bonnet go first, while the sides still look perfect."
+          }
+        ]
+      },
+      {
+        "slideId": "8fa1e629-204e-4a91-9e61-8658d2c9189a",
+        "role": "statement",
+        "verdict": "kept"
+      },
+      {
+        "slideId": "6252d6b6-b0a2-4e27-bda5-251f1f1bb894",
+        "role": "cta",
+        "verdict": "edited",
+        "edits": [
+          {
+            "part": "eyebrow",
+            "before": "Get the full guide",
+            "after": "Not sure where yours stands?"
+          },
+          {
+            "part": "headline",
+            "before": "Not sure where your coating stands?",
+            "after": "Have it looked at by someone who does this for a living."
+          },
+          {
+            "part": "body",
+            "before": "",
+            "after": "Or DM us COATING and we’ll send you this full guide."
+          },
+          {
+            "part": "tagline",
+            "before": "DM us the word COATING and we will walk you through it.",
+            "after": ""
+          },
+          {
+            "part": "cta",
+            "before": "DM COATING",
+            "after": "Find a detailer · link in bio"
+          }
+        ]
+      }
+    ],
+    "added": 0
+  },
+  "generationId": "6a7af7c5c381f38b6361a101",
+  "generatedAt": "2026-08-11T10:21:57.970Z",
+  "runsOfThisBrief": 1
+}

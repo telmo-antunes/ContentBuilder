@@ -119,12 +119,14 @@ export type RecipeMotion = z.infer<typeof recipeMotionSchema>;
  * needs to *append* a small override to the base (4:5) stylesheet, plus optional
  * format-specific composition patterns. Absent formats fall back to the base.
  */
+/** Patterns a recipe may carry: seven roles × three arrangements. */
+export const MAX_PATTERNS = 24;
 export const recipeFormatVariantSchema = z.object({
   /** CSS appended after the base stylesheet for this format — same `.cb-slide`
    *  scope, overriding vertical padding / sizes for the canvas's aspect. */
   stylesheet: z.string().max(8000).default(''),
   /** Format-specific arrangement patterns; falls back to the base patterns when empty. */
-  patterns: z.array(z.string().max(200)).max(12).default([]),
+  patterns: z.array(z.string().max(200)).max(MAX_PATTERNS).default([]),
 });
 export type RecipeFormatVariant = z.infer<typeof recipeFormatVariantSchema>;
 
@@ -312,7 +314,13 @@ export const brandRecipeSchema = z.object({
        */
       roles: z.record(z.string(), z.enum(['flush-left', 'center', 'flush-right'])).optional(),
       /** Ordered arrangement recipes, e.g. "logo top-left → eyebrow → headline → rule → body". */
-      patterns: z.array(z.string().max(200)).max(12).catch([]),
+      /**
+       * Seven roles at up to three arrangements each. This used to be 12 with
+       * `.catch([])` — so an author who wrote a 13th pattern lost ALL of them
+       * silently, and every role fell back to the model. The cap now fits the
+       * variety the author prompt asks for.
+       */
+      patterns: z.array(z.string().max(200)).max(MAX_PATTERNS).catch([]),
     })
     .default({}),
 
@@ -346,6 +354,8 @@ export const brandRecipeSchema = z.object({
           ground: z.string(),
           ink: z.string(),
           accent: z.string().optional(),
+          /** The emphasis tone on the inverse ground; falls back to `accent`. */
+          accentAlt: z.string().optional(),
           inkMuted: z.string().optional(),
         })
         .optional(),
@@ -528,6 +538,9 @@ export function recipeSurfaceCss(recipe: BrandRecipe): string {
     `${RECIPE_VAR_PREFIX}-ink: ${inv.ink}`,
     inv.inkMuted ? `${RECIPE_VAR_PREFIX}-ink-muted: ${inv.inkMuted}` : '',
     inv.accent ? `${RECIPE_VAR_PREFIX}-accent: ${inv.accent}` : '',
+    // The signature's emphasis tone follows the accent onto the new ground —
+    // a pale gold `.it` phrase vanished on a cream inverse slide otherwise.
+    inv.accentAlt || inv.accent ? `${RECIPE_VAR_PREFIX}-accent-alt: ${inv.accentAlt ?? inv.accent}` : '',
   ].filter(Boolean);
   // `background: none` clears the base ground art so the inverse reads clean;
   // the recipe can still restyle `.cb-slide.inverse` for a bespoke treatment.
@@ -583,8 +596,9 @@ export function recipePatternsFor(recipe: BrandRecipe, format: string): string[]
  */
 export function recipePatternsForRole(recipe: BrandRecipe, format: string, role: string): string[] {
   const all = recipePatternsFor(recipe, format);
-  const prefix = role.toLowerCase();
-  const mine = all.filter((p) => p.trim().toLowerCase().startsWith(prefix));
+  // A WORD-BOUNDARY prefix: "stat" must not claim the "statement:" lines.
+  const re = new RegExp(`^${role.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![a-z0-9_-])`);
+  const mine = all.filter((p) => re.test(p.trim().toLowerCase()));
   return mine.length ? mine : all;
 }
 

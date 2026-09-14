@@ -36,6 +36,7 @@ export interface ResolvedPhoto {
   fit: 'cover' | 'contain';
   /** Which part of the photo survives the crop; centre when unset. */
   focal?: { x: number; y: number };
+  zoom?: number;
   /** How it drifts in a video export; undefined follows the brand. */
   move?: PhotoMove;
   /** 'slot': a resize of the authored hole. */
@@ -95,6 +96,7 @@ export function resolveSlidePhotos(slide: Slide, media: MediaAsset[]): SlidePhot
       url: asset.url,
       fit: p.fit === 'contain' ? 'contain' : 'cover',
       focal: p.focal,
+      zoom: p.zoom,
       move: p.motion,
       shape: p.shape,
       size: p.size,

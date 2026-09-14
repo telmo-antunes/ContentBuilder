@@ -116,8 +116,14 @@ export const ARCHETYPES = {
   /** A heading and its enumerated rows, packed to the top. */
   list: {
     key: 'list',
-    intent: 'Heading and rows, packed from the top so the list reads as one block.',
-    slack: 'bottom',
+    intent: 'Heading and rows as one block, optically centred — a short list no longer sits over an empty half-frame.',
+    /**
+     * Was `bottom`. Four short rows packed from the top left the lower half of
+     * every list slide empty — the owner scored hierarchy 1 on decks where
+     * three slides in a row did exactly that. Centred, the block reads as the
+     * slide's subject; a long list fills the frame either way.
+     */
+    slack: 'center',
     photo: 'never',
     maxHeadlineLines: 2,
   },
@@ -339,6 +345,11 @@ export function slideAlignCss(): string {
     `.cb-slide[data-align="flush-left"] .${SLOT_CLASS}{margin-inline:0}`,
     `.cb-slide[data-align="center"] .${SLOT_CLASS}{margin-inline:auto}`,
     `.cb-slide[data-align="flush-right"] .${SLOT_CLASS}{margin-inline-start:auto;margin-inline-end:0}`,
+    // A brand's button and mark usually pin themselves `align-self:flex-start`;
+    // on a centred slide they must follow the type, or the close ships with
+    // centred lines over a button hugging the left edge.
+    `.cb-slide[data-align="center"] .cta,.cb-slide[data-align="center"] .logo-row,.cb-slide[data-align="center"] .logo{align-self:center}`,
+    `.cb-slide[data-align="flush-right"] .cta,.cb-slide[data-align="flush-right"] .logo-row,.cb-slide[data-align="flush-right"] .logo{align-self:flex-end}`,
     /**
      * CENTRED TYPE HAS ITS OWN CRAFT. Copy is composed for a flush rag, and
      * centring it verbatim is what makes a centred slide read as unpleasant
@@ -392,11 +403,14 @@ export const isSlideSurface = (v: unknown): v is SlideSurface =>
 export function slideSurfaceCss(): string {
   return [
     // Raised: the brand's own secondary ground, lifted toward the light.
-    `.cb-slide[data-surface="raised"]{background:` +
+    // `:not(.inverse)`: an inverted slide's ground IS its variation, and the
+    // inverse rule has equal specificity — whichever is emitted later won, and
+    // a raised+inverse slide rendered as a half-lit gradient over the wrong ground.
+    `.cb-slide[data-surface="raised"]:not(.inverse){background:` +
       `radial-gradient(115% 70% at 50% -12%, color-mix(in srgb, var(--cb-accent) 12%, transparent), transparent 62%),` +
       `linear-gradient(168deg, var(--cb-ground-alt, var(--cb-ground)), var(--cb-ground))}`,
     // Deep: the bloom removed and the weight moved low — the quiet frame.
-    `.cb-slide[data-surface="deep"]{background:` +
+    `.cb-slide[data-surface="deep"]:not(.inverse){background:` +
       `radial-gradient(120% 80% at 50% 118%, color-mix(in srgb, var(--cb-ink) 7%, transparent), transparent 58%),` +
       `var(--cb-ground)}`,
     // A photograph IS the surface; never paint over one.

@@ -13,7 +13,13 @@
  */
 
 /** Roles that exist to carry information rather than to make an impression. */
-export const CONTENT_ROLES: ReadonlySet<string> = new Set(['feature', 'statement', 'list', 'stat']);
+/**
+ * `statement` is NOT here since 2026-09: a one-liner statement — a headline and
+ * a short tagline, centred — is 55–60% empty by design, and holding it to the
+ * content limit made the slack gate's "said-more" rung ask the copywriter for
+ * a body every time, undoing the form the parse chose.
+ */
+export const CONTENT_ROLES: ReadonlySet<string> = new Set(['feature', 'list', 'stat']);
 
 /**
  * A display role may be mostly air — that is the form. A slide whose job is to

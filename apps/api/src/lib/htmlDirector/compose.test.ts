@@ -568,23 +568,33 @@ describe('parse budgets enforced in code', () => {
     expect(correction).toContain(`rows[0].text is ${longRow.length} chars, budget 42`);
     expect(correction).toContain('Fix every flagged item');
 
-    // still over after the retry → deterministic clamps
+    // still over after the retry → the ROW is clamped; the HEADLINE is never
+    // cut (a mid-phrase cut shipped as a cover twice) — it is kept whole and
+    // reported, and the layout ladder's smaller-headline rung keeps it on the canvas
     const parts = inputs[0]!.parts;
-    expect(parts.headline!.length).toBeLessThanOrEqual(60);
-    expect(parts.headline!.endsWith('…')).toBe(false); // no ellipsis on a headline
-    expect(longHeadline.startsWith(parts.headline!)).toBe(true); // cut at a word boundary
+    expect(parts.headline).toBe(longHeadline);
     expect(parts.rows![0]!.text.length).toBeLessThanOrEqual(42);
+    expect(warnings().some((w) => w.includes('clamped'))).toBe(true);
+    expect(warnings().some((w) => w.includes('kept whole, not cut'))).toBe(true);
+  });
+
+  it('clamps PROSE directly, without a re-parse, when the overrun is within 10%', async () => {
+    const slightlyLong = 'word '.repeat(18) + 'tail.'; // 95 chars: over the 90 body budget, under 99
+    expect(slightlyLong.length).toBe(95);
+    reply.mockReturnValueOnce(JSON.stringify({ slides: [{ role: 'cover', parts: { headline: 'Short.', body: slightlyLong } }] }));
+    const inputs = await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' });
+    expect(aiCalls).toHaveLength(1);
+    expect(inputs[0]!.parts.body!.length).toBeLessThanOrEqual(90);
     expect(warnings().some((w) => w.includes('clamped'))).toBe(true);
   });
 
-  it('clamps directly, without a re-parse, when the overrun is within 10%', async () => {
-    const slightlyLong = 'word '.repeat(12) + 'tail'; // 64 chars: over 60, under 66
-    expect(slightlyLong.length).toBe(64);
-    reply.mockReturnValueOnce(JSON.stringify({ slides: [{ role: 'cover', parts: { headline: slightlyLong } }] }));
+  it('re-asks for ANY headline over budget — a display line is never cut', async () => {
+    const slightlyLong = 'word '.repeat(12) + 'tail.'; // 65 chars: over 60 by under 10%
+    const json = JSON.stringify({ slides: [{ role: 'cover', parts: { headline: slightlyLong } }] });
+    reply.mockReturnValueOnce(json).mockReturnValueOnce(json);
     const inputs = await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' });
-    expect(aiCalls).toHaveLength(1);
-    expect(inputs[0]!.parts.headline!.length).toBeLessThanOrEqual(60);
-    expect(warnings().some((w) => w.includes('clamped'))).toBe(true);
+    expect(aiCalls).toHaveLength(2);
+    expect(inputs[0]!.parts.headline).toBe(slightlyLong);
   });
 
   it('makes exactly one parse call when the copy is within budget', async () => {
@@ -595,7 +605,7 @@ describe('parse budgets enforced in code', () => {
     expect(warnings()).toEqual([]);
   });
 
-  it('drops an emphasis that a clamped headline no longer contains', async () => {
+  it('keeps the emphasis of a headline that is kept whole', async () => {
     const emphasis = 'keeps going regardless';
     reply.mockReturnValueOnce(
       JSON.stringify({ slides: [{ role: 'cover', parts: { headline: longHeadline, emphasis } }] }),
@@ -603,7 +613,7 @@ describe('parse budgets enforced in code', () => {
       JSON.stringify({ slides: [{ role: 'cover', parts: { headline: longHeadline, emphasis } }] }),
     );
     const inputs = await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' });
-    expect(inputs[0]!.parts.emphasis).toBeUndefined();
+    expect(inputs[0]!.parts.emphasis).toBe(emphasis);
   });
 });
 
@@ -648,8 +658,10 @@ describe('format-aware parse', () => {
     expect(headline.length).toBeGreaterThan(54 * 1.01);
     const json = JSON.stringify({ slides: [{ role: 'cover', parts: { headline } }] });
     reply.mockReturnValueOnce(json).mockReturnValueOnce(json);
-    const inputs = await parseForCompose(detailMastersRecipe, 'idea', { model: 'm', format: '1080x1080' });
-    expect(inputs[0]!.parts.headline!.length).toBeLessThanOrEqual(54);
+    await parseForCompose(detailMastersRecipe, 'idea', { model: 'm', format: '1080x1080' });
+    // A headline is never cut, so the square budget shows as the correction it triggers.
+    expect(aiCalls).toHaveLength(2);
+    expect(userOf(aiCalls[1]!, 2)).toContain('budget 54');
   });
 
   it('gives a story the same budgets as a post, on every part', async () => {
@@ -965,7 +977,7 @@ describe('compose by example (the recipe composes its own slides)', () => {
 
     // THE PRIZE: one parse call for the deck, and nothing else.
     expect(aiCalls).toHaveLength(1);
-    expect(sysOf(aiCalls[0]!)).toContain('social-carousel copywriter');
+    expect(sysOf(aiCalls[0]!)).toContain('copywriter for a business');
     expect(out.map((s) => s.source)).toEqual(['fragment', 'fragment', 'fragment', 'fragment']);
     expect(out.map((s) => s.role)).toEqual(['cover', 'list', 'statement', 'cta']);
 
@@ -1075,7 +1087,10 @@ describe('compose by example (the recipe composes its own slides)', () => {
       cover:
         '<div class="eyebrow">Prepaid packages</div>' +
         '<div class="headline">Get paid before you <span class="it">lift a finger.</span></div>',
-      list: '<div class="headline">Four things change.</div>',
+      // Rows are verbatim-guarded like every other part now, so the mock carries them.
+      list:
+        '<div class="headline">Four things change.</div>' +
+        '<div class="panel"><div class="row">Cash lands first</div><div class="row">Repeat visits secured</div></div>',
       statement:
         '<div class="headline">The diary fills itself.</div>' +
         '<div class="body">The money lands while the work is still ahead.</div>',
