@@ -42,6 +42,9 @@ import {
   type ProjectDetail,
   type ProjectVersion,
   getProjectAutopsy,
+  getSettings,
+  linkInstagramPost,
+  syncInstagramInsights,
   type DeckAutopsy,
 } from '../../../lib/api';
 import { api } from '../../../lib/config';
@@ -168,6 +171,10 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
   const [scoreDraft, setScoreDraft] = useState<Partial<Record<ScoreDimension, number>> & { note?: string }>({});
   const [scoreBusy, setScoreBusy] = useState(false);
   const [scoreDirty, setScoreDirty] = useState(false);
+  /** Instagram: whether the account is connected, and the link/sync state. */
+  const [igReady, setIgReady] = useState(false);
+  const [igLink, setIgLink] = useState('');
+  const [igBusy, setIgBusy] = useState(false);
   const [histVersions, setHistVersions] = useState<ProjectVersion[] | null>(null);
   const [histLabel, setHistLabel] = useState('');
   const [histBusy, setHistBusy] = useState<string | null>(null);
@@ -270,6 +277,9 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
     getHealth()
       .then((h) => setAiReady(Boolean(h.ai?.draft)))
       .catch(() => setAiReady(false));
+    getSettings()
+      .then((d) => setIgReady(Boolean(d.instagram?.configured)))
+      .catch(() => setIgReady(false));
   }, []);
 
   useEffect(() => {
@@ -2049,6 +2059,107 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
               </div>
             </div>
           </section>
+
+          {/* ── Performance: what the post did on Instagram, once linked ── */}
+          {project.type === 'carousel' && (
+            <section className="mo-captile mo-perf" aria-label="Performance on Instagram">
+              <div>
+                <h3 className="colh">On Instagram</h3>
+                {project.instagram ? (
+                  <>
+                    <div className="mo-perf-grid">
+                      {([
+                        ['Reach', project.insights?.reach],
+                        ['Saves', project.insights?.saved],
+                        ['Shares', project.insights?.shares],
+                        ['Likes', project.insights?.likes],
+                        ['Comments', project.insights?.comments],
+                        ['Interactions', project.insights?.totalInteractions],
+                      ] as Array<[string, number | undefined]>).map(([k, v]) => (
+                        <div className="mo-perf-cell" key={k}>
+                          <b>{typeof v === 'number' ? v.toLocaleString() : '—'}</b>
+                          <span>{k}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="hint">
+                      {project.insights ? `Synced ${timeAgo(project.insights.fetchedAt)}.` : 'Linked; the numbers have not been read yet.'}
+                      {project.instagram.permalink && (
+                        <>
+                          {' '}
+                          <a href={project.instagram.permalink} target="_blank" rel="noopener noreferrer">Open the post</a>
+                        </>
+                      )}
+                    </p>
+                  </>
+                ) : igReady ? (
+                  <>
+                    <input
+                      placeholder="Paste the post's Instagram link (instagram.com/p/…)"
+                      value={igLink}
+                      onChange={(e) => setIgLink(e.target.value)}
+                    />
+                    <p className="hint">Linking finds the post in the account's recent media and reads reach, saves, shares, likes and comments.</p>
+                  </>
+                ) : (
+                  <p className="hint">
+                    Connect the Instagram account in <Link href="/settings">Settings</Link> to read what this post did once it is live.
+                  </p>
+                )}
+              </div>
+              <div className="side">
+                <h3 className="colh">&nbsp;</h3>
+                <span className="st">
+                  {project.instagram
+                    ? 'Stored beside the score and the prompt versions, so what readers did can be set against what the deck was.'
+                    : 'After you post, link the post here.'}
+                </span>
+                <div className="row">
+                  {project.instagram ? (
+                    <button
+                      className="mo-btn sm"
+                      disabled={igBusy || !igReady}
+                      onClick={async () => {
+                        setIgBusy(true);
+                        try {
+                          const updated = await syncInstagramInsights(projectId);
+                          setProject((p) => (p ? { ...p, insights: updated.insights, instagram: updated.instagram } : p));
+                          toast('Numbers refreshed.');
+                        } catch (e) {
+                          toast(e instanceof Error ? e.message : 'Could not read the numbers', 'error');
+                        } finally {
+                          setIgBusy(false);
+                        }
+                      }}
+                    >
+                      {igBusy ? 'Reading…' : 'Refresh numbers'}
+                    </button>
+                  ) : (
+                    igReady && (
+                      <button
+                        className="mo-btn sm prim"
+                        disabled={igBusy || !igLink.trim()}
+                        onClick={async () => {
+                          setIgBusy(true);
+                          try {
+                            const updated = await linkInstagramPost(projectId, igLink.trim());
+                            setProject((p) => (p ? { ...p, insights: updated.insights, instagram: updated.instagram, postedAt: updated.postedAt } : p));
+                            toast('Linked to the post.');
+                          } catch (e) {
+                            toast(e instanceof Error ? e.message : 'Could not link the post', 'error');
+                          } finally {
+                            setIgBusy(false);
+                          }
+                        }}
+                      >
+                        {igBusy ? 'Linking…' : 'Link post'}
+                      </button>
+                    )
+                  )}
+                </div>
+              </div>
+            </section>
+          )}
         </>
       )}
 

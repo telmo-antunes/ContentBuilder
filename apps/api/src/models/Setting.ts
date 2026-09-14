@@ -20,6 +20,9 @@ const settingSchema = new Schema(
     recipeModel: { type: String, default: '' },
     parseModel: { type: String, default: '' },
     composeModel: { type: String, default: '' },
+    /** Instagram Graph API — a Business/Creator account token and its IG user id. See lib/instagram.ts. */
+    instagramAccessToken: { type: String, default: '' },
+    instagramUserId: { type: String, default: '' },
     updatedAt: { type: Date, default: () => new Date() },
   },
   baseSchemaOptions,

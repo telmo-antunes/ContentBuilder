@@ -2170,3 +2170,10 @@ input[type='color'] {
 .series-edit input, .series-edit textarea, .series-edit select { padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); color: inherit; font: inherit; }
 .mo-series-pick { display: grid; gap: 4px; margin-bottom: 10px; }
 .mo-series-pick .lab { font-size: 12px; color: var(--mo-muted); }
+
+/* ── Studio: on Instagram ─────────────────────────────────────────────── */
+.mo-perf-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; margin-bottom: 8px; }
+@media (max-width: 760px) { .mo-perf-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.mo-perf-cell { border: 1px solid var(--mo-line); border-radius: 12px; padding: 10px 8px; text-align: center; display: grid; gap: 2px; }
+.mo-perf-cell b { font-family: var(--mo-disp); font-size: 20px; letter-spacing: -0.02em; color: var(--mo-ink); font-variant-numeric: tabular-nums; }
+.mo-perf-cell span { font-size: 11px; color: var(--mo-muted); }
