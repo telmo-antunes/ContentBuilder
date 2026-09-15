@@ -11,6 +11,7 @@
 import { connectDb, disconnectDb } from '../db';
 import { getStorage } from '../storage';
 import { MEDIA_TAG_ESTIMATE_USD, tagImage } from '../lib/mediaTags';
+import { PROMO_COVER_LABEL } from '../lib/photoPool';
 
 const arg = (flag: string) => {
   const i = process.argv.indexOf(flag);
@@ -31,6 +32,8 @@ const has = (flag: string) => process.argv.includes(flag);
     filter.businessId = biz._id;
   }
   if (!has('--force')) filter['tags.taggedAt'] = { $exists: false };
+  // A rendered carousel cover is never offered to the pool, so tagging it is money spent on nothing.
+  filter.label = { $ne: PROMO_COVER_LABEL };
   const assets = (await MediaAssetModel.find(filter).sort({ createdAt: -1 }).lean()) as any[];
   console.log(`${assets.length} picture(s) to tag (~$${(assets.length * MEDIA_TAG_ESTIMATE_USD).toFixed(2)})`);
   if (has('--dry')) {

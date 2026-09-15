@@ -114,15 +114,11 @@ export interface AiSettings {
   recipeModel: string;
   parseModel: string;
   composeModel: string;
-  /** Instagram Graph API; the token is write-only (never read back). */
-  instagramAccessToken?: string;
-  instagramUserId?: string;
 }
 export interface SettingsResponse {
   settings: AiSettings;
   envModels: { model: string; modelSmall: string; modelLarge: string; modelDesign: string };
   stock?: { configured: boolean };
-  instagram?: { configured: boolean; userId: string };
 }
 export const getSettings = () => request<SettingsResponse>('/settings');
 export const updateSettings = (s: Partial<AiSettings>) =>
@@ -203,12 +199,6 @@ export interface DeckAutopsy {
   summary: { fragment: number; ai: number; withPicture: number; forms: number };
 }
 export const getProjectAutopsy = (id: string) => request<DeckAutopsy>(`/projects/${id}/autopsy`);
-
-/** Link a project to the Instagram post it became (by permalink), and read its numbers. */
-export const linkInstagramPost = (id: string, permalink: string) =>
-  request<Project>(`/projects/${id}/instagram/link`, { method: 'POST', body: JSON.stringify({ permalink }) });
-export const syncInstagramInsights = (id: string) =>
-  request<Project>(`/projects/${id}/instagram/sync`, { method: 'POST', body: '{}' });
 
 export const createProject = (data: {
   businessId: string;

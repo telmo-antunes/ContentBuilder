@@ -47,10 +47,7 @@ export default function SettingsPage() {
     if (!form) return;
     setSave('saving');
     try {
-      // The token is write-only: it is not read back, so an empty field means
-      // "unchanged", never "clear". Disconnect sends the empty string explicitly.
-      const { instagramAccessToken, ...rest } = form;
-      await updateSettings(instagramAccessToken?.trim() ? { ...rest, instagramAccessToken: instagramAccessToken.trim() } : rest);
+      await updateSettings(form);
       setSave('saved');
       toast('Settings saved');
       setTimeout(() => setSave('idle'), 1500);
@@ -154,53 +151,6 @@ export default function SettingsPage() {
             </div>
           );
         })}
-        <div className="lgrow">
-          <span className="l">
-            Instagram
-            <small>reads reach, saves and shares for posted decks</small>
-          </span>
-          <span className="v" style={{ fontFamily: 'var(--ui, inherit)', fontSize: 13 }}>
-            {data.instagram?.configured
-              ? `Connected — account ${data.instagram.userId}. Link a post from its Studio page to read its numbers.`
-              : 'Not connected — a Graph API access token for the Business or Creator account, and its IG user id.'}
-          </span>
-          <span className="side">
-            <span className={`mo-dst ${data.instagram?.configured ? 'ok' : 'warn'}`}>
-              {data.instagram?.configured ? '✓ connected' : 'off'}
-            </span>
-            <button className="edit" onClick={() => setOpen(open === 'instagram' ? null : 'instagram')}>
-              {open === 'instagram' ? 'Close' : data.instagram?.configured ? 'Edit' : 'Connect'}
-            </button>
-          </span>
-          {open === 'instagram' && (
-            <div className="mo-drow-body">
-              <input
-                value={form.instagramUserId ?? data.instagram?.userId ?? ''}
-                placeholder="IG user id, e.g. 17841400000000000"
-                onChange={(e) => set({ instagramUserId: e.target.value })}
-              />
-              <input
-                type="password"
-                style={{ marginTop: 8 }}
-                value={form.instagramAccessToken ?? ''}
-                placeholder={data.instagram?.configured ? 'Access token (stored; leave blank to keep it)' : 'Access token'}
-                autoComplete="off"
-                onChange={(e) => set({ instagramAccessToken: e.target.value })}
-              />
-              <p style={{ fontSize: 11.5, color: 'var(--mo-faint)', margin: '6px 0 0' }}>
-                A long-lived token from a Facebook app with instagram_basic and instagram_manage_insights, for the Instagram Business or Creator account linked to a Page. The token is stored on this server only and never shown again.
-                {data.instagram?.configured && (
-                  <>
-                    {' '}
-                    <button className="edit" onClick={() => void updateSettings({ instagramAccessToken: '', instagramUserId: '' }).then(load)}>
-                      Disconnect
-                    </button>
-                  </>
-                )}
-              </p>
-            </div>
-          )}
-        </div>
         <div className="lgrow">
           <span className="l">
             Stock photos

@@ -92,7 +92,7 @@ photographed deck), `scripts/attachReferenceRecipe.ts` (the $0 re-author),
 
 ## Follow-ups shipped after the audit (2026-09-15)
 
-Sixteen of the twenty suggestions that followed the report, on branch
+Fifteen of the twenty suggestions that followed the report, on branch
 `claude/audit-followups`. What each is and where it lives:
 
 | # | what | where |
@@ -111,12 +111,12 @@ Sixteen of the twenty suggestions that followed the report, on branch
 | 13 | Series: a saved brief template + slide plan a post starts from | `Business.series`, `SeriesCard.tsx`, composer picker |
 | 14 | Stories are derived on first export, not composed | `derivePromoStory` in `routes/projects.ts` |
 | 15 | Caption checks (keyword, close, limits) and the first comment beside the deck | review page |
-| 16 | Instagram insights: link a post, read reach/saves/shares/likes/comments | `lib/instagram.ts`, Settings, the Studio's performance tile |
 | 18 | The form kit: any list/statement/feature form the author leaves out is added in the brand's own classes | `htmlDirector/formKit.ts` |
 
 Also fixed on the way: the web app's own `.panel`/`.card`/`.badge`/`.row`/
 `.chip` rules leaked into rendered slides (a light box under light text on
 every Dynatós list), the fragment-variant cap of 4 silently dropped a whole
 fragments block, and a note under a figure was flagged as unfinished prose.
-Not done, by decision: 10 (monthly spend ceiling), 17 (publish from the
-Studio), 19 (agent-first API), 20 (multi-tenant).
+Not done, by decision: 10 (monthly spend ceiling), 16 (Instagram insights —
+built, then reverted at the owner's request), 17 (publish from the Studio),
+19 (agent-first API), 20 (multi-tenant).

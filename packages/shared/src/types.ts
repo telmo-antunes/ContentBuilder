@@ -304,16 +304,6 @@ export interface DeckScores extends Partial<Record<ScoreDimension, number>> {
   pv?: Record<string, number>;
 }
 
-export interface DeckInsights {
-  reach?: number;
-  impressions?: number;
-  likes?: number;
-  comments?: number;
-  saved?: number;
-  shares?: number;
-  totalInteractions?: number;
-  fetchedAt: string;
-}
 
 export interface Project {
   _id: string;
@@ -392,10 +382,6 @@ export interface Project {
   composeProgress?: { phase: 'parsing' | 'composing' | 'checking-layout' | 'done'; done?: number; total?: number; at: string };
   /** The owner's 1–5 score on the audit's eight dimensions, with the prompt versions pinned. */
   scores?: DeckScores;
-  /** The Instagram post this project became, once linked. */
-  instagram?: { mediaId: string; permalink?: string; postedAt?: string; linkedAt: string };
-  /** What the post did on Instagram, last synced. */
-  insights?: DeckInsights;
   createdAt: string;
   updatedAt: string;
 }

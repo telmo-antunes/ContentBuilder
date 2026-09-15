@@ -27,7 +27,6 @@ import { brandHandleFromWebsite, composeProject, composeSlide, parseSlideCopy, p
 import { withSpendLedger, withLedger, summarize, type SpendLedger } from '../lib/spend';
 import { autopsyFor } from '../lib/autopsy';
 import { deckForms, referenceSheetsFor } from '../lib/inspo';
-import { instagramCredentials, listRecentMedia, mediaInsights, permalinkCode } from '../lib/instagram';
 import { CRITIQUE_SKIP_TEXT, critiqueDeck, type CritiqueOutcome } from '../lib/htmlDirector/deckCritique';
 import { resolveBrief } from '../lib/sourceIngest';
 import { authoredShape, partsFromAuthored, rewriteAuthoredCopy } from '../lib/htmlDirector/reparse';
@@ -1287,108 +1286,6 @@ projectsRouter.get(
         promptVersions: p.scores?.pv ?? p.slides?.[0]?.authored?.pv,
         spentUsd: p.spend?.spentUsd,
         exportedAt: p.exportedAt,
-      })),
-    });
-  }),
-);
-
-/**
- * LINK A PROJECT TO THE POST IT BECAME. The owner pastes the post's
- * permalink; the media id is found in the account's recent posts and kept,
- * so insights can be synced from then on without the URL.
- */
-const instagramLinkSchema = z.object({
-  permalink: z.string().trim().url().max(300).optional(),
-  mediaId: z.string().trim().max(40).optional(),
-});
-projectsRouter.post(
-  '/:id/instagram/link',
-  asyncHandler(async (req, res) => {
-    const id = requireObjectId(req.params.id, 'Project');
-    const body = parseBody(instagramLinkSchema, req.body ?? {});
-    const project = await ProjectModel.findById(id);
-    if (!project) throw new ApiError(404, 'Project not found');
-    const creds = await instagramCredentials();
-    if (!creds) throw new ApiError(400, 'Instagram is not connected — add the access token and account id in Settings.');
-    let mediaId = body.mediaId;
-    let permalink = body.permalink;
-    let postedAt: Date | undefined;
-    if (!mediaId) {
-      const code = permalinkCode(body.permalink);
-      if (!code) throw new ApiError(400, 'Paste the post’s Instagram link (instagram.com/p/… or /reel/…).');
-      let media;
-      try {
-        media = await listRecentMedia(creds, 100);
-      } catch (err) {
-        throw new ApiError(502, publicErrMessage(err, 'Instagram error'));
-      }
-      const hit = media.find((m) => permalinkCode(m.permalink) === code);
-      if (!hit) throw new ApiError(404, 'That post is not among the account’s last 100 — check the link, or that the token belongs to the same account.');
-      mediaId = hit.id;
-      permalink = hit.permalink ?? permalink;
-      postedAt = hit.timestamp ? new Date(hit.timestamp) : undefined;
-    }
-    project.set('instagram', { mediaId, ...(permalink ? { permalink } : {}), ...(postedAt ? { postedAt } : {}), linkedAt: new Date() });
-    if (postedAt && !project.get('postedAt')) project.set('postedAt', postedAt);
-    // A linked post has, by definition, been posted.
-    if (project.get('stage') !== 'shipped') project.set('stage', 'shipped');
-    let insights;
-    try {
-      insights = await mediaInsights(creds, mediaId!);
-      project.set('insights', insights);
-    } catch (err) {
-      console.warn(`[instagram] linked ${id} but could not read insights yet: ${err instanceof Error ? err.message : err}`);
-    }
-    await project.save();
-    res.json(project.toJSON());
-  }),
-);
-
-/** Refresh the linked post's numbers. */
-projectsRouter.post(
-  '/:id/instagram/sync',
-  asyncHandler(async (req, res) => {
-    const id = requireObjectId(req.params.id, 'Project');
-    const project = await ProjectModel.findById(id);
-    if (!project) throw new ApiError(404, 'Project not found');
-    const link = project.get('instagram') as { mediaId?: string } | undefined;
-    if (!link?.mediaId) throw new ApiError(400, 'This post is not linked to an Instagram post yet.');
-    const creds = await instagramCredentials();
-    if (!creds) throw new ApiError(400, 'Instagram is not connected — add the access token and account id in Settings.');
-    try {
-      project.set('insights', await mediaInsights(creds, link.mediaId));
-    } catch (err) {
-      throw new ApiError(502, publicErrMessage(err, 'Instagram error'));
-    }
-    await project.save();
-    res.json(project.toJSON());
-  }),
-);
-
-/**
- * EVERY LINKED POST with its numbers, its score and the prompt versions that
- * wrote it — the table that closes the loop from prompt to reader.
- */
-projectsRouter.get(
-  '/insights/all',
-  asyncHandler(async (_req, res) => {
-    const docs = await ProjectModel.find({ 'instagram.mediaId': { $exists: true } })
-      .select('title businessId type format instagram insights scores spend slides.authored.pv slides.authored.role')
-      .sort({ 'instagram.postedAt': -1 })
-      .lean();
-    res.json({
-      posts: docs.map((p: any) => ({
-        _id: String(p._id),
-        title: p.title,
-        businessId: String(p.businessId),
-        type: p.type,
-        format: p.format,
-        instagram: p.instagram,
-        insights: p.insights,
-        scores: p.scores,
-        promptVersions: p.scores?.pv ?? p.slides?.[0]?.authored?.pv,
-        roles: (p.slides ?? []).map((s: any) => s.authored?.role).filter(Boolean),
-        spentUsd: p.spend?.spentUsd,
       })),
     });
   }),

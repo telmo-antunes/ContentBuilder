@@ -16,9 +16,6 @@ const settingsSchema = z.object({
   recipeModel: z.string().max(120).optional(),
   parseModel: z.string().max(120).optional(),
   composeModel: z.string().max(120).optional(),
-  /** Instagram Graph API credentials. An empty string clears; absent leaves the stored value. */
-  instagramAccessToken: z.string().max(600).optional(),
-  instagramUserId: z.string().max(40).optional(),
 });
 
 export const settingsRouter = Router();
@@ -46,11 +43,6 @@ settingsRouter.get(
         modelDesign: config.ai.modelDesign ?? '',
       },
       stock: { configured: Boolean(config.stock.pexelsKey) },
-      // The token is never returned — only whether one is stored, and the account id.
-      instagram: {
-        configured: Boolean(String(doc?.instagramAccessToken ?? '').trim() && String(doc?.instagramUserId ?? '').trim()),
-        userId: (doc?.instagramUserId as string) ?? '',
-      },
     });
   }),
 );
@@ -64,9 +56,6 @@ settingsRouter.put(
       { ...body, key: 'ai', updatedAt: new Date() },
       { upsert: true, new: true },
     );
-    const out = doc.toJSON() as Record<string, unknown>;
-    // Never echo the token back, not even to the page that just set it.
-    if (typeof out.instagramAccessToken === 'string') out.instagramAccessToken = out.instagramAccessToken ? '••••' : '';
-    res.json(out);
+    res.json(doc.toJSON());
   }),
 );
