@@ -112,9 +112,9 @@ const userOf = (c: Anthropic.MessageCreateParamsNonStreaming, i = 0): string => 
  * `closeFurniture` is what a mocked composer appends for it, so the verbatim
  * guard has nothing to repair.
  */
-const CLOSE_PARTS = { tagline: 'DM us and we send it back.', cta: 'Send it' };
-const CLOSE_HTML = '<div class="tagline">DM us and we send it back.</div><div class="cta">Send it</div>';
-const closeFurniture = (user: string): string => (user.includes('Send it') ? CLOSE_HTML : '');
+const CLOSE_PARTS = { tagline: 'Sent the same day.', cta: 'DM us BACK' };
+const CLOSE_HTML = '<div class="tagline">Sent the same day.</div><div class="cta">DM us BACK</div>';
+const closeFurniture = (user: string): string => (user.includes('DM us BACK') ? CLOSE_HTML : '');
 
 /** The composer's real output for slide 7 of "Prepaid packages — get paid up front". */
 const DUPLICATED_REPLY = `\`\`\`html
@@ -981,7 +981,7 @@ describe('compose by example (the recipe composes its own slides)', () => {
             ...(over.statementParts as object | undefined),
           },
         },
-        { role: 'cta', parts: { headline: 'Book the demo.', tagline: 'We walk you through it.', cta: 'See how it works', handle: '@detailmasters' } },
+        { role: 'cta', parts: { headline: 'The demo shows the whole flow.', tagline: 'We walk you through it.', cta: 'Book a demo', handle: '@detailmasters' } },
       ],
     });
 
@@ -1006,7 +1006,7 @@ describe('compose by example (the recipe composes its own slides)', () => {
         '<div class="rule"></div>\n' +
         '<div class="body">The money lands while the work is still ahead.</div>',
     );
-    expect(out[3]!.authored.html).toContain('<div class="cta">See how it works</div>');
+    expect(out[3]!.authored.html).toContain('<div class="cta">Book a demo</div>');
     expect(out[3]!.authored.html).toContain('<div class="handle">@detailmasters</div>');
     // no placeholder ever reaches a slide, and an absent part took its element
     for (const s of out) expect(s.authored.html).not.toContain('{{');
@@ -1110,9 +1110,9 @@ describe('compose by example (the recipe composes its own slides)', () => {
         '<div class="headline">The diary fills itself.</div>' +
         '<div class="body">The money lands while the work is still ahead.</div>',
       cta:
-        '<div class="headline">Book the demo.</div>' +
+        '<div class="headline">The demo shows the whole flow.</div>' +
         '<div class="tagline">We walk you through it.</div>' +
-        '<div class="cta">See how it works</div>' +
+        '<div class="cta">Book a demo</div>' +
         '<div class="handle">@detailmasters</div>',
     };
     reply.mockImplementation((params) =>
@@ -1796,11 +1796,11 @@ describe('one carousel, one ask', () => {
   const close = (parts: Record<string, unknown>) => slide(parts, 'cta');
   const reasons = (out: ReturnType<typeof oneAskFaults>) => out.map((f) => f.reason);
 
-  it('is quiet on a deck that asks once and says what, where, and what comes back', () => {
+  it('is quiet on a deck that asks once, on the button, with the payoff in the headline', () => {
     const deck = [
       slide({ headline: 'You explained the care. They were distracted.' }, 'cover'),
       slide({ headline: 'Booking menu, then Send update.', body: 'It stays on the client’s record.' }, 'feature'),
-      close({ headline: 'DM us AFTERCARE.', tagline: 'We send the template back.', cta: 'Send AFTERCARE' }),
+      close({ headline: 'The template, back in your inbox.', tagline: 'Sent the same day.', cta: 'DM us AFTERCARE' }),
     ];
     expect(oneAskFaults(deck, 'detailmasters.pro')).toEqual([]);
   });
@@ -1810,7 +1810,7 @@ describe('one carousel, one ask', () => {
       slide({ headline: 'Save this for the next handover.' }, 'cover'),
       slide({ headline: 'Three lines.', rows: [{ text: 'What was done' }, { text: 'DM us PAGE for the rest' }] }, 'list'),
       slide({ headline: 'The rule.', cta: 'Book now' }),
-      close({ headline: 'DM us PAGE.', tagline: 'We send the page back.', cta: 'Send PAGE' }),
+      close({ headline: 'Your page, opened with you.', cta: 'DM us PAGE' }),
     ];
     const out = oneAskFaults(deck);
     expect(out.map((f) => [f.slide, f.reason, f.text])).toEqual([
@@ -1820,25 +1820,31 @@ describe('one carousel, one ask', () => {
     ]);
   });
 
+  it('flags the owner’s own example — "DM us PAGE." over a "Send PAGE" button — as asking twice and saying nowhere', () => {
+    const out = oneAskFaults([close({ headline: 'DM us PAGE.', tagline: 'We send the page back.', cta: 'Send PAGE' })]);
+    expect(out.map((f) => [f.reason, f.text])).toEqual([
+      ['the close asks twice', 'DM us PAGE.'],
+      ['the close does not say where', 'Send PAGE'],
+    ]);
+  });
+
   it('flags the brand address, an @name or "link in bio" beside a keyword ask on the close', () => {
-    const withHandle = close({ headline: 'DM us PAGE.', tagline: 'We send the page back.', cta: 'Send PAGE', handle: 'detailmasters.pro' });
+    const withHandle = close({ headline: 'Your page, opened with you.', cta: 'DM us PAGE', handle: 'detailmasters.pro' });
     expect(oneAskFaults([withHandle]).map((f) => [f.reason, f.text])).toEqual([['two destinations on the close', 'detailmasters.pro']]);
-    const inText = close({ headline: 'Reply RECOVER.', tagline: 'The checklist is at dynatos.pt, link in bio.', cta: 'Send RECOVER' });
+    const inText = close({ headline: 'The checklist, yours.', tagline: 'Also at dynatos.pt, link in bio.', cta: 'Reply RECOVER' });
     expect(reasons(oneAskFaults([inText]))).toEqual(['two destinations on the close']);
-    const hostOnly = close({ headline: 'DM us PAGE.', tagline: 'Every page on detailmasters.pro looks like this.', cta: 'Send PAGE' });
+    const hostOnly = close({ headline: 'Every page on detailmasters.pro looks like this.', cta: 'DM us PAGE' });
     expect(reasons(oneAskFaults([hostOnly], 'detailmasters.pro'))).toEqual(['two destinations on the close']);
   });
 
   it('lets the address be the destination when the ask is to visit it', () => {
-    const visit = close({ headline: 'Book at detailmasters.pro.', tagline: 'Pick a slot; the deposit is shown, not taken.', cta: 'Book a slot', handle: 'detailmasters.pro' });
+    const visit = close({ headline: 'A slot is yours in two taps.', tagline: 'The deposit is shown, not taken.', cta: 'Book at detailmasters.pro', handle: 'detailmasters.pro' });
     expect(oneAskFaults([visit], 'detailmasters.pro')).toEqual([]);
   });
 
-  it('flags a close that does not say where, and one that does not say what comes back', () => {
-    const nowhere = close({ headline: 'PAGE.', tagline: 'We send the page back.', cta: 'PAGE' });
-    expect(reasons(oneAskFaults([nowhere]))).toEqual(['the close does not say where']);
-    const noReason = close({ headline: 'DM us PAGE.', cta: 'Send PAGE' });
-    expect(reasons(oneAskFaults([noReason]))).toEqual(['the close does not say what comes back']);
+  it('flags a close with no headline (nothing comes back) and one with no button (nowhere to do it)', () => {
+    expect(reasons(oneAskFaults([close({ cta: 'DM us PAGE' })]))).toEqual(['the close does not say what comes back']);
+    expect(reasons(oneAskFaults([close({ headline: 'Your page, opened with you.' })]))).toEqual(['the close does not say where']);
   });
 });
 

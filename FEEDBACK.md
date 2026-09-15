@@ -298,13 +298,18 @@ when. Checked against the 49 reference carousels in `inspo/`: one closes with
 two asks (Finimize's "Repost / link in bio" admin card), twelve with exactly
 one, and thirty-six with none at all.
 
-The copywriter (parse v13) now has the rule as a rule, with the close written
-as three answers — the action and the channel in the headline, what comes back
-in the tagline, the same action on the button — and `oneAskFaults` checks it
-after the first pass: an ask on any slide before the close, a keyword beside an
-address, a close with no channel word, a close with no tagline. Each goes back
-to the copywriter in the corrective pass; what survives is a copy fault on the
-ship bar ("Close: two destinations", "Slide 3: a second ask"). A surviving
+The copywriter (parse v13) now has the rule as a rule, and the close is ONE
+ask said ONCE: the button carries it — the channel and the keyword, "DM us
+PAGE" — the headline says what comes back, and a tagline says when or how only
+when the brief does. The first cut of this rule put the ask in the headline
+("DM us PAGE.") and again on the button ("Send PAGE"); the owner read that as
+two CTAs, which it is, so the headline is never an instruction now.
+`oneAskFaults` checks it after the first pass: an ask on any slide before the
+close, a close whose headline asks over a button, a keyword beside an address,
+a button that names no channel ("Send PAGE" — sends it where?), a close with
+no headline. Each goes back to the copywriter in the corrective pass; what
+survives is a copy fault on the ship bar ("Close: asks twice", "Close: two
+destinations", "Slide 3: a second ask"). A surviving
 address under a keyword ask is also dropped deterministically, with a decision
 note, since the reader cannot type a URL off a slide anyway — it belongs in the
 bio and the caption. The deck critique asks the same question of the pixels.

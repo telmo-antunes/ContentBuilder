@@ -814,6 +814,7 @@ export interface UnfinishedProse {
     /** The one-ask gate (see `oneAskFaults`): a deck asks the reader for one thing, once, and says
      *  what to do, where, and what comes back. */
     | 'a second ask'
+    | 'the close asks twice'
     | 'two destinations on the close'
     | 'the close does not say where'
     | 'the close does not say what comes back'
@@ -999,15 +1000,22 @@ export function coverHookFaults(
  * 49 reference carousels in `inspo/`, one closes with two asks (an admin card),
  * twelve with exactly one, and the rest with none.
  *
- * Four faults, all decidable from the parts:
+ * The close is ONE ask, said ONCE: the button carries it ("DM us PAGE"), the
+ * headline says what comes back, and the tagline — only when the brief says
+ * so — says when or how. "DM us PAGE." over a "Send PAGE" button was the
+ * owner's own example of two asks.
+ *
+ * Five faults, all decidable from the parts:
  *   · a second ask — any slide before the close that asks for something
  *     ("link in bio", "DM us X", "save this", a button of its own);
+ *   · the close asks twice — the headline is itself an instruction on a close
+ *     that has a button;
  *   · two destinations on the close — a keyword ask beside a web address, an
  *     @name or "link in bio"; the reader cannot do both, so they do neither;
- *   · the close does not say where — no channel word in the headline or the
- *     button (DM, reply, comment, book, visit…), so the reader knows the
- *     keyword but not what to do with it;
- *   · the close does not say what comes back — no tagline, so the ask has no
+ *   · the close does not say where — the button names no channel (DM, reply,
+ *     comment, book, visit…), so the reader knows the keyword but not what to
+ *     do with it — "Send PAGE" sends it where?;
+ *   · the close does not say what comes back — no headline, so the ask has no
  *     reason attached to it.
  * All four go back to the copywriter in the corrective pass; what survives is
  * a copy fault on the ship bar. A surviving address under a keyword ask is also
@@ -1016,8 +1024,9 @@ export function coverHookFaults(
 const KEYWORD_ASK = /\b(?:DM|Reply|Comment|Message|Send|Text|WhatsApp)\s+(?:us\s+|me\s+)?(?:the\s+word\s+)?["“]?[A-Z]{3,}\b/;
 const ASK_PHRASE =
   /\b(?:link in (?:our |the |my )?bio|dm (?:us|me)\b|send (?:us )?(?:a |an )?(?:dm|message)|save this|share this|follow (?:us|for|along)|tap the link|click the link|hit the link|book (?:now|today|a call|a slot)|sign up|subscribe|swipe up|download (?:the|our|it|now))\b/i;
-const CHANNEL_WORD =
-  /\b(?:dm|reply|comment|message|send|whatsapp|text|call|book|visit|tap|click|download|sign up|subscribe|email|link|reserve|order)\b/i;
+/** What a BUTTON must name to say where: a channel, not a bare verb — "Send PAGE" sends it where? */
+const BUTTON_CHANNEL =
+  /\b(?:dm|reply|comment|message|whatsapp|call|book|visit|download|sign up|subscribe|email|link|reserve|order)\b/i;
 const KEYWORD_CHANNEL = /\b(?:dm|reply|comment|message|whatsapp)\b/i;
 const ADDRESS =
   /(?:\blink in (?:our |the |my )?bio\b|\b[a-z0-9-]+\.(?:com|pro|io|co|net|org|pt|uk|app|dev|ai|eu|es|fr|de)\b|(?:^|\s)@[a-z0-9_.]{3,})/i;
@@ -1047,8 +1056,11 @@ export function oneAskFaults(slides: ReadonlyArray<ParsedSlide>, handle?: string
     }
     const headline = s.parts.headline?.trim() ?? '';
     const action = `${headline} ${button}`;
-    if (!CHANNEL_WORD.test(action)) {
-      out.push({ slide: i, label: 'headline', text: headline || button, reason: 'the close does not say where' });
+    if (button && (KEYWORD_ASK.test(headline) || ASK_PHRASE.test(headline))) {
+      out.push({ slide: i, label: 'headline', text: headline, reason: 'the close asks twice' });
+    }
+    if (!button || !BUTTON_CHANNEL.test(button)) {
+      out.push({ slide: i, label: 'cta', text: button || headline, reason: 'the close does not say where' });
     }
     const keyword = KEYWORD_CHANNEL.test(action) || KEYWORD_ASK.test(action);
     const handlePart = typeof s.parts.handle === 'string' ? s.parts.handle.trim() : '';
@@ -1057,8 +1069,8 @@ export function oneAskFaults(slides: ReadonlyArray<ParsedSlide>, handle?: string
       (host && text.toLowerCase().includes(host) ? host : '') ||
       handlePart;
     if (keyword && address) out.push({ slide: i, label: 'handle', text: address, reason: 'two destinations on the close' });
-    if (!(s.parts.tagline?.trim())) {
-      out.push({ slide: i, label: 'tagline', text: headline, reason: 'the close does not say what comes back' });
+    if (!headline) {
+      out.push({ slide: i, label: 'headline', text: button, reason: 'the close does not say what comes back' });
     }
   });
   return out;
@@ -1389,7 +1401,7 @@ WHAT A GOOD DECK LOOKS LIKE — it is read on a phone, one second per slide, thu
 - When the brief is prose with no lists and no numbers, the deck still needs a change of pace: make one slide a bare one-liner (a headline and a short tagline, nothing else) or, if the material has any figure at all, a "stat". Six text frames in a row is an article, not a carousel.
 - Headlines and taglines end with a full stop or a question mark. Two fragments make a line ("Spotless car. Smell back in a week.") and both close. A line that trails off with no punctuation reads as cut.
 - A list is items the reader will scan, so a row says the thing, never that the thing matters. A row's "note" is the reason or the detail behind it — only when the brief gives one.
-- ONE CAROUSEL, ONE ASK. The deck asks the reader to do exactly one thing, once, on the close — never "save this", "follow", "link in bio" or a button on any other slide. The close answers three questions in plain words: WHAT to do and WHERE ("headline": the action and the channel, carrying the keyword — "DM us PAGE."), WHAT COMES BACK ("tagline": the payoff the brief promises — "We send the template back."), and the button repeats the action ("cta": "Send PAGE"). One destination: a keyword ask never sits beside a web address, an @name or "link in bio" — the reader cannot do both, so they do neither. No eyebrow, no body. If the brief gives no payoff, the tagline names the object the deck offered (the template, the checklist, the page) — never an invented reward.
+- ONE CAROUSEL, ONE ASK, SAID ONCE. The deck asks the reader to do exactly one thing, and only the close's BUTTON asks it — never "save this", "follow", "link in bio" or a button on any other slide, and never the same ask twice on the close. The close answers, in plain words: WHAT COMES BACK ("headline": the payoff the brief promises, as a line the reader wants — "The template, back in your inbox."), HOW and TO WHOM ("cta": the one action with its channel and keyword — "DM us AFTERCARE"), and, only when the brief says so, WHEN or HOW ("tagline": "Sent the same day."). The headline is never an instruction: "DM us PAGE." over a "Send PAGE" button is two asks, and a reader given two next steps takes neither. One destination: a keyword ask never sits beside a web address, an @name or "link in bio". No eyebrow, no body. If the brief gives no payoff, the headline names the object the deck offered (the template, the checklist, the page) — never an invented reward.
 
 WORKED EXAMPLE — a brief and the deck it earns
 BRIEF (abridged): The message to send after a ceramic coating. Reader: studios that explain the care verbally and hear nothing until a car comes back damaged. Beats: the handover talk does not work (client distracted · nothing written down · no record); one message at handover (what was done · the no-wash date · what to avoid until then · how to wash after); send it from the booking (booking menu → Send update; it stays on the client's record, visible only to the studio); leave out (a warranty not written elsewhere · a cure time from another product · a promotion); a template: "Car's ready: [service] done. Do not wash the car until [date] — not even by hand." Close: DM AFTERCARE.
@@ -1400,7 +1412,7 @@ DECK:
 4 feature, image — eyebrow "Send it from the booking" · headline "Booking menu, then Send update." · body "It stays on the client's record — visible only to the studio." · why "the control is the headline; the picture is the product doing it"
 5 list — eyebrow "Leave these out" · headline "Three things that do not belong." · rows, each state "dont": "A warranty not written down elsewhere" / "A cure time copied from another product" / "A promotion" · why "an exclusion list is a verdict"
 6 quote — eyebrow "Your template" · headline "Change the brackets. Nothing else." · quote "Car's ready: [service] done. Do not wash the car until [date] — not even by hand." · why "the template is the object worth saving"
-7 cta — headline "DM us AFTERCARE." · emphasis "AFTERCARE." · tagline "We send the template back." · cta "Send AFTERCARE" · why "one ask: what to do, where, and what comes back — nothing else on the deck asks for anything"
+7 cta — headline "The template, back in your inbox." · emphasis "back in your inbox." · cta "DM us AFTERCARE" · why "one ask, said once: the button does the asking, the headline says what comes back — nothing else on the deck asks for anything"
 Notice what is NOT there: nothing the brief does not say, no body under the one-liner, no title on the cover, no eyebrow or address on the close, and no ask anywhere before it.
 
 A SECOND WORKED EXAMPLE, in a different register — a coaching program, condensed and direct
@@ -1411,7 +1423,7 @@ DECK:
 3 statement — eyebrow "The rule" · headline "Two bad markers. One recovery day." · tagline "Not a lighter session. A day." · why "one line; the rule is the whole slide"
 4 list — eyebrow "A recovery day" · headline "What the day is made of." · rows "A walk" / "Eight hours of sleep" / "Protein at every meal" · why "three short items — a step form, not a paragraph"
 5 quote — eyebrow "Remember this" · headline "Say it before the next session." · quote "Grit is finishing the plan. Recovery is what lets you." · why "the line worth saving is the object"
-6 cta — headline "Reply RECOVER." · emphasis "RECOVER." · tagline "We send the recovery-day checklist." · cta "Send RECOVER" · why "one ask: what to do, where, and what comes back — nothing else on the deck asks for anything"
+6 cta — headline "The recovery-day checklist, yours." · emphasis "yours." · cta "Reply RECOVER" · why "one ask, said once: the button asks, the headline is the payoff"
 Same discipline, different voice: short declaratives, no softening, the brand's own imperatives — and still nothing the brief did not say.
 
 THE CONTRACT — these are checked by machines after you finish, so treat them as physics
@@ -1497,12 +1509,12 @@ const PARSE_TOOL: AiJsonTool = {
                 eyebrow: { type: 'string', description: 'A 2–4 word kicker.' },
                 headline: { type: 'string', description: "The line, under ten words — never the post's title: the reader's problem, an opinion, a number, or the control the material names." },
                 emphasis: { type: 'string', description: 'The sub-phrase INSIDE headline to accent.' },
-                tagline: { type: 'string', description: 'A short payoff line.' },
+                tagline: { type: 'string', description: 'A short payoff line. On the close: only when or how, and only when the brief says so — never a second ask.' },
                 body: { type: 'string', description: 'One short supporting sentence, only when the slide needs one. A one-liner slide has none.' },
                 quote: { type: 'string', description: 'The object the slide is about — a template, a script, a message to copy, a rule — or a testimonial. Role "quote".' },
                 attribution: { type: 'string' },
                 stat: { type: 'string', description: 'One number, e.g. "40%".' },
-                cta: { type: 'string', description: 'Button text, under 24 characters — the same action as the headline, carrying the keyword. Only on the close; the deck asks once.' },
+                cta: { type: 'string', description: 'The ONE ask, under 24 characters: the action with its channel and keyword — "DM us PAGE", "Reply RECOVER", "Book at detailmasters.pro". Only on the close; nothing else on the deck asks, and the headline never repeats it.' },
                 handle: { type: 'string' },
                 rows: {
                   type: 'array',
@@ -2098,12 +2110,14 @@ export async function parseForCompose(
       switch (a.reason) {
         case 'a second ask':
           return `- slide ${n} asks the reader for something (${JSON.stringify(a.text)}). The deck asks ONCE, on the close. Cut the ask from this slide; keep its point.`;
+        case 'the close asks twice':
+          return `- the close's headline ${JSON.stringify(a.text)} is an instruction and the button asks too. One ask, said once: the BUTTON asks ("DM us PAGE"); rewrite the headline as what comes back ("Your page, opened with you.").`;
         case 'two destinations on the close':
           return `- the close names a keyword AND an address (${JSON.stringify(a.text)}). One destination: keep the keyword, remove the address, the @name or "link in bio" from every part of the close.`;
         case 'the close does not say where':
-          return `- the close ${JSON.stringify(a.text)} does not say what the reader does or where. The headline is the action and the channel: "DM us PAGE." / "Reply RECOVER." / "Book at <address>."`;
+          return `- the button ${JSON.stringify(a.text)} does not say where the reader does it. The button is the action with its channel and keyword: "DM us PAGE" / "Reply RECOVER" / "Book at <address>" — never a bare "Send PAGE".`;
         default:
-          return `- the close has no tagline. Write one line saying what the reader gets back for doing it, taken from the brief ("We send the template back."). Never invent a reward.`;
+          return `- the close has no headline. Write one line saying what the reader gets back for doing it, taken from the brief ("The template, back in your inbox."). Never invent a reward.`;
       }
     };
     const correction = [
