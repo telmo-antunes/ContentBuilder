@@ -51,6 +51,24 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
+### The composer writes captions where the reader needs sentences
+
+- **Kind:** Gap
+- **Severity:** cost me a fix (a full copy rewrite of an eight-slide deck, by hand)
+- **First seen:** 2026-09-15 — the-booking-page-before-and-after, rejected by the owner on read: *"Instead of writing random words and short phrases, actually explain in detail to the user, write as if you're writing to a person, not a robot."*
+- **What happened:** parse v12 composed, and I shipped, a deck whose every slide read as a museum label. Verbatim: *"A stamp-sized photo beside the text."* · *"The card grew a drawer."* · *"Three sizes, each a price range. The deposit sits behind the bar."* · *"One price per size, the deposit, and the button — all in the bar."* Not one of them is a sentence addressed to anybody: no subject, no reader, no reason. Rewritten by hand, the same slide says *"The photo you uploaded sat in a 64-pixel square beside the text, so the work you were selling was the one thing a client could not see."* Same facts, same frame, and now it explains rather than labels.
+- **Why it matters:** this is the house voice's own failure mode rather than a model slip. The budgets reward compression — `tagline` 70 characters, `body` 90, `explainBody` 150 and only on `statement` and `feature` — and the prompt's examples are terse, so the composer is being asked for captions and duly writes them. A deck whose job is to TEACH a change needs prose; one that is all labels reads as a slideshow of chapter headings, and the reader has to supply the argument themselves.
+- **Direction:** two levers, both small. (1) Let the brief declare the register — a `mode: 'explain'` on the compose request that moves every slide to `explainBody` and tells the copywriter, in the prompt, to write to one person in complete sentences with the reason included. (2) A check that is honestly cheap: a slide whose body and tagline contain no finite verb is a caption, not copy — report it the way `unfinishedProse` reports a dangling line. Roughly half this deck's original slides would have tripped it.
+
+### Nothing in the pipeline knows what tense a before/after deck is in
+
+- **Kind:** Defect
+- **Severity:** cost me a fix
+- **First seen:** 2026-09-15 — the-booking-page-before-and-after, raised by the owner: *"on the 'before' slides write in the past, and on the present slides write in the present."*
+- **What happened:** the deck alternates BEFORE and NOW slides, and the composer mixed tenses inside a single frame. Slide 4's headline was past — *"The card grew a drawer."* — and its own tagline was present: *"Three sizes, each a price range. The deposit **sits** behind the bar."* It sits there in a build that no longer exists. Slide 2 did the same: a past-tense frame captioned *"The work **is** there. Nobody **can** see it."* The brief said in as many words that slides 2-5 are BEFORE/NOW pairs, so the material for getting this right was in front of it.
+- **Why it matters:** a present-tense sentence under a BEFORE screenshot tells a studio owner their page is still like that — which is the precise misunderstanding this deck exists to prevent, and the same class of fault as the invented premise logged above: not a wrong fact, a wrong implication. It is also invisible to every gate, because each line is finished, fits, and comes from the brief.
+- **Direction:** the brief already declares the pairs, so the prompt can carry the rule (a slide describing the old build is written in the past throughout, including its caption; a slide describing today is present throughout). Worth pairing with a cheap check: on a slide whose eyebrow or headline marks it as the old state, a present-tense copula in the body ("is", "sits", "are", "has") is almost always the fault, and the corrective re-parse can be handed the slide with that one instruction.
+
 ### The only treatment a screenshot can get is the one the references never use
 
 - **Kind:** Gap
