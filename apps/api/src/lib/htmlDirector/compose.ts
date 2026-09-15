@@ -811,6 +811,12 @@ export interface UnfinishedProse {
      *  finished and may no longer mean what was approved. */
     | 'clamped mid-phrase'
     | 'over budget after correction'
+    /** The one-ask gate (see `oneAskFaults`): a deck asks the reader for one thing, once, and says
+     *  what to do, where, and what comes back. */
+    | 'a second ask'
+    | 'two destinations on the close'
+    | 'the close does not say where'
+    | 'the close does not say what comes back'
     /** The cover gate (see `coverHookFaults`): a title on the cover, or a cover that runs long. */
     | 'cover reads as the post title'
     | 'cover runs past ten words'
@@ -979,6 +985,82 @@ export function coverHookFaults(
       break;
     }
   }
+  return out;
+}
+
+/**
+ * ONE CAROUSEL, ONE ASK.
+ *
+ * A deck shipped whose close said "DM us PAGE" in the headline, "Send PAGE" on
+ * the button and "detailmasters.pro" in the footer — two different next steps
+ * on one slide, and nothing on it saying what the DM was for or what came
+ * back. The owner's rule, verbatim: one carousel, one CTA, and the CTA must be
+ * justified, make sense, and be clear — to whom, for what, how, when. Of the
+ * 49 reference carousels in `inspo/`, one closes with two asks (an admin card),
+ * twelve with exactly one, and the rest with none.
+ *
+ * Four faults, all decidable from the parts:
+ *   · a second ask — any slide before the close that asks for something
+ *     ("link in bio", "DM us X", "save this", a button of its own);
+ *   · two destinations on the close — a keyword ask beside a web address, an
+ *     @name or "link in bio"; the reader cannot do both, so they do neither;
+ *   · the close does not say where — no channel word in the headline or the
+ *     button (DM, reply, comment, book, visit…), so the reader knows the
+ *     keyword but not what to do with it;
+ *   · the close does not say what comes back — no tagline, so the ask has no
+ *     reason attached to it.
+ * All four go back to the copywriter in the corrective pass; what survives is
+ * a copy fault on the ship bar. A surviving address under a keyword ask is also
+ * dropped deterministically in `normalizeParsedDeck`.
+ */
+const KEYWORD_ASK = /\b(?:DM|Reply|Comment|Message|Send|Text|WhatsApp)\s+(?:us\s+|me\s+)?(?:the\s+word\s+)?["“]?[A-Z]{3,}\b/;
+const ASK_PHRASE =
+  /\b(?:link in (?:our |the |my )?bio|dm (?:us|me)\b|send (?:us )?(?:a |an )?(?:dm|message)|save this|share this|follow (?:us|for|along)|tap the link|click the link|hit the link|book (?:now|today|a call|a slot)|sign up|subscribe|swipe up|download (?:the|our|it|now))\b/i;
+const CHANNEL_WORD =
+  /\b(?:dm|reply|comment|message|send|whatsapp|text|call|book|visit|tap|click|download|sign up|subscribe|email|link|reserve|order)\b/i;
+const KEYWORD_CHANNEL = /\b(?:dm|reply|comment|message|whatsapp)\b/i;
+const ADDRESS =
+  /(?:\blink in (?:our |the |my )?bio\b|\b[a-z0-9-]+\.(?:com|pro|io|co|net|org|pt|uk|app|dev|ai|eu|es|fr|de)\b|(?:^|\s)@[a-z0-9_.]{3,})/i;
+
+export function oneAskFaults(slides: ReadonlyArray<ParsedSlide>, handle?: string): UnfinishedProse[] {
+  const out: UnfinishedProse[] = [];
+  const host = handle?.replace(/^@/, '').trim().toLowerCase();
+  const textOf = (s: ParsedSlide): string =>
+    [
+      s.parts.eyebrow,
+      s.parts.headline,
+      s.parts.tagline,
+      s.parts.body,
+      s.parts.quote,
+      s.parts.cta,
+      ...(s.parts.rows ?? []).flatMap((r) => [r.text, r.note]),
+    ]
+      .filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
+      .join(' \n ');
+  slides.forEach((s, i) => {
+    const text = textOf(s);
+    const button = typeof s.parts.cta === 'string' ? s.parts.cta.trim() : '';
+    if (s.role !== 'cta') {
+      const m = KEYWORD_ASK.exec(text) ?? ASK_PHRASE.exec(text);
+      if (m || button) out.push({ slide: i, label: 'copy', text: (m?.[0] ?? button).trim(), reason: 'a second ask' });
+      return;
+    }
+    const headline = s.parts.headline?.trim() ?? '';
+    const action = `${headline} ${button}`;
+    if (!CHANNEL_WORD.test(action)) {
+      out.push({ slide: i, label: 'headline', text: headline || button, reason: 'the close does not say where' });
+    }
+    const keyword = KEYWORD_CHANNEL.test(action) || KEYWORD_ASK.test(action);
+    const handlePart = typeof s.parts.handle === 'string' ? s.parts.handle.trim() : '';
+    const address =
+      ADDRESS.exec(text)?.[0]?.trim() ||
+      (host && text.toLowerCase().includes(host) ? host : '') ||
+      handlePart;
+    if (keyword && address) out.push({ slide: i, label: 'handle', text: address, reason: 'two destinations on the close' });
+    if (!(s.parts.tagline?.trim())) {
+      out.push({ slide: i, label: 'tagline', text: headline, reason: 'the close does not say what comes back' });
+    }
+  });
   return out;
 }
 
@@ -1307,7 +1389,7 @@ WHAT A GOOD DECK LOOKS LIKE — it is read on a phone, one second per slide, thu
 - When the brief is prose with no lists and no numbers, the deck still needs a change of pace: make one slide a bare one-liner (a headline and a short tagline, nothing else) or, if the material has any figure at all, a "stat". Six text frames in a row is an article, not a carousel.
 - Headlines and taglines end with a full stop or a question mark. Two fragments make a line ("Spotless car. Smell back in a week.") and both close. A line that trails off with no punctuation reads as cut.
 - A list is items the reader will scan, so a row says the thing, never that the thing matters. A row's "note" is the reason or the detail behind it — only when the brief gives one.
-- The close is one line and one button: "headline" (the action, carrying the keyword), "cta" (the button text), and at most one short "tagline". No eyebrow, no body, no handle unless the brief gives one.
+- ONE CAROUSEL, ONE ASK. The deck asks the reader to do exactly one thing, once, on the close — never "save this", "follow", "link in bio" or a button on any other slide. The close answers three questions in plain words: WHAT to do and WHERE ("headline": the action and the channel, carrying the keyword — "DM us PAGE."), WHAT COMES BACK ("tagline": the payoff the brief promises — "We send the template back."), and the button repeats the action ("cta": "Send PAGE"). One destination: a keyword ask never sits beside a web address, an @name or "link in bio" — the reader cannot do both, so they do neither. No eyebrow, no body. If the brief gives no payoff, the tagline names the object the deck offered (the template, the checklist, the page) — never an invented reward.
 
 WORKED EXAMPLE — a brief and the deck it earns
 BRIEF (abridged): The message to send after a ceramic coating. Reader: studios that explain the care verbally and hear nothing until a car comes back damaged. Beats: the handover talk does not work (client distracted · nothing written down · no record); one message at handover (what was done · the no-wash date · what to avoid until then · how to wash after); send it from the booking (booking menu → Send update; it stays on the client's record, visible only to the studio); leave out (a warranty not written elsewhere · a cure time from another product · a promotion); a template: "Car's ready: [service] done. Do not wash the car until [date] — not even by hand." Close: DM AFTERCARE.
@@ -1318,8 +1400,8 @@ DECK:
 4 feature, image — eyebrow "Send it from the booking" · headline "Booking menu, then Send update." · body "It stays on the client's record — visible only to the studio." · why "the control is the headline; the picture is the product doing it"
 5 list — eyebrow "Leave these out" · headline "Three things that do not belong." · rows, each state "dont": "A warranty not written down elsewhere" / "A cure time copied from another product" / "A promotion" · why "an exclusion list is a verdict"
 6 quote — eyebrow "Your template" · headline "Change the brackets. Nothing else." · quote "Car's ready: [service] done. Do not wash the car until [date] — not even by hand." · why "the template is the object worth saving"
-7 cta — headline "DM us AFTERCARE." · emphasis "AFTERCARE." · tagline "We send the template back." · cta "Send AFTERCARE" · why "one line and one button"
-Notice what is NOT there: nothing the brief does not say, no body under the one-liner, no title on the cover, no eyebrow or handle on the close.
+7 cta — headline "DM us AFTERCARE." · emphasis "AFTERCARE." · tagline "We send the template back." · cta "Send AFTERCARE" · why "one ask: what to do, where, and what comes back — nothing else on the deck asks for anything"
+Notice what is NOT there: nothing the brief does not say, no body under the one-liner, no title on the cover, no eyebrow or address on the close, and no ask anywhere before it.
 
 A SECOND WORKED EXAMPLE, in a different register — a coaching program, condensed and direct
 BRIEF (abridged): Recovery beats grit. Reader: people in the program who train through fatigue and call it discipline. Beats: three markers say you are under-recovered (resting heart rate up · sleep under seven hours · the same weight feels heavier); the rule: two bad markers in a row means a recovery day, not a lighter session; what a recovery day is (a walk · eight hours of sleep · protein at every meal); the line to remember: "Grit is finishing the plan. Recovery is what lets you." Close: reply RECOVER for the recovery-day checklist.
@@ -1329,7 +1411,7 @@ DECK:
 3 statement — eyebrow "The rule" · headline "Two bad markers. One recovery day." · tagline "Not a lighter session. A day." · why "one line; the rule is the whole slide"
 4 list — eyebrow "A recovery day" · headline "What the day is made of." · rows "A walk" / "Eight hours of sleep" / "Protein at every meal" · why "three short items — a step form, not a paragraph"
 5 quote — eyebrow "Remember this" · headline "Say it before the next session." · quote "Grit is finishing the plan. Recovery is what lets you." · why "the line worth saving is the object"
-6 cta — headline "Reply RECOVER." · emphasis "RECOVER." · tagline "We send the recovery-day checklist." · cta "Send RECOVER" · why "one line and one button"
+6 cta — headline "Reply RECOVER." · emphasis "RECOVER." · tagline "We send the recovery-day checklist." · cta "Send RECOVER" · why "one ask: what to do, where, and what comes back — nothing else on the deck asks for anything"
 Same discipline, different voice: short declaratives, no softening, the brand's own imperatives — and still nothing the brief did not say.
 
 THE CONTRACT — these are checked by machines after you finish, so treat them as physics
@@ -1342,7 +1424,7 @@ THE CONTRACT — these are checked by machines after you finish, so treat them a
 - WHEN THE MATERIAL IS A VERDICT, SAY SO STRUCTURALLY: if the source contrasts a way that works with a way that fails, give each row a "state" — "do" or "dont" — instead of burying the contrast in prose. The design renders the verdict. Use it only when the contrast is the source's own; a plain enumeration takes no states.
 - parts keys (include only what a slide needs): eyebrow (2–4 word label), headline (the line), emphasis (the sub-phrase inside headline to accent), tagline (a short payoff line), body (1 short sentence — 2 on a statement or feature slide that is doing the explaining), rows (a list — see above), quote (the object, or a testimonial), attribution, stat (e.g. "40%"), cta (button text), handle.
 - ONE IDEA PER SLIDE, and one supporting element at most: a body sentence, OR rows, OR a stat. Never a paragraph and a list on the same poster, and never a big number beside the list that already makes its point.
-- "handle" is the brand's @name or web address and nothing else. It is set in the smallest, faintest type on the poster; a sentence put there ships as an afterthought nobody can read.
+- "handle" is the brand's @name or web address and nothing else. It is set in the smallest, faintest type on the poster; a sentence put there ships as an afterthought nobody can read. It never appears on the close beside a keyword ask — one destination per deck — and only appears at all when the brief's own ask is to visit it.
 - Every slide must tell the reader something the slide before it did not. If two slides make the same point, cut one.
 - HARD BUDGETS, because this is a poster read at arm's length: eyebrow <= 26 characters, headline <= 60, tagline <= 70, body <= 90, cta <= 24, rows text <= 42. On a "statement" or "feature" slide that carries no tagline, the body may run to 150 characters — two sentences — because those are the slides where a deck explains itself. Write TO the budget; never cut a phrase to land inside it, and going over is not truncated — it pushes the design off the canvas.
 - The eyebrow is a LABEL, not a summary: 2–4 words naming what this slide is about. If you find yourself compressing the headline into it, drop it.
@@ -1420,7 +1502,7 @@ const PARSE_TOOL: AiJsonTool = {
                 quote: { type: 'string', description: 'The object the slide is about — a template, a script, a message to copy, a rule — or a testimonial. Role "quote".' },
                 attribution: { type: 'string' },
                 stat: { type: 'string', description: 'One number, e.g. "40%".' },
-                cta: { type: 'string', description: 'Button text, under 24 characters, carrying the keyword when there is one.' },
+                cta: { type: 'string', description: 'Button text, under 24 characters — the same action as the headline, carrying the keyword. Only on the close; the deck asks once.' },
                 handle: { type: 'string' },
                 rows: {
                   type: 'array',
@@ -1554,7 +1636,9 @@ function parseUser(
     photoGuidance(recipe),
     recipe.voice.dos.length ? `DO: ${recipe.voice.dos.join('; ')}` : '',
     recipe.voice.donts.length ? `DON'T: ${recipe.voice.donts.join('; ')}` : '',
-    opts.handle ? `HANDLE: ${opts.handle}` : '',
+    opts.handle
+      ? `BRAND ADDRESS: ${opts.handle} — the only address that exists; never write another. It is not an ask: it goes nowhere on the deck unless the brief's own close is to visit it, and never beside a keyword.`
+      : '',
     formatGuidance(format),
     countGuidance(opts.range, opts.plan.length),
     lessonsBlock(opts.lessons ?? []),
@@ -1729,6 +1813,28 @@ function normalizeParsedDeck(
         console.warn(`[compose] parse: slide ${i + 1} put prose in the handle — dropped`);
         delete parts.handle;
       }
+    }
+
+    /**
+     * ONE DESTINATION ON THE CLOSE. A keyword ask ("DM us PAGE") beside the
+     * brand's address is two different next steps on one slide, and the reader
+     * takes neither. The corrective pass asks the copywriter to drop it; when
+     * it survives anyway, it is dropped here and the owner is told. The address
+     * belongs in the bio and the caption — see `oneAskFaults`.
+     */
+    if (
+      role === 'cta' &&
+      typeof parts.handle === 'string' &&
+      parts.handle.trim() &&
+      KEYWORD_CHANNEL.test(`${parts.headline ?? ''} ${parts.cta ?? ''}`)
+    ) {
+      const address = parts.handle.trim();
+      console.warn(`[compose] parse: slide ${i + 1} set the brand's address under a keyword ask — dropped, one destination per close`);
+      onNote?.({
+        slide: i + 1,
+        note: `The close asks for a DM and also carried the address ${address}. The address was dropped so the reader has one thing to do; it belongs in the bio and the caption.`,
+      });
+      delete parts.handle;
     }
 
     // The brand's domain is a fact — see `enforceBrandDomain`. Swept across
@@ -1961,6 +2067,7 @@ export async function parseForCompose(
   // point, and appending a full stop to "Fragrance covers" only hides it.
   const unfinished = unfinishedProse(slides);
   const hook = coverHookFaults(slides, req.idea, req.sources);
+  const asks = oneAskFaults(slides, opts?.handle);
   const inventionCorpus = `${req.idea} ${req.sources.map((x) => `${x.title ?? ''} ${x.text}`).join(' ')}`;
   const inventionExtra = [recipe.voice.description, ...recipe.voice.dos, ...recipe.voice.donts, opts?.handle ?? ''];
   // A one-line brief cannot source anything — the copywriter is expected to
@@ -1968,7 +2075,7 @@ export async function parseForCompose(
   const invented = inventionCorpus.split(/\s+/).length >= INVENTION_MIN_BRIEF_WORDS
     ? unsourcedWords(slides, inventionCorpus, inventionExtra).filter((u) => u.words.length >= INVENTION_THRESHOLD)
     : [];
-  if (flagrant.length || lost.length || repeats.length || unfinished.length || hook.length || invented.length) {
+  if (flagrant.length || lost.length || repeats.length || unfinished.length || hook.length || invented.length || asks.length) {
     if (flagrant.length) {
       console.warn(`[compose] parse: ${flagrant.length} part(s) burst their budgets — one corrective re-parse`);
     }
@@ -1985,6 +2092,20 @@ export async function parseForCompose(
     for (const u of invented) {
       console.warn(`[compose] parse: slide ${u.slide + 1} uses words the brief never does (${u.words.join(', ')}) — correcting`);
     }
+    for (const a of asks) console.warn(`[compose] parse: slide ${a.slide + 1}: ${a.reason} (${JSON.stringify(a.text)}) — correcting`);
+    const askLine = (a: UnfinishedProse): string => {
+      const n = a.slide + 1;
+      switch (a.reason) {
+        case 'a second ask':
+          return `- slide ${n} asks the reader for something (${JSON.stringify(a.text)}). The deck asks ONCE, on the close. Cut the ask from this slide; keep its point.`;
+        case 'two destinations on the close':
+          return `- the close names a keyword AND an address (${JSON.stringify(a.text)}). One destination: keep the keyword, remove the address, the @name or "link in bio" from every part of the close.`;
+        case 'the close does not say where':
+          return `- the close ${JSON.stringify(a.text)} does not say what the reader does or where. The headline is the action and the channel: "DM us PAGE." / "Reply RECOVER." / "Book at <address>."`;
+        default:
+          return `- the close has no tagline. Write one line saying what the reader gets back for doing it, taken from the brief ("We send the template back."). Never invent a reward.`;
+      }
+    };
     const correction = [
       flagrant.length ? `Some parts exceed the hard copy budgets:` : '',
       ...flagrant.map((v) => `- slide ${v.slide + 1} ${v.label} is ${v.length} chars, budget ${v.budget}`),
@@ -1996,6 +2117,8 @@ export async function parseForCompose(
       ...invented.map((u) => `- slide ${u.slide + 1}: ${u.words.join(', ')}. Every line must come from the brief. Rewrite the slide in the brief's own words, or cut it and return one fewer slide.`),
       hook.length ? `The cover does not earn the swipe:` : '',
       ...hook.map((h) => `- slide 1 headline ${JSON.stringify(h.text)}: ${h.reason.replace(/^cover /, '')}. Rewrite it as the reader's own problem, an opinion, or a number — under ten words — and move the title to the eyebrow if it belongs anywhere.`),
+      asks.length ? `The deck asks the reader for more than one thing, or the close does not say what to do, where, and what comes back:` : '',
+      ...asks.map(askLine),
       repeats.length ? `These pairs of slides make the same point twice — a reader learns nothing from the second:` : '',
       ...repeats.map(
         (r) =>
@@ -2126,6 +2249,7 @@ export function finishParsedDeck(
   const checked: UnfinishedProse[] = [
     ...unfinishedProse(slides),
     ...coverHookFaults(slides, req.idea, req.sources),
+    ...oneAskFaults(slides, opts?.handle),
     ...(`${req.idea} ${req.sources.map((x) => x.text).join(' ')}`.split(/\s+/).length < INVENTION_MIN_BRIEF_WORDS ? [] : unsourcedWords(slides, `${req.idea} ${req.sources.map((x) => `${x.title ?? ''} ${x.text}`).join(' ')}`, [
       recipe.voice.description,
       ...recipe.voice.dos,

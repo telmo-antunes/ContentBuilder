@@ -325,6 +325,16 @@ export const TOUCHPOINT_REGISTRY: Record<TouchpointId, Touchpoint> = {
           'A slide whose picture the tagged library does not hold is composed as type before anything is arranged, and the owner is told which picture was missing.',
         ],
       },
+      {
+        version: 13,
+        date: '2026-09-15',
+        summary: 'One carousel, one ask — and the close says what to do, where, and what comes back.',
+        improves: [
+          'The deck asks the reader for exactly one thing, once, on the close. A "save this", a "link in bio" or a button on any other slide goes back to the copywriter, and what survives is a copy fault on the review page.',
+          'The close answers three questions: the headline is the action and the channel ("DM us PAGE."), the tagline is what comes back, and the button repeats the action. A close missing either goes back.',
+          'One destination: a keyword ask never sits beside the brand\'s address, an @name or "link in bio". A surviving address is dropped and the owner is told; it belongs in the bio and the caption.',
+        ],
+      },
     ],
   },
 

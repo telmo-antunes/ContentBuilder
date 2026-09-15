@@ -920,12 +920,28 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
         ? `Cover: ${f.reason.replace(/^cover /, '')}`
         : f.reason === 'not in the brief'
           ? `Slide ${f.slide + 1}: words the brief never uses`
-          : `Slide ${f.slide + 1}: ${f.label} stops mid-thought`,
+          : f.reason === 'a second ask'
+            ? `Slide ${f.slide + 1}: a second ask`
+            : f.reason === 'two destinations on the close'
+              ? 'Close: two destinations'
+              : f.reason === 'the close does not say where'
+                ? 'Close: does not say where'
+                : f.reason === 'the close does not say what comes back'
+                  ? 'Close: does not say what comes back'
+                  : `Slide ${f.slide + 1}: ${f.label} stops mid-thought`,
       hint: f.reason.startsWith('cover ')
         ? `“${f.text}” — the cover is the reader's own problem, an opinion or a number, under ten words. The title belongs in the eyebrow.`
         : f.reason === 'not in the brief'
           ? `${f.text} — none of these appear in the brief or its sources. A slide built from words the brief never used is usually a claim that was made up; rewrite it from the brief or cut it.`
-          : `“${f.text}” — ${f.reason}. Rewrite it, or shorten it to a line that finishes.`,
+          : f.reason === 'a second ask'
+            ? `“${f.text}” — one carousel, one ask. The deck asks once, on the close; a reader given two next steps takes neither. Cut this ask and keep the slide's point.`
+            : f.reason === 'two destinations on the close'
+              ? `“${f.text}” sits beside a keyword ask. Keep the keyword and move the address to the bio and the caption — one thing to do.`
+              : f.reason === 'the close does not say where'
+                ? `“${f.text}” — the reader knows the keyword but not what to do with it. The close names the action and the channel: DM us, reply, comment, book at.`
+                : f.reason === 'the close does not say what comes back'
+                  ? `“${f.text}” asks and gives no reason. Add one line saying what the reader gets back, from the brief — the template, the checklist, the page.`
+                  : `“${f.text}” — ${f.reason}. Rewrite it, or shorten it to a line that finishes.`,
       slide: f.slide,
     });
   }

@@ -78,6 +78,7 @@ const {
   enforceBrandDomain,
   clampDisplayLine,
   unsourcedWords,
+  oneAskFaults,
 } = await import('./compose');
 type LayoutCheckSummary = import('./compose').LayoutCheckSummary;
 type ComposeProgress = import('./compose').ComposeProgress;
@@ -104,6 +105,16 @@ const userOf = (c: Anthropic.MessageCreateParamsNonStreaming, i = 0): string => 
   const m = c.messages[i];
   return typeof m?.content === 'string' ? m.content : '';
 };
+
+/**
+ * A close that passes the one-ask gate — the action and its channel, what
+ * comes back, the button — for fixtures whose subject is something else.
+ * `closeFurniture` is what a mocked composer appends for it, so the verbatim
+ * guard has nothing to repair.
+ */
+const CLOSE_PARTS = { tagline: 'DM us and we send it back.', cta: 'Send it' };
+const CLOSE_HTML = '<div class="tagline">DM us and we send it back.</div><div class="cta">Send it</div>';
+const closeFurniture = (user: string): string => (user.includes('Send it') ? CLOSE_HTML : '');
 
 /** The composer's real output for slide 7 of "Prepaid packages — get paid up front". */
 const DUPLICATED_REPLY = `\`\`\`html
@@ -233,7 +244,7 @@ describe('composeProject (concurrency pool)', () => {
   const nineSlides = JSON.stringify({
     slides: Array.from({ length: 9 }, (_, i) => ({
       role: i === 0 ? 'cover' : i === 8 ? 'cta' : 'statement',
-      parts: { headline: `Slide ${i} headline stands alone` },
+      parts: { headline: `Slide ${i} headline stands alone`, ...(i === 8 ? CLOSE_PARTS : {}) },
     })),
   });
 
@@ -242,7 +253,7 @@ describe('composeProject (concurrency pool)', () => {
     reply.mockImplementation((params) => {
       if (sysOf(params).includes('STRICT JSON')) return nineSlides;
       const m = userOf(params).match(/Slide (\d+) headline stands alone/);
-      return `<div class="headline">Slide ${m?.[1]} headline stands alone</div>`;
+      return `<div class="headline">Slide ${m?.[1]} headline stands alone</div>` + closeFurniture(userOf(params));
     });
     const out = await composeProject(detailMastersRecipe, 'an idea', {});
     expect(out).toHaveLength(9);
@@ -266,7 +277,7 @@ describe('composeProject (concurrency pool)', () => {
     reply.mockImplementation((params) => {
       if (sysOf(params).includes('STRICT JSON')) return nineSlides;
       const m = userOf(params).match(/Slide (\d+) headline stands alone/);
-      return `<div class="headline">Slide ${m?.[1]} headline stands alone</div>`;
+      return `<div class="headline">Slide ${m?.[1]} headline stands alone</div>` + closeFurniture(userOf(params));
     });
     await composeProject(detailMastersRecipe, 'an idea', {});
     const [parseCall, ...slideCalls] = aiCalls;
@@ -281,7 +292,7 @@ describe('composeProject (concurrency pool)', () => {
       const user = userOf(params);
       if (user.includes('Slide 4 ')) throw new Error('boom');
       const m = user.match(/Slide (\d+) headline stands alone/);
-      return `<div class="headline">Slide ${m?.[1]} headline stands alone</div>`;
+      return `<div class="headline">Slide ${m?.[1]} headline stands alone</div>` + closeFurniture(user);
     });
     await expect(composeProject(detailMastersRecipe, 'an idea', {})).rejects.toThrow('boom');
     // the failure stops NEW work: not all 9 composes were started
@@ -316,7 +327,7 @@ describe('the render check (compose looking at its own output)', () => {
     slides: [
       { role: 'cover', parts: { headline: 'Slide 0 headline stands alone' } },
       { role: 'statement', parts: { headline: 'Slide 1 headline stands alone' } },
-      { role: 'cta', parts: { headline: 'Slide 2 headline stands alone' } },
+      { role: 'cta', parts: { headline: 'Slide 2 headline stands alone', ...CLOSE_PARTS } },
     ],
   });
   /**
@@ -331,7 +342,8 @@ describe('the render check (compose looking at its own output)', () => {
     const n = userOf(params).match(/Slide (\d+) headline stands alone/)?.[1] ?? '?';
     return (
       `<div class="headline">Slide ${n} headline stands alone</div>` +
-      (n === '1' ? `<div class="rule"></div><div class="body">${SLIDE_1_BODY}</div>` : '')
+      (n === '1' ? `<div class="rule"></div><div class="body">${SLIDE_1_BODY}</div>` : '') +
+      closeFurniture(userOf(params))
     );
   };
 
@@ -934,6 +946,7 @@ describe('compose by example (the recipe composes its own slides)', () => {
 <div class="rule"></div>
 <div class="body">{{body}}</div>`,
     cta: `<div class="headline">{{headline}}</div>
+<div class="tagline">{{tagline}}</div>
 <div class="fill"></div>
 <div class="cta">{{cta}}</div>
 <div class="handle">{{handle}}</div>`,
@@ -968,7 +981,7 @@ describe('compose by example (the recipe composes its own slides)', () => {
             ...(over.statementParts as object | undefined),
           },
         },
-        { role: 'cta', parts: { headline: 'Book the demo.', cta: 'See how it works', handle: '@detailmasters' } },
+        { role: 'cta', parts: { headline: 'Book the demo.', tagline: 'We walk you through it.', cta: 'See how it works', handle: '@detailmasters' } },
       ],
     });
 
@@ -1039,14 +1052,15 @@ describe('compose by example (the recipe composes its own slides)', () => {
   });
 
   it('falls back to the model for the ONE slide a fragment cannot express', async () => {
-    // The statement fragment has no {{cta}} hole, so substituting would silently
-    // drop that copy — that slide goes to the model, and only that slide.
+    // The statement fragment has no {{quote}} hole, so substituting would
+    // silently drop that copy — that slide goes to the model, and only that
+    // slide. (A quote rather than a button: the deck asks once, on the close.)
     reply.mockImplementation((params) =>
       sysOf(params).includes('STRICT JSON')
-        ? deck({ statementParts: { cta: 'Book a slot' } })
+        ? deck({ statementParts: { quote: 'Booked while you sleep.' } })
         : '<div class="headline">The diary fills itself.</div>' +
           '<div class="body">The money lands while the work is still ahead.</div>' +
-          '<div class="cta">Book a slot</div>',
+          '<div class="quote">Booked while you sleep.</div>',
     );
     const out = await composeProject(byExample, 'an idea', { renderCheck: false });
 
@@ -1054,9 +1068,9 @@ describe('compose by example (the recipe composes its own slides)', () => {
     expect(aiCalls).toHaveLength(2); // the parse + exactly one compose
     expect(sysOf(aiCalls[1]!)).toContain(SLIDE_AUTHOR_INSTRUCTIONS);
     expect(userOf(aiCalls[1]!)).toContain('role: statement');
-    expect(out[2]!.authored.html).toContain('Book a slot');
+    expect(out[2]!.authored.html).toContain('Booked while you sleep.');
     expect(warnings()).toContainEqual(
-      expect.stringContaining('[compose] statement: recipe fragment cannot carry this slide (no {{cta}} placeholder)'),
+      expect.stringContaining('[compose] statement: recipe fragment cannot carry this slide (no {{quote}} placeholder)'),
     );
     expect(warnings()).toContainEqual(
       expect.stringContaining('[compose] deck: 3/4 slide(s) substituted from recipe fragments · 1 composed by the model'),
@@ -1097,6 +1111,7 @@ describe('compose by example (the recipe composes its own slides)', () => {
         '<div class="body">The money lands while the work is still ahead.</div>',
       cta:
         '<div class="headline">Book the demo.</div>' +
+        '<div class="tagline">We walk you through it.</div>' +
         '<div class="cta">See how it works</div>' +
         '<div class="handle">@detailmasters</div>',
     };
@@ -1389,7 +1404,7 @@ describe('a deck that says the same thing twice', () => {
       JSON.stringify({
         slides: [
           slide({ headline: 'Reapply a ceramic coating later than you think', body: 'The number on the bottle is a best case, never a deadline.' }, 'cover'),
-          slide({ headline: 'Reapply a ceramic coating later than you think', body: 'The number on the bottle is a best case, never a deadline.' }, 'cta'),
+          slide({ headline: 'Reapply a ceramic coating later than you think', body: 'The number on the bottle is a best case, never a deadline.', ...CLOSE_PARTS }, 'cta'),
         ],
       }),
     );
@@ -1773,6 +1788,57 @@ describe('the brand domain is a fact, not a guess', () => {
 
   it('does not sweep when the handle is an @name — there is no domain to enforce', () => {
     expect(enforceBrandDomain('detailmasters.io', '@detailmasters')).toBe('detailmasters.io');
+  });
+});
+
+describe('one carousel, one ask', () => {
+  const slide = (parts: Record<string, unknown>, role = 'statement') => ({ role, parts }) as never;
+  const close = (parts: Record<string, unknown>) => slide(parts, 'cta');
+  const reasons = (out: ReturnType<typeof oneAskFaults>) => out.map((f) => f.reason);
+
+  it('is quiet on a deck that asks once and says what, where, and what comes back', () => {
+    const deck = [
+      slide({ headline: 'You explained the care. They were distracted.' }, 'cover'),
+      slide({ headline: 'Booking menu, then Send update.', body: 'It stays on the client’s record.' }, 'feature'),
+      close({ headline: 'DM us AFTERCARE.', tagline: 'We send the template back.', cta: 'Send AFTERCARE' }),
+    ];
+    expect(oneAskFaults(deck, 'detailmasters.pro')).toEqual([]);
+  });
+
+  it('flags an ask on a slide before the close — a phrase, a keyword, or a button of its own', () => {
+    const deck = [
+      slide({ headline: 'Save this for the next handover.' }, 'cover'),
+      slide({ headline: 'Three lines.', rows: [{ text: 'What was done' }, { text: 'DM us PAGE for the rest' }] }, 'list'),
+      slide({ headline: 'The rule.', cta: 'Book now' }),
+      close({ headline: 'DM us PAGE.', tagline: 'We send the page back.', cta: 'Send PAGE' }),
+    ];
+    const out = oneAskFaults(deck);
+    expect(out.map((f) => [f.slide, f.reason, f.text])).toEqual([
+      [0, 'a second ask', 'Save this'],
+      [1, 'a second ask', 'DM us PAGE'],
+      [2, 'a second ask', 'Book now'],
+    ]);
+  });
+
+  it('flags the brand address, an @name or "link in bio" beside a keyword ask on the close', () => {
+    const withHandle = close({ headline: 'DM us PAGE.', tagline: 'We send the page back.', cta: 'Send PAGE', handle: 'detailmasters.pro' });
+    expect(oneAskFaults([withHandle]).map((f) => [f.reason, f.text])).toEqual([['two destinations on the close', 'detailmasters.pro']]);
+    const inText = close({ headline: 'Reply RECOVER.', tagline: 'The checklist is at dynatos.pt, link in bio.', cta: 'Send RECOVER' });
+    expect(reasons(oneAskFaults([inText]))).toEqual(['two destinations on the close']);
+    const hostOnly = close({ headline: 'DM us PAGE.', tagline: 'Every page on detailmasters.pro looks like this.', cta: 'Send PAGE' });
+    expect(reasons(oneAskFaults([hostOnly], 'detailmasters.pro'))).toEqual(['two destinations on the close']);
+  });
+
+  it('lets the address be the destination when the ask is to visit it', () => {
+    const visit = close({ headline: 'Book at detailmasters.pro.', tagline: 'Pick a slot; the deposit is shown, not taken.', cta: 'Book a slot', handle: 'detailmasters.pro' });
+    expect(oneAskFaults([visit], 'detailmasters.pro')).toEqual([]);
+  });
+
+  it('flags a close that does not say where, and one that does not say what comes back', () => {
+    const nowhere = close({ headline: 'PAGE.', tagline: 'We send the page back.', cta: 'PAGE' });
+    expect(reasons(oneAskFaults([nowhere]))).toEqual(['the close does not say where']);
+    const noReason = close({ headline: 'DM us PAGE.', cta: 'Send PAGE' });
+    expect(reasons(oneAskFaults([noReason]))).toEqual(['the close does not say what comes back']);
   });
 });
 
