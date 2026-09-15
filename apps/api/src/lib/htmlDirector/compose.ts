@@ -813,7 +813,9 @@ export interface UnfinishedProse {
     | 'over budget after correction'
     /** The cover gate (see `coverHookFaults`): a title on the cover, or a cover that runs long. */
     | 'cover reads as the post title'
-    | 'cover runs past ten words';
+    | 'cover runs past ten words'
+    /** Words the brief never uses — the cheapest tell of an invented line (see `unsourcedWords`). */
+    | 'not in the brief';
 }
 
 /**
@@ -979,6 +981,58 @@ export function coverHookFaults(
   }
   return out;
 }
+
+/**
+ * Crude stems, enough to match "minutes" to "two-minute" and "attached" to
+ * "attach". Several candidates rather than one, because no single suffix rule
+ * is right for both "minutes" (drop the s) and "boxes" (drop the es).
+ */
+const stems = (w: string): string[] => {
+  const out = new Set<string>([w]);
+  if (w.length > 4) out.add(w.replace(/s$/, ''));
+  if (w.length > 5) {
+    out.add(w.replace(/es$/, ''));
+    out.add(w.replace(/ies$/, 'y'));
+    out.add(w.replace(/ed$/, ''));
+    out.add(w.replace(/ing$/, ''));
+    out.add(w.replace(/(?:ed|ing)$/, 'e'));
+  }
+  return [...out];
+};
+
+/**
+ * WORDS THE BRIEF NEVER USES. "Never invent a claim" is a rule the copywriter
+ * still breaks — a stat slide arrived reading "The package that ends disputes
+ * before they start. Clients never leave with unanswered questions." on a
+ * brief about a drop-off walk-around that contains none of those nouns. No
+ * check can prove a sentence true, but a slide whose content words appear
+ * nowhere in the brief, its sources or the brand's own names is, nearly
+ * always, a slide the copywriter made up. Counted per slide; the caller sets
+ * the threshold (a synonym or two is style, four is invention).
+ */
+export function unsourcedWords(
+  slides: ReadonlyArray<ParsedSlide>,
+  corpus: string,
+  extra: ReadonlyArray<string> = [],
+): Array<{ slide: number; words: string[] }> {
+  const known = new Set<string>();
+  for (const w of `${corpus} ${extra.join(' ')}`.toLowerCase().split(/[^a-z0-9']+/)) {
+    if (w.length > 2) for (const k of stems(w)) known.add(k);
+  }
+  const out: Array<{ slide: number; words: string[] }> = [];
+  slides.forEach((s, i) => {
+    const words = [...contentWords(s.parts)].filter(
+      (w) => w.length >= 5 && !/\d/.test(w) && !stems(w).some((k) => known.has(k)),
+    );
+    if (words.length) out.push({ slide: i, words });
+  });
+  return out;
+}
+
+/** How many words a slide may use that the brief never does before it reads as invented. */
+export const INVENTION_THRESHOLD = 4;
+/** Below this many words of brief + source there is nothing to check a slide against. */
+export const INVENTION_MIN_BRIEF_WORDS = 40;
 
 export function unfinishedProse(slides: ParsedSlide[]): UnfinishedProse[] {
   const out: UnfinishedProse[] = [];
@@ -1907,7 +1961,14 @@ export async function parseForCompose(
   // point, and appending a full stop to "Fragrance covers" only hides it.
   const unfinished = unfinishedProse(slides);
   const hook = coverHookFaults(slides, req.idea, req.sources);
-  if (flagrant.length || lost.length || repeats.length || unfinished.length || hook.length) {
+  const inventionCorpus = `${req.idea} ${req.sources.map((x) => `${x.title ?? ''} ${x.text}`).join(' ')}`;
+  const inventionExtra = [recipe.voice.description, ...recipe.voice.dos, ...recipe.voice.donts, opts?.handle ?? ''];
+  // A one-line brief cannot source anything — the copywriter is expected to
+  // write. The check judges only a brief that gave it words to work from.
+  const invented = inventionCorpus.split(/\s+/).length >= INVENTION_MIN_BRIEF_WORDS
+    ? unsourcedWords(slides, inventionCorpus, inventionExtra).filter((u) => u.words.length >= INVENTION_THRESHOLD)
+    : [];
+  if (flagrant.length || lost.length || repeats.length || unfinished.length || hook.length || invented.length) {
     if (flagrant.length) {
       console.warn(`[compose] parse: ${flagrant.length} part(s) burst their budgets — one corrective re-parse`);
     }
@@ -1921,6 +1982,9 @@ export async function parseForCompose(
       );
     }
     for (const h of hook) console.warn(`[compose] parse: the cover ${h.reason.replace(/^cover /, '')} — correcting`);
+    for (const u of invented) {
+      console.warn(`[compose] parse: slide ${u.slide + 1} uses words the brief never does (${u.words.join(', ')}) — correcting`);
+    }
     const correction = [
       flagrant.length ? `Some parts exceed the hard copy budgets:` : '',
       ...flagrant.map((v) => `- slide ${v.slide + 1} ${v.label} is ${v.length} chars, budget ${v.budget}`),
@@ -1928,6 +1992,8 @@ export async function parseForCompose(
       ...lost.map((l) => `- ${JSON.stringify(l)}`),
       unfinished.length ? `These lines stop mid-thought. Finish the sentence — do not simply add a full stop to what is there:` : '',
       ...unfinished.map((u) => `- slide ${u.slide + 1} ${u.label}: ${JSON.stringify(u.text)} (${u.reason})`),
+      invented.length ? `These slides use words the brief and its sources never do — nearly always a claim that was made up:` : '',
+      ...invented.map((u) => `- slide ${u.slide + 1}: ${u.words.join(', ')}. Every line must come from the brief. Rewrite the slide in the brief's own words, or cut it and return one fewer slide.`),
       hook.length ? `The cover does not earn the swipe:` : '',
       ...hook.map((h) => `- slide 1 headline ${JSON.stringify(h.text)}: ${h.reason.replace(/^cover /, '')}. Rewrite it as the reader's own problem, an opinion, or a number — under ten words — and move the title to the eyebrow if it belongs anywhere.`),
       repeats.length ? `These pairs of slides make the same point twice — a reader learns nothing from the second:` : '',
@@ -2057,7 +2123,18 @@ export function finishParsedDeck(
    * RESPONSE only — so anyone opening the review page later saw a deck whose
    * ship bar said all-clear while its closing headline stopped mid-sentence.
    */
-  const checked = [...unfinishedProse(slides), ...coverHookFaults(slides, req.idea, req.sources)];
+  const checked: UnfinishedProse[] = [
+    ...unfinishedProse(slides),
+    ...coverHookFaults(slides, req.idea, req.sources),
+    ...(`${req.idea} ${req.sources.map((x) => x.text).join(' ')}`.split(/\s+/).length < INVENTION_MIN_BRIEF_WORDS ? [] : unsourcedWords(slides, `${req.idea} ${req.sources.map((x) => `${x.title ?? ''} ${x.text}`).join(' ')}`, [
+      recipe.voice.description,
+      ...recipe.voice.dos,
+      ...recipe.voice.donts,
+      opts?.handle ?? '',
+    ])
+      .filter((u) => u.words.length >= INVENTION_THRESHOLD)
+      .map((u) => ({ slide: u.slide, label: 'copy', text: u.words.join(', '), reason: 'not in the brief' as const }))),
+  ];
   /**
    * A clamp that removed a phrase-completing word joins the report: it is the
    * one fault every detector downstream is BLIND to, because the line it

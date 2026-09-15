@@ -77,6 +77,7 @@ const {
   brandHandleFromWebsite,
   enforceBrandDomain,
   clampDisplayLine,
+  unsourcedWords,
 } = await import('./compose');
 type LayoutCheckSummary = import('./compose').LayoutCheckSummary;
 type ComposeProgress = import('./compose').ComposeProgress;
@@ -1772,5 +1773,31 @@ describe('the brand domain is a fact, not a guess', () => {
 
   it('does not sweep when the handle is an @name — there is no domain to enforce', () => {
     expect(enforceBrandDomain('detailmasters.io', '@detailmasters')).toBe('detailmasters.io');
+  });
+});
+
+describe('words the brief never uses', () => {
+  const brief =
+    'The walk-around before you touch the car. A two-minute walk-around at drop-off, with the client standing there, and the photos attached to the booking. If it is not in the photos, it happened here.';
+  const slide = (parts: Record<string, unknown>, role = 'statement') => ({ role, parts }) as never;
+
+  it('is quiet on a slide written in the brief’s own words, stems included', () => {
+    const out = unsourcedWords([slide({ headline: 'Two minutes. Client present. Photos attached.', tagline: 'Client standing there.' })], brief);
+    // "minutes" matches "two-minute", "attached" matches "attached"; only "present" is new — a synonym is style, not invention.
+    expect(out[0]?.words ?? []).toEqual(['present']);
+  });
+
+  it('names the words of a slide the copywriter made up', () => {
+    const out = unsourcedWords(
+      [slide({ eyebrow: 'One service', stat: '2 min', headline: 'The package that ends disputes before they start.', tagline: 'Clients never leave with unanswered questions.' }, 'stat')],
+      brief,
+    );
+    expect(out[0]!.words).toEqual(expect.arrayContaining(['package', 'disputes', 'unanswered', 'questions']));
+    expect(out[0]!.words.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('counts the brand’s own vocabulary as known', () => {
+    const out = unsourcedWords([slide({ headline: 'Calm confidence, rebookings up.' })], brief, ['Calm confidence', 'rebookings']);
+    expect(out).toEqual([]);
   });
 });

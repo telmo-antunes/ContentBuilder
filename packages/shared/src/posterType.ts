@@ -23,8 +23,14 @@ export const POSTER_HEADLINE_PX: Record<string, { lg: number; xl: number }> = {
 /** Roles whose slide is led by its headline, and so may be set at poster size. */
 export const POSTER_ROLES: ReadonlySet<string> = new Set(['statement', 'cover', 'cta']);
 
-/** A frame this empty, on a poster role, is a headline set too small. */
-export const POSTER_SLACK = 0.4;
+/**
+ * A frame this empty, on a poster role, is a headline set too small. Slack is
+ * the LARGEST empty band, and a centred one-liner splits its emptiness into
+ * two bands of ~30% each — so the threshold sits below 40%, and the
+ * measurement after the climb (fits, three lines at most, less slack than
+ * before) is what actually decides.
+ */
+export const POSTER_SLACK = 0.3;
 
 export function slidePosterCss(format: string): string {
   const px = POSTER_HEADLINE_PX[format] ?? POSTER_HEADLINE_PX['1080x1350']!;
