@@ -39,6 +39,7 @@ vi.mock('../ai', () => ({
 
 const {
   addHeadlineVariant,
+  headlineVariantOf,
   checkSlideOverflow,
   dropLeastEssential,
   hasSmallerHeadlineVariant,
@@ -861,3 +862,47 @@ describe('withCeiling', () => {
     expect(process.listenerCount('exit')).toBe(before)
   })
 })
+
+describe('poster size — a bare headline-led slide grows to fill its frame', () => {
+  const bare = '<div class="eyebrow">The part that matters</div>\n<div class="fill"></div>\n<div class="headline">Money lands before the work begins.</div>\n<div class="fill"></div>';
+  const withBody = `${bare}\n<div class="body">A body line under it.</div>`;
+  /** Sparse at the brand size; xl fits at three lines and closes the gap. */
+  const probe = (xlLines = 3) => async () => ({
+    async measure(items: readonly { index: number; html: string }[]) {
+      return items.map(({ html }) => {
+        const v = headlineVariantOf(html);
+        return {
+          state: 'fits' as const,
+          collide: false,
+          slack: v === 'xl' ? 0.22 : v === 'lg' ? 0.34 : 0.6,
+          headlineLines: v === 'xl' ? xlLines : 2,
+        };
+      });
+    },
+    async close() {},
+  });
+
+  it('climbs to xl when the frame is mostly empty and xl still fits', async () => {
+    const out = await renderCheckDeck(detailMastersRecipe, [], [{ html: bare, role: 'statement' }], '1080x1350', { openProbe: probe() });
+    expect(headlineVariantOf(out.slides[0]!.html)).toBe('xl');
+    expect(out.notes.some((n) => n.includes('poster size (xl)'))).toBe(true);
+    expect(out.repaired).toBe(1);
+  });
+
+  it('settles on lg when xl would run past three lines', async () => {
+    const out = await renderCheckDeck(detailMastersRecipe, [], [{ html: bare, role: 'statement' }], '1080x1350', { openProbe: probe(4) });
+    expect(headlineVariantOf(out.slides[0]!.html)).toBe('lg');
+  });
+
+  it('leaves a slide with a body, and a content role, alone', async () => {
+    const out = await renderCheckDeck(
+      detailMastersRecipe,
+      [],
+      [{ html: withBody, role: 'statement' }, { html: bare, role: 'feature' }],
+      '1080x1350',
+      { openProbe: probe() },
+    );
+    expect(headlineVariantOf(out.slides[0]!.html)).toBeUndefined();
+    expect(headlineVariantOf(out.slides[1]!.html)).toBeUndefined();
+  });
+});

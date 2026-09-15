@@ -29,6 +29,7 @@ import {
   enforceTypeFloor,
   typeBaseCss,
 } from './typeFloor';
+import { slidePosterCss } from './posterType';
 
 /** CSS custom-property prefix for every brand token the renderer injects. */
 export const RECIPE_VAR_PREFIX = '--cb';
@@ -512,7 +513,9 @@ export function recipeStylesheetFor(recipe: BrandRecipe, format: string): string
   // inert on a slide that carries no `data-surface`.
   const surfaces = slideSurfaceCss();
   const typesetting = slideTypesettingCss();
-  return [typeBaseCss(), authored, surface, media, archetypes, align, surfaces, typesetting]
+  // Poster sizes for a bare headline-led slide — app capability, like the floor.
+  const poster = slidePosterCss(format);
+  return [typeBaseCss(), authored, surface, media, archetypes, align, surfaces, typesetting, poster]
     .filter(Boolean)
     .join('\n');
 }

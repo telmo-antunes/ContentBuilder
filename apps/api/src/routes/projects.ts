@@ -30,7 +30,7 @@ import { deckForms, referenceSheetsFor } from '../lib/inspo';
 import { CRITIQUE_SKIP_TEXT, critiqueDeck, type CritiqueOutcome } from '../lib/htmlDirector/deckCritique';
 import { resolveBrief } from '../lib/sourceIngest';
 import { authoredShape, partsFromAuthored, rewriteAuthoredCopy } from '../lib/htmlDirector/reparse';
-import { addHeadlineVariant, removeHeadlineVariant, shootLiveDeck } from '../lib/htmlDirector/renderCheck';
+import { addHeadlineVariant, headlineVariantOf, removeHeadlineVariant, shootLiveDeck } from '../lib/htmlDirector/renderCheck';
 import { sanitizeAuthoredHtml } from '../lib/htmlSanitize';
 import { ProjectModel, ProjectVersionModel, BusinessModel, BrandKitModel, MediaAssetModel, VideoJobModel, VIDEO_JOB_ACTIVE_STATES } from '../models';
 import { ApiError, asyncHandler, parseBody, publicErrMessage, requireObjectId } from '../lib/http';
@@ -87,14 +87,36 @@ export const projectsRouter = Router();
  * photos — the pre-photos-layer `slide.mediaAssetId` was folded in here once by
  * `npm run migrate:photos` and no longer exists.
  */
-function normalizePhotos(s: SlideInput): SlidePhoto[] {
+function normalizePhotos(s: SlideInput, index = 0): SlidePhoto[] {
   const raw = s.photos ?? [];
   const out: SlidePhoto[] = [];
   let hasBackground = false;
-  for (const p of raw) {
+  /**
+   * A SLOT PHOTO MUST NAME A SLOT THIS SLIDE DECLARES. An agent set every
+   * photo to slot "hero" — the name the skill's example shows — on slides
+   * whose figure was `data-cb-slot="proof"`; the PATCH reported success, the
+   * stored project looked filled, and the export was blank where the pictures
+   * should have been. Only opening the PNGs showed it, three cycles later.
+   * So an undeclared slot is never stored as-is: when the slide declares
+   * slots, the photo takes the first of them (and the response shows the
+   * corrected name); when it declares none, the request is refused with the
+   * field's path, because nothing downstream could have rendered it.
+   */
+  const declared = authoredSlots(s.authored?.html ?? '');
+  for (const [pi, p] of raw.entries()) {
     if (!p.mediaAssetId || !Types.ObjectId.isValid(p.mediaAssetId)) continue;
     let placement = p.placement;
-    if (placement === 'slot' && !(p.slot && isSlotName(p.slot))) placement = 'free';
+    let slot = p.slot;
+    if (placement === 'slot' && !(slot && isSlotName(slot))) placement = 'free';
+    if (placement === 'slot' && slot && !declared.includes(slot)) {
+      if (!declared.length) {
+        throw new ApiError(400, `Slide ${index + 1} declares no image slot, so a photo cannot be placed in slot "${slot}" — use placement "background" or "free".`, {
+          issues: [{ path: `slides.${index}.photos.${pi}.slot`, message: `no slot named "${slot}" on this slide` }],
+        });
+      }
+      console.warn(`[projects] slide ${index + 1}: photo named slot "${slot}", which the slide does not declare — placed in "${declared[0]}"`);
+      slot = declared[0]!;
+    }
     if (placement === 'background') {
       if (hasBackground) continue; // a slide has one background, not several
       hasBackground = true;
@@ -103,7 +125,7 @@ function normalizePhotos(s: SlideInput): SlidePhoto[] {
       id: p.id || randomUUID(),
       mediaAssetId: p.mediaAssetId,
       placement,
-      ...(placement === 'slot' ? { slot: p.slot } : {}),
+      ...(placement === 'slot' ? { slot } : {}),
       ...(placement === 'free'
         ? { frame: p.frame ?? { x: 0.28, y: 0.34, w: 0.44, h: 0.32 }, z: p.z ?? 1 }
         : {}),
@@ -136,7 +158,7 @@ export function normalizeSlides(slides: SlideInput[]) {
     imageNeed: s.imageNeed ?? 'none',
     imageQuery: s.imageQuery,
     rationale: s.rationale,
-    photos: normalizePhotos(s),
+    photos: normalizePhotos(s, i),
     overrides: s.overrides,
     // Preserve AI-authored markup (recipe-driven slides) through every
     // slide-persisting path, and re-sanitise it defensively — this is the one
@@ -1014,12 +1036,23 @@ projectsRouter.post(
       // Tokenised rather than pattern-matched: the old regexes only fired when
       // `headline` was the FIRST class in a double-quoted attribute, so on a
       // recipe that writes `class="lead headline"` the button did nothing at all.
-      case 'smaller-headline':
-        html = addHeadlineVariant(html).html;
+      // Four sizes, one step at a time: sm → the brand's size → lg → xl. The
+      // larger two are the app's poster sizes (see shared/posterType.ts).
+      case 'smaller-headline': {
+        const now = headlineVariantOf(html);
+        html = now === 'xl' ? addHeadlineVariant(removeHeadlineVariant(html, 'xl').html, 'lg').html
+          : now === 'lg' ? removeHeadlineVariant(html, 'lg').html
+          : addHeadlineVariant(html).html;
         break;
-      case 'bigger-headline':
-        html = removeHeadlineVariant(html).html;
+      }
+      case 'bigger-headline': {
+        const now = headlineVariantOf(html);
+        html = now === 'sm' ? removeHeadlineVariant(html).html
+          : now === undefined ? addHeadlineVariant(html, 'lg').html
+          : now === 'lg' ? addHeadlineVariant(removeHeadlineVariant(html, 'lg').html, 'xl').html
+          : html;
         break;
+      }
       // The recipe's inverse surface, applied per slide.
       case 'invert':
         bg = 'inverse';

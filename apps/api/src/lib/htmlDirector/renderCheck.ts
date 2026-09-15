@@ -44,7 +44,7 @@ import {
   type Format,
   archetypeFor,
 } from '@contentbuilder/shared';
-import { SLACK_LIMIT, maxSlackFor as maxSlackForRole } from '@contentbuilder/shared';
+import { POSTER_ROLES, POSTER_SLACK, SLACK_LIMIT, maxSlackFor as maxSlackForRole } from '@contentbuilder/shared';
 import { config } from '../../config';
 import { topLevelBlocks, type SlideBlock } from './dedupeBlocks';
 import { variantIndexOf, type ComposeSlideInput } from './prompt';
@@ -1206,6 +1206,64 @@ export interface DeckCheckResult {
  *
  * Never throws.
  */
+/** Which of the app's headline sizes a slide already wears, if any. */
+export function headlineVariantOf(html: string): 'sm' | 'lg' | 'xl' | undefined {
+  const m = /<[a-z][a-z0-9]*[^>]*\bclass\s*=\s*(?:"([^"]*)"|'([^']*)')[^>]*>/gi;
+  let hit: RegExpExecArray | null;
+  while ((hit = m.exec(html))) {
+    const tokens = (hit[1] ?? hit[2] ?? '').split(/\s+/);
+    if (!tokens.includes('headline')) continue;
+    for (const v of ['xl', 'lg', 'sm'] as const) if (tokens.includes(v)) return v;
+    return undefined;
+  }
+  return undefined;
+}
+
+/** Markup that carries more than a headline and its short lines — a poster size would crowd it. */
+const NOT_BARE = /class="[^"]*\b(body|panel|figures|ledger|steps|compare|quote|stat|card|attr)\b|data-cb-slot=/;
+
+/**
+ * POSTER SIZE — the ceiling that fills the frame.
+ *
+ * The floor keeps a headline readable; nothing said what to do with a frame
+ * the headline does not need. A statement with eight words and nothing else
+ * rendered at the floor, anchored low, with three-quarters of the canvas
+ * empty — and passed every gate, because a display role may leave 65% of a
+ * frame empty. So a bare, headline-led slide that measures sparse climbs to
+ * the app's `xl` size, then `lg`, keeping the first that still fits, does not
+ * collide, runs to three lines at most and actually closes the gap. Free:
+ * one or two measurements, no model.
+ */
+export async function posterPass(
+  measure: (index: number, html: string) => Promise<LayoutVerdict>,
+  out: CheckSlide[],
+  verdicts: LayoutVerdict[],
+): Promise<string[]> {
+  const notes: string[] = [];
+  for (const [i, s] of out.entries()) {
+    const v = verdicts[i];
+    if (!v || v.state !== 'fits' || v.collide) continue;
+    if (!s.role || !POSTER_ROLES.has(s.role)) continue;
+    if (v.slack < POSTER_SLACK || v.headlineLines < 1 || v.headlineLines > 2) continue;
+    if (headlineVariantOf(s.html) !== undefined || NOT_BARE.test(s.html)) continue;
+    if (!/class="[^"]*\bheadline\b/.test(s.html)) continue;
+    for (const size of ['xl', 'lg'] as const) {
+      const bigger = addHeadlineVariant(s.html, size);
+      if (!bigger.changed) break;
+      const w = await measure(i, bigger.html);
+      if (w.state === 'fits' && !w.collide && w.headlineLines <= 3 && w.slack < v.slack) {
+        out[i] = { ...s, html: bigger.html };
+        verdicts[i] = w;
+        notes.push(
+          `slide ${i + 1}: headline set at poster size (${size}) — ${Math.round(v.slack * 100)}% of the frame was empty, now ${Math.round(w.slack * 100)}%`,
+        );
+        break;
+      }
+    }
+  }
+  return notes;
+}
+
 export async function renderCheckDeck(
   recipe: BrandRecipe,
   inputs: readonly ComposeSlideInput[],
@@ -1322,6 +1380,14 @@ export async function renderCheckDeck(
   try {
     const verdicts = await probe.measure(slides.map((s, index) => ({ index, html: s.html })));
     const measured = verdicts.filter((v) => v.state !== 'unknown').length;
+    // A sparse headline-led slide grows to fill its frame before anything else
+    // is judged, so the gates below see the slide that will actually ship.
+    const posterNotes = await posterPass(
+      async (i, html) => (await probe.measure([{ index: i, html }]))[0] ?? UNKNOWN_VERDICT,
+      out,
+      verdicts,
+    );
+    for (const n of posterNotes) console.warn(`[render-check] ${n}`);
     const unmeasured = slides.length - measured;
     if (unmeasured) {
       console.warn(`[render-check] ${unmeasured}/${slides.length} slide(s) could not be measured — those ship unchecked`);
@@ -1343,9 +1409,9 @@ export async function renderCheckDeck(
     if (!overflowing.length && !faulty.length) {
       const designNotes = await designPass(out);
       await lookAtDeck(out);
-      if (designNotes.length) {
+      if (designNotes.length || posterNotes.length) {
         const ms = Date.now() - t0;
-        return { ...nothing, measured, unmeasured, notes: designNotes, ms };
+        return { ...nothing, measured, unmeasured, repaired: posterNotes.length, notes: [...posterNotes, ...designNotes], ms };
       }
       const ms = Date.now() - t0;
       console.warn(
@@ -1358,7 +1424,7 @@ export async function renderCheckDeck(
     // time; the probe's page pool is what actually caps the browser work.
     const repairs = await Promise.all(
       overflowing.map((i) =>
-        repairOverflow(recipe, inputs[i] ?? fallbackInput(slides[i]!, fmt, i), slides[i]!.html, fmt, {
+        repairOverflow(recipe, inputs[i] ?? fallbackInput(slides[i]!, fmt, i), out[i]!.html, fmt, {
           measure: async (html) =>
             ((await probe.measure([{ index: i, html }]))[0] ?? UNKNOWN_VERDICT).state,
           recompose: opts?.recompose,
@@ -1368,7 +1434,7 @@ export async function renderCheckDeck(
               err instanceof Error ? err.message : String(err)
             }`,
           );
-          return { html: slides[i]!.html, steps: [], stillOverflows: true, aiCalls: 0 } as RepairResult;
+          return { html: out[i]!.html, steps: [], stillOverflows: true, aiCalls: 0 } as RepairResult;
         }),
       ),
     );
@@ -1387,7 +1453,7 @@ export async function renderCheckDeck(
         const v = verdicts[i]!;
         const cap = archetypeFor(slides[i]?.archetype)?.maxHeadlineLines;
         return (
-          repairLayout(recipe, inputs[i] ?? fallbackInput(slides[i]!, fmt, i), slides[i]!.html, v, cap, {
+          repairLayout(recipe, inputs[i] ?? fallbackInput(slides[i]!, fmt, i), out[i]!.html, v, cap, {
             measure: async (html) => (await probe.measure([{ index: i, html }]))[0] ?? UNKNOWN_VERDICT,
             // The last rung only exists when the probe can photograph — a
             // double in a test implements `measure` alone and never reaches it.
@@ -1402,16 +1468,16 @@ export async function renderCheckDeck(
                   err instanceof Error ? err.message : String(err)
                 }`,
               );
-              return { index: i, html: slides[i]!.html, steps: [], remaining: [], aiCalls: 0 };
+              return { index: i, html: out[i]!.html, steps: [], remaining: [], aiCalls: 0 };
             })
         );
       }),
     );
 
     const unresolved: number[] = [];
-    const notes: string[] = [];
+    const notes: string[] = [...posterNotes];
     let aiCalls = 0;
-    let repaired = 0;
+    let repaired = posterNotes.length;
 
     for (const r of layoutRepairs) {
       out[r.index] = { ...out[r.index]!, html: r.html };
