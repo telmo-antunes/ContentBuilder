@@ -590,6 +590,7 @@ projectsRouter.post(
     let ledger: SpendLedger | undefined;
     /** Decisions the parse step took before anything was composed — a withdrawn photo call. */
     const earlyNotes: Array<{ slide?: number; note: string }> = [];
+    let progressWrite: Promise<void> = Promise.resolve();
     try {
       const run = await withSpendLedger(
         { projectId: String(project._id), ceilingUsd: config.ai.postCeilingUsd },
@@ -645,10 +646,14 @@ projectsRouter.post(
         // the tests keep the deterministic plan.
         artDirection: true,
         onProgress: (p) => {
-          void ProjectModel.updateOne(
-            { _id: project._id },
-            { $set: { composeProgress: { ...p, at: new Date() } } },
-          ).catch(() => {});
+          // Chained, so the last crumb ("done") cannot land AFTER the clear
+          // below and leave a finished deck reading as still composing.
+          progressWrite = progressWrite.then(() =>
+            ProjectModel.updateOne(
+              { _id: project._id },
+              { $set: { composeProgress: { ...p, at: new Date() } } },
+            ).then(() => undefined, () => undefined),
+          );
         },
         }),
       );
@@ -659,6 +664,7 @@ projectsRouter.post(
       // is the most useful thing about a compose that did not finish.
       throw new ApiError(502, `Compose failed: ${publicErrMessage(err, 'AI error')}. You can build manually instead.`);
     }
+    await progressWrite;
     await ProjectModel.updateOne({ _id: project._id }, { $unset: { composeProgress: '' } }).catch(() => {});
     if (!composed.length) {
       throw new ApiError(502, 'The compose came back empty — try rephrasing the idea.');

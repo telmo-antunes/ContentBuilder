@@ -918,10 +918,14 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
       tone: 'bad',
       label: f.reason.startsWith('cover ')
         ? `Cover: ${f.reason.replace(/^cover /, '')}`
-        : `Slide ${f.slide + 1}: ${f.label} stops mid-thought`,
+        : f.reason === 'not in the brief'
+          ? `Slide ${f.slide + 1}: words the brief never uses`
+          : `Slide ${f.slide + 1}: ${f.label} stops mid-thought`,
       hint: f.reason.startsWith('cover ')
         ? `“${f.text}” — the cover is the reader's own problem, an opinion or a number, under ten words. The title belongs in the eyebrow.`
-        : `“${f.text}” — ${f.reason}. Rewrite it, or shorten it to a line that finishes.`,
+        : f.reason === 'not in the brief'
+          ? `${f.text} — none of these appear in the brief or its sources. A slide built from words the brief never used is usually a claim that was made up; rewrite it from the brief or cut it.`
+          : `“${f.text}” — ${f.reason}. Rewrite it, or shorten it to a line that finishes.`,
       slide: f.slide,
     });
   }

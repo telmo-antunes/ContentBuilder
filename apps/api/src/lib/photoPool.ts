@@ -248,6 +248,12 @@ export async function attachPoolPhotos(
     }),
   );
   const suited = means.map((mean, i) => {
+    // ONLY A PHOTOGRAPH OWNS THE FRAME. A tagged screenshot whose tone read
+    // "dark" (a mobile app over a car photo) was laid behind a close, with the
+    // interface's white rows showing through the type. A screenshot's place is
+    // a slot at real scale; a graphic or a logo never bleeds.
+    const kind = tagged ? pool[i]?.tags?.kind : undefined;
+    if (kind && kind !== 'photo') return false;
     // A tagged picture's tone is a judgement, not a mean: "dark" and "mid" sit
     // on a dark ground, "light" on a light one. The measurement stays as the
     // fallback for anything untagged.
