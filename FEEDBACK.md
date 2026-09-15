@@ -51,6 +51,16 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
+### The only treatment a screenshot can get is the one the references never use
+
+- **Kind:** Gap
+- **Severity:** cost me a fix (three export cycles on one deck; it is the reason its legibility scored 4 and not 5)
+- **First seen:** 2026-09-15 — the-booking-page-before-and-after, judged against `inspo/` for the first time
+- **What happened:** the deck's argument IS four product screenshots, so how a screenshot is drawn decides whether the post works. The app has exactly one treatment: an inset `.cb-shot` card, the image scaled to fit inside it, centred, with the slot's surface around it. Now compare **`inspo/notionhq/DcjRsxVFJvp`**, the closest reference in the swipe file (7 slides, product proof, UI on five of them): every exhibit there is **cropped to one fragment at real scale and runs off the bottom edge of the frame** — a wiki page cut mid-list, a chat thread cut mid-bubble, a Kanban board cut mid-column. Nothing is shrunk to fit. That is why its UI is legible at feed size and a whole window in a card is not. Reproducing it here took cropping the source PNG to the fragment by hand and choosing a window ratio that would defeat the box, which is a workaround, not a treatment.
+- **Why it matters:** every repurpose of a product post is screenshots, and the gap is not cosmetic — it decides whether the evidence can be read at all. It also cuts against the deck's own economics: the more carefully a shot is framed upstream (`blog:shots` has `clipTo`, viewports, scale), the more of that framing the slot throws away by fitting it to a box.
+- **The awkward part:** `ec6a0de` (#124) deliberately made a screenshot unable to bleed — "only a photograph may own the frame, a tagged screenshot or graphic never bleeds, whatever its tone". That rule is right for a screenshot used as a BACKGROUND under type. It also closes the one door the references walk through, because the treatment they use is a screenshot bleeding off ONE edge as an exhibit, with the type above it and nothing over it.
+- **Direction:** a third placement beside `slot` and `edge` — call it `exhibit`: full column width, anchored to the type above it, cropped by the app to the width it needs and allowed to run past the bottom of the frame, with no scrim, no gradient and no fit-to-box. That is a different thing from a photograph owning the frame, and #124's rule can keep saying no to that while this says yes.
+
 ### A headline announced two things and the slide delivered one — and the rationale certified all three
 
 - **Kind:** Defect
