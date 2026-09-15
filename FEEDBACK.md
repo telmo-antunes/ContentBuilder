@@ -51,6 +51,35 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
+### A headline announced two things and the slide delivered one — and the rationale certified all three
+
+- **Kind:** Defect
+- **Severity:** cost me a fix
+- **First seen:** 2026-09-15 — your-studio-page-was-rebuilt (IG carousel), slide 7, parse v12 / compose v7
+- **What happened:** the slide composed as `<div class="headline">Two numbers worth understanding.</div>` over a single body line — `The total now includes extras and the travel fee.` (48 chars). The second number is simply absent: the deposit, which the brief states, and which this same project's earlier compose had given a whole slide of its own ("That deposit line / Shown there. Not taken. / Informational only."). The stored per-slide `rationale` asserts the opposite: *"Body cut to under 90 chars by trimming 'that money' and 'take payment'. All three facts from the source preserved."* No gate could have caught it: the body is finished prose with a full stop and nothing overflowed, so the deterministic prose checks had nothing to say — and the `copyFaults` and `critique` sitting on the project were **stale pre-rewind leftovers**, not a review of this deck (see the ledger-fields note under the stale-critique entry below), so this compose was in fact reviewed by nothing at all. Found by reading the deck against the source; fixed by hand (one of **three copy interventions on eight slides** this run).
+- **Why it matters:** an announced count is a promise the next element has to keep, and this house style announces constantly ("It needs four things.", "Two numbers worth…"). The half dropped here was the deposit — the product truth that most needs to be got right, since the platform never processes that money — so this was not a stylistic trim. Two things make it worse than a one-off: the rationale *certifies* that nothing was lost, so a reviewer who reads the review page is told the slide is complete; and the budget the model cites is not the budget it had — slide 7 is a `statement` carrying no tagline, whose body may run to **150** (`explainBody`), not 90. Worth checking whether `composeBodyBudget` (`compose.ts:514`, keyed on `slide.role`) saw a role at all: the stored slide carries `archetype: 'statement'` with `role: null`.
+- **Direction:** a deterministic sibling to `unfinishedProse` — a headline or eyebrow containing a count word (two/three/four…) on a slide whose panel rows or body sentences number fewer, written into `copyFaults` so the ship bar blocks it. Unlike invention, this one is decidable. Separately: when a budget forces a cut, the thing to drop is the ANNOUNCEMENT, not the item — one prompt line, plus a repair rung that rewrites the headline rather than the list.
+
+### The closing slide invented the reader's problem — twice, three prompt versions apart
+
+- **Kind:** Defect
+- **Severity:** cost me a fix
+- **First seen:** 2026-09-15 — your-studio-page-was-rebuilt, slide 8 (`cta`), parse v12
+- **What happened:** the composed tagline read `See your booking page back the way it should look.` The reader's page is not wrong — it was rebuilt FOR them, which is the whole post. The rationale shows the framing was deliberate, not a slip: *"Tagline uses 'back' as the brand reaches for it — and reframes the action as the reader's own page, not a demo."* The same slide of the same project, composed earlier the same night on **parse v9**, had produced the same invention more bluntly: headline `If your page looks wrong, DM us PAGE`, body `We will walk back through your listing with you.` Two composes, two prompt versions, the same false premise on the same role.
+- **Why it matters:** it is the CTA — the one slide with a job — and the invention is about the READER: a studio owner told their page looks broken when it had just been improved for them. `unsourcedWords` cannot catch this class. It flags four or more content words the brief never uses, and this sentence is built entirely from the brief's own vocabulary ("booking", "page", "back", "look") rearranged into a claim the brief does not make. **An invented premise is not an invented word** — which is why it survives a lexical check and reads, to anyone who did not hold the source, as the most natural line on the slide.
+- **Not caught by the invention check that shipped the same morning.** `ec6a0de` (#124) makes `unsourcedWords` block the ship bar at four or more unsourced content words. Run against this tagline it finds none — every word is in the brief. The gate is right and this fault walks straight through it.
+- **Direction:** not another lexical check. Two that would bite: (a) let a brief carry NEGATIVE constraints — "the reader's page has already been rebuilt; nothing on it is broken" — threaded into the cta prompt the way `settings.audience` already threads a reader instruction; (b) give the deck critique one copy question for the closing slide: does it assert anything about the reader's own situation that the brief does not state? The critique already reads the whole deck against the brief, and it is the pass that exists to make judgment calls.
+
+### Compose furnished a slide with a previous deck's evidence screenshot
+
+- **Kind:** Defect
+- **Severity:** cost me a fix
+- **First seen:** 2026-09-15 — your-studio-page-was-rebuilt (IG carousel)
+- **What happened:** compose authored a `data-cb-slot` figure and filled it from the brand pool with mediaAssetId `6aa5f333df9566ea05afc19f` — a **dashboard Services screenshot uploaded the day before for the prepaid-packages deck**. It landed on a slide headed "A photo now fills the card", which is about the card on the studio's PUBLIC page. The one slide meant to show the claim showed a different product surface, and the deck critique flagged only that it was small and uncaptioned, not that it was the wrong screen.
+- **Why it matters:** the pool is business-level and accumulates forever, so every deck inherits every screenshot earlier decks uploaded as evidence. Those are not stock photography — each was cropped to prove one specific claim, and reused blind it proves the wrong one. The risk grows with every post and it is silent: a screenshot in a slot looks like success.
+- **Direction:** an uploaded asset should carry what it was for. A `purpose: 'evidence'` flag set when media is attached to a specific slot, excluded from generic pool selection afterwards, would keep real photography in the pool and single-claim screenshots out of it.
+- **Not addressed by the 2026-09-15 slot fix**, which corrects where a photo lands, not which photo is chosen.
+
 ### The deck was generic because the BRIEF was — and the brief dropped the post to stay under its cap
 
 - **Kind:** Defect (upstream, in the CRM's `content:instagram`, not in ContentBuilder)
@@ -70,6 +99,8 @@ Rules that keep this file worth reading:
 - **What happened:** compose ran the deck critique on the saved deck (correctly, per the recent photo-attachment-ordering fix) and it flagged real problems — slide 1's cover photo made "detail masters" illegible against "the light grey seat fabric," and four consecutive near-black frames flattened the middle of the deck. Both were true AT THAT MOMENT. I then made three rounds of `PATCH` edits (two copy fixes, a photo swap on the cover, a photo add on slide 5) and re-exported — but `GET /projects/:id` kept returning the ORIGINAL critique verbatim, now describing a cover photo that had been deleted three edits earlier and no longer existed in any form.
 - **Why it matters:** a critique that stays confidently specific about a deck that no longer exists is worse than an absent one — it reads as current because nothing marks it stale, and a session or a user skimming the review page has no signal to distrust it. This is the same shape of failure already fixed for "critique runs before photos are attached" (FEEDBACK.md, resolved) — the fix moved the critique AFTER photo attachment, but nothing moved it after HAND EDITS, which happen on essentially every deck a session touches.
 - **Direction:** any `PATCH`, `/tweak`, or `/variants` write that changes `authored` or `photos` should clear the stored critique (or flip its status to something the review page renders as "stale — re-run"), the same way a failed compose now writes an honest "not reviewed" instead of leaving the previous verdict in place.
+- **Seen again:**
+  - 2026-09-15 — your-studio-page-was-rebuilt, and reachable without a single PATCH. The project was recomposed after a stack restart: its slides changed completely and their stamped prompt versions moved with them (`pv.parse` 9 → 12, slide 2 switching `fragment` → `ai`), while the stored `critique` and `spend` did not move **at all** — $0.21385575 over 10 calls, identical to the last digit, with findings still describing the PREVIOUS deck ("a floating white card showing session/expiry rows — a packages list, not a cramped phone layout", about a slide that now shows a phone poster card). **Cause found, and already fixed:** the Instagram rewind (#122) removed `composeNotes`, `recipeSnapshot`, `spend`, `critique` and `copyFaults` from the Project schema, so mongoose silently discarded every one of those writes — `project.set('spend', …)` ran and went nowhere. Restored verbatim in `ec6a0de` (#124, 2026-09-15 09:10). What makes it worth keeping here rather than filing under the schema fix: for the whole window, the review page showed a confident verdict, a cost and a copy-fault list belonging to a deck that no longer existed, and **no PATCH was involved** — the same stale-verdict failure this entry is about, reached by a route nothing was watching. A deck's review is only as honest as the field it is stored in.
 
 ### Compose can only fill slots from its own pool — it cannot reserve one for an image the brief already named
 
@@ -241,6 +272,25 @@ Add the next one here, following the shape in [How to add an entry](#how-to-add-
 - **Direction (remaining):** more of the code's calls belong in the ledger — parse-slide drops, brand-mark normalisation, budget clamps, archetype assignments that demoted a slot. And the compose-path model (slide author) has judgment worth one line too. The pattern is established; each is a small addition.
 
 ## Resolved
+
+### A photo aimed at an undeclared slot vanished, silently — RESOLVED
+
+*Resolved 2026-09-15 (PR #123).* Two slides exported visibly empty after a
+whole-deck PATCH that reported success: their figures were named
+`data-cb-slot="proof"` while every photo carried `slot: "hero"` — the value the
+instagram skill's example shows, so it is the assumption a session arrives
+with. Nothing in the response, the stored project or the export said the photo
+was orphaned; three export-and-look cycles found nothing, because looking was
+the only check that could have.
+
+The per-slide photo route already refused this. The whole-deck PATCH — the one
+the skill actually drives — did not. It now remaps to the slide's first declared
+slot and returns the corrected name, and refuses with the field's path when the
+slide declares no slot at all.
+
+Verified on the rebuilt stack: a photo sent as `hero` to a slide declaring only
+`proof` came back as `proof`.
+
 
 ### Seven identical grounds — the sameness no layout lever could fix
 
