@@ -328,10 +328,10 @@ export const TOUCHPOINT_REGISTRY: Record<TouchpointId, Touchpoint> = {
       {
         version: 13,
         date: '2026-09-15',
-        summary: 'One carousel, one ask — and the close says what to do, where, and what comes back.',
+        summary: 'One carousel, one ask, said once — the button asks, the headline says what comes back.',
         improves: [
-          'The deck asks the reader for exactly one thing, once, on the close. A "save this", a "link in bio" or a button on any other slide goes back to the copywriter, and what survives is a copy fault on the review page.',
-          'The close answers three questions: the headline is the action and the channel ("DM us PAGE."), the tagline is what comes back, and the button repeats the action. A close missing either goes back.',
+          'The deck asks the reader for exactly one thing, and only the close\'s button asks it. A "save this", a "link in bio" or a button on any other slide goes back to the copywriter, and what survives is a copy fault on the review page.',
+          'The button is the whole ask — the channel and the keyword ("DM us PAGE", "Reply RECOVER", "Book at …") — and the headline is what the reader gets back. A headline that is itself an instruction over a button ("DM us PAGE." over "Send PAGE") is two asks and goes back; so does a button that names no channel.',
           'One destination: a keyword ask never sits beside the brand\'s address, an @name or "link in bio". A surviving address is dropped and the owner is told; it belongs in the bio and the caption.',
         ],
       },
