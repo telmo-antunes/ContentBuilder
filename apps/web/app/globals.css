@@ -2046,7 +2046,7 @@ input[type='color'] {
 .mo-ledger .lgrow:last-child { border-bottom: none; }
 .mo-ledger .lgrow .l { font-size: 12px; font-weight: 600; color: var(--mo-ink); }
 .mo-ledger .lgrow .l small { display: block; font-weight: 400; color: var(--mo-faint); font-size: 11px; margin-top: 2px; }
-.mo-ledger .lgrow .v { font-family: var(--mono, ui-monospace); font-size: 12px; color: var(--mo-ink); }
+.mo-ledger .lgrow .v { font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 12px; color: var(--mo-ink); }
 .mo-ledger .lgrow .v .def { color: var(--mo-faint); }
 .mo-ledger .lgrow .side { display: flex; align-items: center; gap: 10px; }
 .mo-ledger .lgrow .mo-drow-body { grid-column: 1 / -1; }
@@ -2170,3 +2170,19 @@ input[type='color'] {
 .series-edit input, .series-edit textarea, .series-edit select { padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); color: inherit; font: inherit; }
 .mo-series-pick { display: grid; gap: 4px; margin-bottom: 10px; }
 .mo-series-pick .lab { font-size: 12px; color: var(--mo-muted); }
+
+/* Settings — the machine room's row controls. The Override/Edit/Close button had
+   no rule of its own (`.mo-drow .edit` never matched `.lgrow`), so it shipped
+   as the browser's default button beside a styled pill. */
+.mo-ledger .lgrow .edit { font-size: 12px; font-weight: 600; color: var(--mo-ink); background: var(--mo-card); border: 1px solid var(--mo-line-strong); border-radius: 999px; padding: 5px 13px; cursor: pointer; font-family: inherit; white-space: nowrap; line-height: 1.3; transition: border-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease), transform 0.3s var(--mo-spring); }
+.mo-ledger .lgrow .edit:hover { border-color: var(--mo-indigo); color: var(--mo-indigo); transform: translateY(-1px); }
+.mo-ledger .lgrow .mo-drow-body { display: flex; flex-direction: column; gap: 8px; padding-top: 6px; }
+.mo-ledger .lgrow .mo-drow-body select,
+.mo-ledger .lgrow .mo-drow-body input { width: 100%; max-width: 460px; font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 12px; border: 1px solid var(--mo-line-strong); border-radius: 9px; padding: 8px 34px 8px 10px; background: var(--mo-card); color: var(--mo-ink); appearance: none; -webkit-appearance: none; }
+.mo-ledger .lgrow .mo-drow-body select { background-image: linear-gradient(45deg, transparent 50%, var(--mo-faint) 50%), linear-gradient(135deg, var(--mo-faint) 50%, transparent 50%); background-position: calc(100% - 18px) 55%, calc(100% - 13px) 55%; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; cursor: pointer; }
+.mo-ledger .lgrow .mo-drow-body input { padding-right: 10px; }
+.mo-ledger .lgrow .mo-drow-body select:focus,
+.mo-ledger .lgrow .mo-drow-body input:focus { outline: none; border-color: var(--mo-indigo); box-shadow: 0 0 0 3px var(--mo-indigo-bg); }
+.mo-ledger .lgrow .mo-drow-body .note { font-size: 11.5px; color: var(--mo-faint); margin: 0; }
+.mo-ledger .lgrow .mo-drow-body .link { font-size: 11.5px; font-weight: 600; color: var(--mo-indigo); background: none; border: none; padding: 0; cursor: pointer; font-family: inherit; }
+.mo-ledger .lgrow .mo-drow-body .link:hover { text-decoration: underline; }

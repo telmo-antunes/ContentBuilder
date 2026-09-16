@@ -2,13 +2,17 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { getSettings, updateSettings, getUsage, type AiSettings, type SettingsResponse, type UsageSummary } from '../lib/api';
+import { getSettings, updateSettings, getUsage, type AiSettings, type ModelOption, type SettingsResponse, type UsageSummary } from '../lib/api';
 import { ErrorState } from '../components/ErrorState';
 import { Skeleton } from '../components/Skeleton';
 import { toast } from '../components/Toast';
 
 const usd = (n: number) => `$${n.toFixed(n < 1 ? 4 : 2)}`;
 const compact = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
+/** "Claude Sonnet 5 · $2 / $10 per 1M" — the price rides in the option so the choice is made with the cost in view. */
+const modelLabel = (m: ModelOption) => `${m.label} · $${m.inUsd} / $${m.outUsd} per 1M`;
+/** The select's sentinel for "type an id the list does not carry". */
+const OTHER = '__other__';
 
 /**
  * SETTINGS — the machine room, as ledger lines (The Ledger, batch 7).
@@ -25,6 +29,8 @@ export default function SettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  /** Rows whose override is being typed by hand rather than picked. */
+  const [typing, setTyping] = useState<Record<string, boolean>>({});
 
   const load = () => {
     setError(null);
@@ -93,6 +99,7 @@ export default function SettingsPage() {
     { key: 'captionModel', label: 'Captions', hint: 'writes the caption in the brand voice', ph: judgmentDefault },
   ];
   const anyOverride = rows.some((r) => (form[r.key] as string).trim() !== '');
+  const models = data.models ?? [];
 
   return (
     <div className="mo-page mo-kit mo-ledger" style={{ maxWidth: 900, margin: '0 auto' }}>
@@ -127,27 +134,64 @@ export default function SettingsPage() {
                   {isOpen ? 'Close' : override ? 'Edit' : 'Override'}
                 </button>
               </span>
-              {isOpen && (
-                <div className="mo-drow-body">
-                  <input
-                    value={form[r.key] as string}
-                    placeholder={r.ph}
-                    autoFocus
-                    onChange={(e) => set({ [r.key]: e.target.value } as Partial<AiSettings>)}
-                  />
-                  <p style={{ fontSize: 11.5, color: 'var(--mo-faint)', margin: '6px 0 0' }}>
-                    Blank uses the environment default ({r.ph}). Changes apply to the next generation — no restart.
-                    {override && (
-                      <>
-                        {' '}
-                        <button className="edit" onClick={() => set({ [r.key]: '' } as Partial<AiSettings>)}>
-                          Clear this override
-                        </button>
-                      </>
+              {isOpen && (() => {
+                const listed = models.some((m) => m.id === override);
+                const byHand = typing[r.key] || (override !== '' && !listed);
+                const selected = byHand ? OTHER : override;
+                return (
+                  <div className="mo-drow-body">
+                    <select
+                      value={selected}
+                      autoFocus
+                      aria-label={`Model for ${r.label}`}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v === OTHER) {
+                          setTyping((t) => ({ ...t, [r.key]: true }));
+                          return;
+                        }
+                        setTyping((t) => ({ ...t, [r.key]: false }));
+                        set({ [r.key]: v } as Partial<AiSettings>);
+                      }}
+                    >
+                      <option value="">Environment default — {r.ph}</option>
+                      {models.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {modelLabel(m)}
+                          {m.source === 'env' ? ' · from the environment' : ''}
+                        </option>
+                      ))}
+                      <option value={OTHER}>Other model id…</option>
+                    </select>
+                    {byHand && (
+                      <input
+                        value={form[r.key] as string}
+                        placeholder="claude-…"
+                        autoFocus
+                        aria-label={`Model id for ${r.label}`}
+                        onChange={(e) => set({ [r.key]: e.target.value } as Partial<AiSettings>)}
+                      />
                     )}
-                  </p>
-                </div>
-              )}
+                    <p className="note">
+                      The default comes from the environment ({r.ph}). Changes apply to the next generation — no restart.
+                      {override && (
+                        <>
+                          {' '}
+                          <button
+                            className="link"
+                            onClick={() => {
+                              setTyping((t) => ({ ...t, [r.key]: false }));
+                              set({ [r.key]: '' } as Partial<AiSettings>);
+                            }}
+                          >
+                            Clear this override
+                          </button>
+                        </>
+                      )}
+                    </p>
+                  </div>
+                );
+              })()}
             </div>
           );
         })}

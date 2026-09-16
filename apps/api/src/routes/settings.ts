@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { SettingModel } from '../models';
 import { asyncHandler, parseBody } from '../lib/http';
 import { config } from '../config';
+import { modelOptions } from '../lib/modelCatalogue';
 
 /**
  * Operator-tunable AI config: a per-touchpoint model override for each live AI
@@ -25,7 +26,18 @@ settingsRouter.get(
   '/',
   asyncHandler(async (_req, res) => {
     const doc = (await SettingModel.findOne({ key: 'ai' }).lean()) as Record<string, unknown> | null;
+    const storedIds = ['visionModel', 'captionModel', 'recipeModel', 'parseModel', 'composeModel']
+      .map((k) => doc?.[k])
+      .filter((v): v is string => typeof v === 'string');
     res.json({
+      // What the page offers in its dropdown: the catalogue, plus whatever the
+      // environment and the stored overrides already name.
+      models: modelOptions(
+        [config.ai.model, config.ai.modelSmall, config.ai.modelLarge, config.ai.modelDesign].filter(
+          (v): v is string => typeof v === 'string',
+        ),
+        storedIds,
+      ),
       settings: {
         visionModel: (doc?.visionModel as string) ?? '',
         captionModel: (doc?.captionModel as string) ?? '',

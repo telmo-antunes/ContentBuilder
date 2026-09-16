@@ -8,6 +8,7 @@ import { Usage } from '../models/Usage';
 const PRICES: Array<{ match: RegExp; in: number; out: number }> = [
   { match: /fable|mythos/i, in: 10, out: 50 },
   { match: /haiku/i, in: 1, out: 5 },
+  { match: /sonnet-5\b/i, in: 2, out: 10 },
   { match: /sonnet/i, in: 3, out: 15 },
   { match: /opus/i, in: 5, out: 25 },
 ];

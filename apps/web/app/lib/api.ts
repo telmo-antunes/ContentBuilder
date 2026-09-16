@@ -115,8 +115,17 @@ export interface AiSettings {
   parseModel: string;
   composeModel: string;
 }
+export interface ModelOption {
+  id: string;
+  label: string;
+  inUsd: number;
+  outUsd: number;
+  source: 'catalogue' | 'env' | 'stored';
+}
 export interface SettingsResponse {
   settings: AiSettings;
+  /** The models the dropdown offers — catalogue first, then whatever the environment or an override already names. */
+  models?: ModelOption[];
   envModels: { model: string; modelSmall: string; modelLarge: string; modelDesign: string };
   stock?: { configured: boolean };
 }
