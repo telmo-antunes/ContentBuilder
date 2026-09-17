@@ -51,6 +51,33 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
+### The close invented a service promise nobody has made
+
+- **Kind:** Defect
+- **Severity:** cost me a fix (it would have shipped as a commitment to strangers)
+- **First seen:** 2026-09-17 — what-a-walk-in-booking-is-for (IG carousel), slide 6, parse v13
+- **What happened:** the cta slide composed as headline `Your walk-in setup, by return.` over the tagline `Sent the same day.` Nothing in the brief offers a setup service, and nothing anywhere offers same-day anything — the brief's close was one line: *"Close: DM us WALKIN."* A reader who DMs is now owed a deliverable and a turnaround the business never agreed to. Rewritten to what the studio actually gets: *"We will walk through your first one with you, on your own services."*
+- **Why it matters:** this is the third instance of the same class in three decks — an invented PREMISE built entirely from brief-shaped words, which `unsourcedWords` cannot see because every word is ordinary. What makes this one worse than the earlier two is where it landed: the close is the one slide with a commercial promise on it, so the invention is a promise rather than a description. The new one-ask check (#125) validates the close's SHAPE — action, channel, what comes back, one destination — and a fabricated offer passes every one of those arms.
+- **Direction:** the close deserves the strictest material rule in the deck, not the loosest. Either the brief's close line becomes the only text the cta slide may draw on (a verbatim-or-compress rule for that slide alone), or `oneAskFaults` gains a fifth arm: the tagline's content words must appear in the brief. It is the one slide where that check is cheap, because its brief line is always short.
+
+### Three images were handed over and one slot existed
+
+- **Kind:** Gap
+- **Severity:** cost me a fix
+- **First seen:** 2026-09-17 — what-a-walk-in-booking-is-for (IG carousel)
+- **What happened:** the `content:instagram` payload carried three published images with their slots already decided (`hero`, `section-3`, `section-5`), and the composed deck authored exactly **one** `data-cb-slot` figure across six slides. Placing the other two meant hand-inserting figures into two slides' markup and patching them back. This is the image-manifest gap logged in August, now with a number on it: **1 slot for 3 supplied images**, and the deck's whole subject is a screen.
+- **Why it matters:** the payload knows the images before compose runs. Every blog-to-carousel repurpose hits this, and the cost is paid in hand edits on the deck whose evidence matters most.
+- **Direction:** unchanged from the August entry — let the compose request carry the manifest so the copywriter plans figures around images that already exist. Recording the ratio here because it is the first time the gap has been measured rather than described.
+
+### A cropped fragment is readable at feed size; a whole window never is
+
+- **Kind:** Friction (the `exhibit` gap, with a second worked example)
+- **Severity:** cost me a fix (two export cycles)
+- **First seen:** 2026-09-17 — what-a-walk-in-booking-is-for (IG carousel), slides 2 and 5
+- **What happened:** both product screenshots went in as the full 2388x1800 dashboard window and rendered as a dark sidebar beside 5px form type — the deck critique called slide 2 "unreadable" in as many words. Cropping each source PNG to the fragment that carries the claim (the service/date block; the price field with the order summary) made both legible at the same slot size, with no change to the slot at all.
+- **Why it matters:** it is the same finding as the `exhibit` placement entry above, but the fix here was entirely upstream — the deck never had to change. Worth knowing as the cheap move while that placement does not exist: **crop the source, not the slot.**
+- **Direction:** the attach step could measure it. An image whose longest text run renders below ~10px at the slot's drawn width is going to be unreadable on a phone, and that is computable at attach time from the asset's dimensions and the slot's column width.
+
 ### The composer writes captions where the reader needs sentences
 
 - **Kind:** Gap
@@ -220,6 +247,8 @@ Rules that keep this file worth reading:
 - **What happened:** the product is written `detailmasters CRM` — lowercase, always — and the copywriter title-cased it. Nothing in the pipeline knows the brand's name has a fixed casing.
 - **Why it matters:** it is the single most-repeated string the product will ever emit, it appears on the slide that carries the offer, and a house-style rule that lives only in a human's head gets broken by every new model.
 - **Direction:** the recipe already carries the brand's identity; give it a `nameFormat` (or reuse the wordmark) and enforce it mechanically after the parse, exactly like the brand-mark normaliser already does for the logo — a prompt line alone will not hold.
+- **Seen again:**
+  - 2026-09-17 — what-a-walk-in-booking-is-for (IG carousel), slide 5, parse v13: the EYEBROW composed as `Detail Masters`. Same fault, new slot — the earlier instance was a headline, and the direction of a post-parse normaliser still holds for both. A prompt line has now failed to hold it across two prompt generations.
 
 ### A full-bleed cta puts white type on a light photograph
 
