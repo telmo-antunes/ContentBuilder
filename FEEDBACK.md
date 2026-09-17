@@ -51,6 +51,15 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
+### The one-ask rule prescribes the shape the owner calls a double CTA
+
+- **Kind:** Defect (in the rule, not in a model's obedience to it)
+- **Severity:** cost me a fix, twice
+- **First seen:** 2026-09-17 — what-a-walk-in-booking-is-for (IG carousel), slide 6. Telmo: *"On slide 6 we have again double CTA, we already went over this on the last IG post."*
+- **What happened:** parse v13 defines the close as three answers — **the action and the channel in the HEADLINE**, what comes back in the tagline, **the same action on the BUTTON**. Followed exactly, that produces `DM us WALKIN` as the headline over a `Send WALKIN` button: the ask, stated twice, on one frame. Telmo reads that as two CTAs and has now rejected it on two consecutive decks. On the previous one (your-studio-page-was-rebuilt) he did not explain it — he simply rewrote the slide himself, to headline `Create your page, tailored to your taste.` · tagline `We help you set it up in 5 minutes.` · button `DM us PAGE`. That rewrite is the rule he actually wants, and it inverts v13's first clause.
+- **Why it matters:** `oneAskFaults` enforces v13's shape mechanically — `CHANNEL_WORD` is tested against `headline + button`, so a close that puts the ask only on the button still passes, but nothing pushes toward it and the prompt pushes away from it. The check and the prompt therefore agree with each other and disagree with the owner, which is the worst configuration: a deck can be "correct" twice over and still get rewritten by hand.
+- **Direction:** flip the prescribed shape to the one he wrote. **Headline = the offer** (what the reader ends up with), tagline = what it costs them or what happens next, **button = the only ask**, carrying the action and the keyword. Keep `CHANNEL_WORD` testing `headline + button` so the button alone can satisfy it, and add the mirror fault: a close whose headline and button both carry the keyword is a double ask, and should be reported as one.
+
 ### The close invented a service promise nobody has made
 
 - **Kind:** Defect
