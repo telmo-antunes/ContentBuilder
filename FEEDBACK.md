@@ -51,15 +51,6 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
-### The one-ask rule prescribes the shape the owner calls a double CTA
-
-- **Kind:** Defect (in the rule, not in a model's obedience to it)
-- **Severity:** cost me a fix, twice
-- **First seen:** 2026-09-17 — what-a-walk-in-booking-is-for (IG carousel), slide 6. Telmo: *"On slide 6 we have again double CTA, we already went over this on the last IG post."*
-- **What happened:** parse v13 defines the close as three answers — **the action and the channel in the HEADLINE**, what comes back in the tagline, **the same action on the BUTTON**. Followed exactly, that produces `DM us WALKIN` as the headline over a `Send WALKIN` button: the ask, stated twice, on one frame. Telmo reads that as two CTAs and has now rejected it on two consecutive decks. On the previous one (your-studio-page-was-rebuilt) he did not explain it — he simply rewrote the slide himself, to headline `Create your page, tailored to your taste.` · tagline `We help you set it up in 5 minutes.` · button `DM us PAGE`. That rewrite is the rule he actually wants, and it inverts v13's first clause.
-- **Why it matters:** `oneAskFaults` enforces v13's shape mechanically — `CHANNEL_WORD` is tested against `headline + button`, so a close that puts the ask only on the button still passes, but nothing pushes toward it and the prompt pushes away from it. The check and the prompt therefore agree with each other and disagree with the owner, which is the worst configuration: a deck can be "correct" twice over and still get rewritten by hand.
-- **Direction:** flip the prescribed shape to the one he wrote. **Headline = the offer** (what the reader ends up with), tagline = what it costs them or what happens next, **button = the only ask**, carrying the action and the keyword. Keep `CHANNEL_WORD` testing `headline + button` so the button alone can satisfy it, and add the mirror fault: a close whose headline and button both carry the keyword is a double ask, and should be reported as one.
-
 ### The close invented a service promise nobody has made
 
 - **Kind:** Defect
@@ -342,6 +333,41 @@ Add the next one here, following the shape in [How to add an entry](#how-to-add-
 - **Direction (remaining):** more of the code's calls belong in the ledger — parse-slide drops, brand-mark normalisation, budget clamps, archetype assignments that demoted a slot. And the compose-path model (slide author) has judgment worth one line too. The pattern is established; each is a small addition.
 
 ## Resolved
+
+### The checks ran on the model's draft and never on the hand edit — RESOLVED
+
+*Resolved 2026-09-17.* **This entry replaces a wrong one.** On 2026-09-17 a
+close shipped with `DM us WALKIN` in the headline over a `Send WALKIN` button —
+the double CTA the September 15 rule above exists to prevent — and this file
+was given an entry blaming parse v13 for prescribing that shape. It does not.
+The prompt names that exact pair as its worked example of two asks, and
+`oneAskFaults` has carried a `the close asks twice` arm since the day the rule
+landed. Both were right. The two asks were typed in by hand, in a `PATCH`, on
+top of a composed close that had already passed the check.
+
+The real fault was that nothing re-ran it. `copyFaults` was written by the
+compose route alone, so the ship bar's all-clear only ever described the
+model's first draft; every edit after it — the Studio's own copy fields, a
+`PATCH` from a script — landed on the slide unread. A deck could pass the
+checks, be edited into breaking them, and still show a clean bar.
+
+`PATCH /projects/:id` now re-runs them whenever slides change. The parts are
+recovered from the authored markup with `partsFromAuthored`, not taken from the
+request, so what gets judged is what will render — a slide edited as raw HTML
+is checked exactly like one edited through the copy fields. The three checks
+that need only the deck and what a project keeps (`unfinishedProse`,
+`coverHookFaults`, `oneAskFaults`) live behind one `deckCopyFaults` export that
+compose uses too, so the two paths cannot drift. `unsourcedWords` is left out
+on purpose: it needs the sources' full text, which a saved project does not
+keep, and a corpus of titles alone would call every honest sentence an
+invention.
+
+**The lesson for the next session is about this file, not about the code.** The
+retracted entry was written from the deck outwards — the slide was wrong, so
+the prompt that wrote the slide must be wrong — without opening the prompt. It
+proposed inverting a rule that was already correct and that the owner had
+already endorsed. Read the rule before writing it down as broken; a finding
+that names a prompt or a check should quote the line it is accusing.
 
 ### The close asked for two things, and said nothing about either — RESOLVED
 

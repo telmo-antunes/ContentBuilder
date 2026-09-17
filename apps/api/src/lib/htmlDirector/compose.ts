@@ -1077,6 +1077,32 @@ export function oneAskFaults(slides: ReadonlyArray<ParsedSlide>, handle?: string
 }
 
 /**
+ * EVERY COPY CHECK A FINISHED DECK CAN FACE WITHOUT THE BRIEF'S TEXT.
+ *
+ * These three read the deck and the two things a project always keeps — the
+ * idea it was written from and its sources' titles — so they can run on a deck
+ * nobody is composing. That matters because compose is not the only way copy
+ * reaches a slide: a hand edit goes in through `PATCH /projects/:id`, and the
+ * close that shipped with "DM us WALKIN" over a "Send WALKIN" button was
+ * written by hand, on top of a composed close the checks had already passed.
+ * The rule was right and the check was right; nothing re-ran them.
+ *
+ * `unsourcedWords` is deliberately NOT here: it needs the sources' full text,
+ * which a saved project does not keep, and a corpus of titles alone would call
+ * every honest sentence an invention.
+ */
+export function deckCopyFaults(
+  slides: ReadonlyArray<ParsedSlide>,
+  opts: { idea?: string; sources?: ReadonlyArray<{ title?: string }>; handle?: string } = {},
+): UnfinishedProse[] {
+  return [
+    ...unfinishedProse([...slides]),
+    ...coverHookFaults(slides, opts.idea, opts.sources),
+    ...oneAskFaults(slides, opts.handle),
+  ];
+}
+
+/**
  * Crude stems, enough to match "minutes" to "two-minute" and "attached" to
  * "attach". Several candidates rather than one, because no single suffix rule
  * is right for both "minutes" (drop the s) and "boxes" (drop the es).
@@ -2261,9 +2287,7 @@ export function finishParsedDeck(
    * ship bar said all-clear while its closing headline stopped mid-sentence.
    */
   const checked: UnfinishedProse[] = [
-    ...unfinishedProse(slides),
-    ...coverHookFaults(slides, req.idea, req.sources),
-    ...oneAskFaults(slides, opts?.handle),
+    ...deckCopyFaults(slides, { idea: req.idea, sources: req.sources, handle: opts?.handle }),
     ...(`${req.idea} ${req.sources.map((x) => x.text).join(' ')}`.split(/\s+/).length < INVENTION_MIN_BRIEF_WORDS ? [] : unsourcedWords(slides, `${req.idea} ${req.sources.map((x) => `${x.title ?? ''} ${x.text}`).join(' ')}`, [
       recipe.voice.description,
       ...recipe.voice.dos,

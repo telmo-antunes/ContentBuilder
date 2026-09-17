@@ -23,7 +23,7 @@ import {
   type Format,
   type SlidePhoto,
 } from '@contentbuilder/shared';
-import { brandHandleFromWebsite, composeProject, composeSlide, parseSlideCopy, parseSlideDirection } from '../lib/htmlDirector/compose';
+import { brandHandleFromWebsite, composeProject, composeSlide, deckCopyFaults, parseSlideCopy, parseSlideDirection } from '../lib/htmlDirector/compose';
 import { withSpendLedger, withLedger, summarize, type SpendLedger } from '../lib/spend';
 import { autopsyFor } from '../lib/autopsy';
 import { deckForms, referenceSheetsFor } from '../lib/inspo';
@@ -211,6 +211,44 @@ async function scrubForeignMedia(
     // is no meaningful "partial" version of a picture on the wrong brand.
     s.photos = (s.photos ?? []).filter((p) => owned.has(String(p.mediaAssetId)));
   }
+}
+
+/**
+ * RE-RUN THE COPY CHECKS ON A DECK NOBODY IS COMPOSING.
+ *
+ * The parts are read back out of the authored markup, not taken from whatever
+ * the caller sent, so what gets judged is what will render — a slide edited as
+ * raw HTML is checked exactly like one edited through the copy fields.
+ *
+ * Returns `undefined` for a clean deck (and for one with no authored slides at
+ * all), because the field's absence is what the ship bar reads as all-clear.
+ */
+async function copyFaultsForDeck(project: { get: (k: string) => unknown }): Promise<unknown[] | undefined> {
+  const slides = (project.get('slides') ?? []) as Array<{ authored?: { html?: string; role?: string } }>;
+  const parsed = slides
+    .map((s) => (s.authored?.html ? { html: s.authored.html, role: s.authored.role } : null))
+    .filter((x): x is { html: string; role: string | undefined } => x !== null);
+  // A deck of block-era or hand-placed slides has no authored markup to read;
+  // an all-clear it never earned is worse than no verdict, so say nothing.
+  if (parsed.length !== slides.length || !parsed.length) return undefined;
+  const business = await BusinessModel.findById(String(project.get('businessId'))).lean();
+  const profileHandle = (business as { profile?: { instagram?: unknown } } | null)?.profile?.instagram;
+  const handle =
+    (typeof profileHandle === 'string' && profileHandle.trim()) ||
+    brandHandleFromWebsite((business as { websiteUrl?: string } | null)?.websiteUrl);
+  const faults = deckCopyFaults(
+    parsed.map((s) => ({
+      role: (s.role ?? 'statement') as never,
+      parts: partsFromAuthored(s.html) as never,
+      image: false,
+    })),
+    {
+      idea: typeof project.get('idea') === 'string' ? (project.get('idea') as string) : undefined,
+      sources: (project.get('sources') ?? []) as Array<{ title?: string }>,
+      handle: handle || undefined,
+    },
+  );
+  return faults.length ? faults : undefined;
 }
 
 /** Write a caption for a project's current slides, grounded in the brand voice + profile. */
@@ -460,6 +498,21 @@ projectsRouter.patch(
       const normalized = normalizeSlides(body.slides);
       await scrubForeignMedia(normalized, String(project.get('businessId')));
       project.set('slides', normalized);
+      /**
+       * A HAND EDIT FACES THE SAME CHECKS A COMPOSE DOES.
+       *
+       * `copyFaults` used to be written by the compose route alone, so the ship
+       * bar's all-clear meant "the model's draft was clean" and nothing more.
+       * Every edit after it — the Studio's own copy fields, a `PATCH` from a
+       * script — landed on the slide unread. That is how a close shipped with
+       * "DM us WALKIN" in the headline AND "Send WALKIN" on the button: the
+       * rule forbids it, `oneAskFaults` catches it, and neither ran, because
+       * the two asks were typed in after the compose that passed.
+       *
+       * Recovered from the authored markup rather than from the request, so it
+       * judges what will actually render — including a slide edited as raw HTML.
+       */
+      project.set('copyFaults', await copyFaultsForDeck(project));
     }
     if (body.caption !== undefined) project.set('caption', body.caption);
     if (body.scores !== undefined) {
