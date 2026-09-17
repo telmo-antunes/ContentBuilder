@@ -237,6 +237,49 @@ describe('projects', () => {
     expect(patched.body.slides.map((s: any) => s.order)).toEqual([0, 1]);
   });
 
+  /**
+   * The close that shipped with two asks was typed in by hand on top of a
+   * composed close the checks had already passed — so the checks have to run
+   * again here, on the markup, or the ship bar's all-clear only ever describes
+   * the draft nobody edited.
+   */
+  it('re-runs the copy checks on a hand edit, and clears them when the edit is fixed', async () => {
+    const biz = await seedBusiness();
+    await seedApprovedKit(String(biz._id));
+    const created = await request(app())
+      .post('/projects')
+      .send({ businessId: String(biz._id), title: 'C', type: 'carousel', format: '1080x1080' });
+    const pid = created.body._id;
+    const cover = { authored: { html: '<h1 class="headline">Bookings that arrive in the DMs</h1>', role: 'cover' } };
+
+    const twoAsks = await request(app())
+      .patch(`/projects/${pid}`)
+      .send({
+        slides: [
+          cover,
+          { authored: { html: '<h1 class="headline">DM us WALKIN</h1><p class="cta">Send WALKIN</p>', role: 'cta' } },
+        ],
+      });
+    expectStatus(twoAsks, 200);
+    expect(twoAsks.body.copyFaults.map((f: any) => f.reason)).toContain('the close asks twice');
+
+    const oneAsk = await request(app())
+      .patch(`/projects/${pid}`)
+      .send({
+        slides: [
+          cover,
+          {
+            authored: {
+              html: '<h1 class="headline">Your next DM booking, in the calendar</h1><p class="cta">DM us WALKIN</p>',
+              role: 'cta',
+            },
+          },
+        ],
+      });
+    expectStatus(oneAsk, 200);
+    expect(oneAsk.body.copyFaults).toBeUndefined();
+  });
+
   it('version history: snapshot, restore, and the safety re-snapshot', async () => {
     const biz = await seedBusiness();
     await seedApprovedKit(String(biz._id));
