@@ -1349,6 +1349,52 @@ describe('POST /projects/:id/promo-story', () => {
 })
 
 // ── Review-driven guards ──────────────────────────────────────────────────────
+describe('POST /projects/:id/slides/:slideId/refresh — one slide on the current prompt', () => {
+  /** Approved kit with a minimal recipe and one authored, UNSTAMPED slide that trails a spacer. */
+  async function seedStale(html: string) {
+    const biz = await seedBusiness();
+    const kit = await seedApprovedKit(String(biz._id));
+    kit.set('recipe', {
+      version: 2,
+      tokens: { ground: '#0B0F1A', ink: '#F8FAFC', accent: '#F5C044', displayFamily: 'Inter', bodyFamily: 'Inter', radius: 16 },
+      typography: { displayCase: 'sentence', displayWeight: 700, displayTracking: '-0.02em', density: 'balanced' },
+      signature: { name: 'Gold rule', description: 'A recurring move' },
+      stylesheet: '.cb-slide .headline { font-size: 100px; }',
+      components: [{ className: 'headline', use: 'the line' }],
+    });
+    await kit.save();
+    const created = await request(app())
+      .post('/projects')
+      .send({ businessId: String(biz._id), title: 'T', type: 'carousel', format: '1080x1080', slides: [{ authored: { html } }] });
+    expectStatus(created, 201);
+    return { project: created.body, slideId: created.body.slides[0].id as string };
+  }
+
+  it('404s a slide that is not in the deck', async () => {
+    const { project } = await seedStale('<h1 class="headline">Hi</h1>');
+    expectStatus(await request(app()).post(`/projects/${project._id}/slides/nope/refresh`).send({}), 404);
+  });
+
+  it('re-arranges the flagged slide on the current composer, stamps today\'s versions, and saves nothing', async () => {
+    // The composer (mocked) hands the same words back without the trailing spacer.
+    aiReplyMock.mockImplementation(() => '<div class="headline">Hi</div>');
+    try {
+      const { project, slideId } = await seedStale('<h1 class="headline">Hi</h1>\n<div class="fill"></div>');
+      const res = await request(app()).post(`/projects/${project._id}/slides/${slideId}/refresh`).send({});
+      expectStatus(res, 200);
+      expect(res.body.variants.length).toBeGreaterThan(0);
+      expect(res.body.variants[0].html).toContain('Hi');
+      expect(res.body.variants[0].pv?.compose).toBeGreaterThan(0);
+      expect(res.body.rewrote).toBe(false);
+      // Candidates are offered, never applied.
+      const after = await ProjectModel.findById(project._id).lean();
+      expect((after as unknown as { slides: Array<{ authored: { html: string } }> }).slides[0]!.authored.html).toContain('class="fill"');
+    } finally {
+      aiReplyMock.mockImplementation(() => '');
+    }
+  });
+});
+
 describe('compose guards and settings from the carousel review', () => {
   it('refuses to compose with an empty photo pool unless textOnly is acknowledged', async () => {
     const biz = await seedBusiness();

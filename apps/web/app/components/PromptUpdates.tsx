@@ -19,19 +19,29 @@ import { Icon } from './Icon';
  * newer prompt would fix. So the headline is never "you are on v2, v5 exists" —
  * it is "your call to action is 32px, which is 11.6pt on a phone".
  *
- * Nothing here has a one-click apply, deliberately. Re-authoring a recipe costs
- * money and moves a design that was approved; re-composing a slide rewrites
- * words that may have been edited by hand. The strip tells you, points at the
- * button that already exists for doing it, and stops.
+ * Nothing here applies anything on its own. Re-authoring a recipe costs money
+ * and moves a design that was approved; re-composing a slide rewrites words
+ * that may have been edited by hand. The strip tells you and offers the
+ * smallest next step: on a post, one button PER FLAGGED SLIDE that refreshes
+ * that slide alone on the current prompt and shows candidates to pick from —
+ * so fixing slide 4 no longer means recomposing all seven.
  */
 export default function PromptUpdates({
   status,
   /** What re-running this touchpoint is called here, e.g. "Design directions". */
   action,
+  slides,
+  onFixSlide,
+  busySlide,
   className,
 }: {
   status: UpdateStatus | null | undefined;
   action?: { label: string; onClick: () => void; disabled?: boolean };
+  /** On a post: the slides that earned the flag, each with its own refresh. */
+  slides?: Array<{ id: string; order: number; reasons: string[] }>;
+  onFixSlide?: (slideId: string) => void;
+  /** The slide currently being refreshed, if any — its button reads as busy. */
+  busySlide?: string | null;
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -61,6 +71,26 @@ export default function PromptUpdates({
           <li key={`${f.detector}-${i}`}>{f.message}</li>
         ))}
       </ul>
+
+      {/* One slide at a time: the smallest fix that answers the finding. */}
+      {onFixSlide && slides && slides.length > 0 && (
+        <div className="pu-slides">
+          {[...slides]
+            .sort((a, b) => a.order - b.order)
+            .map((s) => (
+              <button
+                key={s.id}
+                className="btn sm"
+                disabled={busySlide !== null && busySlide !== undefined}
+                title={`Refresh slide ${s.order + 1} on the current prompt — ${s.reasons.join('; ')}`}
+                onClick={() => onFixSlide(s.id)}
+              >
+                {busySlide === s.id ? `Refreshing slide ${s.order + 1}…` : `Recompose slide ${s.order + 1}`}
+              </button>
+            ))}
+          <span className="pu-slides-note">Each shows two candidates on the current prompt — nothing changes until you pick one.</span>
+        </div>
+      )}
 
       {open && (
         <div className="pu-releases">

@@ -44,7 +44,8 @@ import { generateCaption, type GeneratedCaption } from '../lib/caption';
 import { attachPoolPhotos, brandPhotoPool, poolPhotoFinder, PROMO_COVER_LABEL } from '../lib/photoPool';
 import { lessonsFor, noteSlideSignal, observeOutcome, recordGeneration } from '../lib/learningLoop';
 import type { ComposeRecord, CopyCheckSummary, LayoutCheckSummary } from '../lib/htmlDirector/compose';
-import { postUpdateStatus } from '../lib/promptStatus';
+import { postUpdateStatus, slideRefreshPlan } from '../lib/promptStatus';
+import { balanceVertical } from '../lib/htmlDirector/balance';
 import { aiDraftConfigured, config } from '../config';
 
 const composeSchema = z.object({
@@ -993,6 +994,96 @@ projectsRouter.post(
     }
     if (!variants.length) throw new ApiError(502, 'No usable alternatives came back — try again.');
     res.json({ variants });
+  }),
+);
+
+/**
+ * BRING ONE SLIDE UP TO THE CURRENT PROMPT — without recomposing the deck.
+ *
+ * The review page says "the AI has improved since this was made" and names the
+ * slide; the only button that answered was the whole-deck Recompose, which
+ * rewrites every slide to fix one. This refreshes the flagged slide alone: its
+ * copy is recovered from its own markup, the two word-level detectors hand the
+ * copywriter a direction (see `slideRefreshPlan`), and the CURRENT composer
+ * arranges it again. Candidates come back stamped with today's prompt
+ * versions; nothing is saved until the person picks one.
+ */
+projectsRouter.post(
+  '/:id/slides/:slideId/refresh',
+  asyncHandler(async (req, res) => {
+    const id = requireObjectId(req.params.id, 'Project');
+    const project = await ProjectModel.findById(id);
+    if (!project) throw new ApiError(404, 'Project not found');
+
+    const slides = (project.get('slides') as Array<{ toObject?: () => SlideInput }>).map((x) =>
+      typeof x.toObject === 'function' ? x.toObject() : (x as SlideInput),
+    );
+    const idx = slides.findIndex((x) => x.id === req.params.slideId);
+    if (idx < 0) throw new ApiError(404, 'Slide not found');
+    const slide = slides[idx]!;
+    if (!slide.authored?.html) throw new ApiError(400, 'This slide is not AI-composed.');
+
+    const stored = (await approvedKitFor(String(project.get('businessId')))) as { recipe?: unknown } | null;
+    if (!stored?.recipe) throw new ApiError(400, 'This brand has no design recipe yet.');
+    const recipe = migrateRecipe(stored.recipe);
+
+    // What fired on THIS slide — the same verdict the review page shows.
+    const status = postUpdateStatus(slides as never, recipe);
+    const flag = status?.slides.find((f) => f.id === slide.id);
+    const detectors = flag?.detectors ?? [];
+    const plan = slideRefreshPlan(detectors);
+
+    const role = (slide.authored.role ?? 'statement') as never;
+    const hadPhoto = authoredSlots(slide.authored.html).length > 0;
+    let parts = partsFromAuthored(slide.authored.html);
+    let photo = hadPhoto;
+    let nextRole = role;
+    if (plan.direction) {
+      if (!aiDraftConfigured()) throw new ApiError(400, 'AI is not configured.');
+      try {
+        const rewritten = await parseSlideDirection(recipe, plan.direction, {
+          format: project.get('format'),
+          role,
+          index: idx,
+          photoBudget: hadPhoto ? 1 : 0,
+          post: { title: project.get('title'), idea: project.get('idea'), says: parts },
+        });
+        parts = rewritten.parts;
+        photo = rewritten.photo ?? false;
+        nextRole = rewritten.role as never;
+      } catch (err) {
+        throw new ApiError(502, `Could not refresh this slide: ${publicErrMessage(err, 'AI error')}`);
+      }
+    }
+
+    const variants: Array<{ html: string; bg?: string; role?: string; pv?: Record<string, number> }> = [];
+    for (let v = 0; v < 2; v++) {
+      try {
+        const out = await composeSlide(recipe, {
+          role: nextRole,
+          parts,
+          format: project.get('format'),
+          photo,
+          index: idx + v,
+        });
+        const html = plan.balance ? balanceVertical(out.html).html : out.html;
+        // A candidate identical to what is already there fixed nothing.
+        if (html && html !== slide.authored.html && !variants.some((x) => x.html === html)) {
+          variants.push({
+            html,
+            ...(out.bg ? { bg: out.bg } : {}),
+            ...(out.role ? { role: out.role } : {}),
+            ...(out.pv ? { pv: out.pv } : {}),
+          });
+        }
+      } catch (err) {
+        console.warn('[refresh] one candidate failed:', err instanceof Error ? err.message : err);
+      }
+    }
+    if (!variants.length) {
+      throw new ApiError(502, 'The current prompt arranged this slide the same way — nothing to change here.');
+    }
+    res.json({ variants, reasons: flag?.reasons ?? [], rewrote: Boolean(plan.direction) });
   }),
 );
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { currentVersion, type BrandRecipe } from '@contentbuilder/shared';
-import { brandUpdateStatus, postUpdateStatus } from './promptStatus';
+import { brandUpdateStatus, postUpdateStatus, slideRefreshPlan } from './promptStatus';
 
 /**
  * A recipe that is fully CURRENT: phone-legible type, a list vocabulary the app
@@ -140,5 +140,33 @@ describe('postUpdateStatus', () => {
     expect(s.flagged).toBe(true);
     expect(s.slides.map((x) => x.id)).toEqual(['b']);
     expect(s.slides[0]!.reasons).toContain('an enumeration written as a paragraph');
+  });
+});
+
+describe('one slide, brought up to the current prompt', () => {
+  it('names the detectors behind a flagged slide, not only the phrases', () => {
+    // An unstamped slide with an empty list card: the deck is behind AND the
+    // emptyList detector fires on this one slide.
+    const s = postUpdateStatus(
+      [
+        slide('a', 0, '<h1 class="headline">A</h1>', CURRENT_POST),
+        slide('b', 1, '<h1 class="headline">Four things.</h1><div class="panel"></div>'),
+      ],
+      current(),
+    )!;
+    expect(s.flagged).toBe(true);
+    const b = s.slides.find((f) => f.id === 'b')!;
+    expect(b.detectors).toContain('emptyList');
+    expect(b.reasons.length).toBe(b.detectors.length);
+  });
+
+  it('hands the copywriter a direction only for the word-level detectors', () => {
+    expect(slideRefreshPlan(['emptyList']).direction).toMatch(/list card/);
+    expect(slideRefreshPlan(['secretList']).direction).toMatch(/rows/);
+    expect(slideRefreshPlan(['emptyList', 'secretList']).direction).toMatch(/rows.*list card|list card.*rows/s);
+    // Arrangement faults are the composer's, and the spacer one is repaired by
+    // the very pass that detects it.
+    expect(slideRefreshPlan(['strandedSpacer'])).toEqual({ balance: true });
+    expect(slideRefreshPlan(['brandMarkDrift'])).toEqual({ balance: false });
   });
 });
