@@ -327,6 +327,20 @@ export const noteSlideChoice = (projectId: string, slideId: string, kind: 'arran
     body: JSON.stringify({ kind }),
   }).catch(() => undefined);
 
+/**
+ * Bring ONE slide up to the current prompt. The server recovers its copy,
+ * lets the copywriter fix what a word-level detector flagged, and arranges it
+ * again on today's composer — candidates come back stamped with today's
+ * versions, and nothing is saved until one is applied.
+ */
+export interface SlideRefreshResponse {
+  variants: Array<{ html: string; bg?: string; role?: string; pv?: Record<string, number> }>;
+  reasons: string[];
+  rewrote: boolean;
+}
+export const refreshSlide = (projectId: string, slideId: string) =>
+  request<SlideRefreshResponse>(`/projects/${projectId}/slides/${slideId}/refresh`, { method: 'POST', body: '{}' });
+
 /** Instant deterministic slide tweaks (no AI): headline size, inverse surface. */
 export const tweakSlide = (
   projectId: string,
