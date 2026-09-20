@@ -2186,3 +2186,9 @@ input[type='color'] {
 .mo-ledger .lgrow .mo-drow-body .note { font-size: 11.5px; color: var(--mo-faint); margin: 0; }
 .mo-ledger .lgrow .mo-drow-body .link { font-size: 11.5px; font-weight: 600; color: var(--mo-indigo); background: none; border: none; padding: 0; cursor: pointer; font-family: inherit; }
 .mo-ledger .lgrow .mo-drow-body .link:hover { text-decoration: underline; }
+
+/* "The AI has improved" strip on a post: one refresh button per flagged slide. */
+.pu-slides { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; padding-left: 26px; }
+.pu-slides-note { font-size: 11.5px; color: var(--faint); flex: 1 1 220px; }
+/* The selected slide's own callout in the review sheet. */
+.mo-stale { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 0 0 12px; padding: 9px 12px; border-radius: 10px; font-size: 12px; color: var(--mo-ink); background: var(--mo-indigo-bg); border: 1px solid color-mix(in srgb, var(--mo-indigo) 25%, transparent); }

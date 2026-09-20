@@ -217,13 +217,13 @@ describe('usage telemetry: cache fields + pricing', () => {
     expect(estimateCostUsd('claude-haiku-4-5', 1_000_000, 0)).toBeCloseTo(1, 10);
     expect(estimateCostUsd('claude-haiku-4-5', 0, 0, 1_000_000, 0)).toBeCloseTo(1.25, 10);
     expect(estimateCostUsd('claude-haiku-4-5', 0, 0, 0, 1_000_000)).toBeCloseTo(0.1, 10);
-    // multipliers follow the model's own input rate (sonnet: $3/M in)
+    // multipliers follow the model's own input rate (Sonnet 5: $2/M in, $10/M out)
     expect(estimateCostUsd('claude-sonnet-5', 0, 0, 1_000_000, 1_000_000)).toBeCloseTo(
-      3 * 1.25 + 3 * 0.1,
+      2 * 1.25 + 2 * 0.1,
       10,
     );
     // the legacy two-token call keeps its exact pre-cache behavior
-    expect(estimateCostUsd('claude-sonnet-5', 1_000_000, 1_000_000)).toBeCloseTo(18, 10);
+    expect(estimateCostUsd('claude-sonnet-5', 1_000_000, 1_000_000)).toBeCloseTo(12, 10);
   });
 
   it('records cache fields when present and prices them into costUsd', async () => {

@@ -34,6 +34,7 @@ import {
   getSlideVariants,
   noteSlideChoice,
   rewriteSlideCopy,
+  refreshSlide,
   listProjectVersions,
   restoreProjectVersion,
   saveProjectVersion,
@@ -117,14 +118,16 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
   const [layout, setLayout] = useState<Record<string, { collide: boolean; slack: number }>>({});
   // Alternative arrangements for the selected slide — shown side by side, applied
   // only on click, so a single weak slide no longer means re-composing the deck.
-  const [variants, setVariants] = useState<Array<{ html: string; bg?: string; role?: string }> | null>(null);
+  const [variants, setVariants] = useState<Array<{ html: string; bg?: string; role?: string; pv?: Record<string, number> }> | null>(null);
   /**
    * Which question produced the candidates on screen. An ARRANGEMENT swap keeps
    * every word, so nothing in the saved deck records that a composition was
    * rejected — it has to be reported explicitly. A COPY rewrite needs no such
    * help: the words changed, and the save-time diff sees that by itself.
    */
-  const [variantKind, setVariantKind] = useState<'arrangement' | 'copy'>('arrangement');
+  const [variantKind, setVariantKind] = useState<'arrangement' | 'copy' | 'refresh'>('arrangement');
+  /** The slide being refreshed on the current prompt, while the server works. */
+  const [refreshing, setRefreshing] = useState<string | null>(null);
   /**
    * A direction for the SELECTED slide — the per-slide half of the brief
    * language. Empty asks for a rearrangement of the copy already there; filled,
@@ -408,6 +411,37 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
    * The inverse: keep this arrangement, change the words. No composer runs, so
    * the layout you liked comes back byte-identical apart from the copy.
    */
+  /**
+   * ONE SLIDE, BROUGHT UP TO THE CURRENT PROMPT. The banner names the slide;
+   * this refreshes it alone — the copy recovered from its own markup, the
+   * copywriter fixing what a word-level detector flagged, today's composer
+   * arranging it — and shows the candidates in the same picker as the other
+   * alternatives. The deck is untouched until one is applied.
+   */
+  const askRefresh = useCallback(
+    async (slideId: string) => {
+      if (refuseWhileExporting()) return;
+      const at = (project?.slides ?? []).findIndex((s) => s.id === slideId);
+      if (at >= 0) setSel(at);
+      setRefreshing(slideId);
+      setWorking('refresh');
+      setVariantKind('refresh');
+      try {
+        const res = await refreshSlide(projectId, slideId);
+        setVariants(res.variants);
+        // The kind decides the picker's heading and what the learning loop is told.
+        setVariantKind(res.rewrote ? 'copy' : 'refresh');
+      } catch (e) {
+        setVariants(null);
+        toast(e instanceof Error ? e.message : 'Could not refresh this slide', 'error');
+      } finally {
+        setRefreshing(null);
+        setWorking(null);
+      }
+    },
+    [projectId, project, refuseWhileExporting],
+  );
+
   const askRewrite = useCallback(
     async (slideId: string, direction?: string) => {
       setWorking('rewrite');
@@ -426,27 +460,49 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
   );
 
   /** Apply one candidate to the slide. */
+  /**
+   * A CANDIDATE'S PHOTOS ARE THE SLIDE'S PHOTOS, RE-HOMED. A candidate names
+   * its slot as it likes ("laptop-service" where the slide had "laptop"), so a
+   * slot photo carried over unchanged would render nowhere — the picker showed
+   * the alternative with its image missing, and the save then refused it. The
+   * same rule the server applies on save (`normalizePhotos`): a photo whose
+   * slot the candidate does not declare takes the candidate's first slot.
+   */
+  const photosFor = useCallback((candidateHtml: string, slide: Slide): SlidePhoto[] => {
+    const declared = authoredSlots(candidateHtml);
+    return (slide.photos ?? []).map((p) =>
+      p.placement === 'slot' && p.slot && !declared.includes(p.slot) && declared.length
+        ? { ...p, slot: declared[0]! }
+        : p,
+    );
+  }, []);
+
   const applyVariant = useCallback(
-    async (slideId: string, v: { html: string; bg?: string; role?: string }, allSlides: Slide[]) => {
+    async (slideId: string, v: { html: string; bg?: string; role?: string; pv?: Record<string, number> }, allSlides: Slide[]) => {
       setWorking('apply');
       try {
         const next = allSlides.map((s) =>
-          s.id === slideId ? { ...s, authored: { ...s.authored, ...v } } : s,
+          s.id === slideId ? { ...s, authored: { ...s.authored, ...v }, photos: photosFor(v.html, s) } : s,
         );
         const updated = await updateProject(projectId, { slides: next as Slide[] });
         setProject((prev) => (prev ? { ...prev, slides: updated.slides } : prev));
         setVariants(null);
         // AFTER the save, so the outcome diff has already run over the new deck
         // and this only adds the one thing the diff could not have seen.
-        void noteSlideChoice(projectId, slideId, variantKind);
-        toast(variantKind === 'copy' ? 'New copy applied' : 'Arrangement applied', 'ok');
-      } catch {
-        toast('Could not apply that', 'error');
+        void noteSlideChoice(projectId, slideId, variantKind === 'copy' ? 'copy' : 'arrangement');
+        toast(
+          variantKind === 'copy' ? 'New copy applied' : variantKind === 'refresh' ? 'Slide refreshed on the current prompt' : 'Arrangement applied',
+          'ok',
+        );
+      } catch (e) {
+        // The server says WHY (an orphaned photo, a clipped line) — a generic
+        // "could not apply" hid exactly the thing the person needed to fix.
+        toast(e instanceof Error && e.message ? `Could not apply that — ${e.message}` : 'Could not apply that', 'error');
       } finally {
         setWorking(null);
       }
     },
-    [projectId, variantKind],
+    [projectId, variantKind, photosFor],
   );
 
   /** Instant deterministic tweaks — no AI, no waiting. */
@@ -1358,7 +1414,13 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
 
           {/* Written by an older copywriter or composer. No apply button: a
               recompose rewrites copy that may have been hand-edited since. */}
-          <PromptUpdates status={project.promptUpdates} className="studio-pu" />
+          <PromptUpdates
+            status={project.promptUpdates}
+            className="studio-pu"
+            slides={project.promptUpdates?.slides}
+            onFixSlide={askRefresh}
+            busySlide={refreshing}
+          />
 
           {/* ── The deck: the spine of the line ── */}
           <section className="mo-line-wrap" aria-label="The deck">
@@ -1799,6 +1861,18 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
 
                   {/* ── Taste tools: adjust, alternatives, direction ── */}
                   <div className="mo-scol3">
+                    {selected && staleSlides[selected.id] && (
+                      <div className="mo-stale">
+                        <span>A newer prompt would fix: {staleSlides[selected.id]!.join('; ')}.</span>
+                        <button
+                          className="mo-btn sm"
+                          disabled={working !== null}
+                          onClick={() => askRefresh(selected.id)}
+                        >
+                          {working === 'refresh' ? 'Refreshing…' : 'Recompose this slide'}
+                        </button>
+                      </div>
+                    )}
                     <h3 className="colh">Quick adjustments</h3>
                     <div className="mo-qrow">
                       <button
@@ -1867,7 +1941,14 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                     {variants && variants.length > 0 && (
                       <div className="mo-variants">
                         <h3 className="colh">
-                          Pick one <span className="n">{variantKind === 'copy' ? 'new words' : 'same words, new arrangement'}</span>
+                          Pick one{' '}
+                          <span className="n">
+                            {variantKind === 'copy'
+                              ? 'new words'
+                              : variantKind === 'refresh'
+                                ? 'same words, arranged on the current prompt'
+                                : 'same words, new arrangement'}
+                          </span>
                         </h3>
                         <div className="sv-row">
                           {variants.map((v, i) => (
@@ -1883,7 +1964,7 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                                   slide={{ authored: v }}
                                   brandKit={kit}
                                   format={project.format}
-                                  photos={selected ? resolveSlidePhotos(selected, project.media) : undefined}
+                                  photos={selected ? resolveSlidePhotos({ ...selected, photos: photosFor(v.html, selected) }, project.media) : undefined}
                                   forExport
                                 />
                               </ScaledSlide>

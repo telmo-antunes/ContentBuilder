@@ -36,6 +36,38 @@ export interface SlideUpdateFlag {
   order: number;
   /** Short phrases from DETECTOR_LABEL — enough for a chip on the card. */
   reasons: string[];
+  /** The detectors behind those phrases — what a refresh of this slide has to fix. */
+  detectors: DetectorId[];
+}
+
+/**
+ * HOW TO BRING ONE SLIDE UP TO DATE, given what fired on it.
+ *
+ * The strip used to stop at "a newer prompt would fix this" and point at the
+ * whole-deck Recompose, which rewrites seven slides to fix one. A slide can be
+ * refreshed alone: its copy is recovered from its own markup, and the CURRENT
+ * composer arranges it again. Two detectors are about the words themselves,
+ * and only the copywriter can fix words — so those carry a direction for it,
+ * written here so the thing that flags and the thing that fixes agree.
+ */
+export function slideRefreshPlan(detectors: ReadonlyArray<DetectorId>): { direction?: string; balance: boolean } {
+  const lines: string[] = [];
+  if (detectors.includes('secretList')) {
+    lines.push(
+      'This slide lists several things inside one paragraph. Keep every fact and the headline exactly; write the items as rows, one item each, and drop the paragraph.',
+    );
+  }
+  if (detectors.includes('emptyList')) {
+    lines.push(
+      'This slide carries a list card with nothing in it. Keep the headline\'s meaning; either fill the rows with items the copy actually names, or say it as one line with no list.',
+    );
+  }
+  return {
+    ...(lines.length ? { direction: lines.join(' ') } : {}),
+    // The spacer-at-the-end arrangement is repaired by the same pass that
+    // detects it, so the refresh runs it on what the composer hands back.
+    balance: detectors.includes('strandedSpacer'),
+  };
 }
 
 export interface PostUpdateStatus extends UpdateStatus {
@@ -96,10 +128,12 @@ export function postUpdateStatus(
 
   const flagged: SlideUpdateFlag[] = [];
   authored.forEach((s, i) => {
-    const reasons = fired
-      .filter((d) => (d === 'brandMarkDrift' ? odd.has(i) : postDetector([s], recipe, d).length > 0))
-      .map((d) => DETECTOR_LABEL[d]);
-    if (reasons.length) flagged.push({ id: s.id ?? String(i), order: s.order ?? i, reasons });
+    const detectors = fired.filter((d) =>
+      d === 'brandMarkDrift' ? odd.has(i) : postDetector([s], recipe, d).length > 0,
+    );
+    if (detectors.length) {
+      flagged.push({ id: s.id ?? String(i), order: s.order ?? i, reasons: detectors.map((d) => DETECTOR_LABEL[d]), detectors });
+    }
   });
 
   return { ...deck, slides: flagged };
