@@ -460,12 +460,29 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
   );
 
   /** Apply one candidate to the slide. */
+  /**
+   * A CANDIDATE'S PHOTOS ARE THE SLIDE'S PHOTOS, RE-HOMED. A candidate names
+   * its slot as it likes ("laptop-service" where the slide had "laptop"), so a
+   * slot photo carried over unchanged would render nowhere — the picker showed
+   * the alternative with its image missing, and the save then refused it. The
+   * same rule the server applies on save (`normalizePhotos`): a photo whose
+   * slot the candidate does not declare takes the candidate's first slot.
+   */
+  const photosFor = useCallback((candidateHtml: string, slide: Slide): SlidePhoto[] => {
+    const declared = authoredSlots(candidateHtml);
+    return (slide.photos ?? []).map((p) =>
+      p.placement === 'slot' && p.slot && !declared.includes(p.slot) && declared.length
+        ? { ...p, slot: declared[0]! }
+        : p,
+    );
+  }, []);
+
   const applyVariant = useCallback(
-    async (slideId: string, v: { html: string; bg?: string; role?: string }, allSlides: Slide[]) => {
+    async (slideId: string, v: { html: string; bg?: string; role?: string; pv?: Record<string, number> }, allSlides: Slide[]) => {
       setWorking('apply');
       try {
         const next = allSlides.map((s) =>
-          s.id === slideId ? { ...s, authored: { ...s.authored, ...v } } : s,
+          s.id === slideId ? { ...s, authored: { ...s.authored, ...v }, photos: photosFor(v.html, s) } : s,
         );
         const updated = await updateProject(projectId, { slides: next as Slide[] });
         setProject((prev) => (prev ? { ...prev, slides: updated.slides } : prev));
@@ -477,13 +494,15 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
           variantKind === 'copy' ? 'New copy applied' : variantKind === 'refresh' ? 'Slide refreshed on the current prompt' : 'Arrangement applied',
           'ok',
         );
-      } catch {
-        toast('Could not apply that', 'error');
+      } catch (e) {
+        // The server says WHY (an orphaned photo, a clipped line) — a generic
+        // "could not apply" hid exactly the thing the person needed to fix.
+        toast(e instanceof Error && e.message ? `Could not apply that — ${e.message}` : 'Could not apply that', 'error');
       } finally {
         setWorking(null);
       }
     },
-    [projectId, variantKind],
+    [projectId, variantKind, photosFor],
   );
 
   /** Instant deterministic tweaks — no AI, no waiting. */
@@ -1945,7 +1964,7 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                                   slide={{ authored: v }}
                                   brandKit={kit}
                                   format={project.format}
-                                  photos={selected ? resolveSlidePhotos(selected, project.media) : undefined}
+                                  photos={selected ? resolveSlidePhotos({ ...selected, photos: photosFor(v.html, selected) }, project.media) : undefined}
                                   forExport
                                 />
                               </ScaledSlide>

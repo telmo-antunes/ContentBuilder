@@ -1370,6 +1370,22 @@ describe('POST /projects/:id/slides/:slideId/refresh — one slide on the curren
     return { project: created.body, slideId: created.body.slides[0].id as string };
   }
 
+  it('keeps a place for the slide’s photo even when the composer forgets the figure', async () => {
+    // The slide carries a photo slot; the mocked composer hands back words only.
+    // A candidate with no slot would show no image and be refused on save, so
+    // the composer's slot guard (or, failing that, the route) has to keep one.
+    const withSlot = '<h1 class="headline">Hi</h1>\n<figure class="cb-shot" data-cb-slot="price"></figure>\n<div class="fill"></div>';
+    aiReplyMock.mockImplementation(() => '<div class="headline">Hi</div>');
+    try {
+      const { project, slideId } = await seedStale(withSlot);
+      const res = await request(app()).post(`/projects/${project._id}/slides/${slideId}/refresh`).send({});
+      expectStatus(res, 200);
+      for (const v of res.body.variants) expect(v.html).toMatch(/data-cb-slot="[^"]+"/);
+    } finally {
+      aiReplyMock.mockImplementation(() => '');
+    }
+  });
+
   it('404s a slide that is not in the deck', async () => {
     const { project } = await seedStale('<h1 class="headline">Hi</h1>');
     expectStatus(await request(app()).post(`/projects/${project._id}/slides/nope/refresh`).send({}), 404);

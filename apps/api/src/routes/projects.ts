@@ -958,7 +958,11 @@ projectsRouter.post(
           post: { title: project.get('title'), idea: project.get('idea'), says: parts },
         });
         parts = rewritten.parts;
-        photo = rewritten.photo ?? false;
+        // A PICTURE ALREADY ON THE SLIDE STAYS. The copywriter may decline a
+        // picture for a slide that has none; it may not drop one the owner
+        // already placed — that candidate would show no image, and saving it
+        // would be refused for orphaning the photo.
+        photo = hadPhoto || (rewritten.photo ?? false);
         rewrittenRole = rewritten.role as never;
       } catch (err) {
         throw new ApiError(502, `Could not rewrite this slide: ${publicErrMessage(err, 'AI error')}`);
@@ -985,6 +989,12 @@ projectsRouter.post(
         // markup however many times it is asked — and the Studio offered two
         // identical "alternatives" side by side, which reads as a broken
         // feature rather than as a brand with one arrangement for that role.
+        // A candidate with nowhere for the slide's photo is not an alternative
+        // to this slide — the image would vanish and the save be refused.
+        if (hadPhoto && !authoredSlots(out.html).length) {
+          console.warn('[variants] a candidate left no slot for the photo — dropped');
+          continue;
+        }
         if (out.html && !variants.some((v) => v.html === out.html)) {
           variants.push({ html: out.html, ...(out.bg ? { bg: out.bg } : {}), ...(out.role ? { role: out.role } : {}) });
         }
@@ -992,7 +1002,14 @@ projectsRouter.post(
         console.warn('[variants] one candidate failed:', err instanceof Error ? err.message : err);
       }
     }
-    if (!variants.length) throw new ApiError(502, 'No usable alternatives came back — try again.');
+    if (!variants.length) {
+      throw new ApiError(
+        502,
+        hadPhoto
+          ? 'Every alternative left no place for this slide’s photo — try again, or say in the direction that the picture stays.'
+          : 'No usable alternatives came back — try again.',
+      );
+    }
     res.json({ variants });
   }),
 );
@@ -1049,7 +1066,7 @@ projectsRouter.post(
           post: { title: project.get('title'), idea: project.get('idea'), says: parts },
         });
         parts = rewritten.parts;
-        photo = rewritten.photo ?? false;
+        photo = hadPhoto || (rewritten.photo ?? false); // a placed picture stays — see the variants route
         nextRole = rewritten.role as never;
       } catch (err) {
         throw new ApiError(502, `Could not refresh this slide: ${publicErrMessage(err, 'AI error')}`);
@@ -1067,6 +1084,10 @@ projectsRouter.post(
           index: idx + v,
         });
         const html = plan.balance ? balanceVertical(out.html).html : out.html;
+        if (hadPhoto && !authoredSlots(html).length) {
+          console.warn('[refresh] a candidate left no slot for the photo — dropped');
+          continue;
+        }
         // A candidate identical to what is already there fixed nothing.
         if (html && html !== slide.authored.html && !variants.some((x) => x.html === html)) {
           variants.push({
@@ -1081,7 +1102,12 @@ projectsRouter.post(
       }
     }
     if (!variants.length) {
-      throw new ApiError(502, 'The current prompt arranged this slide the same way — nothing to change here.');
+      throw new ApiError(
+        502,
+        hadPhoto
+          ? 'The current prompt found no arrangement that keeps this slide’s photo — nothing changed.'
+          : 'The current prompt arranged this slide the same way — nothing to change here.',
+      );
     }
     res.json({ variants, reasons: flag?.reasons ?? [], rewrote: Boolean(plan.direction) });
   }),
