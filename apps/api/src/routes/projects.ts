@@ -46,6 +46,7 @@ import { lessonsFor, noteSlideSignal, observeOutcome, recordGeneration } from '.
 import type { ComposeRecord, CopyCheckSummary, LayoutCheckSummary } from '../lib/htmlDirector/compose';
 import { postUpdateStatus, slideRefreshPlan } from '../lib/promptStatus';
 import { balanceVertical } from '../lib/htmlDirector/balance';
+import { pictureTreatment, slotSizesFor, soundCandidates, unbleedPicture } from '../lib/htmlDirector/candidateCheck';
 import { aiDraftConfigured, config } from '../config';
 
 const composeSchema = z.object({
@@ -939,6 +940,7 @@ projectsRouter.post(
     const role = (slide.authored.role ?? 'statement') as never;
     const count = Math.min(3, Math.max(2, Number(req.query.count) || 2));
     const hadPhoto = authoredSlots(slide.authored.html).length > 0;
+    const treatment = pictureTreatment(slide.authored.html);
 
     let parts = partsFromAuthored(slide.authored.html);
     let photo = hadPhoto;
@@ -969,8 +971,15 @@ projectsRouter.post(
       }
     }
 
+    /**
+     * COMPOSE GENEROUSLY, THEN MEASURE. Candidates used to be offered exactly
+     * as composed, unmeasured — and one that painted its quote card on top of
+     * its screenshot was shown, picked and saved. So a couple of spare
+     * arrangements are composed, every one is measured, and only the sound
+     * ones reach the picker (`soundCandidates`).
+     */
     const variants: Array<{ html: string; bg?: string; role?: string }> = [];
-    for (let v = 0; v < count; v++) {
+    for (let v = 0; v < count + 2; v++) {
       try {
         const out = await composeSlide(recipe, {
           role: rewrittenRole,
@@ -995,8 +1004,22 @@ projectsRouter.post(
           console.warn('[variants] a candidate left no slot for the photo — dropped');
           continue;
         }
-        if (out.html && !variants.some((v) => v.html === out.html)) {
-          variants.push({ html: out.html, ...(out.bg ? { bg: out.bg } : {}), ...(out.role ? { role: out.role } : {}) });
+        // THE PICTURE KEEPS ITS TREATMENT. A rewrite that turns a contained
+        // exhibit into a backdrop puts the copy on top of the picture — fine
+        // over a photograph, unreadable over the screenshot this slide holds,
+        // and invisible to the measurement because nothing actually overlaps.
+        // Repaired rather than refused where it can be; measured either way.
+        let html = out.html;
+        if (hadPhoto && treatment === 'inset' && pictureTreatment(html) === 'bleed') {
+          console.warn('[variants] a candidate made the picture a backdrop — put back in the flow');
+          html = unbleedPicture(html);
+        }
+        if (hadPhoto && pictureTreatment(html) !== treatment) {
+          console.warn(`[variants] a candidate changed the picture from ${treatment} to ${pictureTreatment(html)} — dropped`);
+          continue;
+        }
+        if (html && !variants.some((v) => v.html === html)) {
+          variants.push({ html, ...(out.bg ? { bg: out.bg } : {}), ...(out.role ? { role: out.role } : {}) });
         }
       } catch (err) {
         console.warn('[variants] one candidate failed:', err instanceof Error ? err.message : err);
@@ -1006,11 +1029,24 @@ projectsRouter.post(
       throw new ApiError(
         502,
         hadPhoto
-          ? 'Every alternative left no place for this slide’s photo — try again, or say in the direction that the picture stays.'
+          ? 'Every alternative moved or dropped this slide’s picture — try again, or say in the direction that the picture stays exactly where it is.'
           : 'No usable alternatives came back — try again.',
       );
     }
-    res.json({ variants });
+    const sound = await soundCandidates(recipe, project.get('format'), variants, {
+      role: rewrittenRole,
+      ...(slide.authored.archetype ? { archetype: slide.authored.archetype } : {}),
+      slotSizes: slotSizesFor(slide.photos),
+      max: count,
+    });
+    for (const faults of sound.rejected) console.warn(`[variants] a candidate was ${faults.join(' + ')} — dropped`);
+    if (!sound.kept.length) {
+      throw new ApiError(
+        502,
+        `Every alternative came out broken on the canvas (${[...new Set(sound.rejected.flat())].join(', ')}) — the copy may be too long for this arrangement.`,
+      );
+    }
+    res.json({ variants: sound.kept });
   }),
 );
 
@@ -1052,6 +1088,7 @@ projectsRouter.post(
 
     const role = (slide.authored.role ?? 'statement') as never;
     const hadPhoto = authoredSlots(slide.authored.html).length > 0;
+    const treatment = pictureTreatment(slide.authored.html);
     let parts = partsFromAuthored(slide.authored.html);
     let photo = hadPhoto;
     let nextRole = role;
@@ -1074,7 +1111,7 @@ projectsRouter.post(
     }
 
     const variants: Array<{ html: string; bg?: string; role?: string; pv?: Record<string, number> }> = [];
-    for (let v = 0; v < 2; v++) {
+    for (let v = 0; v < 4; v++) { // spares, because the measurement below drops the broken ones
       try {
         const out = await composeSlide(recipe, {
           role: nextRole,
@@ -1083,9 +1120,17 @@ projectsRouter.post(
           photo,
           index: idx + v,
         });
-        const html = plan.balance ? balanceVertical(out.html).html : out.html;
+        let html = plan.balance ? balanceVertical(out.html).html : out.html;
         if (hadPhoto && !authoredSlots(html).length) {
           console.warn('[refresh] a candidate left no slot for the photo — dropped');
+          continue;
+        }
+        if (hadPhoto && treatment === 'inset' && pictureTreatment(html) === 'bleed') {
+          console.warn('[refresh] a candidate made the picture a backdrop — put back in the flow');
+          html = unbleedPicture(html);
+        }
+        if (hadPhoto && pictureTreatment(html) !== treatment) {
+          console.warn(`[refresh] a candidate changed the picture from ${treatment} to ${pictureTreatment(html)} — dropped`);
           continue;
         }
         // A candidate identical to what is already there fixed nothing.
@@ -1109,7 +1154,20 @@ projectsRouter.post(
           : 'The current prompt arranged this slide the same way — nothing to change here.',
       );
     }
-    res.json({ variants, reasons: flag?.reasons ?? [], rewrote: Boolean(plan.direction) });
+    const sound = await soundCandidates(recipe, project.get('format'), variants, {
+      role: nextRole,
+      ...(slide.authored.archetype ? { archetype: slide.authored.archetype } : {}),
+      slotSizes: slotSizesFor(slide.photos),
+      max: 2,
+    });
+    for (const faults of sound.rejected) console.warn(`[refresh] a candidate was ${faults.join(' + ')} — dropped`);
+    if (!sound.kept.length) {
+      throw new ApiError(
+        502,
+        `The current prompt only produced arrangements that break on the canvas (${[...new Set(sound.rejected.flat())].join(', ')}) — this slide is better left as it is.`,
+      );
+    }
+    res.json({ variants: sound.kept, reasons: flag?.reasons ?? [], rewrote: Boolean(plan.direction) });
   }),
 );
 
