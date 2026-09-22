@@ -19,3 +19,4 @@ export * from './learning';
 export * from './brandMark';
 export * from './promptVersions';
 export * from './posterType';
+export * from './copyWidth';

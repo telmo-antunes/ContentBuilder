@@ -345,7 +345,7 @@ export const refreshSlide = (projectId: string, slideId: string) =>
 export const tweakSlide = (
   projectId: string,
   slideId: string,
-  tweak: 'bigger-headline' | 'smaller-headline' | 'invert' | 'un-invert',
+  tweak: 'bigger-headline' | 'smaller-headline' | 'invert' | 'un-invert' | 'wider-copy' | 'narrower-copy',
 ) =>
   request<Project>(`/projects/${projectId}/slides/${slideId}/tweak`, {
     method: 'POST',

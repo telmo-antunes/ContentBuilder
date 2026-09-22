@@ -30,6 +30,7 @@ import {
   typeBaseCss,
 } from './typeFloor';
 import { slidePosterCss } from './posterType';
+import { copyWidthCss } from './copyWidth';
 
 /** CSS custom-property prefix for every brand token the renderer injects. */
 export const RECIPE_VAR_PREFIX = '--cb';
@@ -515,7 +516,10 @@ export function recipeStylesheetFor(recipe: BrandRecipe, format: string): string
   const typesetting = slideTypesettingCss();
   // Poster sizes for a bare headline-led slide — app capability, like the floor.
   const poster = slidePosterCss(format);
-  return [typeBaseCss(), authored, surface, media, archetypes, align, surfaces, typesetting, poster]
+  // The per-slide measure, last: its doubled classes are inert unless a slide
+  // carries one, and when it does it must outrank the brand's own max-width.
+  const measure = copyWidthCss();
+  return [typeBaseCss(), authored, surface, media, archetypes, align, surfaces, typesetting, poster, measure]
     .filter(Boolean)
     .join('\n');
 }

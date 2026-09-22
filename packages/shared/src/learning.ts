@@ -56,7 +56,7 @@ export interface PartEdit {
  * magnitude attached.
  */
 export interface TweakPress {
-  kind: 'smaller-headline' | 'bigger-headline' | 'invert' | 'un-invert';
+  kind: 'smaller-headline' | 'bigger-headline' | 'invert' | 'un-invert' | 'wider-copy' | 'narrower-copy';
   chars?: number;
 }
 

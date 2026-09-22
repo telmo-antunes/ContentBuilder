@@ -16,9 +16,11 @@ import {
   ensureBrandMark,
   isSlotName,
   migrateRecipe,
+  narrowerCopy,
   PLATE_CLASS,
   SLOT_CLASS,
   slidePhotoSchema,
+  widerCopy,
   type BrandRecipe,
   type Format,
   type SlidePhoto,
@@ -1237,7 +1239,7 @@ projectsRouter.post(
 );
 
 const tweakSchema = z.object({
-  tweak: z.enum(['bigger-headline', 'smaller-headline', 'invert', 'un-invert']),
+  tweak: z.enum(['bigger-headline', 'smaller-headline', 'invert', 'un-invert', 'wider-copy', 'narrower-copy']),
 });
 
 /** The visible length of a slide's headline — the magnitude behind a size tweak. */
@@ -1287,6 +1289,24 @@ projectsRouter.post(
           : html;
         break;
       }
+      /**
+       * THE MEASURE, PER SLIDE. A brand's `.body{max-width:22ch}` is the right
+       * default and occasionally wrong for one slide — a caption under a wide
+       * screenshot wrapping into a narrow column. Four steps, one at a time:
+       * 16ch → the brand's own → 30ch → the full canvas.
+       */
+      case 'wider-copy': {
+        const next = widerCopy(html);
+        if (!next.changed) throw new ApiError(400, 'This slide’s copy is already as wide as the canvas.');
+        html = next.html;
+        break;
+      }
+      case 'narrower-copy': {
+        const next = narrowerCopy(html);
+        if (!next.changed) throw new ApiError(400, 'This slide’s copy is already at its narrowest.');
+        html = next.html;
+        break;
+      }
       // The recipe's inverse surface, applied per slide.
       case 'invert':
         bg = 'inverse';
@@ -1310,6 +1330,10 @@ projectsRouter.post(
       'smaller-headline': { field: 'smallerHeadline', by: 1 },
       invert: { field: 'invert', by: 1 },
       'un-invert': { field: 'invert', by: -1 },
+      // A net preference, like invert: a brand whose measure is repeatedly
+      // widened is a brand whose recipe sets it too tight.
+      'wider-copy': { field: 'widerCopy', by: 1 },
+      'narrower-copy': { field: 'widerCopy', by: -1 },
     };
     const sig = TWEAK_SIGNALS[tweak];
     try {
