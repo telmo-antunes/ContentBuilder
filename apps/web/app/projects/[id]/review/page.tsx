@@ -507,14 +507,16 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
 
   /** Instant deterministic tweaks — no AI, no waiting. */
   const applyTweak = useCallback(
-    async (slideId: string, tweak: 'bigger-headline' | 'smaller-headline' | 'invert' | 'un-invert') => {
+    async (slideId: string, tweak: 'bigger-headline' | 'smaller-headline' | 'invert' | 'un-invert' | 'wider-copy' | 'narrower-copy') => {
       if (refuseWhileExporting()) return;
       setWorking(tweak);
       try {
         const updated = await tweakSlide(projectId, slideId, tweak);
         setProject((prev) => (prev ? { ...prev, slides: updated.slides } : prev));
-      } catch {
-        toast('Could not apply that change', 'error');
+      } catch (e) {
+        // The ends of a ladder refuse with a reason ("already as wide as the
+        // canvas") — worth more than "could not apply that change".
+        toast(e instanceof Error && e.message ? e.message : 'Could not apply that change', 'error');
       } finally {
         setWorking(null);
       }
@@ -860,6 +862,12 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
   const cardW = project.format === '1080x1920' ? 208 : 296;
   const authored = slides.length > 0 && slides.every((s) => s.authored?.html);
   const selected = slides[Math.min(sel, slides.length - 1)];
+  /**
+   * Has this slide any prose whose measure the width buttons could move? A
+   * headline has its own size control and a list its own layout, so the
+   * buttons are offered only where they would do something.
+   */
+  const hasProse = /class\s*=\s*["'][^"']*\b(body|tagline|quote)\b/i.test(selected?.authored?.html ?? '');
   // Live-edited view: while editing, swap the selected slide's authored HTML for
   // the in-progress rebuild so the deck + preview reflect edits before saving.
   const editingHtml = editId ? buildAuthored(editEls) : null;
@@ -1888,6 +1896,26 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                         onClick={() => selected && applyTweak(selected.id, 'smaller-headline')}
                       >
                         Smaller headline
+                      </button>
+                      <button
+                        className="mo-btn sm"
+                        disabled={working !== null || !hasProse}
+                        title={
+                          hasProse
+                            ? 'Let this slide’s prose run wider — 16ch → the brand’s own → 30ch → the full canvas'
+                            : 'This slide has no body, tagline or quote to widen'
+                        }
+                        onClick={() => selected && applyTweak(selected.id, 'wider-copy')}
+                      >
+                        Wider text
+                      </button>
+                      <button
+                        className="mo-btn sm"
+                        disabled={working !== null || !hasProse}
+                        title={hasProse ? 'Pull this slide’s prose back into a narrower column' : 'This slide has no body, tagline or quote to narrow'}
+                        onClick={() => selected && applyTweak(selected.id, 'narrower-copy')}
+                      >
+                        Narrower text
                       </button>
                       <button
                         className="mo-btn sm"
