@@ -18,15 +18,25 @@
  * ships: the alternative is a feature that stops working whenever the web app
  * is restarting.
  */
-import { SLOT_ATTR, type BrandRecipe, type Format, type SlidePhoto } from '@contentbuilder/shared';
+import { SLOT_ATTR, authoredSlots, isFormat, type BrandRecipe, type Format, type SlidePhoto } from '@contentbuilder/shared';
 import {
+  UNKNOWN_VERDICT,
+  addHeadlineVariant,
   checkSlideOverflow,
+  hasSmallerHeadlineVariant,
+  headlineVariantOf,
   layoutFaults,
+  openRenderProbe,
   renderCheckEnabledByDefault,
+  repairOverflow,
   withCeiling,
   type CheckOptions,
   type CheckSlide,
+  type LayoutVerdict,
+  type RenderProbe,
+  type RepairContext,
 } from './renderCheck';
+import type { ComposeSlideInput } from './prompt';
 
 export interface Candidate {
   html: string;
@@ -101,6 +111,102 @@ export function unbleedPicture(html: string): string {
   );
 }
 
+/**
+ * "SAME WORDS" IS A CONTRACT, NOT A HOPE.
+ *
+ * "Other arrangements" promises the copy is kept and only the layout moves. A
+ * candidate shipped with the caption gone and the headline repeated inside the
+ * card — plausible markup, wrong words — and the person applied it believing
+ * the promise. So every candidate is read back against the parts it was
+ * composed from: each part must appear, and the headline must appear once.
+ * Cheap, deterministic, and it runs before anything is measured.
+ */
+export interface WordParts {
+  eyebrow?: string;
+  headline?: string;
+  tagline?: string;
+  body?: string;
+  quote?: string;
+  attribution?: string;
+  stat?: string;
+  cta?: string;
+  rows?: ReadonlyArray<{ text?: string; note?: string }>;
+}
+
+/** What a reader would read: tags gone, entities decoded, whitespace collapsed, case folded. */
+export function readableText(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+const SCALAR_PARTS = ['eyebrow', 'headline', 'tagline', 'body', 'quote', 'attribution', 'stat', 'cta'] as const;
+
+/** Empty when the candidate says exactly what the parts say — otherwise, what it lost or repeated. */
+export function keepsTheWords(parts: WordParts, html: string): string[] {
+  const text = readableText(html);
+  const faults: string[] = [];
+  const count = (needle: string): number => {
+    const n = readableText(needle);
+    if (!n) return 1;
+    let i = 0;
+    let at = text.indexOf(n);
+    while (at !== -1) {
+      i += 1;
+      at = text.indexOf(n, at + n.length);
+    }
+    return i;
+  };
+  for (const key of SCALAR_PARTS) {
+    const value = parts[key];
+    if (typeof value !== 'string' || !value.trim()) continue;
+    const n = count(value);
+    if (n === 0) faults.push(`lost the ${key}`);
+    else if (key === 'headline' && n > 1) faults.push('repeats the headline');
+  }
+  for (const [i, row] of (parts.rows ?? []).entries()) {
+    if (row.text && count(row.text) === 0) faults.push(`lost row ${i + 1}`);
+  }
+  return faults;
+}
+
+/**
+ * THE PHOTO'S GEOMETRY, ON THE CANDIDATE'S OWN SLOT NAMES.
+ *
+ * A candidate names its slot as it likes ("pricing-ui" where the slide had
+ * "price"), and the reservation is keyed by name — so a size keyed to the old
+ * name reserved nothing, the slot fell back to its default (taller) geometry,
+ * and every alternative for a slide with a wide screenshot measured as
+ * overflowing. The photo lands on the candidate's first declared slot when it
+ * is applied (`photosFor` on the page, `normalizePhotos` on save), so that is
+ * where its size is measured too.
+ */
+export function slotSizesOn(
+  html: string,
+  sizes: Record<string, { shape?: string; size?: string }> | undefined,
+): Record<string, { shape?: string; size?: string }> {
+  if (!sizes || !Object.keys(sizes).length) return {};
+  const declared = authoredSlots(html);
+  if (!declared.length) return {};
+  const out: Record<string, { shape?: string; size?: string }> = {};
+  const spare = [...declared];
+  for (const [slot, g] of Object.entries(sizes)) {
+    const target = declared.includes(slot) ? slot : spare.find((d) => !(d in out));
+    if (!target) break;
+    out[target] = g;
+    spare.splice(spare.indexOf(target), 1);
+  }
+  return out;
+}
+
 /** Long enough for a cold browser and a handful of frames, short enough to fail a hung one. */
 const MEASURE_CEILING_MS = 90_000;
 
@@ -135,13 +241,16 @@ export async function measureCandidates(
   if (!opts?.openProbe && !renderCheckEnabledByDefault()) {
     return candidates.map((candidate) => ({ candidate, faults: [] }));
   }
-  const slides: CheckSlide[] = candidates.map((c) => ({
-    html: c.html,
-    ...(c.bg ? { bg: c.bg } : {}),
-    ...(c.role ?? opts?.role ? { role: c.role ?? opts?.role } : {}),
-    ...(opts?.archetype ? { archetype: opts.archetype } : {}),
-    ...(opts?.slotSizes && Object.keys(opts.slotSizes).length ? { slotSizes: opts.slotSizes } : {}),
-  }));
+  const slides: CheckSlide[] = candidates.map((c) => {
+    const sizes = slotSizesOn(c.html, opts?.slotSizes);
+    return {
+      html: c.html,
+      ...(c.bg ? { bg: c.bg } : {}),
+      ...(c.role ?? opts?.role ? { role: c.role ?? opts?.role } : {}),
+      ...(opts?.archetype ? { archetype: opts.archetype } : {}),
+      ...(Object.keys(sizes).length ? { slotSizes: sizes } : {}),
+    };
+  });
   /**
    * A WEDGED BROWSER MUST NOT HANG THE REQUEST. `checkSlideOverflow` handles a
    * probe that THROWS; one that never returns would leave the person watching
@@ -170,24 +279,117 @@ export async function measureCandidates(
 /**
  * The candidates worth showing a person, and what was wrong with the rest.
  *
- * `max` caps what comes back so a route can compose generously, measure, and
- * still return the two the picker has room for.
+ * ONE PROBE for everything: the measurement, the repairs and the re-measures
+ * all write into the same throwaway scaffold, because opening a probe stands
+ * up a business, a kit, a project and a browser, and a route that opened one
+ * per candidate would take longer than the compose it followed.
+ *
+ * A BROKEN CANDIDATE GETS THE SAME LADDER A DECK GETS. A whole-deck compose
+ * does not throw an overflowing slide away; it climbs `repairOverflow` —
+ * smaller headline, drop the least essential block, recompose with the copy
+ * declared fixed — and keeps what fits. Dropping candidates instead left a
+ * slide with a wide screenshot and a long caption with no alternatives at all,
+ * every time. `opts.input` is the slide the candidates were composed from;
+ * without it the ladder cannot recompose and only the free rung runs.
+ *
+ * `max` caps what comes back so a route can compose generously and still
+ * return the two the picker has room for.
  */
 export async function soundCandidates(
   recipe: BrandRecipe,
   format: Format | string,
   candidates: ReadonlyArray<Candidate>,
-  opts?: Parameters<typeof measureCandidates>[3] & { max?: number },
-): Promise<{ kept: Candidate[]; rejected: string[][] }> {
-  const verdicts = await measureCandidates(recipe, format, candidates, opts);
-  const kept: Candidate[] = [];
-  const rejected: string[][] = [];
-  for (const v of verdicts) {
-    if (v.faults.length) {
-      rejected.push(v.faults);
-      continue;
-    }
-    if (!opts?.max || kept.length < opts.max) kept.push(v.candidate);
+  opts?: Parameters<typeof measureCandidates>[3] & {
+    max?: number;
+    /** The slide these candidates were composed from — what the ladder recomposes. */
+    input?: ComposeSlideInput;
+    /** Test seam for the ladder's last rung; production uses the real composer. */
+    recompose?: RepairContext['recompose'];
+    /**
+     * WHAT THE ROUTE DID TO THE ORIGINALS, DONE TO EVERY REPAIR TOO. The
+     * ladder's last rung recomposes from scratch, and the model that put a
+     * picture behind the copy the first time will do it again — a repaired
+     * candidate came back with the bleed the route had just removed, measured
+     * fine (nothing overlaps in the flow), and was offered. Applied to the
+     * output of every rung before it is measured.
+     */
+    normalise?: (html: string) => string;
+  },
+): Promise<{ kept: Candidate[]; rejected: string[][]; repaired: number }> {
+  const cap = (list: Candidate[]) => (opts?.max ? list.slice(0, opts.max) : list);
+  const unchecked = () => ({ kept: cap([...candidates]), rejected: [] as string[][], repaired: 0 });
+  if (!candidates.length) return { kept: [], rejected: [], repaired: 0 };
+  if (!opts?.openProbe && !renderCheckEnabledByDefault()) return unchecked();
+
+  const fmt: Format = isFormat(format) ? format : '1080x1350';
+  const slides: CheckSlide[] = candidates.map((c) => {
+    const sizes = slotSizesOn(c.html, opts?.slotSizes);
+    return {
+      html: c.html,
+      ...(c.bg ? { bg: c.bg } : {}),
+      ...(c.role ?? opts?.role ? { role: c.role ?? opts?.role } : {}),
+      ...(opts?.archetype ? { archetype: opts.archetype } : {}),
+      ...(Object.keys(sizes).length ? { slotSizes: sizes } : {}),
+    };
+  });
+  const open = opts?.openProbe ?? openRenderProbe;
+  let probe: RenderProbe;
+  try {
+    probe = await withCeiling(open(recipe, fmt, slides), MEASURE_CEILING_MS, 'candidate probe');
+  } catch (err) {
+    console.warn(`[candidates] renderer unavailable — offering unchecked: ${err instanceof Error ? err.message : String(err)}`);
+    return unchecked();
   }
-  return { kept, rejected };
+  const faultsOf = (v: LayoutVerdict | undefined, role: string | undefined): string[] =>
+    !v || v.state === 'unknown' ? [] : layoutFaults(v, undefined, role).filter(BROKEN);
+  const normalise = opts?.normalise ?? ((h: string) => h);
+  const recomposeRaw: NonNullable<RepairContext['recompose']> =
+    opts?.recompose ??
+    (async (input, note) => {
+      const { composeSlide } = await import('./compose');
+      return (await composeSlide(recipe, input, { note, renderCheck: false })).html;
+    });
+  const recompose: NonNullable<RepairContext['recompose']> = async (input, note) => normalise(await recomposeRaw(input, note));
+  try {
+    const verdicts = await withCeiling(
+      probe.measure(candidates.map((c, index) => ({ index, html: c.html }))),
+      MEASURE_CEILING_MS,
+      'candidate measurement',
+    );
+    const kept: Candidate[] = [];
+    const rejected: string[][] = [];
+    let repaired = 0;
+    for (const [i, c] of candidates.entries()) {
+      const role = c.role ?? opts?.role;
+      let html = c.html;
+      let faults = faultsOf(verdicts[i], role);
+      if (faults.length) {
+        // Measured in THIS candidate's own position, so the ladder's verdicts
+        // are about the frame the person will actually see.
+        const measure = async (h: string) => ((await probe.measure([{ index: i, html: h }]))[0] ?? UNKNOWN_VERDICT).state;
+        if (faults.includes('overflows') && opts?.input) {
+          const r = await repairOverflow(recipe, opts.input, html, fmt, { measure, recompose });
+          if (!r.stillOverflows) html = normalise(r.html);
+        } else if (hasSmallerHeadlineVariant(recipe) && headlineVariantOf(html) !== 'sm') {
+          const smaller = addHeadlineVariant(html, 'sm');
+          if (smaller.changed) html = normalise(smaller.html);
+        }
+        if (html !== c.html) {
+          faults = faultsOf((await probe.measure([{ index: i, html }]))[0], role);
+          if (!faults.length) repaired += 1;
+        }
+      }
+      if (faults.length) {
+        rejected.push(faults);
+        continue;
+      }
+      if (!opts?.max || kept.length < opts.max) kept.push({ ...c, html });
+    }
+    return { kept, rejected, repaired };
+  } catch (err) {
+    console.warn(`[candidates] measuring failed — offering unchecked: ${err instanceof Error ? err.message : String(err)}`);
+    return unchecked();
+  } finally {
+    await probe.close().catch(() => {});
+  }
 }

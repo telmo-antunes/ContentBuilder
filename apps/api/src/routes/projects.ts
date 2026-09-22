@@ -48,7 +48,7 @@ import { lessonsFor, noteSlideSignal, observeOutcome, recordGeneration } from '.
 import type { ComposeRecord, CopyCheckSummary, LayoutCheckSummary } from '../lib/htmlDirector/compose';
 import { postUpdateStatus, slideRefreshPlan } from '../lib/promptStatus';
 import { balanceVertical } from '../lib/htmlDirector/balance';
-import { pictureTreatment, slotSizesFor, soundCandidates, unbleedPicture } from '../lib/htmlDirector/candidateCheck';
+import { keepsTheWords, pictureTreatment, slotSizesFor, soundCandidates, unbleedPicture } from '../lib/htmlDirector/candidateCheck';
 import { aiDraftConfigured, config } from '../config';
 
 const composeSchema = z.object({
@@ -1020,6 +1020,12 @@ projectsRouter.post(
           console.warn(`[variants] a candidate changed the picture from ${treatment} to ${pictureTreatment(html)} — dropped`);
           continue;
         }
+        // The words are the contract — see `keepsTheWords`.
+        const lost = keepsTheWords(parts, html);
+        if (lost.length) {
+          console.warn(`[variants] a candidate ${lost.join(', ')} — dropped`);
+          continue;
+        }
         if (html && !variants.some((v) => v.html === html)) {
           variants.push({ html, ...(out.bg ? { bg: out.bg } : {}), ...(out.role ? { role: out.role } : {}) });
         }
@@ -1039,9 +1045,19 @@ projectsRouter.post(
       role: rewrittenRole,
       ...(slide.authored.archetype ? { archetype: slide.authored.archetype } : {}),
       slotSizes: slotSizesFor(slide.photos),
-      max: count,
+      max: count + 2,
+      input: { role: rewrittenRole, parts, format: project.get('format'), photo, index: idx },
+      normalise: (h) => (hadPhoto && treatment === 'inset' ? unbleedPicture(h) : h),
     });
+    if (sound.repaired) console.warn(`[variants] ${sound.repaired} candidate(s) repaired on the ladder`);
     for (const faults of sound.rejected) console.warn(`[variants] a candidate was ${faults.join(' + ')} — dropped`);
+    // A repair may recompose; the words and the picture's treatment are still the contract.
+    sound.kept = sound.kept.filter((k) => {
+      const lost = keepsTheWords(parts, k.html);
+      const moved = hadPhoto && pictureTreatment(k.html) !== treatment;
+      if (lost.length || moved) console.warn(`[variants] a repaired candidate ${[...lost, ...(moved ? ['moved the picture'] : [])].join(', ')} — dropped`);
+      return !lost.length && !moved;
+    }).slice(0, count);
     if (!sound.kept.length) {
       throw new ApiError(
         502,
@@ -1135,6 +1151,11 @@ projectsRouter.post(
           console.warn(`[refresh] a candidate changed the picture from ${treatment} to ${pictureTreatment(html)} — dropped`);
           continue;
         }
+        const lost = keepsTheWords(parts, html);
+        if (lost.length) {
+          console.warn(`[refresh] a candidate ${lost.join(', ')} — dropped`);
+          continue;
+        }
         // A candidate identical to what is already there fixed nothing.
         if (html && html !== slide.authored.html && !variants.some((x) => x.html === html)) {
           variants.push({
@@ -1160,9 +1181,15 @@ projectsRouter.post(
       role: nextRole,
       ...(slide.authored.archetype ? { archetype: slide.authored.archetype } : {}),
       slotSizes: slotSizesFor(slide.photos),
-      max: 2,
+      max: 4,
+      input: { role: nextRole, parts, format: project.get('format'), photo, index: idx },
+      normalise: (h) => (hadPhoto && treatment === 'inset' ? unbleedPicture(h) : h),
     });
+    if (sound.repaired) console.warn(`[refresh] ${sound.repaired} candidate(s) repaired on the ladder`);
     for (const faults of sound.rejected) console.warn(`[refresh] a candidate was ${faults.join(' + ')} — dropped`);
+    sound.kept = sound.kept
+      .filter((k) => !keepsTheWords(parts, k.html).length && !(hadPhoto && pictureTreatment(k.html) !== treatment))
+      .slice(0, 2);
     if (!sound.kept.length) {
       throw new ApiError(
         502,

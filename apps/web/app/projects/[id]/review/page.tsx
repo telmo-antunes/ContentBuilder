@@ -66,6 +66,8 @@ import CanvasCopyEditor from '../../../components/CanvasCopyEditor';
 
 
 /** Text elements where the brand's signature emphasis (accent phrase) applies. */
+/** A compare pane: two of these plus the gap must fit the sheet's third column (~480px). */
+const COMPARE_W = 224;
 const EMPH_CLASSES = new Set(['headline', 'tagline', 'quote', 'body', 'lead', 'sub']);
 const canEmphasize = (el: AuthoredEl) =>
   el.emphasis !== undefined || EMPH_CLASSES.has(el.className.split(/\s+/)[0] ?? '');
@@ -128,6 +130,18 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
   const [variantKind, setVariantKind] = useState<'arrangement' | 'copy' | 'refresh'>('arrangement');
   /** The slide being refreshed on the current prompt, while the server works. */
   const [refreshing, setRefreshing] = useState<string | null>(null);
+  /**
+   * COMPARE BEFORE CONFIRMING. Clicking a candidate used to apply it — one
+   * click to look closer, and the deck had already changed. Now a click only
+   * puts the candidate beside the slide as it is, at a size you can judge, and
+   * a separate "Use this one" saves it.
+   */
+  const [compare, setCompare] = useState<number | null>(null);
+  /**
+   * ONE STEP BACK. What the slide was before the last apply, so a choice that
+   * looked right at thumbnail size and wrong on the deck is one click to undo.
+   */
+  const [undo, setUndo] = useState<{ slideId: string; authored: Slide['authored']; photos: SlidePhoto[]; what: string } | null>(null);
   /**
    * A direction for the SELECTED slide — the per-slide half of the brief
    * language. Empty asks for a rearrangement of the copy already there; filled,
@@ -379,6 +393,7 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
   useEffect(() => {
     setDirection('');
     setVariants(null);
+    setCompare(null);
   }, [sel]);
 
   /**
@@ -481,12 +496,22 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
     async (slideId: string, v: { html: string; bg?: string; role?: string; pv?: Record<string, number> }, allSlides: Slide[]) => {
       setWorking('apply');
       try {
+        const was = allSlides.find((s) => s.id === slideId);
         const next = allSlides.map((s) =>
           s.id === slideId ? { ...s, authored: { ...s.authored, ...v }, photos: photosFor(v.html, s) } : s,
         );
         const updated = await updateProject(projectId, { slides: next as Slide[] });
         setProject((prev) => (prev ? { ...prev, slides: updated.slides } : prev));
+        if (was?.authored) {
+          setUndo({
+            slideId,
+            authored: was.authored,
+            photos: was.photos ?? [],
+            what: variantKind === 'copy' ? 'the new words' : variantKind === 'refresh' ? 'the refresh' : 'the new arrangement',
+          });
+        }
         setVariants(null);
+        setCompare(null);
         // AFTER the save, so the outcome diff has already run over the new deck
         // and this only adds the one thing the diff could not have seen.
         void noteSlideChoice(projectId, slideId, variantKind === 'copy' ? 'copy' : 'arrangement');
@@ -504,6 +529,26 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
     },
     [projectId, variantKind, photosFor],
   );
+
+  /** Put back what the slide was before the last apply. */
+  const restorePrevious = useCallback(async () => {
+    if (!undo || !project) return;
+    if (refuseWhileExporting()) return;
+    setWorking('undo');
+    try {
+      const next = project.slides.map((s) =>
+        s.id === undo.slideId ? { ...s, authored: undo.authored, photos: undo.photos } : s,
+      );
+      const updated = await updateProject(projectId, { slides: next as Slide[] });
+      setProject((prev) => (prev ? { ...prev, slides: updated.slides } : prev));
+      setUndo(null);
+      toast('Put back the previous version', 'ok');
+    } catch (e) {
+      toast(e instanceof Error && e.message ? `Could not put it back — ${e.message}` : 'Could not put it back', 'error');
+    } finally {
+      setWorking(null);
+    }
+  }, [undo, project, projectId, refuseWhileExporting]);
 
   /** Instant deterministic tweaks — no AI, no waiting. */
   const applyTweak = useCallback(
@@ -1881,60 +1926,85 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                         </button>
                       </div>
                     )}
-                    <h3 className="colh">Quick adjustments</h3>
+                    {undo && selected && undo.slideId === selected.id && (
+                      <div className="mo-undo">
+                        <span>Applied {undo.what}. Not what you wanted?</span>
+                        <button className="mo-btn sm" disabled={working !== null} onClick={restorePrevious}>
+                          {working === 'undo' ? 'Putting back…' : 'Put back the previous version'}
+                        </button>
+                      </div>
+                    )}
+
+                    <h3 className="colh">
+                      Quick adjustments <span className="n">instant, no AI</span>
+                    </h3>
+                    <div className="mo-qgroups">
+                      <div className="mo-qgroup" role="group" aria-label="Headline size">
+                        <span className="lbl">Headline</span>
+                        <button
+                          className="mo-btn sm"
+                          disabled={working !== null || !selected?.authored?.html}
+                          title="One size smaller"
+                          onClick={() => selected && applyTweak(selected.id, 'smaller-headline')}
+                        >
+                          Smaller
+                        </button>
+                        <button
+                          className="mo-btn sm"
+                          disabled={working !== null || !selected?.authored?.html}
+                          title="One size bigger — up to poster size"
+                          onClick={() => selected && applyTweak(selected.id, 'bigger-headline')}
+                        >
+                          Bigger
+                        </button>
+                      </div>
+                      <div className="mo-qgroup" role="group" aria-label="Text width">
+                        <span className="lbl">Text width</span>
+                        <button
+                          className="mo-btn sm"
+                          disabled={working !== null || !hasProse}
+                          title={hasProse ? 'Pull this slide’s prose into a narrower column' : 'This slide has no body, tagline or quote'}
+                          onClick={() => selected && applyTweak(selected.id, 'narrower-copy')}
+                        >
+                          Narrower
+                        </button>
+                        <button
+                          className="mo-btn sm"
+                          disabled={working !== null || !hasProse}
+                          title={hasProse ? 'Let this slide’s prose run wider — up to the full canvas' : 'This slide has no body, tagline or quote'}
+                          onClick={() => selected && applyTweak(selected.id, 'wider-copy')}
+                        >
+                          Wider
+                        </button>
+                      </div>
+                      <div className="mo-qgroup" role="group" aria-label="Surface">
+                        <span className="lbl">Surface</span>
+                        <button
+                          className="mo-btn sm"
+                          disabled={working !== null || !recipe?.surfaces?.inverse || !selected?.authored?.html}
+                          title={
+                            recipe?.surfaces?.inverse
+                              ? 'Flip this slide to the brand’s light surface'
+                              : 'This brand has no inverse surface yet'
+                          }
+                          onClick={() =>
+                            selected &&
+                            applyTweak(selected.id, selected.authored?.bg === 'inverse' ? 'un-invert' : 'invert')
+                          }
+                        >
+                          {selected?.authored?.bg === 'inverse' ? 'Un-invert' : 'Invert colors'}
+                        </button>
+                      </div>
+                    </div>
+
+                    <h3 className="colh">
+                      Words and layout <span className="n">ask the AI — nothing changes until you confirm</span>
+                    </h3>
                     <div className="mo-qrow">
                       <button
                         className="mo-btn sm"
-                        disabled={working !== null || !selected?.authored?.html}
-                        onClick={() => selected && applyTweak(selected.id, 'bigger-headline')}
-                      >
-                        Bigger headline
-                      </button>
-                      <button
-                        className="mo-btn sm"
-                        disabled={working !== null || !selected?.authored?.html}
-                        onClick={() => selected && applyTweak(selected.id, 'smaller-headline')}
-                      >
-                        Smaller headline
-                      </button>
-                      <button
-                        className="mo-btn sm"
-                        disabled={working !== null || !hasProse}
-                        title={
-                          hasProse
-                            ? 'Let this slide’s prose run wider — 16ch → the brand’s own → 30ch → the full canvas'
-                            : 'This slide has no body, tagline or quote to widen'
-                        }
-                        onClick={() => selected && applyTweak(selected.id, 'wider-copy')}
-                      >
-                        Wider text
-                      </button>
-                      <button
-                        className="mo-btn sm"
-                        disabled={working !== null || !hasProse}
-                        title={hasProse ? 'Pull this slide’s prose back into a narrower column' : 'This slide has no body, tagline or quote to narrow'}
-                        onClick={() => selected && applyTweak(selected.id, 'narrower-copy')}
-                      >
-                        Narrower text
-                      </button>
-                      <button
-                        className="mo-btn sm"
-                        disabled={working !== null || !recipe?.surfaces?.inverse || !selected?.authored?.html}
-                        title={
-                          recipe?.surfaces?.inverse
-                            ? 'Flip this slide to the brand’s light surface'
-                            : 'This brand has no inverse surface yet'
-                        }
-                        onClick={() =>
-                          selected &&
-                          applyTweak(selected.id, selected.authored?.bg === 'inverse' ? 'un-invert' : 'invert')
-                        }
-                      >
-                        {selected?.authored?.bg === 'inverse' ? 'Un-invert' : 'Invert colors'}
-                      </button>
-                      <button
-                        className="mo-btn sm"
                         disabled={!selected?.authored?.html}
+                        title="Type the words yourself"
                         onClick={() => selected && startEdit(selected)}
                       >
                         <Icon name="edit" size={12} /> Edit the words
@@ -1945,7 +2015,7 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                         title={
                           direction.trim()
                             ? 'Rewrite this slide from your direction'
-                            : 'Re-arrange this slide only — the copy is kept'
+                            : 'Same words, a different layout — two to compare'
                         }
                         onClick={() => selected && askVariants(selected.id, direction)}
                       >
@@ -1958,18 +2028,18 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                       <button
                         className="mo-btn sm"
                         disabled={!selected?.authored?.html || working !== null}
-                        title="Keep this exact layout — write new copy for it"
+                        title="Same layout, new words — two to compare"
                         onClick={() => selected && askRewrite(selected.id, direction)}
                       >
                         {working === 'rewrite' ? 'Writing…' : 'New words'}
                       </button>
                     </div>
 
-                    {/* Candidates: nothing saved until one is picked. */}
-                    {variants && variants.length > 0 && (
+                    {/* Candidates: click one to compare it with the slide as it is. Nothing is saved until "Use this one". */}
+                    {variants && variants.length > 0 && selected && (
                       <div className="mo-variants">
                         <h3 className="colh">
-                          Pick one{' '}
+                          Click one to compare{' '}
                           <span className="n">
                             {variantKind === 'copy'
                               ? 'new words'
@@ -1982,23 +2052,80 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                           {variants.map((v, i) => (
                             <button
                               key={i}
-                              className="sv-card"
+                              className={`sv-card${compare === i ? ' sel' : ''}`}
                               disabled={working !== null}
-                              onClick={() => selected && applyVariant(selected.id, v, slides)}
-                              title="Apply this one"
+                              onClick={() => setCompare(compare === i ? null : i)}
+                              title={compare === i ? 'Comparing this one' : 'Compare this one with the current slide'}
+                              aria-pressed={compare === i}
                             >
                               <ScaledSlide format={project.format} displayWidth={124}>
                                 <SlideRenderer
                                   slide={{ authored: v }}
                                   brandKit={kit}
                                   format={project.format}
-                                  photos={selected ? resolveSlidePhotos({ ...selected, photos: photosFor(v.html, selected) }, project.media) : undefined}
+                                  photos={resolveSlidePhotos({ ...selected, photos: photosFor(v.html, selected) }, project.media)}
                                   forExport
                                 />
                               </ScaledSlide>
                             </button>
                           ))}
                         </div>
+                        {compare !== null && variants[compare] && (
+                          <>
+                            <div className="mo-compare">
+                              <div className="pane">
+                                <span className="cap">Now</span>
+                                <div className="frame">
+                                  <ScaledSlide format={project.format} displayWidth={COMPARE_W}>
+                                    <SlideRenderer
+                                      slide={selected}
+                                      brandKit={kit}
+                                      format={project.format}
+                                      photos={resolveSlidePhotos(selected, project.media)}
+                                      forExport
+                                    />
+                                  </ScaledSlide>
+                                </div>
+                              </div>
+                              <div className="pane cand">
+                                <span className="cap">Candidate {compare + 1} of {variants.length}</span>
+                                <div className="frame">
+                                  <ScaledSlide format={project.format} displayWidth={COMPARE_W}>
+                                    <SlideRenderer
+                                      slide={{ authored: variants[compare]! }}
+                                      brandKit={kit}
+                                      format={project.format}
+                                      photos={resolveSlidePhotos({ ...selected, photos: photosFor(variants[compare]!.html, selected) }, project.media)}
+                                      forExport
+                                    />
+                                  </ScaledSlide>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="mo-compare-actions">
+                              <button
+                                className="mo-btn sm prim"
+                                disabled={working !== null}
+                                onClick={() => applyVariant(selected.id, variants[compare]!, slides)}
+                              >
+                                {working === 'apply' ? 'Applying…' : 'Use this one'}
+                              </button>
+                              <button className="mo-btn sm" disabled={working !== null} onClick={() => setCompare(null)}>
+                                Keep the current
+                              </button>
+                              {variants.length > 1 && (
+                                <button
+                                  className="mo-btn sm"
+                                  disabled={working !== null}
+                                  onClick={() => setCompare((compare + 1) % variants.length)}
+                                >
+                                  Next candidate
+                                </button>
+                              )}
+                              <span className="n">Nothing is saved until you choose.</span>
+                            </div>
+                          </>
+                        )}
                       </div>
                     )}
 
