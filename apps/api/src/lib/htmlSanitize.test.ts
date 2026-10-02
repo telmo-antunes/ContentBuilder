@@ -111,3 +111,17 @@ describe('sanitizeAuthoredHtml', () => {
     });
   });
 });
+
+describe('scene steps (data-cb-step / data-cb-steps)', () => {
+  it('keeps valid step markup exactly', () => {
+    const src = '<div data-cb-steps="2.8 2.4"><p class="row" data-cb-step="0 1">a</p><p class="cta" data-cb-step="1">b</p></div>';
+    expect(sanitizeAuthoredHtml(src)).toBe(src);
+  });
+  it('drops a step list or duration list that would not survive a selector', () => {
+    expect(sanitizeAuthoredHtml('<p data-cb-step="0,1">a</p>')).toBe('<p>a</p>');
+    expect(sanitizeAuthoredHtml('<p data-cb-step="99">a</p>')).toBe('<p>a</p>');
+    expect(sanitizeAuthoredHtml('<div data-cb-steps="0.05 2"></div>')).toBe('<div></div>');
+    // durations belong on a container, not on inline text
+    expect(sanitizeAuthoredHtml('<b data-cb-steps="2 2">a</b>')).toBe('<b>a</b>');
+  });
+});

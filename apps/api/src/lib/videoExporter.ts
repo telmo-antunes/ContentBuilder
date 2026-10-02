@@ -168,9 +168,19 @@ export async function renderSlidesToVideo(
           return Number.isFinite(end) ? Math.max(max, end) : max;
         }, 0);
       });
+      /**
+       * A SCENE slide publishes its own clock (see web/lib/render/AuthoredSlide
+       * and shared/scenes.ts): `__cbMotionMs` is how long its steps run, and
+       * `__cbSeek(ms)` paints any moment of them. It is driven beside the Web
+       * Animations below, not instead of them — the recipe's reveal still runs
+       * on everything that is not a step.
+       */
+      const sceneMs: number = await page.evaluate(() => Number((globalThis as any).__cbMotionMs ?? 0) || 0);
+      const motionTotalMs = Math.max(motionMs, sceneMs);
       // Never longer than the clip the user asked for, and never so short that
-      // the reveal is cut off mid-entrance.
-      const revealFrames = Math.min(targetFrames, Math.max(1, Math.ceil(motionMs / FRAME_MS)));
+      // the reveal is cut off mid-entrance. A scene longer than the clip is cut
+      // at the clip — the user chose the length.
+      const revealFrames = Math.min(targetFrames, Math.max(1, Math.ceil(motionTotalMs / FRAME_MS)));
       const el = await page.$('[data-slide-root]');
       if (!el) throw new Error(`Render route produced no slide for ${slide.id}`);
 
@@ -179,17 +189,20 @@ export async function renderSlidesToVideo(
       // animation seeked past its end paints stale in headless Chrome (elements
       // silently vanish even though computed opacity is 1).
       for (let f = 0; f < revealFrames; f++) {
-        const t = Math.min(f * FRAME_MS, motionMs);
+        const t = Math.min(f * FRAME_MS, motionTotalMs);
         await page.evaluate(
-          (ct: number) =>
+          (ct: number, animMs: number) => {
             (globalThis as any).document.getAnimations().forEach((a: any) => {
               try {
-                a.currentTime = ct;
+                a.currentTime = Math.min(ct, animMs);
               } catch {
                 /* some animations reject a manual time */
               }
-            }),
+            });
+            (globalThis as any).__cbSeek?.(ct);
+          },
           t,
+          motionMs,
         );
         frames.push(Buffer.from(await el.screenshot({ type: 'png' })));
         // Frame capture is the bulk of the work — report it as it goes, and
@@ -221,6 +234,8 @@ export async function renderSlidesToVideo(
           }
         });
         doc.querySelectorAll('.cb-motion').forEach((n: any) => n.classList.remove('cb-motion'));
+        // A scene settles on its rest step, fully entered.
+        (globalThis as any).__cbSeek?.(Number((globalThis as any).__cbMotionMs ?? 0) || 0);
       });
       await new Promise((r) => setTimeout(r, 120));
       const settled = Buffer.from(await el.screenshot({ type: 'png' }));

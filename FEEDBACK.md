@@ -51,6 +51,48 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
+### A figure on a `photo: 'never'` layout, and spacers that silently do nothing
+
+- **Kind:** Defect (no guard) + Gap (no fixed spacing primitive)
+- **Severity:** cost me a fix — three export rounds of edits that could not work
+- **First seen:** 2026-10-02 — asking-for-the-review, slides 3 and 5
+- **What happened:** two screenshots went onto slides whose archetypes are `list` and `pull`. Both are declared `photo: 'never'` in `packages/shared/src/archetypes.ts`, and both have `slack: 'center'`, for which `slideArchetypeCss` emits `.fill{flex:0 0 0}` — every spacer is collapsed to zero by design. So the figures crowded the copy, and three successive rounds of adding `<div class="fill">` changed nothing on the rendered slide. Slide 4 (`split`, `slack: 'between'`) honoured the same fill the whole time, which is what finally exposed it. Setting `authored.archetype = 'split'` on both fixed the spacing in one export.
+- **Why it matters:** nothing tells an editor that a figure was put on a layout built never to hold one, or that a spacer is inert on this archetype. Both fail silently, and the visible symptom ("cramped") points at the copy, not the layout.
+- **Direction:** two small things. (1) On PATCH, when a slide gains a `cb-shot` and its archetype is `photo: 'never'`, either re-pick the archetype from the role's allowed list (`feature`/`statement` can be `split`) or report it as a fault beside `copyFaults`. (2) Give authored markup a FIXED gap primitive — `.gap`, sized from a recipe token like `--cb-gap` — that every archetype honours, distinct from `.fill`, which only distributes slack. Inline styles are stripped by design, so today there is no way to say "a little space here" on a centred slide.
+
+
+### A slot's legibility is set by the capture's width, and nothing says so
+
+- **Kind:** Gap
+- **Severity:** cost me a fix (five export cycles on one deck)
+- **First seen:** 2026-10-02 — asking-for-the-review (IG carousel), slides 3 and 5
+- **What happened:** two product screenshots went into slots and came back unreadable. The obvious move — crop tighter to the fragment carrying the claim — made them *worse*, and it took three rounds to see why. A slot renders a figure at a fixed fraction of the frame, so the rendered type size is `sourceTypePx x (boxWidth / sourceWidth)`. Cropping changes both the numerator's context and the denominator, but not their ratio. What does change it is the **capture width**: the same `/dashboard/reviews` card is 28px type in a 2388px-wide iPad capture (ratio 0.012) and 28px type in a 780px-wide phone capture (ratio 0.036). Re-shooting at phone width made the card about three times larger with no crop at all.
+- **Why it matters:** this is the third deck whose argument is screenshots, and all three lost cycles to it. The existing note in HANDOFF says "crop the source, not the slot", which is right about blogs and actively misleading here.
+- **Direction:** the attach step already knows the asset's dimensions and the slot's drawn width. It could refuse, or warn, when the ratio implies type under ~14px at 1080 — "this capture is 2388px wide; at this slot that lands at 11px. Re-shoot at phone width." The number is computable before the first export.
+
+### A feature slide with no figure keeps the hole where the figure was
+
+- **Kind:** Defect
+- **Severity:** cost me a fix
+- **First seen:** 2026-10-02 — asking-for-the-review, slide 4
+- **What happened:** the composer authored its one `data-cb-slot` on the slide with the least to show. Moving the slot to the slides that had evidence left slide 4 with three lines of copy and the rest of the frame empty — the role's layout budget still reserved the figure's space, so the slide read as a void rather than as a text slide. It had to be rebuilt by hand as a stat slide ("48h") to fill honestly.
+- **Why it matters:** removing a figure is a normal edit; the deck should re-balance rather than leave its hole.
+- **Direction:** when a slide's last `cb-shot` is removed, re-pick the role's arrangement for the copy that is left, the way a text-only compose would have laid it out.
+
+### Three images, six slides, one slot — again
+
+- **Kind:** Gap
+- **Severity:** cost me a fix
+- **First seen:** 2026-10-02 — asking-for-the-review (and logged before, on what-a-walk-in-booking-is-for)
+- **What happened:** the `content:instagram` payload carried three published images with their slots decided, and the composed deck authored exactly one figure across six slides. Same ratio as September. Placing the other two meant hand-inserting figures and patching them back.
+- **Why it matters:** every blog-to-carousel repurpose hits it, and it is now measured twice with the same number.
+- **Direction:** unchanged — let the compose request carry the image manifest so the copywriter plans figures around pictures that already exist.
+
+### The PATCH copy check earned its keep — RESOLVED, recorded
+
+*2026-10-02.* The check added to `PATCH /projects/:id` caught a real fault on its first real run: a hand-rewritten close read "We will turn your requests on **with you**" and came back `ends on a dangling word`. Before that check, a hand edit faced nothing — which is exactly how the "DM us WALKIN" / "Send WALKIN" double CTA shipped. Two hand edits in this deck, two checks run, one fault caught and fixed before export.
+
+
 ### The close invented a service promise nobody has made
 
 - **Kind:** Defect
