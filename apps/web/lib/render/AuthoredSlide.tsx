@@ -3,6 +3,14 @@
 import { useEffect, useId, useMemo, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import {
+  STEP_ATTR,
+  parseStepList,
+  presenceAt,
+  restStep,
+  sceneMotionCss,
+  sceneStillCss,
+  sceneSteps,
+  sceneTotalMs,
   bleedAnchorCss,
   isArchetype,
   authoredSlots,
@@ -500,8 +508,50 @@ export function AuthoredSlide({
    * the same things with better information.
    */
   const anchorCss = bg && overrides?.bleedAnchor ? bleedAnchorCss(scope, overrides.bleedAnchor) : '';
-  const styleStr = `${varRule}\n${scopedCss}\n${slotRules}\n${bgLayerCss}${motionCss}${freeMotionCss}\n${ambientCss}\n${anchorCss}`;
+  /**
+   * A SCENE acts its claim out as steps (see shared/scenes.ts). The still
+   * export shows the rest step by CSS alone; in motion mode the clock below
+   * owns every stepped element, so the recipe's reveal must not also run.
+   */
+  const steps = useMemo(() => sceneSteps(html), [html]);
+  const sceneCss = steps ? (motion ? sceneMotionCss(scope) : sceneStillCss(scope, restStep(steps))) : '';
+  const styleStr = `${varRule}\n${scopedCss}\n${slotRules}\n${bgLayerCss}${motionCss}${freeMotionCss}\n${ambientCss}\n${anchorCss}\n${sceneCss}`;
   const styleHtmlObj = useMemo(() => ({ __html: styleStr }), [styleStr]);
+  /**
+   * THE SEEKABLE CLOCK. The exporter cannot drive a timer, and framer-motion
+   * cannot be asked for frame 311 — so a scene's time is a function the page
+   * exposes: `window.__cbSeek(ms)` paints that moment, and `__cbMotionMs` says
+   * how long the scene runs so the clip is cut to it. Every call is pure in
+   * `ms`; nothing here remembers the previous frame, which is what lets the
+   * exporter seek out of order and get the same picture.
+   */
+  useEffect(() => {
+    if (!motion || !steps) return;
+    const root = slideRef.current;
+    if (!root) return;
+    const els = Array.from(root.querySelectorAll<HTMLElement>(`[${STEP_ATTR}]`)).map((el) => ({
+      el,
+      steps: parseStepList(el.getAttribute(STEP_ATTR) ?? ''),
+    }));
+    const seek = (ms: number) => {
+      for (const { el, steps: st } of els) {
+        const p = presenceAt(ms, steps, st);
+        el.style.display = p.opacity < 0.002 ? 'none' : '';
+        el.style.opacity = p.opacity.toFixed(4);
+        el.style.transform = `translateY(${((1 - p.enter) * 18).toFixed(2)}px) scale(${(1 - 0.04 * p.exit).toFixed(4)})`;
+        const blur = 6 * (1 - p.enter) + 6 * p.exit;
+        el.style.filter = blur > 0.05 ? `blur(${blur.toFixed(2)}px)` : '';
+      }
+    };
+    const w = window as unknown as { __cbSeek?: (ms: number) => void; __cbMotionMs?: number };
+    w.__cbSeek = seek;
+    w.__cbMotionMs = sceneTotalMs(steps);
+    seek(0);
+    return () => {
+      delete w.__cbSeek;
+      delete w.__cbMotionMs;
+    };
+  }, [motion, steps, html]);
   const slideHtmlObj = useMemo(() => ({ __html: html }), [html]);
   // Setting a background photo puts the slide into the recipe's photo treatment
   // (its `.photo` rules layer `--cb-photo` under a legibility scrim), even
