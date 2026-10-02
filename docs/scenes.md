@@ -1,8 +1,9 @@
 # Scenes — acting the product out, inside a slide
 
-*Design note, 2026-10-02. Written at Telmo's ask: the motion scenes on /crm and
+*Design note, 2026-10-02, written at Telmo's ask: the motion scenes on /crm and
 /about, and the Liquid Glass reels, should be something ContentBuilder can make
-too. Nothing below is built; this is the shape of the work and what it costs.*
+too. Steps 1–3 below were built the same day (branch `claude/scene-slides`);
+the composer's scene role is the open piece.*
 
 ## What exists today, and why none of it transfers as-is
 
@@ -65,6 +66,21 @@ scene proves, and its output is the step list.
 
 What it must not do is the same as everywhere else: no stat it was not given,
 no feature that does not exist, no suggestion that the platform sends clients.
+
+## Status — 2026-10-02
+
+| | |
+|---|---|
+| the clock, step markup, sanitiser, exporter branch | **built** — `shared/scenes.ts`, `htmlSanitize.ts`, `AuthoredSlide.tsx`, `videoExporter.ts` |
+| one scene by hand, exported | **built** — Smart Reconnect, project `6abfb3c28dcd44ce8b58c936`, 9 s clip; frames at 1.8 / 2.9 / 5.4 s show the three states |
+| the composer's scene role | open |
+| the Studio: scrub and edit steps | open |
+
+**Found on the proof.** The one-ask check (`oneAskFaults`) read the scene's
+"Send to Ana" button as *a second ask*. In a scene a button is a state in the
+story, not an ask to the reader; the check needs to know the slide is a scene
+(`isScene(html)`) and skip buttons carrying `data-cb-step`. One line, once the
+composer role lands and decides what a scene's close looks like.
 
 ## What it costs, in order
 
