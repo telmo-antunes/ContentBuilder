@@ -51,6 +51,37 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
+### The faithfulness check flagged every content word of the deck as "not in the brief"
+
+- **Kind:** Defect
+- **Severity:** cost me a fix
+- **First seen:** 2026-10-06 — what-to-buy-first (project 6ac4f9868a6afe03ee1083c1)
+- **What happened:** after `POST /compose` with a 1906-char idea that named every item, `copyFaults` listed one "not in the brief" fault per slide covering nearly all its words: slide 1 `machines, pressure, washer, vacuum, extractor, action, polisher, inspection`, slide 4 `services, charge, extractor, sprays, solution, fabric, sucks, straight…`. Every one of those words is in the idea. After the PATCH the same check returned nothing.
+- **Why it matters:** a check that fires on every slide teaches the reader to ignore it, and the real faults on the same list (a clipped row, a stray button) were buried among eleven false ones.
+- **Direction:** compare against the idea the compose actually received (the project likely has no stored brief at compose time, so the check runs against an empty one); if no brief is stored, skip the check rather than flag everything.
+- **Seen again:**
+
+### A content slide was composed as the call to action, and a directed variant could not change its role
+
+- **Kind:** Defect
+- **Severity:** cost me a fix
+- **First seen:** 2026-10-06 — what-to-buy-first
+- **What happened:** slide 3 of 6 (the pressure-washer warning) came back `role: 'cta'`, archetype `cta`, with a `Book` button (fault: `cta 'Book' clamped mid-phrase`). A variant directed "A statement slide, not a call to action, and no button" dropped the button but kept `role: 'cta'`, so the PATCH check then reported `the close does not say where` on a slide that is not the close. Fixed by setting `authored.role` by hand.
+- **Why it matters:** a deck with two calls to action, one of them mid-deck with a dead button, and a role field that only a hand edit can change.
+- **Direction:** only the last slide may take the cta role unless the brief asks otherwise; a variant whose direction changes the slide's job should re-derive the role from the archetype it returns.
+- **Seen again:**
+
+### List rows were clipped mid-phrase, and a directed variant clipped them again
+
+- **Kind:** Defect
+- **Severity:** cost me a fix
+- **First seen:** 2026-10-06 — what-to-buy-first
+- **What happened:** slide 2 rows came back `1. Pressure washer, because every service` and `3. Microfibres and wash products` (the idea said "every service starts with a wash" and "always bought new"). The check caught it (`starts a sentence it never finishes`). A variant directed with the exact three rows returned `Pressure washer: every service starts` and dropped "always bought new" again; slide 5's variant dropped the whole second line of a two-line body. `?count=2` returned one variant per slide. This is the shape of the resolved "Composed body copy was clipped mid-sentence" entry, now on `.panel .row` and in the variants path.
+- **Why it matters:** the variants endpoint is the tool for fixing one slide, and it reproduces the defect it is used to fix; the only way out was hand-written HTML.
+- **Direction:** apply the clip check inside variants and retry (or widen the row budget) before returning; when a direction quotes exact text, treat it as copy to place, not a brief to compress.
+- **Seen again:**
+
+
 ### A figure on a `photo: 'never'` layout, and spacers that silently do nothing
 
 - **Kind:** Defect (no guard) + Gap (no fixed spacing primitive)
@@ -290,6 +321,7 @@ Rules that keep this file worth reading:
 - **Why it matters:** it is the single most-repeated string the product will ever emit, it appears on the slide that carries the offer, and a house-style rule that lives only in a human's head gets broken by every new model.
 - **Direction:** the recipe already carries the brand's identity; give it a `nameFormat` (or reuse the wordmark) and enforce it mechanically after the parse, exactly like the brand-mark normaliser already does for the logo — a prompt line alone will not hold.
 - **Seen again:**
+  - 2026-10-06 — what-to-buy-first — the payload named the post's hero image, compose returned `imageNeed: none` on all six slides and no `.cb-shot` anywhere; a variant directed "split layout with a hero photo slot" also came back without the slot. The cover had to be hand-written with the figure and the photo PATCHed in.
   - 2026-09-17 — what-a-walk-in-booking-is-for (IG carousel), slide 5, parse v13: the EYEBROW composed as `Detail Masters`. Same fault, new slot — the earlier instance was a headline, and the direction of a post-parse normaliser still holds for both. A prompt line has now failed to hold it across two prompt generations.
 
 ### A full-bleed cta puts white type on a light photograph
