@@ -1345,6 +1345,40 @@ describe('markdown is not copy', () => {
   });
 });
 
+describe('the cover says there is more', () => {
+  const deck = (slides: Array<Record<string, unknown>>) => JSON.stringify({ slides });
+
+  it("sets the cover's swipe cue in its handle line", async () => {
+    reply.mockReturnValue(deck([
+      { role: 'cover', parts: { headline: 'What should you buy first?', swipe: 'Swipe for the list →' } },
+      { role: 'cta', parts: { headline: 'The guide, sent over.', cta: 'DM us KIT' } },
+    ]));
+    const out = await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' });
+    expect(out[0]!.parts.handle).toBe('Swipe for the list →');
+    expect((out[0]!.parts as Record<string, unknown>).swipe).toBeUndefined();
+  });
+
+  it('drops a swipe cue anywhere but the cover', async () => {
+    reply.mockReturnValue(deck([
+      { role: 'cover', parts: { headline: 'What should you buy first?' } },
+      { role: 'feature', parts: { headline: 'Pressure washer', body: 'Every job starts with a wash.', swipe: 'Swipe →' } },
+      { role: 'cta', parts: { headline: 'The guide, sent over.', cta: 'DM us KIT' } },
+    ]));
+    const out = await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' });
+    expect(out[1]!.parts.handle).toBeUndefined();
+    expect((out[1]!.parts as Record<string, unknown>).swipe).toBeUndefined();
+  });
+
+  it('asks for the deck shape the owner set', async () => {
+    reply.mockReturnValue(deck([{ role: 'cover', parts: { headline: 'A line' } }]));
+    await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' });
+    const system = JSON.stringify(aiCalls[0]);
+    expect(system).toContain('EACH ITEM GETS ITS OWN SLIDE');
+    expect(system).toContain("goes on THAT item's slide");
+    expect(system).toContain("that decision is the close's headline");
+  });
+});
+
 describe('prose is shortened by the sentence, not mid-thought', () => {
   it('drops the trailing sentence rather than amputating it', async () => {
     const body =

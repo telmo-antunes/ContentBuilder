@@ -335,6 +335,16 @@ export const TOUCHPOINT_REGISTRY: Record<TouchpointId, Touchpoint> = {
           'One destination: a keyword ask never sits beside the brand\'s address, an @name or "link in bio". A surviving address is dropped and the owner is told; it belongs in the bio and the caption.',
         ],
       },
+      {
+        version: 14,
+        date: '2026-10-06',
+        summary: 'A swipe cue on the cover, one slide per item to buy, tips on their item, the decision on the close.',
+        improves: [
+          'The cover is a picture and ends with a short swipe cue that says more follows and what ("Swipe for the list →"), written as a new `swipe` part and set in the cover\'s foot line.',
+          'A set of things to buy, choose or use gets one feature slide per item, its picture the item itself so the reader knows what to look for, instead of one list slide.',
+          'A tip or warning about an item rides on that item\'s slide instead of taking a slide of its own, and a closing decision becomes the close\'s headline above the one ask.',
+        ],
+      },
     ],
   },
 

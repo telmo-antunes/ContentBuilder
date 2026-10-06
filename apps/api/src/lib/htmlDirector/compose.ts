@@ -107,6 +107,8 @@ const partsSchema = z.object({
   stat: z.string().optional(),
   cta: z.string().optional(),
   handle: z.string().optional(),
+  /** Cover only: a short cue that the deck continues ("Swipe for the list →"). Set where the handle sits. */
+  swipe: z.string().optional(),
   /**
    * An enumeration, one entry per item. The composer has always known how to
    * lay these out (see `rowLines` in prompt.ts) but this key did not exist on
@@ -1420,6 +1422,10 @@ WHAT YOU ARE GIVEN
 
 WHAT A GOOD DECK LOOKS LIKE — it is read on a phone, one second per slide, thumb ready to leave
 - The cover is never the post's title. It is the reader's own problem, an opinion, or a number, in under ten words. "The message to send after a ceramic coating" is a title; "You explained the care. They were distracted." is a cover. If the title belongs anywhere, it is the eyebrow.
+- The cover is a picture (image true) with the hook over it, and it ends with a "swipe" cue that says more follows and what: "Swipe for the list →". Short, in the deck's language, never an ask.
+- WHEN THE MATERIAL IS A SET OF THINGS TO BUY, CHOOSE OR USE — equipment, products, tools — EACH ITEM GETS ITS OWN SLIDE, never one list slide: role "feature", image true, headline the item's name, body what it is for. The picture is the item itself, on its own, so the reader knows what to look for when buying; never a person using it. Keep the material's order and say it in the eyebrow ("Buy first · 1 of 3").
+- A tip, warning or rule about one item goes on THAT item's slide, in its body. It never gets a slide of its own.
+- When the material ends on a decision (which to choose, what to do first), that decision is the close's headline, with the one ask on the button below it — not a separate slide before the close.
 - One slide says one thing, at display size. A slide may be a single line with nothing under it — a headline and a five-word tagline is a complete, strong slide. Never add a body to fill space.
 - Each slide is a different KIND of slide. In a good deck the reader meets, in some order: a picture with one line over it, a bare one-liner, a numbered set, the product doing the thing, a verdict (what works against what fails), an object worth saving (a template, a message, a rule), and a close. Two slides of the same kind in a row is fine when the material is a pair; four is a template.
 - When the material names a control, a number, a date or a product term, THAT is the headline. "Booking menu, then Send update." beats "You can send it from the dashboard".
@@ -1457,7 +1463,7 @@ THE CONTRACT — these are checked by machines after you finish, so treat them a
 - NEVER INVENT A CLAIM. This applies to the BRIEF exactly as it applies to a SOURCE: when the brief carries sentences, facts or list items, COMPRESS them — cut words, never substitute your own. Do not introduce a noun, cause, symptom or recommendation the brief does not contain. A slide built from a heading with no material under it states the heading and stops; it does not guess what the material would have said.
 - THE SAME RULE BINDS EVERY SMALL LINE: row notes, taglines, bodies. A row's "note" exists ONLY when the brief explains that item; an unexplained item is a bare row, and a bare row is correct output, not a gap to fill. Plausible domain knowledge is still an invention — the readers most likely to notice are the ones who know the field.
 - When the brief presents a list as ordered ("in order of impact", numbered), keep its order and do not add, drop or re-rank items — and never assert a ranking word ("fastest", "worst", "number one") the brief does not use.
-- USE "list" WHEN THE CONTENT ENUMERATES: "four things", "three ways", "what you get" — any set of parallel items — is role "list" with the items in "rows" (2–5), NOT in "body". Never write a paragraph that is secretly a list. If your headline announces a number, the slide almost certainly wants rows. A "list" slide MUST carry rows; if you cannot fill them, the slide is not a list.
+- USE "list" WHEN THE CONTENT ENUMERATES: "four things", "three ways", "what you get" — any set of parallel items — is role "list" with the items in "rows" (2–5), NOT in "body". The one exception is a set of things to buy, choose or use: those get a slide each (see WHAT A GOOD DECK LOOKS LIKE). Never write a paragraph that is secretly a list. If your headline announces a number, the slide almost certainly wants rows. A "list" slide MUST carry rows; if you cannot fill them, the slide is not a list.
 - rows entries are {"text": "the item", "note": "optional half-line of detail"}. Keep text under 42 characters — these are scanned, not read.
 - WHEN THE MATERIAL IS A VERDICT, SAY SO STRUCTURALLY: if the source contrasts a way that works with a way that fails, give each row a "state" — "do" or "dont" — instead of burying the contrast in prose. The design renders the verdict. Use it only when the contrast is the source's own; a plain enumeration takes no states.
 - parts keys (include only what a slide needs): eyebrow (2–4 word label), headline (the line), emphasis (the sub-phrase inside headline to accent), tagline (a short payoff line), body (1 short sentence — 2 on a statement or feature slide that is doing the explaining), rows (a list — see above), quote (the object, or a testimonial), attribution, stat (e.g. "40%"), cta (button text), handle.
@@ -1542,6 +1548,7 @@ const PARSE_TOOL: AiJsonTool = {
                 stat: { type: 'string', description: 'One number, e.g. "40%".' },
                 cta: { type: 'string', description: 'The ONE ask, under 24 characters: the action with its channel and keyword — "DM us PAGE", "Reply RECOVER", "Book at detailmasters.pro". Only on the close; nothing else on the deck asks, and the headline never repeats it.' },
                 handle: { type: 'string' },
+                swipe: { type: 'string', description: 'Cover only: a cue, under 28 characters, that tells the reader more follows and what — "Swipe for the list →". In the deck\'s language. Never an ask.' },
                 rows: {
                   type: 'array',
                   description: 'An enumeration, one entry per item — never a paragraph that is secretly a list.',
@@ -1873,6 +1880,20 @@ function normalizeParsedDeck(
         note: `The close asks for a DM and also carried the address ${address}. The address was dropped so the reader has one thing to do; it belongs in the bio and the caption.`,
       });
       delete parts.handle;
+    }
+
+    /**
+     * THE COVER SAYS THERE IS MORE. Telmo, 2026-10-06, on a finished deck: the
+     * cover wants "a prompt to swipe to the next slide". The copywriter writes it
+     * as `swipe`; it is set in the cover's handle line — the small line every
+     * recipe already places at the foot of the cover — unless the brand's own
+     * address is there. Anywhere but the cover it is dropped: a swipe cue in
+     * the middle of a deck is noise.
+     */
+    if (typeof parts.swipe === 'string') {
+      const cue = parts.swipe.trim();
+      if (role === 'cover' && cue && !(typeof parts.handle === 'string' && parts.handle.trim())) parts.handle = cue;
+      delete parts.swipe;
     }
 
     // The brand's domain is a fact — see `enforceBrandDomain`. Swept across
