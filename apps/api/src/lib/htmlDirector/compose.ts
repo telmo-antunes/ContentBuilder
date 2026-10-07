@@ -64,6 +64,7 @@ import {
 import { renderCheckDeck, renderCheckEnabledByDefault, type OpenProbe } from './renderCheck';
 import { repairByLooking } from './visionRepair';
 import { balanceVertical } from './balance';
+import { isSpecSlide, markSpecList } from './specs';
 import { sourceBlock, type SourceDoc } from '../sourceIngest';
 import {
   buildComposeMessages,
@@ -1423,7 +1424,8 @@ WHAT YOU ARE GIVEN
 WHAT A GOOD DECK LOOKS LIKE — it is read on a phone, one second per slide, thumb ready to leave
 - The cover is never the post's title. It is the reader's own problem, an opinion, or a number, in under ten words. "The message to send after a ceramic coating" is a title; "You explained the care. They were distracted." is a cover. If the title belongs anywhere, it is the eyebrow.
 - The cover is a picture (image true) with the hook over it, and it ends with a "swipe" cue that says more follows and what: "Swipe for the list →". Short, in the deck's language, never an ask.
-- WHEN THE MATERIAL IS A SET OF THINGS TO BUY, CHOOSE OR USE — equipment, products, tools — EACH ITEM GETS ITS OWN SLIDE, never one list slide: role "feature", image true, headline the item's name, body what it is for. The picture is the item itself, on its own, so the reader knows what to look for when buying; never a person using it. Keep the material's order and say it in the eyebrow ("Buy first · 1 of 3").
+- WHEN THE MATERIAL IS A SET OF THINGS TO BUY, CHOOSE OR USE — equipment, products, tools — EACH ITEM GETS ITS OWN SLIDE, never one list slide: role "feature", image true, headline the item's name, body what it does and what that lets the reader do, in two short sentences. The picture is the item itself, on its own, so the reader knows what to look for when buying; never a person using it. Keep the material's order and say it in the eyebrow ("Buy first · 1 of 3").
+- Write those slides for someone new to the trade who is about to spend money: no jargon left unexplained, nothing assumed about what they already own or know. When the material says what to look for in one (specs, sizes, features), put them in that slide's rows: 3 to 5, each under 36 characters, no notes, each readable on its own ("Water flow: 6 to 9 L/min", never a bare "6–9"). They render as a compact ticked list under the picture. Only specs the material states; a spec you were not given is not written.
 - A tip, warning or rule about one item goes on THAT item's slide, in its body. It never gets a slide of its own.
 - When the material ends on a decision (which to choose, what to do first), that decision is the close's headline, with the one ask on the button below it — not a separate slide before the close.
 - One slide says one thing, at display size. A slide may be a single line with nothing under it — a headline and a five-word tagline is a complete, strong slide. Never add a body to fill space.
@@ -1975,7 +1977,9 @@ function normalizeParsedDeck(
       if (role === 'stat') role = 'list';
     }
 
-    if (rows.length && image) {
+    // An item slide keeps both: its picture shows what to look for, its rows
+    // what to check before buying (see specs.ts). Any other list keeps the rule.
+    if (rows.length && image && !isSpecSlide(role, rows)) {
       console.warn(`[compose] parse: slide ${i + 1} asked for a photo AND ${rows.length} rows — keeping the rows`);
       image = false;
     }
@@ -2875,6 +2879,14 @@ export function composeByFragment(
 }
 
 /** Compose one slide's authored HTML from its parts (arrange-only; sanitised). */
+/** An item slide's specs are set at spec scale, whether or not the composer remembered to. */
+function specScaled(html: string, input: ComposeSlideInput): string {
+  if (!input.photo || !isSpecSlide(input.role, input.parts.rows)) return html;
+  const marked = markSpecList(html);
+  if (marked !== html) console.warn(`[compose] ${input.role}: set the item's specs at spec scale mechanically`);
+  return marked;
+}
+
 export async function composeSlide(
   recipe: BrandRecipe,
   input: ComposeSlideInput,
@@ -2888,7 +2900,7 @@ export async function composeSlide(
     if (substituted) {
       console.warn(`[compose] ${input.role}: composed from the recipe fragment — no model call`);
       return {
-        html: substituted.html,
+        html: specScaled(substituted.html, input),
         role: input.role,
         source: 'fragment',
         pv: currentVersions('post') as Record<string, number>,
@@ -3013,7 +3025,7 @@ export async function composeSlide(
   // Stamp WHAT MADE THIS SLIDE — the copywriter and the composer versions in
   // force right now — so a post can later be told what a newer prompt improves.
   return {
-    html: withSlot,
+    html: specScaled(withSlot, input),
     role: input.role,
     source: 'ai',
     pv: currentVersions('post') as Record<string, number>,

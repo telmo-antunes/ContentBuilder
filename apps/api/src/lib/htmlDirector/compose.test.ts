@@ -1907,3 +1907,55 @@ describe('words the brief never uses', () => {
     expect(out).toEqual([]);
   });
 });
+
+describe('an item slide keeps its picture and its specs', () => {
+  const deck = (slides: Array<Record<string, unknown>>) => JSON.stringify({ slides });
+  const rows = [{ text: 'Pressure: 85 to 130 bar' }, { text: 'Water flow: 6 to 9 L/min' }, { text: '25° and 40° nozzles' }];
+
+  it('keeps the photo on a feature slide whose rows are specs', async () => {
+    reply.mockReturnValue(deck([
+      { role: 'cover', image: true, parts: { headline: 'What should you buy first?' } },
+      { role: 'feature', image: true, parts: { headline: 'Pressure washer', body: 'It rinses the grit off first.', rows } },
+      { role: 'cta', parts: { headline: 'The guide, sent over.', cta: 'DM us KIT' } },
+    ]));
+    const out = await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' });
+    expect(out[1]!.photo).toBe(true);
+    expect(out[1]!.parts.rows).toHaveLength(3);
+  });
+
+  it('still drops the photo from a list slide', async () => {
+    reply.mockReturnValue(deck([
+      { role: 'cover', image: true, parts: { headline: 'What should you buy first?' } },
+      { role: 'list', image: true, parts: { headline: 'Three things', rows } },
+      { role: 'cta', parts: { headline: 'The guide, sent over.', cta: 'DM us KIT' } },
+    ]));
+    const out = await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' });
+    expect(out[1]!.photo).toBe(false);
+  });
+
+  it('sets the specs at spec scale when the composer forgets', async () => {
+    reply.mockReturnValue(
+      '<h2 class="headline">Pressure washer</h2><figure class="cb-shot" data-cb-slot="hero"></figure>' +
+        '<div class="body">It rinses the grit off first.</div>' +
+        `<div class="panel checks">${rows.map((r) => `<div class="row">${r.text}</div>`).join('')}</div>`,
+    );
+    const out = await composeSlide(detailMastersRecipe, {
+      role: 'feature',
+      parts: { headline: 'Pressure washer', body: 'It rinses the grit off first.', rows },
+      format: '1080x1350',
+      index: 1,
+      photo: true,
+    });
+    expect(out.html).toContain('class="panel checks specs"');
+    const user = JSON.stringify(aiCalls[0]);
+    expect(user).toContain("these rows are the item's SPECS");
+  });
+
+  it('asks the copywriter for specs a beginner can check', async () => {
+    reply.mockReturnValue(deck([{ role: 'cover', parts: { headline: 'A line' } }]));
+    await parseForCompose(detailMastersRecipe, 'idea', { model: 'm' });
+    const system = JSON.stringify(aiCalls[0]);
+    expect(system).toContain('someone new to the trade');
+    expect(system).toContain('a spec you were not given is not written');
+  });
+});

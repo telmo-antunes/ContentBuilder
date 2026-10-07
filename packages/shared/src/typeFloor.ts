@@ -130,6 +130,49 @@ export function typeFloorReport(css: string): Array<{ role: string; from: number
   return out;
 }
 
+// ── Spec lists ───────────────────────────────────────────────────────────────
+
+/**
+ * THE SMALLEST A SPEC ROW MAY RENDER: 13pt on a phone.
+ *
+ * Below the panel floor (15pt) on purpose. A spec row is a label of two to five
+ * words ("Water flow: 6 to 9 L/min") that is scanned, not read as a sentence,
+ * the way an attribution is — and 13pt is the attribution floor.
+ */
+export const SPECS_FLOOR_PX = pxForPt(13);
+
+/** How far a spec list is scaled when the brand's rows leave room above the floor. */
+export const SPECS_SCALE = 0.78;
+
+/**
+ * A SPEC LIST — `.specs` on a list container — is the brand's own list at a
+ * smaller scale: same panel, same ticks, same rules, everything shrunk together.
+ *
+ * WHY. A slide for one item to buy carries a photo of it, a line on what it is
+ * for, and the specs to check before paying. At a brand's list size (a 46px
+ * row, 22px of padding a side, a 44px tick) four specs cost ~460px, and the
+ * fourth one ran off the bottom of the what-to-buy-first deck (2026-10-07).
+ * Telmo liked the specs as ticked rows and asked for them smaller.
+ *
+ * `zoom` rather than new sizes, because a scale keeps the brand's proportions
+ * without this app having to know how each brand drew its list. It is derived
+ * from the brand's own row size so the text never lands below SPECS_FLOOR_PX:
+ * a brand that already authored small rows is scaled less, or not at all.
+ */
+export function specsDensityCss(css: string): string {
+  let row = 0;
+  for (const m of (css ?? '').matchAll(/([^{}]*)\{([^}]*)\}/g)) {
+    const selector = m[1] ?? '';
+    // The row's own text: a selector that ENDS on the row, not its marker or note.
+    if (!selector.split(',').some((s) => /\.row(?:\.row)?\s*$/.test(s.trim()))) continue;
+    for (const f of (m[2] ?? '').matchAll(/font-size\s*:\s*([\d.]+)px/gi)) row = Math.max(row, Number(f[1]));
+  }
+  // A brand that sizes its rows some other way renders them at no less than the panel floor.
+  const authored = Math.max(row || TYPE_FLOOR_PX.panel!, TYPE_FLOOR_PX.panel!);
+  const zoom = Math.min(1, Math.max(SPECS_SCALE, SPECS_FLOOR_PX / authored));
+  return `.cb-slide .specs{zoom:${Number(zoom.toFixed(3))}}`;
+}
+
 // ── The measure ──────────────────────────────────────────────────────────────
 
 /**

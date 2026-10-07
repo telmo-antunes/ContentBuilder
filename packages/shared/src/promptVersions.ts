@@ -345,6 +345,15 @@ export const TOUCHPOINT_REGISTRY: Record<TouchpointId, Touchpoint> = {
           'A tip or warning about an item rides on that item\'s slide instead of taking a slide of its own, and a closing decision becomes the close\'s headline above the one ask.',
         ],
       },
+      {
+        version: 15,
+        date: '2026-10-07',
+        summary: 'Item slides say what the item does for the reader, then the specs to check before buying.',
+        improves: [
+          'Each item slide is written for someone new to the trade who is about to spend money: what the item does and what that lets them do, with nothing assumed about what they already know.',
+          'When the material says what to look for in an item, those specs become the slide\'s rows (3 to 5, short, each readable on its own) and keep the item\'s picture beside them, set as a compact ticked list.',
+        ],
+      },
     ],
   },
 
@@ -421,6 +430,14 @@ export const TOUCHPOINT_REGISTRY: Record<TouchpointId, Touchpoint> = {
         improves: [
           'The composer is given the composition its slide will be laid out as — where the leftover space belongs, and how many lines the headline may run to — instead of finding out afterwards when the layout gates measured it against a policy it had never been told.',
           'A spacer now goes where the arrangement says rather than by feel, which is what decides whether a slide reads anchored or adrift.',
+        ],
+      },
+      {
+        version: 8,
+        date: '2026-10-07',
+        summary: 'An item\'s specs share the slide with its photograph, set at a smaller scale.',
+        improves: [
+          'A slide carrying an item\'s specs keeps the photo, the body and every spec instead of dropping the list to make room for the picture. The list is the brand\'s own, scaled down together (ticks, rules and type) and never below 13pt on a phone.',
         ],
       },
     ],
