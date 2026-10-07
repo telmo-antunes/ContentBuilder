@@ -13,6 +13,7 @@
  * inside `.cb-slide`; the renderer injects the recipe stylesheet + `--cb-*`
  * tokens around it. The fragment is sanitised (allowlist) before it is stored.
  */
+import { isSpecSlide } from './specs';
 import type Anthropic from '@anthropic-ai/sdk';
 import { cachedSystemLayers } from '../ai';
 import {
@@ -241,7 +242,7 @@ When this slide is marked "image: true", you are composing a two-body layout —
 - INSET: <figure class="cb-shot" data-cb-slot="NAME"></figure> — an empty figure, no children, no src, NAME your own short lowercase label ("hero", "before", "product"; letters, digits, hyphens; unique per slide). Add a shape class when the composition wants one: "wide" (16:9, ~38% of the canvas), "tall" (3:4, ~46%), "square" (~38%); none means 4:3 (~34%). The inset is right when the picture is EVIDENCE for the words — a screenshot, a detail, a proof. Place it in the flow where the design needs it, and place it WITH the type, not away from it: the figure and the copy it supports are one group, and a figure drifting in leftover space with a band of nothing above it is the commonest way a photo slide fails. Spend "tall" only when the picture is the slide, and then the copy is an eyebrow and one short headline.
 - EDGE: class "edge" (optionally "edge left") instead of a shape — the photograph takes that whole side, floor to ceiling, type holding the other. It costs no vertical space, so the copy runs its full length beside it. Reach for it when the picture deserves to be half the poster; a deck where every photograph is an inset rounded rectangle is the single strongest "template" signal a carousel can carry.
 - FULL-BLEED (only when the brief says so): the picture is the background layer behind your whole fragment, under the brand's scrim. No figure at all — a slot would punch a card through it — and the copy stays to the few short display moments the arrangement names.
-A slot REPLACES content, it does not add to it: the picture costs a third to half the canvas, so keep the brand mark, an eyebrow, the headline, the slot — and drop the pattern's optional furniture to pay for it. One slot, two only for a genuine pair (a before and an after). When "image" is not set, no slot at all.
+A slot REPLACES content, it does not add to it: the picture costs a third to half the canvas, so keep the brand mark, an eyebrow, the headline, the slot — and drop the pattern's optional furniture to pay for it. One exception: an item's SPECS are not furniture. A slide marked as carrying specs keeps the slot, the body and every row, in the brand's list container with the extra class "specs" — the app sets that list at a smaller scale so all three fit, and you choose where the seam falls. One slot, two only for a genuine pair (a before and an after). When "image" is not set, no slot at all.
 
 Return only the fragment (the inner markup of .cb-slide).`;
 
@@ -294,6 +295,9 @@ export function buildComposeMessages(
     `  copy parts (VERBATIM — arrange, do not change):`,
     partLines || '  (none)',
     rowLines,
+    input.photo && isSpecSlide(input.role, p.rows)
+      ? `  these rows are the item's SPECS — what the reader checks before buying one. Keep every one, with the photograph and the body, in the brand's list container with the extra class "specs".`
+      : ``,
     ``,
     `Compose the fragment now.`,
   ]

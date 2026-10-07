@@ -4,12 +4,15 @@ import {
   DESCENDER_CLEARANCE_EM,
   LOCKUP_GAP_PX,
   MEASURE_FLOOR_CH,
+  SPECS_FLOOR_PX,
+  SPECS_SCALE,
   TYPE_FLOOR_PX,
   enforceDescenderClearance,
   enforceLockupGap,
   enforceMeasureFloor,
   enforceStoryReserve,
   enforceTypeFloor,
+  specsDensityCss,
   pxForPt,
   typeFloorReport,
 } from './typeFloor';
@@ -257,3 +260,27 @@ describe('enforceLockupGap', () => {
     expect(out).not.toMatch(/\.logo-row\s+\.eyebrow\{/); // descendant, not sibling
   });
 })
+
+describe('specsDensityCss', () => {
+  const zoomOf = (css: string) => Number(/zoom:([\d.]+)/.exec(specsDensityCss(css))![1]);
+
+  it('scales a roomy list down to the spec scale', () => {
+    expect(zoomOf('.cb-slide .panel .row{ padding:22px 0; font-size:60px; }')).toBe(SPECS_SCALE);
+  });
+
+  it('never takes the row text below the spec floor', () => {
+    const zoom = zoomOf('.cb-slide .panel .row{ font-size:46px; }');
+    expect(zoom).toBeGreaterThanOrEqual(SPECS_SCALE);
+    expect(46 * zoom).toBeGreaterThanOrEqual(SPECS_FLOOR_PX - 0.05);
+  });
+
+  it('reads the row itself, not its marker or note', () => {
+    const css = '.cb-slide .panel .row{ font-size:60px; } .cb-slide .checks .row.row::before{ font-size:26px; } .cb-slide .panel .row em{ font-size:30px; }';
+    expect(zoomOf(css)).toBe(SPECS_SCALE);
+  });
+
+  it('assumes the panel floor when a brand sizes its rows some other way', () => {
+    expect(zoomOf('.cb-slide .panel .row{ font-size:1.2em; }')).toBeLessThanOrEqual(1);
+    expect(zoomOf('')).toBeGreaterThan(SPECS_SCALE);
+  });
+});

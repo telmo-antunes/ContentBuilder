@@ -51,6 +51,16 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
+### A hand-PATCHed slide can overflow and export says nothing
+
+- **Kind:** Friction
+- **Severity:** cost me a fix
+- **First seen:** 2026-10-07 — what-to-buy-first (project 6ac4f9868a6afe03ee1083c1)
+- **What happened:** slide 2 was PATCHed to eyebrow + headline + `sm` photo + a 4-line `.body` + `panel checks` with four rows. `POST /export` returned a healthy 1 MB PNG with the fourth row cut by the bottom edge and no warning. The overflow measurement that compose runs does not run on a PATCH or on export, so the only check was opening the PNG. It took two export-and-look rounds to find the budget: 3 body lines (~125 chars) and 3 rows (~34 chars each) under an `sm` photo.
+- **Why it matters:** an item-per-slide deck with a spec list is a shape Telmo now wants routinely, and every hand edit to it is a chance to ship a clipped slide.
+- **Direction:** run the existing overflow measure on PATCH (or at least on export) and return per-slide overflow in px.
+- **Partly fixed 2026-10-07 (feat/spec-lists):** the compact list now exists. `.specs` on a list container scales the brand's own list to 78%, never below 13pt, and an item slide keeps its photo and its specs. Four specs fit under a photo and a 3-line body. The silent overflow on a hand PATCH is still open.
+
 ### The faithfulness check flagged every content word of the deck as "not in the brief"
 
 - **Kind:** Defect

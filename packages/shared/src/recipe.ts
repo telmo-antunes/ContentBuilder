@@ -27,6 +27,7 @@ import {
   enforceMeasureFloor,
   enforceStoryReserve,
   enforceTypeFloor,
+  specsDensityCss,
   typeBaseCss,
 } from './typeFloor';
 import { slidePosterCss } from './posterType';
@@ -519,7 +520,9 @@ export function recipeStylesheetFor(recipe: BrandRecipe, format: string): string
   // The per-slide measure, last: its doubled classes are inert unless a slide
   // carries one, and when it does it must outrank the brand's own max-width.
   const measure = copyWidthCss();
-  return [typeBaseCss(), authored, surface, media, archetypes, align, surfaces, typesetting, poster, measure]
+  // A spec list is the brand's list at a smaller scale, sized off its own rows.
+  const specs = specsDensityCss(authored);
+  return [typeBaseCss(), authored, surface, media, archetypes, align, surfaces, typesetting, poster, measure, specs]
     .filter(Boolean)
     .join('\n');
 }
@@ -986,6 +989,8 @@ export const RECIPE_STRUCTURAL_CLASSES: ReadonlySet<string> = new Set([
   'numbered',
   'do',
   'dont',
+  // A list at a smaller scale, for an item's specs (see `specsDensityCss`).
+  'specs',
   ...APP_IMAGE_CLASSES,
 ]);
 
