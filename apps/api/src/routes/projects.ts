@@ -39,6 +39,7 @@ import { ApiError, asyncHandler, parseBody, publicErrMessage, requireObjectId } 
 import { createProjectSchema, slideSchema, updateProjectSchema, type SlideInput } from '../lib/validation';
 import { renderSlidesToPng, slugify } from '../lib/exporter';
 import { buildContactSheet } from '../lib/contactSheet';
+import { promoStoryMark } from '../lib/promoMark';
 import { runVideoJob, sweepExpiredVideoJobs } from '../lib/videoJobs';
 import { findImageCopyContradictions, type SlidePairing } from '../lib/imageCopyCheck';
 import { getStorage } from '../storage';
@@ -2086,10 +2087,12 @@ async function derivePromoStory(id: string, body: z.infer<typeof promoStorySchem
   const esc = (v: string) =>
     v.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] as string);
 
+  // The carousel's own mark, so the frame reads as the same post (see promoMark.ts).
+  const mark = promoStoryMark(slides.map((sl) => sl.authored?.html), recipe);
+
   const composed = {
     html: [
-      '<div class="logo-row"><div class="monogram"></div>'
-        + '<div class="wordmark"><b>detail</b><span class="it">masters</span></div></div>',
+      ...(mark ? [mark] : []),
       '<div class="fill"></div>',
       `<figure class="${SLOT_CLASS} ${PLATE_CLASS}" data-cb-slot="hero"></figure>`,
       `<div class="eyebrow">${esc(parts.eyebrow)}</div>`,

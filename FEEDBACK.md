@@ -51,6 +51,15 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
+### A recipe that recolours the logo with a filter breaks when the logo changes
+
+- **Kind:** Defect
+- **Severity:** blocked shipping
+- **First seen:** 2026-10-08 — what-to-buy-first (project 6ac4f9868a6afe03ee1083c1)
+- **What happened:** the detailmasters recipe drew `var(--cb-logo)` with `filter:invert(1)` in two places, the close's lockup (`.monogram`) and the 5% watermark (`.cb-slide::after`), to make a dark logo read on dark slides. The stored logo was an opaque dark tile, so the invert turned its ground white: the close showed a black DM in a white box, and every slide carried a pale square in its corner. Telmo caught it on the review page ("the colors of the logo in this post are messed up"). The brand had also moved to a new mark (CRM PR #381) whose gold cell an invert turns blue. Fixed by hand: the kit's logo is now the light flag on transparent, and `npm run recipe:flag-mark` drops the invert on dark slides and keeps it, with `hue-rotate(180deg)`, for `.inverse` only.
+- **Why it matters:** a filter is a guess about the artwork made when the recipe was authored. Nothing checks it again when the logo is replaced, and an opaque or coloured logo fails silently on every slide.
+- **Direction:** let the kit hold a logo per ground (`--cb-logo-on-dark` / `--cb-logo-on-light`) and stop the recipe author from writing filters on `--cb-logo`. Failing that, have the brand-kit screen warn when an uploaded logo is opaque. Also note that a deck pins its recipe at first export (`recipeSnapshot`), so a kit fix never reaches decks already exported; `recipe:flag-mark -- --project <id>` patches one unposted deck.
+
 ### A hand-PATCHed slide can overflow and export says nothing
 
 - **Kind:** Friction

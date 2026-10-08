@@ -383,14 +383,15 @@ export const detailMastersRecipe: BrandRecipe = brandRecipeSchema.parse({
 .cb-slide::before{ content:""; position:absolute; inset:0; z-index:0; pointer-events:none; opacity:.06; mix-blend-mode:overlay;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
 .cb-slide::after{ content:""; position:absolute; right:-90px; bottom:-110px; width:600px; height:600px; z-index:0; pointer-events:none;
-  background:var(--cb-logo, none) center/contain no-repeat; filter:invert(1); opacity:.05; }
+  background:var(--cb-logo, none) center/contain no-repeat; opacity:.05; }
 .cb-slide > *{ position:relative; z-index:1; }
 .cb-slide.photo{ background:
     linear-gradient(180deg, rgba(16,11,5,.28), rgba(12,8,4,.55) 42%, rgba(12,8,4,.92) 86%),
     var(--cb-photo, none) center/cover no-repeat,
     linear-gradient(135deg, #5a4630, #140d06 72%); }
 .cb-slide .logo-row{ display:flex; align-items:center; gap:22px; align-self:flex-start; }
-.cb-slide .monogram{ height:56px; width:56px; background:var(--cb-logo, none) center/contain no-repeat; filter:invert(1) brightness(1.25); flex:0 0 auto; }
+.cb-slide .monogram{ height:56px; width:56px; background:var(--cb-logo, none) center/contain no-repeat; flex:0 0 auto; }
+.cb-slide.inverse .monogram, .cb-slide.inverse::after{ filter:invert(1) hue-rotate(180deg); }
 .cb-slide .wordmark{ font-weight:600; font-size:40px; letter-spacing:.01em; }
 .cb-slide .wordmark b{ color:var(--cb-ink); font-weight:600; } .cb-slide .wordmark i{ font-style:normal; color:var(--cb-accent); }
 .cb-slide .fill{ flex:1 1 auto; }
