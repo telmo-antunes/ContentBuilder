@@ -22,7 +22,8 @@
     "ai:share": "tsx src/scripts/aiShare.ts",
     "fragments:carry": "tsx src/scripts/carryFragments.ts",
     "recipe:tighten": "tsx src/scripts/tightenDynatos.ts",
-    "fragments:check": "tsx src/scripts/checkFragments.ts"
+    "fragments:check": "tsx src/scripts/checkFragments.ts",
+    "recipe:flag-mark": "tsx src/scripts/flagMark.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.106.0",
