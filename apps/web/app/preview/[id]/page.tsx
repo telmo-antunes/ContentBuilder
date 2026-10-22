@@ -204,6 +204,7 @@ export default function PreviewPage() {
                     slideTotal={total}
                     showCounter={Boolean(project.settings?.slideCounter)}
                     forExport
+                    deckCss={project.deckCss}
                   />
                 </ScaledSlide>
               </div>

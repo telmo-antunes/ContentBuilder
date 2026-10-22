@@ -249,7 +249,8 @@ export interface Slide {
     role?: string;
     archetype?: string;
     pv?: Record<string, number>;
-    source?: 'fragment' | 'ai';
+    /** 'designer': written by the whole-deck design call (see docs/designer.md). */
+    source?: 'fragment' | 'ai' | 'designer';
     /** Per-slide alignment deviation, applied by the app's data-align layer. */
     align?: 'flush-left' | 'center' | 'flush-right';
     /** Per-slide ground, applied by the app's data-surface layer. */
@@ -302,6 +303,38 @@ export interface DeckScores extends Partial<Record<ScoreDimension, number>> {
   at: string;
   /** The prompt versions that wrote the deck, pinned when scored. */
   pv?: Record<string, number>;
+}
+
+/** Where a compose has got to. The designer path adds its own phases. */
+export type ComposePhase =
+  | 'parsing'
+  | 'composing'
+  | 'checking-layout'
+  | 'designing'
+  | 'rendering'
+  | 'reviewing'
+  | 'revising'
+  | 'done';
+
+/** One round of the designer path: what it scored, and whether it shipped. */
+export interface DesignRound {
+  round: number;
+  scores?: Partial<Record<ScoreDimension, number>>;
+  /** The rubric total (8 dimensions × 1–5), when the review ran. */
+  total?: number;
+  verdict?: string;
+  /** 1-based slides the designer lost copy on, composed by the classic path instead. */
+  fallbacks: number[];
+  /** Why this round was (or was not) the one that shipped. */
+  kept: boolean;
+  reason?: string;
+}
+
+export interface DesignSummary {
+  engine: 'designer' | 'classic';
+  rounds: DesignRound[];
+  /** The designer's one-paragraph read of the deck it made. */
+  rationale?: string;
 }
 
 
@@ -379,7 +412,14 @@ export interface Project {
   exportedAt?: string;
   postedAt?: string;
   /** Where a running compose has got to — written per phase, cleared when it finishes. */
-  composeProgress?: { phase: 'parsing' | 'composing' | 'checking-layout' | 'done'; done?: number; total?: number; at: string };
+  composeProgress?: { phase: ComposePhase; done?: number; total?: number; at: string };
+  /**
+   * The deck stylesheet the designer wrote for this deck alone — `.cb-slide`
+   * rules in the brand's tokens, for devices the recipe does not define.
+   */
+  deckCss?: string;
+  /** How the designer path went, when it ran. */
+  design?: DesignSummary;
   /** The owner's 1–5 score on the audit's eight dimensions, with the prompt versions pinned. */
   scores?: DeckScores;
   createdAt: string;

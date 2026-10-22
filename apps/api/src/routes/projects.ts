@@ -11,6 +11,7 @@ import {
   VIDEO_SECONDS_DEFAULT,
   authoredSlots,
   clampVideoSeconds,
+  currentVersions,
   defaultThemeForCategory,
   dimensionsFor,
   ensureBrandMark,
@@ -25,26 +26,31 @@ import {
   type Format,
   type SlidePhoto,
 } from '@contentbuilder/shared';
-import { brandHandleFromWebsite, composeProject, composeSlide, deckCopyFaults, parseSlideCopy, parseSlideDirection } from '../lib/htmlDirector/compose';
+import { brandHandleFromWebsite, composeFromInputs, composeSlide, deckCopyFaults, parseDeckCopy, parseSlideCopy, parseSlideDirection } from '../lib/htmlDirector/compose';
+import { runDesignPath, type DesignPathResult } from '../lib/htmlDirector/designPath';
+import { DESIGN_PROMPT_VERSION, toAuthored } from '../lib/htmlDirector/designDeck';
+import { REVIEW_PROMPT_VERSION } from '../lib/htmlDirector/reviewDeck';
 import { withSpendLedger, withLedger, summarize, type SpendLedger } from '../lib/spend';
 import { autopsyFor } from '../lib/autopsy';
 import { deckForms, referenceSheetsFor } from '../lib/inspo';
 import { CRITIQUE_SKIP_TEXT, critiqueDeck, type CritiqueOutcome } from '../lib/htmlDirector/deckCritique';
 import { resolveBrief } from '../lib/sourceIngest';
 import { authoredShape, partsFromAuthored, rewriteAuthoredCopy } from '../lib/htmlDirector/reparse';
-import { addHeadlineVariant, headlineVariantOf, removeHeadlineVariant, shootLiveDeck } from '../lib/htmlDirector/renderCheck';
+import { addHeadlineVariant, headlineVariantOf, openRenderProbe, removeHeadlineVariant, renderCheckEnabledByDefault, shootLiveDeck } from '../lib/htmlDirector/renderCheck';
 import { sanitizeAuthoredHtml } from '../lib/htmlSanitize';
-import { ProjectModel, ProjectVersionModel, BusinessModel, BrandKitModel, MediaAssetModel, VideoJobModel, VIDEO_JOB_ACTIVE_STATES } from '../models';
+import { ProjectModel, ProjectVersionModel, BusinessModel, BrandKitModel, MediaAssetModel, SettingModel, VideoJobModel, VIDEO_JOB_ACTIVE_STATES } from '../models';
 import { ApiError, asyncHandler, parseBody, publicErrMessage, requireObjectId } from '../lib/http';
 import { createProjectSchema, slideSchema, updateProjectSchema, type SlideInput } from '../lib/validation';
 import { renderSlidesToPng, slugify } from '../lib/exporter';
 import { buildContactSheet } from '../lib/contactSheet';
 import { promoStoryMark } from '../lib/promoMark';
+import { languageOf, promoLabelsFor } from '../lib/language';
+import { bleedAnchorFor } from '../lib/bleedAnchor';
 import { runVideoJob, sweepExpiredVideoJobs } from '../lib/videoJobs';
 import { findImageCopyContradictions, type SlidePairing } from '../lib/imageCopyCheck';
 import { getStorage } from '../storage';
 import { generateCaption, type GeneratedCaption } from '../lib/caption';
-import { attachPoolPhotos, brandPhotoPool, poolPhotoFinder, PROMO_COVER_LABEL } from '../lib/photoPool';
+import { attachPoolPhotos, brandPhotoPool, designerPhotoPool, poolPhotoFinder, PROMO_COVER_LABEL } from '../lib/photoPool';
 import { lessonsFor, noteSlideSignal, observeOutcome, recordGeneration } from '../lib/learningLoop';
 import type { ComposeRecord, CopyCheckSummary, LayoutCheckSummary } from '../lib/htmlDirector/compose';
 import { postUpdateStatus, slideRefreshPlan } from '../lib/promptStatus';
@@ -64,6 +70,8 @@ const composeSchema = z.object({
    * chose it".
    */
   textOnly: z.boolean().optional(),
+  /** Run a specific engine for this compose; absent = the Settings default. */
+  engine: z.enum(['designer', 'classic']).optional(),
   /**
    * How many slides. Optional, and normally ABSENT: the deck length is derived
    * from the brief (a plan fixes it; otherwise the volume of material decides).
@@ -422,6 +430,7 @@ projectsRouter.get(
         authored: first?.authored
           ? { html: first.authored.html, bg: first.authored.bg, role: first.authored.role, align: first.authored.align }
           : null,
+        ...(p.deckCss ? { deckCss: p.deckCss } : {}),
         exportedAt: p.exportedAt ?? null,
         postedAt: p.postedAt ?? null,
         updatedAt: p.updatedAt,
@@ -555,6 +564,22 @@ projectsRouter.delete(
 );
 
 
+/**
+ * Which engine `POST /compose` runs: the Settings choice when one is stored,
+ * else the designer whenever a design-capable tier is configured — it is the
+ * better deck, and it falls back to the classic path on its own when a call
+ * cannot run. The classic composer stays one setting away.
+ */
+async function resolveComposeEngine(): Promise<'designer' | 'classic'> {
+  try {
+    const doc = (await SettingModel.findOne({ key: 'ai' }).lean()) as { composeEngine?: unknown } | null;
+    if (doc?.composeEngine === 'designer' || doc?.composeEngine === 'classic') return doc.composeEngine;
+  } catch {
+    /* settings unavailable → the environment decides */
+  }
+  return config.ai.modelDesign || config.ai.modelLarge ? 'designer' : 'classic';
+}
+
 // AI compose: turn an idea into on-brand AUTHORED slides using the brand's
 // recipe (its design system). Requires the brand to have a recipe. Replaces the
 // project's slides; the previous state is kept recoverable via a version.
@@ -562,7 +587,7 @@ projectsRouter.post(
   '/:id/compose',
   asyncHandler(async (req, res) => {
     const id = requireObjectId(req.params.id, 'Project');
-    const { idea, slideCount, plan, textOnly } = parseBody(composeSchema, req.body);
+    const { idea, slideCount, plan, textOnly, engine: engineAsked } = parseBody(composeSchema, req.body);
     if (!aiDraftConfigured()) {
       throw new ApiError(400, 'AI is not configured (set ANTHROPIC_API_KEY + ANTHROPIC_MODEL_SMALL).');
     }
@@ -634,7 +659,10 @@ projectsRouter.post(
       ? `${brief.idea}\n\nReader: a car owner, about their own car. Never address a business owner; never mention CRM, bookings, software or business growth.`
       : brief.idea;
 
-    let composed;
+    let composed: Awaited<ReturnType<typeof composeFromInputs>> = [];
+    /** Set when the designer path ran — it persisted the deck itself. */
+    let designed: DesignPathResult | null = null;
+    const engine = engineAsked ?? (await resolveComposeEngine());
     let captured: ComposeRecord | undefined;
     let layout: LayoutCheckSummary | undefined;
     let copy: CopyCheckSummary | undefined;
@@ -652,7 +680,10 @@ projectsRouter.post(
     try {
       const run = await withSpendLedger(
         { projectId: String(project._id), ceilingUsd: config.ai.postCeilingUsd },
-        () => composeProject(parsedRecipe.data, briefIdea, {
+        async () => {
+        // THE COPY FIRST, shared by both engines; then the designer that sees
+        // (docs/designer.md) or the classic per-slide composer.
+        const parsed = await parseDeckCopy(parsedRecipe.data, briefIdea, {
         format: project.get('format'),
         slideCount,
         plan: brief.plan,
@@ -713,7 +744,88 @@ projectsRouter.post(
             ).then(() => undefined, () => undefined),
           );
         },
-        }),
+        });
+        if (engine === 'designer') {
+          const pv = { ...currentVersions('post'), design: DESIGN_PROMPT_VERSION, review: REVIEW_PROMPT_VERSION } as Record<string, number>;
+          // Ranked by what THIS deck says, not by upload date — see designerPhotoPool.
+          const designerPool = await designerPhotoPool(businessId, [
+            ...parsed.inputs.flatMap((s) => [s.imageQuery, s.parts.headline, s.parts.eyebrow, s.parts.body]),
+            parsed.ctx.idea.slice(0, 400),
+          ]);
+          /**
+           * Where the type goes over a full-bleed picture — whichever end is
+           * already dark — read off the picture itself, exactly as the classic
+           * path does in `attachPoolPhotos`. Without it the brand's photo
+           * treatment decides, and a designed cover came back as a muddy band
+           * of picture at the top of the frame.
+           */
+          const anchorFor = async (mediaAssetId: unknown) => {
+            const asset = designerPool.find((m) => String(m._id) === String(mediaAssetId));
+            if (!asset?.key) return undefined;
+            try {
+              return await bleedAnchorFor(await getStorage().read(asset.key));
+            } catch {
+              return undefined;
+            }
+          };
+          designed = await runDesignPath({
+            recipe: parsed.recipe,
+            format: project.get('format'),
+            type: project.get('type') === 'story' ? 'story' : 'carousel',
+            inputs: parsed.inputs,
+            pool: designerPool,
+            idea: parsed.ctx.idea,
+            brandName: (business as { name?: string } | null)?.name,
+            handle: brandHandle || undefined,
+            audience,
+            references: await referenceSheetsFor(
+              deckForms(parsed.inputs.map((s) => ({ role: s.role, hasPhoto: s.photo === true }))),
+            ).catch(() => []),
+            // A slide the designer could not be trusted with is set the old way —
+            // the fragment path for free where it can, the cheap model otherwise.
+            classic: async (input) => {
+              const out = await composeSlide(parsed.recipe, input, { ...parsed.o, renderCheck: false });
+              return out.html ? { html: out.html, source: out.source } : null;
+            },
+            persist: async (deck, round) => {
+              if (round === 1 && project.get('slides')?.length) await saveVersion(project, 'Before AI compose').catch(() => {});
+              const ids = deck.slides.map(() => randomUUID());
+              const anchors = await Promise.all(
+                deck.slides.map((s) => {
+                  const bg = s.photos.find((p) => p.placement === 'background');
+                  return bg ? anchorFor(bg.mediaAssetId) : Promise.resolve(undefined);
+                }),
+              );
+              project.set(
+                'slides',
+                deck.slides.map((s, i) => ({
+                  id: ids[i]!,
+                  order: i,
+                  imageNeed: 'none' as const,
+                  photos: s.photos,
+                  authored: toAuthored(s, pv),
+                  ...(anchors[i] ? { overrides: { bleedAnchor: anchors[i] } } : {}),
+                  ...(s.note ? { rationale: s.note } : {}),
+                  ...(parsed.inputs[i]?.imageQuery ? { imageQuery: parsed.inputs[i]!.imageQuery } : {}),
+                })),
+              );
+              project.set('deckCss', deck.deckCss || undefined);
+              await project.save();
+              return ids;
+            },
+            shoot: (ids) => shootLiveDeck(String(project._id), ids, project.get('format')),
+            openProbe: renderCheckEnabledByDefault() ? openRenderProbe : undefined,
+            onProgress: (p) => {
+              progressWrite = progressWrite.then(() =>
+                ProjectModel.updateOne({ _id: project._id }, { $set: { composeProgress: { ...p, at: new Date() } } }).then(() => undefined, () => undefined),
+              );
+            },
+          });
+          if (designed) return [];
+          console.warn('[compose] the designer could not design this deck — composing it the classic way');
+        }
+        return composeFromInputs(parsed.recipe, parsed.inputs, parsed.o, parsed.ctx);
+        },
       );
       composed = run.value;
       ledger = run.ledger;
@@ -724,55 +836,89 @@ projectsRouter.post(
     }
     await progressWrite;
     await ProjectModel.updateOne({ _id: project._id }, { $unset: { composeProgress: '' } }).catch(() => {});
-    if (!composed.length) {
+    if (!composed.length && !designed) {
       throw new ApiError(502, 'The compose came back empty — try rephrasing the idea.');
     }
 
-    if (project.get('slides')?.length) await saveVersion(project, 'Before AI compose').catch(() => {});
+    /** The deck as saved, in deck order — whichever engine made it. */
+    let slides: Array<{ id: string; authored?: { html?: string; role?: string }; photos?: unknown[] }>;
+    let composeNotes: Array<{ slide?: number; note: string }>;
+    let photosAttached = 0;
+    if (designed) {
+      const d: DesignPathResult = designed;
+      // The designer path saved its deck as it went (it had to be rendered to
+      // be reviewed); what is on disk is the round that won.
+      slides = (project.get('slides') as typeof slides) ?? [];
+      composeNotes = [...earlyNotes, ...d.deck.notes.map((note) => ({ note }))];
+      photosAttached = d.deck.slides.reduce((n, s) => n + s.photos.length, 0);
+      project.set('design', d.summary);
+      if (d.review) {
+        const pv = { ...currentVersions('post'), design: DESIGN_PROMPT_VERSION, review: REVIEW_PROMPT_VERSION };
+        project.set('scores', {
+          ...d.review.scores,
+          note: `Scored by the app's design review (${d.review.model}); round ${d.summary.rounds.find((r) => r.kept)?.round ?? 1} of ${d.summary.rounds.length}.`,
+          at: new Date(),
+          pv,
+        });
+        project.set('critique', { status: 'ok', findings: d.review.findings, verdict: d.review.verdict });
+      } else {
+        project.set('critique', { status: 'skipped', reason: d.reviewSkip?.reason ?? 'not-run', ...(d.reviewSkip?.detail ? { detail: d.reviewSkip.detail } : {}) });
+        composeNotes.push({ note: 'This deck was designed but not reviewed — the contact sheet could not be built or the review call failed.' });
+      }
+      if (d.deck.fallbacks.length) {
+        composeNotes.push({ note: `Slide${d.deck.fallbacks.length === 1 ? '' : 's'} ${d.deck.fallbacks.join(', ')} came back from the designer with copy missing or added and ${d.deck.fallbacks.length === 1 ? 'was' : 'were'} composed the classic way instead.` });
+      }
+    } else {
+      if (project.get('slides')?.length) await saveVersion(project, 'Before AI compose').catch(() => {});
 
-    // Stock photos are still never attached on the user's behalf. The brand's
-    // OWN pictures are a different question — they were harvested from its site
-    // precisely so posts could use them — so a slot arrives filled and swappable
-    // rather than empty and waiting.
-    const base = composed.map((s, i) => ({ id: randomUUID(), order: i, authored: s.authored, imageQuery: s.imageQuery }));
-    const attached = await attachPoolPhotos(base, pool, String(parsedRecipe.data.tokens?.ground ?? ''));
-    const anchors = attached.anchors;
-    // The decision ledger: consequential calls the code takes on the deck's
-    // behalf, stored on the project and shown on the review page. A decision
-    // that only ever reached console.warn was invisible to the one person who
-    // could overrule it.
-    const composeNotes: Array<{ slide?: number; note: string }> = [...earlyNotes, ...attached.notes];
+      // Stock photos are still never attached on the user's behalf. The brand's
+      // OWN pictures are a different question — they were harvested from its site
+      // precisely so posts could use them — so a slot arrives filled and swappable
+      // rather than empty and waiting.
+      const base = composed.map((s, i) => ({ id: randomUUID(), order: i, authored: s.authored, imageQuery: s.imageQuery }));
+      const attached = await attachPoolPhotos(base, pool, String(parsedRecipe.data.tokens?.ground ?? ''));
+      const anchors = attached.anchors;
+      photosAttached = attached.used;
+      // The decision ledger: consequential calls the code takes on the deck's
+      // behalf, stored on the project and shown on the review page. A decision
+      // that only ever reached console.warn was invisible to the one person who
+      // could overrule it.
+      composeNotes = [...earlyNotes, ...attached.notes];
 
-    const slides = base.map((s, i) => ({
-      ...s,
-      imageNeed: 'none' as const,
-      ...(anchors[i] ? { overrides: { bleedAnchor: anchors[i] } } : {}),
-      photos: attached.photos[i] ?? [],
-      // The copywriter's own words for the picture this slide wants — what the
-      // Studio's stock picker opens on, instead of an empty search box.
-      ...(composed[i]!.imageQuery ? { imageQuery: composed[i]!.imageQuery } : {}),
-      // The model's one-line reasoning for this slide's calls — review insight.
-      ...(composed[i]!.rationale ? { rationale: composed[i]!.rationale } : {}),
-    }));
-    project.set('slides', slides);
+      slides = base.map((s, i) => ({
+        ...s,
+        imageNeed: 'none' as const,
+        ...(anchors[i] ? { overrides: { bleedAnchor: anchors[i] } } : {}),
+        photos: attached.photos[i] ?? [],
+        // The copywriter's own words for the picture this slide wants — what the
+        // Studio's stock picker opens on, instead of an empty search box.
+        ...(composed[i]!.imageQuery ? { imageQuery: composed[i]!.imageQuery } : {}),
+        // The model's one-line reasoning for this slide's calls — review insight.
+        ...(composed[i]!.rationale ? { rationale: composed[i]!.rationale } : {}),
+      }));
+      project.set('slides', slides);
+      // A classic deck carries no deck stylesheet; a previous designer deck's must not linger.
+      project.set('deckCss', undefined);
+      project.set('design', { engine: 'classic', rounds: [] });
+      /**
+       * ALWAYS WRITE A FRESH ANSWER, including "there isn't one".
+       *
+       * This field used to be set only on success, so a compose whose review
+       * failed left the PREVIOUS deck's critique in place — and the review page
+       * showed a confident verdict about a deck that no longer existed. That is
+       * how an out-of-credits error looked exactly like a clean review.
+       *
+       * Written as "not-run" HERE, before the save, and overwritten by the real
+       * review below — so a crash between the two leaves an honest "not
+       * reviewed" rather than a stale verdict.
+       */
+      project.set('critique', { status: 'skipped', reason: 'not-run' });
+    }
     project.set('composeNotes', composeNotes);
     // What this post cost, and anything the ceiling turned down. Stored rather
     // than logged: a silent downgrade is worse than an expensive deck, so the
     // review page can say which steps the budget bought and which it refused.
     if (ledger) project.set('spend', summarize(ledger));
-    /**
-     * ALWAYS WRITE A FRESH ANSWER, including "there isn't one".
-     *
-     * This field used to be set only on success, so a compose whose review
-     * failed left the PREVIOUS deck's critique in place — and the review page
-     * showed a confident verdict about a deck that no longer existed. That is
-     * how an out-of-credits error looked exactly like a clean review.
-     *
-     * Written as "not-run" HERE, before the save, and overwritten by the real
-     * review below — so a crash between the two leaves an honest "not
-     * reviewed" rather than a stale verdict.
-     */
-    project.set('critique', { status: 'skipped', reason: 'not-run' });
     /**
      * Copy that stops mid-thought is stored, not just returned. It used to
      * exist only in the compose RESPONSE, so anyone opening the review page
@@ -816,7 +962,9 @@ projectsRouter.post(
      * never a stale verdict and never a failed compose.
      */
     let critique: CritiqueOutcome | undefined;
-    if (ledger) {
+    // The designer path reviewed its own deck on the rubric; the classic one
+    // gets the art-director critique it always had.
+    if (ledger && !designed) {
       const shots = await shootLiveDeck(
         String(project._id),
         slides.map((s) => s.id),
@@ -888,8 +1036,9 @@ projectsRouter.post(
         failures,
         plan: brief.plan,
         locks: brief.locks,
-        photosAttached: attached.used,
+        photosAttached,
       },
+      ...(designed ? { design: (designed as DesignPathResult).summary } : {}),
       /**
        * What the layout gates did — absent only when the check was switched off
        * entirely. A deck with `unmeasured > 0` shipped with the overflow,
@@ -1657,9 +1806,16 @@ projectsRouter.post(
 
     project.set('status', 'rendered');
     project.set('renders', rendered.map((r) => r.url));
-    // Exporting is the one lifecycle step the app can observe, so it advances the
-    // stage by itself. "Posted" stays manual — we can't see Instagram.
-    project.set('stage', 'shipped');
+    /**
+     * A FINAL export advances the stage to shipped — it is the one lifecycle
+     * step the app can observe ("posted" stays manual; we cannot see
+     * Instagram). A REVIEW export — the PNGs a script pulls to look at the
+     * deck — does not: three unpublished campaigns once landed on the Desk as
+     * shipped because every export counted as a handoff. The Studio's Export
+     * button is final; anything that does not say so is a look.
+     */
+    const final = (req.body as { final?: unknown } | undefined)?.final === true;
+    if (final) project.set('stage', 'shipped');
     project.set('exportedAt', new Date());
     // PIN THE RECIPE at first export. Decks render live against the brand's
     // recipe, so replacing the recipe silently re-skinned every deck already
@@ -2065,9 +2221,12 @@ async function derivePromoStory(id: string, body: z.infer<typeof promoStorySchem
    * A caller may still pass one, and should when it can add a hook the cover
    * does not have. Passing an empty string is the same as passing nothing.
    */
+  // The labels follow the CAROUSEL's language: three English decks once
+  // derived Portuguese stories because these two strings were hard-coded.
+  const labels = promoLabelsFor(languageOf(slides.map((s) => s.authored?.html)));
   const parts = {
-    eyebrow: body.eyebrow ?? 'NOVO POST',
-    cta: body.cta ?? 'Vê o carrossel completo',
+    eyebrow: body.eyebrow ?? labels.eyebrow,
+    cta: body.cta ?? labels.cta,
     headline: body.headline?.trim() ?? '',
   };
 

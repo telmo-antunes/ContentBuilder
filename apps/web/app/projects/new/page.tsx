@@ -41,6 +41,14 @@ function liveProgress(p: { phase: string; done?: number; total?: number } | unde
       return { label: p.total ? `Typesetting slide ${Math.min((p.done ?? 0) + 1, p.total)} of ${p.total}…` : 'Typesetting each slide…', index: 3 };
     case 'checking-layout':
       return { label: p.total ? `Checking nothing overflows (${p.done ?? 0}/${p.total})…` : 'Checking nothing overflows…', index: 4 };
+    case 'designing':
+      return { label: 'Designing the whole deck…', index: 3 };
+    case 'rendering':
+      return { label: 'Rendering it at feed size…', index: 4 };
+    case 'reviewing':
+      return { label: 'Reviewing it against the rubric…', index: 4 };
+    case 'revising':
+      return { label: 'Revising what the review flagged…', index: 4 };
     case 'done':
       return { label: 'Attaching photographs and reviewing…', index: 5 };
     default:

@@ -6,7 +6,7 @@ import { ScaledSlide } from '../../lib/render/SlideFrame';
 import { resolveSlidePhotos } from '../../lib/render/projectRender';
 import type { RenderBrandKit } from '../../lib/render/types';
 
-export type ProjectThumbData = Pick<Project, '_id' | 'title' | 'type' | 'format' | 'status' | 'slides'> & {
+export type ProjectThumbData = Pick<Project, '_id' | 'title' | 'type' | 'format' | 'status' | 'slides' | 'deckCss'> & {
   settings?: { theme?: ThemePreset };
 };
 
@@ -59,6 +59,7 @@ export function ProjectThumb({
           photos={resolveSlidePhotos(first, media)}
           theme={first.overrides?.theme ?? project.settings?.theme ?? 'editorial'}
           forExport
+          deckCss={project.deckCss}
         />
       </ScaledSlide>
     </div>

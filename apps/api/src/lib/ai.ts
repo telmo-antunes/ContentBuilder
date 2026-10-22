@@ -52,7 +52,11 @@ export type AiFeature =
   // Per-post: write the deck's copy, arrange it into slides, write the caption.
   | 'parse'
   | 'compose'
-  | 'caption';
+  | 'caption'
+  // The designer that sees (docs/designer.md): designs the whole deck in one
+  // call, then a vision review scores it on the owner's rubric.
+  | 'design'
+  | 'review';
 
 const OVERRIDE_FIELD: Record<AiFeature, string> = {
   vision: 'visionModel',
@@ -60,6 +64,8 @@ const OVERRIDE_FIELD: Record<AiFeature, string> = {
   parse: 'parseModel',
   compose: 'composeModel',
   caption: 'captionModel',
+  design: 'designModel',
+  review: 'reviewModel',
 };
 
 const ENV_DEFAULT: Record<AiFeature, () => string> = {
@@ -84,6 +90,13 @@ const ENV_DEFAULT: Record<AiFeature, () => string> = {
    */
   parse: premiumModel,
   compose: () => config.ai.modelSmall ?? config.ai.model!,
+  /**
+   * Both halves of the designer path are design-critical and both must SEE
+   * (the designer reads the homepage-era screenshot when there is one; the
+   * review reads the contact sheet), so they sit on the design tier.
+   */
+  design: designModel,
+  review: designModel,
 };
 
 /**

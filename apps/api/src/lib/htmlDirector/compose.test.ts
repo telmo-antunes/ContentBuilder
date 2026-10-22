@@ -1607,6 +1607,18 @@ describe('trimToFinished — the repair the correction never had', () => {
     expect(trimToFinished('January is already')).toBeNull();
   });
 
+  it('cuts back to the last independent clause when no word can be dropped', () => {
+    // The exact body that shipped mid-sentence on a designer deck (2026-10-22).
+    expect(trimToFinished('Payment is stored against the purchase, so the money is already in before the first')).toBe(
+      'Payment is stored against the purchase.',
+    );
+    expect(trimToFinished('The deposit is taken at booking; the balance on the')).toBe('The deposit is taken at booking.');
+    // A comma with no connective after it leaves a subordinate clause alone — flagged, not cut.
+    expect(trimToFinished('If the car is dirty, the price')).toBeNull();
+    // Too short to be a line.
+    expect(trimToFinished('Paid, so the balance before the')).toBeNull();
+  });
+
   it('never invents words — everything it returns was in the original', () => {
     const original = 'A busy December fixes nothing if January is';
     const out = trimToFinished(original);

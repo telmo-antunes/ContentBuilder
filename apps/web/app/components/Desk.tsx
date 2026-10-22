@@ -96,6 +96,7 @@ function Thumb({ card, kit, size = 44 }: { card: BoardCard; kit?: BrandKit; size
             brandKit={toRenderKit(kit)}
             format={card.format as Format}
             forExport
+            deckCss={card.deckCss}
           />
         </ScaledSlide>
       </span>

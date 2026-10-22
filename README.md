@@ -7,7 +7,7 @@ Internal web app that turns a business into on-brand Instagram content. It first
 **Author once, compose cheap, gate deterministically.**
 
 - **Author once** — the expensive, design-critical AI call runs once per brand: it writes the brand's design system (real CSS scoped to the slide root, written against injected `--cb-*` tokens). Every future post reuses it.
-- **Compose cheap** — turning an idea into slides is a small-model call: parse the idea into per-slide roles and verbatim copy parts, then arrange those parts using **only the brand's own classes**. The look comes from the recipe, not from per-slide creativity.
+- **Compose cheap** — turning an idea into slides is a small-model call: parse the idea into per-slide roles and verbatim copy parts, then arrange those parts using **only the brand's own classes**. The look comes from the recipe, not from per-slide creativity. *(The classic engine. Since 2026-10-22 the default is the **designer that sees** — one design-tier call that writes the whole deck against the recipe and is reviewed on the owner's rubric; see [docs/designer.md](docs/designer.md). The deterministic gates below still hold either way.)*
 - **Deterministic quality gates** — code, not prompts, guarantees the floor at render time:
   - **Contrast repair** — ink is held to WCAG AA body text and the accent to AA large text against the ground; failing colors are walked toward white/black until they pass.
   - **Type floor** — every canvas is 1080px wide and read on a ~393pt phone (≈ px / 2.75), so a deterministic pass raises any undersized type to a legible minimum.
@@ -37,7 +37,7 @@ The app runs without an Anthropic key: website analysis falls back to heuristic 
 6. **Compose** — `/projects/new`: pick a brand, carousel or story plus a format, and write the **brief**; `POST /projects/:id/compose` replaces the slides (the previous state is version-snapshotted). The brief is a small language, not just a paragraph — see [The brief](#the-brief) below. How many slides the deck gets is derived from the material, not dialled in. A slide that wants imagery arrives with the brand's own photograph already in its slot, and only ever asks for a slot the brand can fill.
 7. **Studio** — `/projects/:id/review`: reorder the deck, **direct one slide** (a prompt, or exact copy in quotes, that rewrites that slide alone), re-compose a single slide into alternatives (keeping the copy) or into new copy (keeping the arrangement), apply instant deterministic tweaks (headline size, inverse surface), edit copy on-canvas, attach photos (uploads, harvested site photos, a Pexels stock picker; background / slot / free placements), replay the motion, write or regenerate the caption, browse and restore version history (up to 20 snapshots).
 8. **Export** — PNG zip or animated MP4 (details below). The Share button surfaces LAN links: `/preview/:id` (live, swipeable, works before any export) and `/share/:id` (phone hand-off that feeds exported PNGs to the native share sheet).
-9. **Desk** — the home page: every post across every brand on a lifecycle board (`idea → drafting → ready → shipped`). Exporting advances a post to `shipped` automatically; the rest is drag/edit.
+9. **Desk** — the home page: every post across every brand on a lifecycle board (`idea → drafting → ready → shipped`). A final export (the Studio's Export button, or `POST /export` with `{ "final": true }`) advances a post to `shipped`; a review export leaves the stage alone. The rest is drag/edit.
 
 ## AI touchpoints
 
@@ -48,8 +48,12 @@ Every touchpoint resolves its model as: per-feature override saved in Settings (
 | Brand vision (color roles, style, voice) | `ANTHROPIC_MODEL_FREE` → `ANTHROPIC_MODEL` | Once per analyze | Heuristic color roles |
 | Recipe author (the design system) | `ANTHROPIC_MODEL_DESIGN` → `_FREE` → `_SMALL` → `ANTHROPIC_MODEL` | Once per brand (approval or on demand; ×2–3 for candidates) | Disabled |
 | Parse (brief + source → the deck's copy) | `ANTHROPIC_MODEL_FREE` → `_SMALL` → `ANTHROPIC_MODEL` | Once per post (twice if a budget or a verbatim line needs correcting); once per slide for a Studio rewrite | Disabled |
-| Compose (copy → authored slides; slide variants) | `ANTHROPIC_MODEL_SMALL` → `ANTHROPIC_MODEL` | Once per slide (skipped entirely when the recipe has fragments) | Disabled |
+| Compose (copy → authored slides; slide variants) | `ANTHROPIC_MODEL_SMALL` → `ANTHROPIC_MODEL` | Once per slide (skipped entirely when the recipe has fragments) — the **classic** engine | Disabled |
+| Design (copy → the whole deck, pictures and a deck stylesheet) | `ANTHROPIC_MODEL_DESIGN` → `_FREE` → `_SMALL` → `ANTHROPIC_MODEL` | Once per post, plus one revision when the review earns it — the **designer** engine (docs/designer.md) | Disabled |
+| Design review (the rendered deck, scored on the rubric) | same as Design | Once per design round | Disabled |
 | Caption | `ANTHROPIC_MODEL_FREE` → `_SMALL` → `ANTHROPIC_MODEL` | On demand per post | Disabled |
+
+`POST /projects/:id/compose` runs the **designer** engine whenever a design tier is configured (Settings › Compose engine chooses explicitly; a request may pass `engine`). The designer sees the brand's stylesheet and fragments, every slide's copy and the tagged library, writes the whole deck in one call, is shown the rendered contact sheet scored on `docs/audit/rubric.md`, and revises once when that review finds a blocking fault or a dimension at 2. The better round ships. A slide that lost or added copy falls back to the classic composer for that slide alone.
 
 The two halves of a compose sit on **different tiers on purpose**. The parse writes
 every headline and row from one sentence of idea — it runs once per deck and is the
@@ -214,7 +218,7 @@ npm run lint
 
 ## Export
 
-**PNG** — `POST /projects/:id/export` renders every slide through the hidden `/render` route with Puppeteer at the project's exact pixel dimensions (the same React renderer the editor uses — what you see is what exports), persists the PNGs through the StorageProvider, and streams a zip (`01.png`, `02.png`, …). Exporting snapshots a version and advances the Desk stage to `shipped`.
+**PNG** — `POST /projects/:id/export` renders every slide through the hidden `/render` route with Puppeteer at the project's exact pixel dimensions (the same React renderer the editor uses — what you see is what exports), persists the PNGs through the StorageProvider, and streams a zip (`01.png`, `02.png`, …). Exporting snapshots a version; with `{ "final": true }` in the body it also advances the Desk stage to `shipped` (the Studio sends it; a script pulling PNGs to review does not).
 
 **MP4** — `POST /projects/:id/export-video` starts a durable job (`202` + job id; state lives in Mongo, the artifact in storage, so jobs survive a restart). Output is **one clip per slide** — correct for Instagram, where the viewer advances slides — each playing the brand's reveal choreography and then holding the settled composition. Capture is deterministic: CSS animations are paused and the timeline is stepped frame-by-frame at 30fps, then encoded with bundled ffmpeg. The client polls `GET /projects/:id/export-video/:jobId`; the same URL serves the finished download (a lone slide is one MP4, several are a zip). `POST …/cancel` stops a running job within a second or two. Finished artifacts are swept after ~24h.
 

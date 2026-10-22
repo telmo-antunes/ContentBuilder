@@ -15,6 +15,7 @@ import { z } from 'zod';
 // so importing back through it would make evaluation order load-bearing.
 import { PHOTO_MOVES } from './slideMotion';
 import { MAX_PLAN_SLIDES, MAX_SLIDE_DIRECTION_CHARS } from './brief';
+import { DECK_CSS_MAX_CHARS } from './deckCss';
 import {
   ASSET_TYPES,
   MAX_SLIDES_PER_PROJECT,
@@ -152,7 +153,7 @@ export const slideSchema = z.object({
        * carried here so a client PATCH round-trips it instead of silently
        * erasing the one record the markup itself cannot answer.
        */
-      source: z.enum(['fragment', 'ai']).optional().catch(undefined),
+      source: z.enum(['fragment', 'ai', 'designer']).optional().catch(undefined),
       /**
        * This slide's OWN alignment, when it deviates from the brand's global
        * one — chosen by the parse step (which sees the whole deck) or by hand.
@@ -220,6 +221,12 @@ export const updateProjectSchema = z.object({
   slides: z.array(slideSchema).max(MAX_SLIDES_PER_PROJECT).optional(),
   settings: settingsSchema.optional(),
   caption: captionSchema.optional(),
+  /**
+   * The DECK STYLESHEET — a few rules the designer wrote for this deck alone,
+   * scoped to `.cb-slide` and limited to the brand's tokens (see
+   * `lib/htmlDirector/deckCss.ts`). Empty string clears it.
+   */
+  deckCss: z.string().max(DECK_CSS_MAX_CHARS).optional(),
   /** The owner's 1–5 score on the audit's eight dimensions; `at` and the prompt versions are set by the server. */
   scores: z
     .object({

@@ -35,6 +35,8 @@ import {
   slideAlignFor,
   isSlideSurface,
   statCountUp,
+  scopeDeckCss,
+  enforceTypeFloor,
   type BrandRecipe,
   type Format,
 } from '@contentbuilder/shared';
@@ -82,9 +84,16 @@ export function AuthoredSlide({
   reserveSlots = false,
   motion = false,
   onOverflow,
+  deckCss,
 }: {
   recipe: BrandRecipe;
   authored: { html: string; bg?: string; role?: string; archetype?: string; align?: string; surface?: string };
+  /**
+   * The DECK's own stylesheet, when the designer wrote one — a few
+   * `.cb-slide` rules in the brand's tokens (see shared/deckCss.ts). Injected
+   * after the brand's sheet, through the same legibility floor.
+   */
+  deckCss?: string;
   /** The target canvas — selects the recipe's per-format vertical tuning. */
   format: Format;
   logoUrl?: string;
@@ -341,6 +350,10 @@ export function AuthoredSlide({
   // Base stylesheet + the format's vertical override (square/story), then scope
   // every .cb-slide rule to this instance so multiple slides can share a page.
   const scopedCss = recipeStylesheetFor(recipe, format).replace(/\.cb-slide/g, `.${scope} .cb-slide`);
+  // The deck sheet rides AFTER the brand's (so its devices can arrange brand
+  // classes inside them) and through the same type floor, so a deck can never
+  // set type smaller than the phone minimum the brand is held to.
+  const deckScoped = deckCss ? scopeDeckCss(enforceTypeFloor(deckCss), scope) : '';
   // Set the logo/photo URLs in the stylesheet (a data: URL's ";base64," breaks an
   // inline style attr, so these live in a <style> rule, not the style attribute).
   const safeUrl = (u: string) => u.replace(/["\\<>]/g, '');
@@ -515,7 +528,7 @@ export function AuthoredSlide({
    */
   const steps = useMemo(() => sceneSteps(html), [html]);
   const sceneCss = steps ? (motion ? sceneMotionCss(scope) : sceneStillCss(scope, restStep(steps))) : '';
-  const styleStr = `${varRule}\n${scopedCss}\n${slotRules}\n${bgLayerCss}${motionCss}${freeMotionCss}\n${ambientCss}\n${anchorCss}\n${sceneCss}`;
+  const styleStr = `${varRule}\n${scopedCss}\n${deckScoped}\n${slotRules}\n${bgLayerCss}${motionCss}${freeMotionCss}\n${ambientCss}\n${anchorCss}\n${sceneCss}`;
   const styleHtmlObj = useMemo(() => ({ __html: styleStr }), [styleStr]);
   /**
    * THE SEEKABLE CLOCK. The exporter cannot drive a timer, and framer-motion

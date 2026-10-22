@@ -101,7 +101,7 @@ const slideSchema = new Schema(
            * fragment when its fragment substitutes cleanly in every shape a list
            * slide comes in. Stored, it is simply known.
            */
-          source: { type: String, enum: ['fragment', 'ai'], required: false },
+          source: { type: String, enum: ['fragment', 'ai', 'designer'], required: false },
           /**
            * This slide's alignment when it deviates from the brand default —
            * the parse step's per-deck call (or a hand edit). Rendered as
@@ -270,6 +270,19 @@ const projectSchema = new Schema(
      */
     recipeSnapshot: { type: Schema.Types.Mixed, required: false },
     recipeSnapshotAt: { type: Date, required: false },
+    /**
+     * The deck stylesheet the designer wrote for THIS deck — a handful of
+     * `.cb-slide`-scoped rules in the brand's tokens, for devices the recipe
+     * does not define. Sanitised and policy-checked before it is stored
+     * (`lib/htmlDirector/deckCss.ts`); injected after the brand's own sheet.
+     */
+    deckCss: { type: String, required: false, maxlength: 12000 },
+    /**
+     * How the designer path went: which engine composed the deck, each round's
+     * rubric scores, which round shipped, and which slides fell back to the
+     * classic composer. Shown on the review page beside the critique.
+     */
+    design: { type: Schema.Types.Mixed, required: false },
     /**
      * WHAT THIS POST COST, from the last compose: total, ceiling, per-feature
      * breakdown, and any step the ceiling turned down. See lib/spend.ts.

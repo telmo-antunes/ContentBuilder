@@ -21,8 +21,11 @@ export default function RenderStage({
   showCounter,
   motion = false,
   reserveSlots = false,
+  deckCss,
 }: {
   authored?: { html: string; bg?: string; role?: string };
+  /** The project's deck stylesheet, when the designer wrote one. */
+  deckCss?: string;
   /** The user's own photos: slot fills, a background, and free overlays. */
   photos?: SlidePhotoSet;
   format: Format;
@@ -51,6 +54,7 @@ export default function RenderStage({
         showCounter={showCounter}
         motion={motion}
         reserveSlots={reserveSlots}
+        deckCss={deckCss}
         // Publish the ground-truth overflow result on the DOM so the export /
         // any headless pass driving this route can read it off the page.
         onOverflow={(o, layout) => {

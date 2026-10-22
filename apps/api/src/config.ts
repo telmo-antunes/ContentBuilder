@@ -47,7 +47,7 @@ export const config = {
      * fixed order (alternatives → repair → design pass) instead of failing,
      * and never drops the parse or the checks. Unset means "count, don't cap".
      */
-    postCeilingUsd: Number(process.env.AI_POST_CEILING_USD ?? '0.40') || Infinity,
+    postCeilingUsd: Number(process.env.AI_POST_CEILING_USD ?? '1.50') || Infinity,
   },
   stock: {
     /** Pexels API key (free at pexels.com/api). Unset = AI drafts leave image placeholders. */

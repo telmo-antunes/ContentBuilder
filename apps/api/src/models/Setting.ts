@@ -20,6 +20,11 @@ const settingSchema = new Schema(
     recipeModel: { type: String, default: '' },
     parseModel: { type: String, default: '' },
     composeModel: { type: String, default: '' },
+    /** The designer that sees: the whole-deck design call and its rubric review. */
+    designModel: { type: String, default: '' },
+    reviewModel: { type: String, default: '' },
+    /** Which engine `POST /compose` runs: '' = designer when a design tier exists, else classic. */
+    composeEngine: { type: String, enum: ['', 'designer', 'classic'], default: '' },
     updatedAt: { type: Date, default: () => new Date() },
   },
   baseSchemaOptions,

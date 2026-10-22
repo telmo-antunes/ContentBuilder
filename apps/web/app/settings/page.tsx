@@ -94,11 +94,14 @@ export default function SettingsPage() {
   const rows: Array<{ key: keyof AiSettings; label: string; hint: string; ph: string }> = [
     { key: 'recipeModel', label: 'Brand recipe', hint: 'designs the look — once per brand', ph: designDefault },
     { key: 'parseModel', label: 'Copywriter', hint: 'writes every headline, row and close — the call that decides a post', ph: judgmentDefault },
-    { key: 'composeModel', label: 'Slide arrange', hint: 'sets the words in the brand\'s layouts when no fragment can — cheap', ph: smallDefault },
+    { key: 'designModel', label: 'Designer', hint: 'designs the whole deck in one call, seeing the brand and every slide — the designer engine', ph: designDefault },
+    { key: 'reviewModel', label: 'Design review', hint: 'scores the rendered deck on the rubric and decides the revision — the designer engine', ph: designDefault },
+    { key: 'composeModel', label: 'Slide arrange', hint: 'sets the words in the brand\'s layouts when no fragment can — the classic engine', ph: smallDefault },
     { key: 'visionModel', label: 'Brand analysis', hint: 'reads colors, type & voice from websites', ph: visionDefault },
     { key: 'captionModel', label: 'Captions', hint: 'writes the caption in the brand voice', ph: judgmentDefault },
   ];
-  const anyOverride = rows.some((r) => (form[r.key] as string).trim() !== '');
+  const anyOverride = rows.some((r) => r.key !== 'composeEngine' && (form[r.key] as string).trim() !== '');
+  const engineDefault = env.modelDesign || env.modelLarge ? 'designer' : 'classic';
   const models = data.models ?? [];
 
   return (
@@ -195,6 +198,27 @@ export default function SettingsPage() {
             </div>
           );
         })}
+        <div className="lgrow">
+          <span className="l">
+            Compose engine
+            <small>the designer designs the whole deck and reviews it on the rubric; classic sets each slide from the brand&apos;s fragments</small>
+          </span>
+          <span className="v">
+            <select
+              aria-label="Compose engine"
+              value={form.composeEngine ?? ''}
+              onChange={(e) => set({ composeEngine: e.target.value as AiSettings['composeEngine'] })}
+              style={{ font: 'inherit' }}
+            >
+              <option value="">Default — {engineDefault}</option>
+              <option value="designer">Designer that sees</option>
+              <option value="classic">Classic composer</option>
+            </select>
+          </span>
+          <span className="side">
+            <span className={`mo-dst ${form.composeEngine ? 'busy' : 'ok'}`}>{form.composeEngine ? 'override' : 'default'}</span>
+          </span>
+        </div>
         <div className="lgrow">
           <span className="l">
             Stock photos

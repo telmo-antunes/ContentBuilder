@@ -51,6 +51,47 @@ Rules that keep this file worth reading:
 
 ## Open findings
 
+### The designer engine — what the first live runs taught (2026-10-22)
+
+*Logged as the engine shipped; each line is fixed in the same branch unless marked open.*
+
+- **Kind:** Defect · **Severity:** cost me a fix · **First seen:** 2026-10-22 — `DESIGNER · getting paid` (project 6ad9cc0f38948dae19ce1caa)
+- **What happened:** round 1 scored 29/40 (variety 2, legibility 2), level with the September classic best, because the validators undid the design: `.sm`, `.row` and `.numbered` were stripped as "unknown classes" (only `components` counted as known, and the stylesheet styles modifiers the list never names), so the one list slide shipped as body text in a box; the cover and the close were refused as "invented words: detail, masters" because the brand mark is `<b>detail</b><i>masters</i>` and the comparison inserted a space at every tag — the designed bleed-photo cover was replaced by the fragment cover; the deck stylesheet's tint (`rgba(…,.05)`) was dropped for not being a token, taking the exhibit device with it. The library offered was the newest 24 of 211 pictures — equipment and damage-photo screens for a brief about prepaid packages — so the designer had nothing on topic to place. *Fixed:* `brandStyledClasses` (every class the stylesheet styles is known), inline tags vanish without a space in `plainText` and the brand's own words are allowed, `color-mix(… transparent)` is taught for tints, and the designer's pool is relevance-ranked against the deck's words (`designerPhotoPool`). Prompt v2 also says to use the library, to size screenshots wide/lg, and to vary a run of statements.
+- **Operational:** editing a route or lib file while a compose runs restarts the API (`tsx watch`) and kills the request mid-review — the deck was designed and saved but never scored, and the design call was paid for. Don't edit source during a live run.
+- **Seen again (prompts v3–v5, same two briefs):** the validators held; what remained was the design itself. Zoomed UI screenshots (`zoom` 2.1–2.2 with a focal point) clipped the thing they were zooming on at both slot edges — the reviewer flagged it blocking on both runs. The designer twice rewrote a headline into an equation device ("Price paid, minus commission") with words not in the parts, so the slide fell back to classic. The middle slides share one eyebrow-headline skeleton (variety 2–3). The compare and chevron devices render too small to read at feed size. *Fixed in v5:* slide archetypes with headline-line caps and a sizing table, a dk-strip rung that re-measures a laddered or overflowing slide without its deck devices, compare columns ≥40%. *Open:* zoom still clips (cap zoom at ~1.8 or ask for the element at ~80% of the slot); the equation rewrite needs a "the headline is verbatim — build the device from the rows" line; the sameness needs a stronger variety instruction or a second pass on the middles.
+- **Prompt v6 (same two briefs, $1.07):** both scored 30/40 with NO fallback slides and NO clipped zoom — the headline-is-one-element rule stopped the equation rewrite, the zoom formula (0.8 ÷ element share, ≤2.4) stopped the clipping, `stripDeckClasses` now leaves a device whole when its text sits in deck-only leaves (the fork had shipped at body size because the rung stripped it). Variety 3 on both. *Still open:* a desktop screenshot of a full-width table at zoom 1.4 is "mouse-type" — legible only when zoomed ≥2 onto one narrow element, or set as type; the copywriter repeating a headline across two slides (smell: slides 3 and 7) is a parse fault, not the designer's; the brand's verdict list sets the × glyph flush against the first letter.
+- **Copy shipped mid-sentence through the designer (getting-paid v6, slide 4):** "…so the money is already in before the first" — the parse's correction failed and `trimToFinished` had no safe word to drop, so it flagged and shipped. *Fixed:* a third move, `cutToClause`, keeps the last independent clause (before a connective, a semicolon or a dash) and closes it with a full stop.
+- **Revision trigger narrowed:** the first six runs earned a second round on "any dimension at 2" four times; it beat round one twice and lost twice at ~$0.20 each — about the reviewer's own run-to-run variance. `shouldRevise` now fires on a blocking finding, an overflow or a collision only.
+- **Open:** the review has no reference strips unless `inspo/tools/annotations.json` exists (it does here); a run without the inspo folder reviews blind. The revision is only ever one round; a deck that needs two stays at its second score.
+
+### English carousel exports generate Portuguese promotional story labels
+
+
+*Resolved 2026-10-22. The promo story reads the carousel's own language from its copy (`lib/language.ts`) and labels itself in it: NEW POST / See the full carousel for English, the Portuguese pair for Portuguese, with Spanish, French, German and Italian pairs besides. A caller may still pass its own labels.*
+
+- **Kind:** Defect
+- **Severity:** cost me a fix
+- **First seen:** 2026-10-18 — website-import, assistant and damage campaigns
+- **What happened:** exporting three hand-authored English carousels generated promotional stories containing `NOVO POST` and `Vê o carrossel completo`. This affected projects 6ad4a7fa96157f2ab8a50b47, 6ad4a80496157f2ab8a50ba0 and 6ad4a80596157f2ab8a50bac. Each needed a version snapshot and a manual PATCH to `NEW CAROUSEL` and `See the full carousel`.
+- **Why it matters:** an English campaign unexpectedly produces a second language in its derivative assets.
+- **Direction:** inherit the source post's explicit language, or the brand's configured content language, when creating promotional story labels.
+- **Seen again:**
+  - 2026-10-18 — repeated in all three campaigns in this batch.
+
+### A review export marks an unpublished campaign as shipped
+
+
+*Resolved 2026-10-22. `POST /projects/:id/export` advances the stage to shipped only with `{ "final": true }` in the body; the Studio's Export button sends it, a script pulling PNGs to look at the deck does not.*
+
+- **Kind:** Friction
+- **Severity:** cost me a fix
+- **First seen:** 2026-10-18 — website-import, assistant and damage campaigns
+- **What happened:** `POST /projects/:id/export` moved each carousel to `shipped`, although the PNGs were being produced for review and no post had been published. Explicit stage PATCH calls were needed to return all three to `drafting` with `posted:false`, including after a revised export.
+- **Why it matters:** the production board can imply approval or completion before the owner reviews the artwork.
+- **Direction:** distinguish a review export from a final handoff, or keep exporting independent of the editorial stage.
+- **Seen again:**
+  - 2026-10-18 — repeated for projects 6ad4a7f296157f2ab8a50ae0, 6ad4a7fa96157f2ab8a50b51 and 6ad4a7ff96157f2ab8a50b7d.
+
 ### A recipe that recolours the logo with a filter breaks when the logo changes
 
 - **Kind:** Defect
@@ -119,6 +160,8 @@ Rules that keep this file worth reading:
 - **What happened:** two product screenshots went into slots and came back unreadable. The obvious move — crop tighter to the fragment carrying the claim — made them *worse*, and it took three rounds to see why. A slot renders a figure at a fixed fraction of the frame, so the rendered type size is `sourceTypePx x (boxWidth / sourceWidth)`. Cropping changes both the numerator's context and the denominator, but not their ratio. What does change it is the **capture width**: the same `/dashboard/reviews` card is 28px type in a 2388px-wide iPad capture (ratio 0.012) and 28px type in a 780px-wide phone capture (ratio 0.036). Re-shooting at phone width made the card about three times larger with no crop at all.
 - **Why it matters:** this is the third deck whose argument is screenshots, and all three lost cycles to it. The existing note in HANDOFF says "crop the source, not the slot", which is right about blogs and actively misleading here.
 - **Direction:** the attach step already knows the asset's dimensions and the slot's drawn width. It could refuse, or warn, when the ratio implies type under ~14px at 1080 — "this capture is 2388px wide; at this slot that lands at 11px. Re-shoot at phone width." The number is computable before the first export.
+- **Seen again:**
+  - 2026-10-18 — damage photographs campaign: the 780 × 1116 full dialog was reduced by the fixed 4:3 `contain` slot, making the damage photograph too small. A 780 × 680 crop of the tab, explanation and image needed a new upload and carousel export. Thin captures such as the 712 × 108 photo-tab strip also leave substantial letterboxing. A fit-aware preview should account for both dimensions and offer an asset-shaped slot.
 
 ### A feature slide with no figure keeps the hole where the figure was
 
