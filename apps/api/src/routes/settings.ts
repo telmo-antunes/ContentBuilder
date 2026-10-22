@@ -17,6 +17,10 @@ const settingsSchema = z.object({
   recipeModel: z.string().max(120).optional(),
   parseModel: z.string().max(120).optional(),
   composeModel: z.string().max(120).optional(),
+  designModel: z.string().max(120).optional(),
+  reviewModel: z.string().max(120).optional(),
+  /** '' = the designer when a design tier is configured, else the classic composer. */
+  composeEngine: z.enum(['', 'designer', 'classic']).optional(),
 });
 
 export const settingsRouter = Router();
@@ -26,7 +30,7 @@ settingsRouter.get(
   '/',
   asyncHandler(async (_req, res) => {
     const doc = (await SettingModel.findOne({ key: 'ai' }).lean()) as Record<string, unknown> | null;
-    const storedIds = ['visionModel', 'captionModel', 'recipeModel', 'parseModel', 'composeModel']
+    const storedIds = ['visionModel', 'captionModel', 'recipeModel', 'parseModel', 'composeModel', 'designModel', 'reviewModel']
       .map((k) => doc?.[k])
       .filter((v): v is string => typeof v === 'string');
     res.json({
@@ -47,6 +51,9 @@ settingsRouter.get(
         // writer for a month without anyone seeing it.
         parseModel: (doc?.parseModel as string) ?? '',
         composeModel: (doc?.composeModel as string) ?? '',
+        designModel: (doc?.designModel as string) ?? '',
+        reviewModel: (doc?.reviewModel as string) ?? '',
+        composeEngine: (doc?.composeEngine as string) ?? '',
       },
       envModels: {
         model: config.ai.model ?? '',

@@ -69,6 +69,7 @@ export default async function RenderPage({
       showCounter={Boolean(project.settings?.slideCounter) && project.type === 'carousel'}
       motion={motion === '1'}
       reserveSlots={reserveSlots === '1'}
+      deckCss={project.deckCss}
     />
   );
 }

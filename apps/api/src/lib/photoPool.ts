@@ -74,6 +74,70 @@ export async function brandPhotoPool(businessId: string) {
 }
 
 /**
+ * THE LIBRARY AS THE DESIGNER IS BRIEFED WITH IT — ranked by what this deck
+ * is about, not by upload date.
+ *
+ * `brandPhotoPool` offers the newest two dozen, which is right for a composer
+ * that fills slots by tone: it needs a picture, not a particular one. The
+ * designer chooses by caption, and a brief about prepaid packages was shown
+ * 24 pictures of equipment and damage-photo screens because those were
+ * uploaded last — out of 211. So the designer's pool is every usable, tagged
+ * picture the brand has, scored against the deck's own words (the copywriter's
+ * image calls, its headlines, the brief), the best `limit` of them — with a
+ * few photographs kept whatever the words say, because a cover that owns the
+ * frame wants a photograph and the words rarely ask for one by name.
+ */
+export async function designerPhotoPool(
+  businessId: string,
+  queries: ReadonlyArray<string | undefined>,
+  limit = 30,
+): Promise<PoolAsset[]> {
+  const MIN_POOL_DIMENSION = 800;
+  const docs = await MediaAssetModel.find({
+    businessId,
+    $or: [{ width: { $gte: MIN_POOL_DIMENSION } }, { height: { $gte: MIN_POOL_DIMENSION } }],
+    label: { $ne: PROMO_COVER_LABEL },
+  })
+    .sort({ createdAt: -1 })
+    .limit(300)
+    .lean<any[]>();
+  const storage = getStorage();
+  const present = (
+    await Promise.all(docs.map(async (d) => ((await storage.exists(String(d.key)).catch(() => false)) ? d : null)))
+  ).filter(Boolean) as any[];
+  const words = queries.filter((q): q is string => Boolean(q && q.trim()));
+  const scored = present.map((m, recency) => {
+    const tags = m.tags as PoolAsset['tags'] | undefined;
+    const relevance = words.reduce((best, q) => Math.max(best, matchScore(tags, q)), 0);
+    return { m, relevance, recency, photo: tags?.kind === 'photo' };
+  });
+  scored.sort((a, b) => b.relevance - a.relevance || a.recency - b.recency);
+  const keepPhotos = Math.min(6, Math.ceil(limit / 5));
+  const chosen: typeof scored = [];
+  const seen = new Set<unknown>();
+  for (const s of scored) {
+    if (chosen.length >= limit - keepPhotos) break;
+    chosen.push(s);
+    seen.add(s.m._id);
+  }
+  // Photographs the words did not ask for, most relevant then newest, so a
+  // frame can still be owned by a picture.
+  for (const s of scored) {
+    if (chosen.length >= limit) break;
+    if (seen.has(s.m._id) || !s.photo) continue;
+    chosen.push(s);
+    seen.add(s.m._id);
+  }
+  for (const s of scored) {
+    if (chosen.length >= limit) break;
+    if (seen.has(s.m._id)) continue;
+    chosen.push(s);
+    seen.add(s.m._id);
+  }
+  return chosen.map((s) => s.m as PoolAsset);
+}
+
+/**
  * Fill the holes the composer left, with the brand's own photographs.
  *
  * An empty `cb-shot` renders as a dead grey rectangle taking a third of the

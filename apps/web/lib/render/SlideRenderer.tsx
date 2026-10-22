@@ -33,10 +33,13 @@ export function SlideRenderer({
   slideTotal,
   showCounter = false,
   motion = false,
+  deckCss,
 }: {
   slide: RenderableSlide;
   brandKit: RenderBrandKit;
   format: Format;
+  /** The project's deck stylesheet, when the designer wrote one. */
+  deckCss?: string;
   /** The user's own photos: slot fills, a background, and free overlays. */
   photos?: SlidePhotoSet;
   /**
@@ -110,6 +113,7 @@ export function SlideRenderer({
             reserveSlots={reserveSlots}
             motion={motion}
             onOverflow={onOverflow}
+            deckCss={deckCss}
           />
         ) : (
           // No recipe/markup yet — a neutral branded field rather than a crash.

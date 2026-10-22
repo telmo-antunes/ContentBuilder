@@ -752,7 +752,13 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
       setExporting(kind);
       try {
         if (kind === 'zip') {
-          const res = await fetch(api(`/projects/${projectId}/export`), { method: 'POST' });
+          // The Studio's export is the handoff: it ships the post. A script
+          // pulling PNGs to review sends no `final` and leaves the stage alone.
+          const res = await fetch(api(`/projects/${projectId}/export`), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ final: true }),
+          });
           if (!res.ok) throw new Error(`Export failed (HTTP ${res.status})`);
           await saveBlob(res, 'project.zip');
           toast('ZIP downloaded', 'ok');
@@ -998,6 +1004,22 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
       });
     }
   });
+  // How the designer path went: which round shipped and what it scored. The
+  // scores themselves sit in the scorecard below; this is the one-line read.
+  if (project.design?.engine === 'designer') {
+    const kept = project.design.rounds.find((r) => r.kept);
+    chips.push({
+      key: 'design',
+      tone: 'info',
+      label: kept?.total ? `Designed · ${kept.total}/40 on the rubric` : 'Designed as a whole deck',
+      hint: [
+        `${project.design.rounds.length} round${project.design.rounds.length === 1 ? '' : 's'}; round ${kept?.round ?? 1} shipped${kept?.reason ? ` — ${kept.reason}` : ''}.`,
+        project.design.rationale ?? '',
+      ]
+        .filter(Boolean)
+        .join(' '),
+    });
+  }
   // The compose step's decision ledger — calls the code took on the deck's
   // behalf (e.g. a full-bleed photo dropped for fighting the brand ground).
   // Info tone: they explain the deck, they don't gate shipping.
@@ -1596,6 +1618,7 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                           editing={!phoneView}
                           theme={slide.overrides?.theme ?? project.settings?.theme ?? 'editorial'}
                           forExport
+                          deckCss={project.deckCss}
                         />
                       </ScaledSlide>
                     </div>
@@ -1665,6 +1688,7 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                         brandKit={kit}
                         format={project.format}
                         photos={resolveSlidePhotos(selectedWorking, project.media)}
+                        deckCss={project.deckCss}
                         editing
                         theme={selectedWorking.overrides?.theme ?? project.settings?.theme ?? 'editorial'}
                         forExport
@@ -2065,6 +2089,7 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                                   format={project.format}
                                   photos={resolveSlidePhotos({ ...selected, photos: photosFor(v.html, selected) }, project.media)}
                                   forExport
+                                  deckCss={project.deckCss}
                                 />
                               </ScaledSlide>
                             </button>
@@ -2083,6 +2108,7 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                                       format={project.format}
                                       photos={resolveSlidePhotos(selected, project.media)}
                                       forExport
+                                      deckCss={project.deckCss}
                                     />
                                   </ScaledSlide>
                                 </div>
@@ -2097,6 +2123,7 @@ export default function ReviewPage({ params }: { params: { id: string } }) {
                                       format={project.format}
                                       photos={resolveSlidePhotos({ ...selected, photos: photosFor(variants[compare]!.html, selected) }, project.media)}
                                       forExport
+                                      deckCss={project.deckCss}
                                     />
                                   </ScaledSlide>
                                 </div>

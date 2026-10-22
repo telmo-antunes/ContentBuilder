@@ -114,6 +114,10 @@ export interface AiSettings {
   recipeModel: string;
   parseModel: string;
   composeModel: string;
+  designModel: string;
+  reviewModel: string;
+  /** '' = the designer when a design tier is configured, else the classic composer. */
+  composeEngine: '' | 'designer' | 'classic';
 }
 export interface ModelOption {
   id: string;
@@ -371,6 +375,8 @@ export interface BoardCard {
   idea: string;
   slideCount: number;
   authored: { html: string; bg?: string; role?: string } | null;
+  /** The designer's deck stylesheet, so the board thumb renders the cover as it ships. */
+  deckCss?: string;
   exportedAt: string | null;
   postedAt: string | null;
   updatedAt: string;

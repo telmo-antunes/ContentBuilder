@@ -115,6 +115,8 @@ export type OpenProbe = (
   recipe: BrandRecipe,
   format: Format,
   slides: readonly CheckSlide[],
+  /** The deck stylesheet the slides were designed with — measured as they will render. */
+  opts?: { deckCss?: string },
 ) => Promise<RenderProbe>;
 
 // ── Tuning ──────────────────────────────────────────────────────────────────
@@ -231,6 +233,7 @@ export async function createRenderScaffold(
   format: Format,
   slides: ReadonlyArray<CheckSlide>,
   label = 'render-check',
+  opts?: { deckCss?: string },
 ): Promise<RenderScaffold> {
   // Loaded lazily: mongoose is only needed when a real render actually happens,
   // and this module is imported by the compose path on every deck.
@@ -259,6 +262,9 @@ export async function createRenderScaffold(
     format,
     status: 'draft',
     settings: { theme: 'editorial', slideCounter: false },
+    // A deck designed with its own sheet is measured under it: without this
+    // the probe would gate a compare or an exhibit as if its device had no CSS.
+    ...(opts?.deckCss ? { deckCss: opts.deckCss } : {}),
     slides: slides.map((s, i) => ({
       id: slideIds[i]!,
       order: i,
@@ -534,7 +540,7 @@ export const UNKNOWN_VERDICT: LayoutVerdict = {
  * the rig cannot be built at all (no database, no browser) — callers treat that
  * as "the renderer is unreachable" and degrade.
  */
-export const openRenderProbe: OpenProbe = async (recipe, format, slides) => {
+export const openRenderProbe: OpenProbe = async (recipe, format, slides, probeOpts) => {
   const { getBrowser } = await import('../browser');
   /**
    * THE BROWSER FIRST, THEN THE SCAFFOLD.
@@ -550,7 +556,7 @@ export const openRenderProbe: OpenProbe = async (recipe, format, slides) => {
    * rather than hangs — but the ordering is what makes a failure clean.
    */
   const browser: Browser = await getBrowser();
-  const scaffold = await createRenderScaffold(recipe, format, slides);
+  const scaffold = await createRenderScaffold(recipe, format, slides, 'render-check', probeOpts);
   const pool = pagePool(browser, Math.min(PAGE_POOL, Math.max(1, slides.length)), dimensionsFor(format));
   let failures = 0;
 

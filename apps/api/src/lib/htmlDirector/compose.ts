@@ -33,6 +33,7 @@ import {
   variantBiasFromLessons,
   slideCountFor,
   type BrandRecipe,
+  type ComposePhase,
   type Lesson,
   type RecipeEmphasisWrap,
   assignArchetypes,
@@ -322,7 +323,7 @@ export interface CopyCheckSummary {
 
 /** Where a compose has got to. `done`/`total` are set only where there is a count. */
 export interface ComposeProgress {
-  phase: 'parsing' | 'composing' | 'checking-layout' | 'done';
+  phase: ComposePhase;
   done?: number;
   total?: number;
 }
@@ -910,7 +911,7 @@ export function trimToFinished(text: string): string | null {
     'being', 'has', 'have', 'had', 'will', 'would', 'can', 'could', 'should',
     'may', 'might', 'must',
   ]);
-  const MIN_WORDS = 3;
+  const MIN_WORDS = TRIM_MIN_WORDS;
   let words = out.replace(/[,;:]+$/, '').split(/\s+/).filter(Boolean);
   while (
     words.length > MIN_WORDS &&
@@ -921,8 +922,8 @@ export function trimToFinished(text: string): string | null {
   }
   out = words.join(' ').replace(/[,;:]+$/, '').trim();
 
-  if (!out || out === original) return null;
-  if (out.split(/\s+/).length < MIN_WORDS) return null;
+  if (!out || out === original) return cutToClause(original);
+  if (out.split(/\s+/).length < MIN_WORDS) return cutToClause(original);
   /**
    * A repair that is still unfinished is not a repair — checked exactly the way
    * `unfinishedProse` checks, terminal punctuation first. Two complete
@@ -931,9 +932,41 @@ export function trimToFinished(text: string): string | null {
    */
   if (TERMINAL_PUNCTUATION.test(out)) return out;
   const last = out.split(/\s+/).pop()?.toLowerCase().replace(/[,;:]+$/, '') ?? '';
-  if (INTERNAL_SENTENCE_BREAK.test(out)) return null;
-  if (DANGLING_WORDS.has(last)) return null;
+  if (INTERNAL_SENTENCE_BREAK.test(out)) return cutToClause(original);
+  if (DANGLING_WORDS.has(last)) return cutToClause(original);
   return out;
+}
+
+/**
+ * The last independent clause: a comma followed by a connective, a semicolon,
+ * or a spaced dash — the one place a line can be cut where what stands before
+ * it was a whole thought.
+ */
+const CLAUSE_BOUNDARY = /^(.*\S)(?:,\s+(?:so|and|but|or|yet|then|which|while|because|unless|until|whereas)\b|;|\s[—–]\s)/i;
+
+/** Fewer words than this is a stub nobody wrote, not a repaired line. */
+const TRIM_MIN_WORDS = 3;
+
+/**
+ * THE THIRD MOVE: CUT BACK TO THE LAST INDEPENDENT CLAUSE.
+ *
+ * "Payment is stored against the purchase, so the money is already in before
+ * the first" shipped on a slide — the word trim found nothing it could drop
+ * (`first` is no modifier) and gave up, and the fault went to the ship bar
+ * while the deck went out mid-sentence. A clause that stood on its own before
+ * a connective is a sentence the author wrote: keep it and close it with a
+ * full stop. A comma with no connective after it is not cut ("If the car is
+ * dirty, the price" would leave a subordinate clause alone), nor is a clause
+ * too short to be a line.
+ */
+function cutToClause(text: string): string | null {
+  const m = CLAUSE_BOUNDARY.exec(text.trim());
+  if (!m?.[1]) return null;
+  const kept = m[1].trim().replace(/[,;:]+$/, '');
+  if (kept.split(/\s+/).length < TRIM_MIN_WORDS) return null;
+  const last = kept.split(/\s+/).pop()?.toLowerCase() ?? '';
+  if (INTERNAL_SENTENCE_BREAK.test(kept) || DANGLING_WORDS.has(last)) return null;
+  return TERMINAL_PUNCTUATION.test(kept) ? kept : `${kept}.`;
 }
 
 /**
@@ -3046,31 +3079,27 @@ export interface ComposedProjectSlide {
   source: ComposePath;
 }
 
-export async function composeProject(
-  recipeIn: BrandRecipe,
-  idea: string,
-  opts?: ComposeOptions,
-): Promise<ComposedProjectSlide[]> {
-  // Resolve BOTH tiers once and thread them through: the parse writes the copy
-  // (quality tier, once per deck), the per-slide composes typeset it (cheap
-  // tier, once per slide). One lookup each, no per-slide Settings round-trip.
+/**
+ * THE FIRST HALF OF A COMPOSE — the copy, written and checked — split out so
+ * the two engines (the classic per-slide composer and the designer that sees,
+ * docs/designer.md) share it exactly. Returns everything the second half
+ * needs: the gap-filled recipe, the parsed slides, the resolved options and
+ * the brief context.
+ */
+export interface ParsedDeckCopy {
+  recipe: BrandRecipe;
+  inputs: ComposeSlideInput[];
+  o: ComposeOptions;
+  ctx: { idea: string; parseUser?: string };
+}
+
+export async function parseDeckCopy(recipeIn: BrandRecipe, idea: string, opts?: ComposeOptions): Promise<ParsedDeckCopy> {
   const [composeM, parseM] = await Promise.all([modelFor('compose'), modelFor('parse')]);
-  /**
-   * FILL THE FRAGMENT GAPS FIRST. A hole the brand's author happened not to
-   * write sends every slide that needs that part to the composer — a paid model
-   * call for an arrangement the recipe already describes. Adding the hole is
-   * free, deterministic, idempotent, and uses only classes the brand advertises,
-   * so it is done here rather than left to a migration: every brand already in
-   * the database composes cheaper on its very next deck.
-   */
   const filled = fillRecipeFragmentGaps(recipeIn);
   for (const r of filled.repairs) {
     console.warn(`[compose] recipe: filled the "${r.role}" fragment's missing hole(s): ${r.added.join(', ')}`);
   }
   const recipe = filled.recipe;
-  // A caller that did not pre-parse the brief still gets the brief LANGUAGE: an
-  // inline "Slide 3: …" plan and any "quoted" copy are lifted out here, so a
-  // script or a script-shaped call behaves exactly like the composer screen.
   const brief = opts?.plan || opts?.locks ? undefined : parseBrief(idea);
   const o: ComposeOptions = {
     ...opts,
@@ -3078,8 +3107,6 @@ export async function composeProject(
     parseModel: opts?.parseModel ?? parseM,
     plan: opts?.plan ?? brief?.plan,
     locks: opts?.locks ?? brief?.locks,
-    // "You keep re-arranging the feature slides" is only actionable if the
-    // composer reaches past the arrangement they keep rejecting.
     variantBias: opts?.variantBias ?? variantBiasFromLessons(opts?.lessons ?? []),
   };
   let lastParseUser = '';
@@ -3091,7 +3118,16 @@ export async function composeProject(
       o.onParsePrompt?.(u);
     },
   });
-  return composeFromInputs(recipe, inputs, o, { idea: brief?.idea ?? idea, parseUser: lastParseUser });
+  return { recipe, inputs, o, ctx: { idea: brief?.idea ?? idea, parseUser: lastParseUser } };
+}
+
+export async function composeProject(
+  recipeIn: BrandRecipe,
+  idea: string,
+  opts?: ComposeOptions,
+): Promise<ComposedProjectSlide[]> {
+  const { recipe, inputs, o, ctx } = await parseDeckCopy(recipeIn, idea, opts);
+  return composeFromInputs(recipe, inputs, o, ctx);
 }
 
 /**
