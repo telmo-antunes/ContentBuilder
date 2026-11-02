@@ -5,10 +5,13 @@ export interface UsageInfo {
   renderMs?: number; modelMs?: number; firstTokenMs?: number; renderCacheHits?: number;
   thinkingTokens?: number; effort?: string;
 }
+export interface SlideEvent { index: number; html: string; mode: 'full' | 'patch' | 'variant'; pass?: 'polish' }
 export interface Operation {
   signal: AbortSignal;
   progress: (message: string) => void;
   usage: (usage: UsageInfo) => void;
+  /** A slide finished streaming; the client can show it before the whole deck is done. */
+  slide?: (event: SlideEvent) => void;
 }
 /** Newline-delimited events keep long calls observable and cancellable. */
 export function operationResponse(request: Request, work: (operation: Operation) => Promise<unknown>): Response {
@@ -30,7 +33,8 @@ export function operationResponse(request: Request, work: (operation: Operation)
       try {
         const value = await work({ signal: abort.signal,
           progress: message => send({ type: 'progress', message }),
-          usage: usage => send({ type: 'usage', usage }) });
+          usage: usage => send({ type: 'usage', usage }),
+          slide: event => send({ type: 'slide', ...event }) });
         abort.signal.throwIfAborted();
         send({ type: 'result', value });
       } catch (error) {

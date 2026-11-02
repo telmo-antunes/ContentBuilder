@@ -6,14 +6,16 @@ import { RequestError } from './http';
 
 export const imageTypes = { jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif', svg: 'image/svg+xml', avif: 'image/avif' } as const;
 export type ImageExtension = keyof typeof imageTypes;
+export const assetTypes = { ...imageTypes, css: 'text/css' } as const;
+export type AssetExtension = keyof typeof assetTypes;
 const directory = () => resolve(process.cwd(), '.data/assets');
 export function assetName(reference: string): string {
   const name = reference.split('/').pop()!;
-  if (!/^[a-f0-9]{64}\.(jpg|png|webp|gif|svg|avif)$/.test(name)) throw new RequestError('Invalid image reference.');
+  if (!/^[a-f0-9]{64}\.(jpg|png|webp|gif|svg|avif|css)$/.test(name)) throw new RequestError('Invalid image reference.');
   return name;
 }
-export function assetType(reference: string) { return imageTypes[assetName(reference).split('.').pop() as ImageExtension]; }
-export async function storeAsset(bytes: Uint8Array, extension: ImageExtension = 'jpg'): Promise<string> {
+export function assetType(reference: string) { return assetTypes[assetName(reference).split('.').pop() as AssetExtension]; }
+export async function storeAsset(bytes: Uint8Array, extension: AssetExtension = 'jpg'): Promise<string> {
   const name = `${createHash('sha256').update(bytes).digest('hex')}.${extension}`;
   await mkdir(directory(), { recursive: true });
   await writeFile(resolve(directory(), name), bytes, { flag: 'wx', mode: 0o600 }).catch(error => { if (error.code !== 'EEXIST') throw error; });

@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { Deck } from '@/lib/schema';
+import { isStory } from '@/lib/formats';
 import { SlidePreview } from '../SlidePreview';
 import { Icon } from './Icon';
 
@@ -8,11 +9,14 @@ export type StageWork = { kind: 'generate' | 'revise' | 'other'; phase: string; 
 type Props = {
   deck: Deck | null; width: number; height: number; selected: number; onSelect: (index: number) => void;
   work: StageWork | null; handle: string; peeking: boolean; locked: boolean; empty: ReactNode;
+  // Slides that just streamed in (no busy overlay), and whether another one is still being written.
+  fresh?: number[]; pending?: boolean;
+  onCaption: () => void; onOptions: (index: number) => void; onRemix: (format: 'story' | 'post') => void;
   onAim: (index: number) => void; onMove: (from: number, to: number) => void; onDuplicate: (index: number) => void; onDelete: (index: number) => void; onDownloadSlide: (index: number) => void;
 };
 
 // The post as Instagram will show it: swipe it, tap a frame to aim the next instruction at it.
-export function Stage({ deck, width, height, selected, onSelect, onAim, work, handle, peeking, locked, empty, onMove, onDuplicate, onDelete, onDownloadSlide }: Props) {
+export function Stage({ deck, width, height, selected, onSelect, onAim, work, handle, peeking, locked, empty, fresh = [], pending = false, onCaption, onOptions, onRemix, onMove, onDuplicate, onDelete, onDownloadSlide }: Props) {
   const track = useRef<HTMLDivElement>(null);
   const frame = useRef(0);
   const menuRoot = useRef<HTMLDivElement>(null);
@@ -20,7 +24,7 @@ export function Stage({ deck, width, height, selected, onSelect, onAim, work, ha
   const [dragging, setDragging] = useState<number | null>(null);
   const [over, setOver] = useState<number | null>(null);
   const w = deck?.width ?? width, h = deck?.height ?? height;
-  const story = h / w > 1.6;
+  const story = isStory({ width: w, height: h });
   const slides = deck?.slides ?? [];
   const count = slides.length;
   const index = Math.min(selected, Math.max(0, count - 1));
@@ -48,7 +52,7 @@ export function Stage({ deck, width, height, selected, onSelect, onAim, work, ha
       if (next !== index && next >= 0 && next < count) onSelect(next);
     });
   }
-  const busyOn = (i: number) => !!work && (work.kind === 'generate' || (work.kind === 'revise' && (work.target === null || work.target === i)));
+  const busyOn = (i: number) => !!work && !fresh.includes(i) && (work.kind === 'generate' || (work.kind === 'revise' && (work.target === null || work.target === i)));
   const busyPill = work ? <div className="cell-busy" role="status"><span className="busy-pill"><span className="spinner" />{work.phase}</span></div> : null;
 
   return <section className={`stage${story ? ' is-story' : ''}`} style={{ '--ratio': `${w} / ${h}`, '--ar': w / h } as CSSProperties} aria-label="Post preview">
@@ -64,8 +68,10 @@ export function Stage({ deck, width, height, selected, onSelect, onAim, work, ha
             <p className="menu-title">Slide {index + 1}</p>
             <button role="menuitem" disabled={index === 0} onClick={() => { setMenu(false); onMove(index, index - 1); }}><Icon name="left" />Move earlier</button>
             <button role="menuitem" disabled={index === count - 1} onClick={() => { setMenu(false); onMove(index, index + 1); }}><Icon name="right" />Move later</button>
+            <button role="menuitem" onClick={() => { setMenu(false); onOptions(index); }}><Icon name="grid" />Show me 3 options</button>
             <button role="menuitem" onClick={() => { setMenu(false); onDuplicate(index); }}><Icon name="copy" />Duplicate</button>
             <button role="menuitem" onClick={() => { setMenu(false); onDownloadSlide(index); }}><Icon name="download" />Download PNG</button>
+            <button role="menuitem" onClick={() => { setMenu(false); onRemix(story ? 'post' : 'story'); }}><Icon name="phone" />{story ? 'Make a feed version' : 'Make a story version'}</button>
             <button role="menuitem" className="danger" disabled={count === 1} onClick={() => { setMenu(false); onDelete(index); }}><Icon name="trash" />Delete</button>
           </div> : null}
         </div> : null}
@@ -80,6 +86,7 @@ export function Stage({ deck, width, height, selected, onSelect, onAim, work, ha
               <SlidePreview html={slide.html} width={w} height={h} index={i} fill assets={deck!.assets} />
               {busyOn(i) ? busyPill : null}
             </div>)}
+            {pending ? <div className="cell skeleton" style={{ '--i': count } as CSSProperties}>{busyPill}</div> : null}
           </div>
           {!story && count > 1 ? <span className="counter">{index + 1}/{count}</span> : null}
           {index > 0 ? <button type="button" className="nav prev" aria-label="Previous slide" onClick={() => onSelect(index - 1)}><Icon name="left" /></button> : null}
@@ -91,7 +98,9 @@ export function Stage({ deck, width, height, selected, onSelect, onAim, work, ha
         <div className="post-actions" aria-hidden="true"><Icon name="heart" size={24} /><Icon name="comment" size={24} /><Icon name="share" size={24} />
           {count > 1 ? <span className="dots">{slides.map((_, i) => <i key={i} className={i === index ? 'on' : ''} />)}</span> : <span className="dots" />}
           <Icon name="bookmark" size={24} /></div>
-        <p className="caption"><strong>{handle}</strong> {deck?.title || (generating ? 'Writing your post…' : 'Your caption will live here.')}</p>
+        {deck?.caption ? <button type="button" className="caption" onClick={onCaption} aria-label="Open the caption">
+          <strong>{handle}</strong> {deck.caption.text.split('\n')[0]} <span className="more">more</span></button>
+          : <p className="caption"><strong>{handle}</strong> {deck?.title || (generating ? 'Writing your post…' : 'Your caption will live here.')}</p>}
       </footer> : null}
     </article>
 
@@ -104,7 +113,7 @@ export function Stage({ deck, width, height, selected, onSelect, onAim, work, ha
         onDrop={event => { event.preventDefault(); if (dragging !== null && dragging !== i) onMove(dragging, i); setDragging(null); setOver(null); }}
         onDragEnd={() => { setDragging(null); setOver(null); }}>
         <SlidePreview html={slide.html} width={w} height={h} index={i} thumbnail assets={deck!.assets} /><span className="num">{i + 1}</span>
-      </button>) : [0, 1, 2, 3].map(i => <span key={i} className="thumb ghost" style={{ '--i': i } as CSSProperties} />)}
+      </button>).concat(pending ? [<span key="next" className="thumb ghost" style={{ '--i': count } as CSSProperties} />] : []) : [0, 1, 2, 3].map(i => <span key={i} className="thumb ghost" style={{ '--i': i } as CSSProperties} />)}
     </nav> : null}
   </section>;
 }

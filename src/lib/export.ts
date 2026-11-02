@@ -3,6 +3,7 @@ import { withPage } from './browser';
 import { RequestError } from './http';
 import type { Deck } from './schema';
 import { captureSlide } from './render';
+import { captionText } from './caption';
 
 export async function exportDeck(deck: Deck, signal?: AbortSignal, metrics?: (value: { renderMs: number; renderCacheHits: number }) => void): Promise<Buffer> {
   const start = Date.now(); let hits = 0;
@@ -25,6 +26,7 @@ export async function exportDeck(deck: Deck, signal?: AbortSignal, metrics?: (va
         const png = capture.png;
         archive.append(Buffer.from(png), { name: `slide-${String(index + 1).padStart(2, '0')}.png` });
       }
+      if (deck.caption) archive.append(captionText(deck), { name: 'caption.txt' });
       await archive.finalize();
       const result = await complete; metrics?.({ renderMs: Date.now() - start, renderCacheHits: hits }); return result;
     } catch (error) { archive.abort(); throw error; }

@@ -5,8 +5,11 @@ export const sizeSchema = z.object({
   width: z.number().int().min(200).max(2400),
   height: z.number().int().min(200).max(2400),
 });
-export const assetReference = z.string().regex(/^\/api\/assets\/[a-f0-9]{64}\.(jpg|png|webp|gif|svg|avif)$/);
-export const slideSchema = z.object({ html: z.string().min(1), diagnostics: z.array(z.string()).optional(), renderedText: z.string().optional() });
+// Images, plus retained web-font stylesheets (fonts inlined) so slides render the same offline.
+export const assetReference = z.string().regex(/^\/api\/assets\/[a-f0-9]{64}\.(jpg|png|webp|gif|svg|avif|css)$/);
+export const slideSchema = z.object({ html: z.string().min(1), alt: z.string().optional(), diagnostics: z.array(z.string()).optional(), renderedText: z.string().optional() });
+export const captionSchema = z.object({ text: z.string(), hashtags: z.string().default(''), firstComment: z.string().default('') });
+export type Caption = z.infer<typeof captionSchema>;
 export const slideDirectionSchema = z.object({ slide: z.number().int().positive().max(Number.MAX_SAFE_INTEGER), text: z.string() });
 export const slideDirectionDraftSchema = slideDirectionSchema.extend({ id: z.string().min(1) });
 export const deckSchema = sizeSchema.extend({
@@ -16,6 +19,7 @@ export const deckSchema = sizeSchema.extend({
   originSlideDirections: z.array(slideDirectionSchema).optional(),
   originTask: z.string().optional(),
   assets: z.record(assetReference).optional(),
+  caption: captionSchema.optional(),
 });
 const imageReference = z.string().refine(value => /^data:image\/jpeg;base64,/.test(value) || /^\/api\/assets\/[a-f0-9]{64}\.jpg$/.test(value), 'Invalid reference image');
 export const MAX_REVISION_REFERENCES = 8;
@@ -34,7 +38,22 @@ export const brandSchema = z.object({
   captures: z.array(imageReference).default([]),
   previews: z.array(z.object({ url: z.union([z.string().url(), assetReference]), thumbnail: imageReference, original: assetReference.optional(), width: z.number().optional(), height: z.number().optional(), description: z.string().optional() })).default([]),
   selectedImages: z.array(z.union([z.string().url(), assetReference])).optional(),
+  description: z.string().optional(),
+  // The page's main text when it reads as an article: content to adapt, not style.
+  article: z.object({ title: z.string(), text: z.string() }).optional(),
+  // What the analysis suggests for the brand kit; the user's own kit always wins.
+  kitHints: z.object({ handle: z.string(), voice: z.string(), colors: z.array(z.string()), fonts: z.array(z.string()), logo: assetReference }).partial().optional(),
 });
+// What every post for this brand should carry. Survives "New post"; lessons are learned from revisions.
+export const kitSchema = z.object({
+  handle: z.string().max(60).default(''), voice: z.string().max(2000).default(''), rules: z.string().max(2000).default(''),
+  colors: z.array(z.string().max(40)).max(12).default([]), fonts: z.array(z.string().max(60)).max(6).default([]),
+  logo: assetReference.optional(), lessons: z.array(z.string().max(300)).max(16).default([]),
+}).default({});
+export type Kit = z.infer<typeof kitSchema>;
+export const versionSchema = z.object({ deck: deckSchema, instruction: z.string() });
+export type Version = z.infer<typeof versionSchema>;
+export const MAX_VERSIONS = 15;
 export const modelSelectionSchema = z.object({
   analyze: z.string().max(200).default('latest:sonnet'), generate: z.string().max(200).default('latest:opus'), revise: z.string().max(200).default('latest:opus'),
   complete: z.string().max(200).default('latest:haiku'), rephrase: z.string().max(200).default('latest:sonnet'), chat: z.string().max(200).default('latest:sonnet'),
@@ -59,7 +78,7 @@ export const writingSchema = z.object({
 }).default({ autocomplete: true, draft: '', messages: [] });
 export type WritingMessage = z.infer<typeof writingMessageSchema>;
 export const agentActionSchema = z.object({
-  type: z.enum(['analyze', 'generate', 'revise', 'inspect', 'export', 'undo', 'redo', 'set_brief', 'move_earlier', 'move_later', 'duplicate', 'delete']),
+  type: z.enum(['analyze', 'generate', 'revise', 'inspect', 'export', 'undo', 'redo', 'set_brief', 'move_earlier', 'move_later', 'duplicate', 'delete', 'set_canvas', 'remix']),
   instruction: z.string(), url: z.string(), target: z.number().int().nonnegative().nullable(), referenceUrls: z.array(assetReference),
 });
 export type AgentAction = z.infer<typeof agentActionSchema>;
@@ -105,9 +124,15 @@ export const workspaceSchema = sizeSchema.extend({
   slideDirections: z.array(slideDirectionDraftSchema).default([]),
   brand: brandSchema.nullable(),
   references: z.array(brandSchema).default([]),
+  kit: kitSchema,
+  pinned: z.array(revisionReferenceSchema).max(MAX_REVISION_REFERENCES).default([]),
+  polish: z.boolean().default(true),
   deck: deckSchema.nullable(),
   previous: z.object({ deck: deckSchema, instruction: z.string() }).nullable().default(null),
   redo: z.object({ deck: deckSchema, instruction: z.string() }).nullable().default(null),
+  // Undo and redo stacks; previous and redo mirror their newest entries.
+  history: z.array(versionSchema).max(MAX_VERSIONS).default([]),
+  future: z.array(versionSchema).max(MAX_VERSIONS).default([]),
   revisionText: z.string().default(''), revisionScope: z.enum(['slide', 'deck']).default('slide'), revisionTarget: z.number().int().nonnegative().default(0),
   revisionReferences: z.array(revisionReferenceSchema).max(MAX_REVISION_REFERENCES).default([]),
   lastInstruction: z.string().default(''),
@@ -119,6 +144,8 @@ export const generateSchema = workspaceSchema.extend({
   slideIndex: z.number().int().nonnegative().optional(),
   generationTask: z.string().optional(),
   generationReferences: z.array(revisionReferenceSchema).max(MAX_REVISION_REFERENCES).optional(),
+  // Re-flow the current deck into this canvas as a new deck (carousel → story and back).
+  remix: z.boolean().optional(),
 });
 export type SlideDirection = z.infer<typeof slideDirectionSchema>;
 export type SlideDirectionDraft = z.infer<typeof slideDirectionDraftSchema>;
@@ -127,4 +154,4 @@ export type Brand = z.infer<typeof brandSchema>;
 export type Workspace = z.infer<typeof workspaceSchema>;
 export type GenerationInput = z.infer<typeof generateSchema>;
 export type RunRecord = z.infer<typeof runSchema>;
-export const emptyWorkspace: Workspace = { brief: '', models: modelSelectionSchema.parse(undefined), writing: writingSchema.parse(undefined), agent: agentStateSchema.parse(undefined), recentRuns: [], slideDirectionsEnabled: false, slideDirections: [], brand: null, references: [], deck: null, width: 1080, height: 1350, previous: null, redo: null, revisionText: '', revisionScope: 'slide', revisionTarget: 0, revisionReferences: [], lastInstruction: '', lastRun: null };
+export const emptyWorkspace: Workspace = { brief: '', models: modelSelectionSchema.parse(undefined), writing: writingSchema.parse(undefined), agent: agentStateSchema.parse(undefined), recentRuns: [], slideDirectionsEnabled: false, slideDirections: [], brand: null, references: [], kit: kitSchema.parse(undefined), pinned: [], polish: true, deck: null, width: 1080, height: 1350, previous: null, redo: null, history: [], future: [], revisionText: '', revisionScope: 'slide', revisionTarget: 0, revisionReferences: [], lastInstruction: '', lastRun: null };

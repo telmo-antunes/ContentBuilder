@@ -1,4 +1,4 @@
-import type { UsageInfo } from './operation';
+import type { SlideEvent, UsageInfo } from './operation';
 
 export class ClientError extends Error {
   constructor(message: string, public status = 0) { super(message); }
@@ -12,7 +12,7 @@ export async function jsonRequest<T>(path: string, value?: unknown, method = 'PO
   return result as T;
 }
 export async function streamRequest<T>(path: string, value: unknown, signal: AbortSignal,
-  onProgress: (message: string) => void, onUsage: (usage: UsageInfo) => void): Promise<T> {
+  onProgress: (message: string) => void, onUsage: (usage: UsageInfo) => void, onSlide?: (event: SlideEvent) => void): Promise<T> {
   const response = await fetch(`/api/${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(value), signal });
   if (!response.ok) throw new ClientError((await response.json()).error || 'The request failed.', response.status);
   const reader = response.body!.getReader();
@@ -30,6 +30,7 @@ export async function streamRequest<T>(path: string, value: unknown, signal: Abo
         const event = JSON.parse(line);
         if (event.type === 'progress') onProgress(event.message);
         if (event.type === 'usage') onUsage(event.usage);
+        if (event.type === 'slide') onSlide?.(event);
         if (event.type === 'error') throw new ClientError(event.message);
         if (event.type === 'result') { signal.throwIfAborted(); return event.value as T; }
       }
@@ -45,7 +46,7 @@ export function downloadJson(value: unknown, filename = 'contentbuilder-draft.js
 
 const assetPromises = new Map<string, Promise<string>>();
 export function previewAsset(reference: string): Promise<string> {
-  if (!/^\/api\/assets\/[a-f0-9]{64}\.(jpg|png|webp|gif|svg|avif)$/.test(reference)) return Promise.reject(new Error('Invalid saved image'));
+  if (!/^\/api\/assets\/[a-f0-9]{64}\.(jpg|png|webp|gif|svg|avif|css)$/.test(reference)) return Promise.reject(new Error('Invalid saved image'));
   let promise = assetPromises.get(reference);
   if (!promise) {
     promise = fetch(reference).then(async response => {

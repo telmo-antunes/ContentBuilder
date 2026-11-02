@@ -10,7 +10,7 @@ type Props = {
 };
 
 export function Choices({ message, disabled, onSend }: { message: AgentMessage; disabled: boolean; onSend: (text: string) => void }) {
-  if (!message.choices?.length || message.action) return null;
+  if (!message.choices?.length || (message.action && message.actionStatus !== 'done')) return null;
   return <div className="choices">{message.choices.map((choice, i) => <button type="button" key={i} style={{ '--i': i } as CSSProperties}
     className="chip choice" disabled={disabled} onClick={() => onSend(choice.message)}>{choice.label}</button>)}</div>;
 }

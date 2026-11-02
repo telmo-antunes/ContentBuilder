@@ -125,6 +125,26 @@ async function buildImageSheets(images: VisualReference[], signal?: AbortSignal)
   }, false, signal);
 }
 
+/** Shrink full-size captures for the model: enough to judge type and spacing, far fewer tokens. */
+export async function downscale(images: VisualReference[], width: number, signal?: AbortSignal): Promise<VisualReference[]> {
+  if (!images.length) return [];
+  const key = cacheKey(['downscale-v1', width, images]);
+  const previous = cached<VisualReference[]>(key); if (previous) return previous;
+  const result = await withPage(async page => {
+    const output: VisualReference[] = [];
+    for (const image of images) {
+      signal?.throwIfAborted();
+      await page.setViewport({ width, height: width, deviceScaleFactor: 1 });
+      await page.setContent('<html><body style="margin:0"><img style="display:block;width:100%;height:auto"></body></html>');
+      const height = await page.$eval('img', async (element, data) => { element.src = data; await element.decode(); return element.getBoundingClientRect().height; }, image.data);
+      await page.setViewport({ width, height: Math.max(1, Math.ceil(height)), deviceScaleFactor: 1 });
+      output.push({ label: image.label, data: `data:image/jpeg;base64,${Buffer.from(await page.screenshot({ type: 'jpeg', quality: 82 })).toString('base64')}` });
+    }
+    return output;
+  }, false, signal);
+  remember(key, result, JSON.stringify(result).length); return result;
+}
+
 export async function revisionImages(deck: Deck, index: number | undefined, operation: Operation): Promise<VisualReference[]> {
   const start = Date.now(); let hits = 0;
   const images = await withPage(async page => {
@@ -137,6 +157,7 @@ export async function revisionImages(deck: Deck, index: number | undefined, oper
     }
     return output;
   }, false, operation.signal);
-  const result = index === undefined && images.length > 1 ? await imageSheets(images, operation.signal) : images;
+  // Up to ten slides go one by one at phone-review size; bigger decks fall back to contact sheets.
+  const result = index === undefined && images.length > 10 ? await imageSheets(images, operation.signal) : await downscale(images, 540, operation.signal);
   operation.usage({ renderMs: Date.now() - start, renderCacheHits: hits }); return result;
 }

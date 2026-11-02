@@ -27,6 +27,15 @@ The screen is the post, previewed the way Instagram shows it, and one bar at the
 - **Conversation** (speech-bubble button) shows the full exchange with the agent; the latest reply also floats above the bar with tappable choices.
 - **Settings** (sliders button) holds the format, websites the agent learned from (notes and which images it may use), the brief for this post, AI models, render checks, and saving or opening a portable copy.
 
+- **Watch it being made:** slides appear one by one as the model writes them. A polish pass then looks at the result at phone size and fixes clipped text, small type and weak contrast (switch it off in Settings).
+- **Caption:** every post comes with its Instagram caption, hashtags, a first comment and alt text per slide. Tap the caption under the post to copy them; the ZIP includes `caption.txt`.
+- **Options:** the slide menu's "Show me 3 options" designs three alternatives for that slide; tap one to use it.
+- **Story or feed version:** the slide menu re-flows the post into a 9:16 story (or back into a feed post) as a new version. The agent can also do it ("make a story version") and change the format for the next post.
+- **Versions:** the clock button lists up to 15 earlier versions; tap one to return to it, and come forward again the same way.
+- **Brand kit** (Settings): handle, colours, fonts, voice, logo and always/never rules that every post follows and that survive "New post". Learning a website fills the empty fields. Revisions that state a lasting preference ("never say cliente") are saved as lessons; remove any you don't want.
+- **Pinned inspiration** (Settings, or the pin on an attached image): images whose look every post learns from, without copying their content.
+- **Articles:** when the link you give is an article, its text becomes the post's content source.
+
 Changes happen straight away (direct mode); the agent decides whether a message is a question, a new post or a revision, and runs the action. Turn on **Ask before changing slides** in Settings to get a proposal to approve first. The agent can chain up to five read-only steps (website analysis, checks) per message and runs at most one slide change.
 
 ## Engine
