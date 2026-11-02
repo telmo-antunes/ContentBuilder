@@ -1,237 +1,111 @@
 # ContentBuilder
 
-Internal web app that turns a business into on-brand Instagram content. It first authors a **Brand Recipe** — a complete per-brand design system (tokens, an authored stylesheet, a component vocabulary, composition patterns, a motion signature) — and then composes **carousels** (1:1 or 4:5 multi-slide posts) and **stories** (9:16 frames) against it. Slides are exported as pixel-exact PNGs or as animated per-slide MP4 clips.
+A local content agent for discussing ideas, using website inspiration, creating slides, reviewing them and exporting PNGs. Every slide change starts as an explicit proposal.
 
-## The core idea
+## Run
 
-**Author once, compose cheap, gate deterministically.**
+Use Node 22.12 or newer.
 
-- **Author once** — the expensive, design-critical AI call runs once per brand: it writes the brand's design system (real CSS scoped to the slide root, written against injected `--cb-*` tokens). Every future post reuses it.
-- **Compose cheap** — turning an idea into slides is a small-model call: parse the idea into per-slide roles and verbatim copy parts, then arrange those parts using **only the brand's own classes**. The look comes from the recipe, not from per-slide creativity. *(The classic engine. Since 2026-10-22 the default is the **designer that sees** — one design-tier call that writes the whole deck against the recipe and is reviewed on the owner's rubric; see [docs/designer.md](docs/designer.md). The deterministic gates below still hold either way.)*
-- **Deterministic quality gates** — code, not prompts, guarantees the floor at render time:
-  - **Contrast repair** — ink is held to WCAG AA body text and the accent to AA large text against the ground; failing colors are walked toward white/black until they pass.
-  - **Type floor** — every canvas is 1080px wide and read on a ~393pt phone (≈ px / 2.75), so a deterministic pass raises any undersized type to a legible minimum.
-  - **Class consistency** — components advertised to the composer but never defined in the stylesheet are dropped; authored HTML and CSS are sanitized.
-  - **Vertical rhythm** — a `.fill` spacer left dangling at the end of a composition (its handle absent, its photo slot unused) grows into empty canvas and leaves the bottom half of the poster blank; the slack is moved behind the top-edge labels instead, and a separator that separates nothing is dropped.
-  - **Structural honesty** — a list never loses its rows to a photograph or to the overflow repair, prose never ships in the `.handle`, over-long copy ends on a finished clause rather than an ellipsis, and markdown emphasis the copywriter typed is read as the accent it meant rather than printed as asterisks.
-  - **Render-verify (optional)** — the recipe's own output can be rendered, screenshotted, and revised by a vision model before it ships (`POST /brandkits/:kitId/recipe?verify=1`).
-
-The app runs without an Anthropic key: website analysis falls back to heuristic color roles, and the AI compose/candidate/caption buttons disable. Manual kit entry, editing, rendering, and export all keep working.
-
-## Monorepo layout
-
-| Path | What it is |
-| --- | --- |
-| `apps/web` | Next.js (App Router, TS) — the UI, plus a hidden `/render` route the exporters and the render-verify pass drive. Proxies `/api/*` to the API so the opt-in Basic auth covers both. |
-| `apps/api` | Express (TS) — Anthropic calls, Puppeteer capture/render, ffmpeg video encode, Mongo (Mongoose), storage, zip streaming. |
-| `packages/shared` | One source of truth for both apps: the Brand Recipe schema + render helpers, formats/dimensions, contrast math, the type floor, slide photos & motion, bundled fonts. |
-| `scripts/` | Dev helpers: bundled `mongod` launcher, font bundler. |
-
-## The user flow
-
-1. **Brand** — add a business (name, website URL) from the home Desk's brand rail.
-2. **Profile** — fill in the deterministic business profile (category, offer, audience, tone, goal). Required before AI analysis.
-3. **Analyze** — `POST /businesses/:id/analyze` drives Puppeteer at the site: screenshot, pixel-sampled palette, DOM-computed color roles, detected fonts (kept when they exist on Google Fonts, else mapped to a bundled lookalike), DOM logo. A vision pass assigns color roles, a style descriptor, and a voice line (heuristics without a key). The site's biggest photos are harvested into the brand's media library. Low-quality captures retry once and are flagged.
-4. **Kit approval** — every kit is a draft until a human approves it. Edits to kit colors/fonts re-point the recipe's tokens (with a live diff preview in the UI), and contrast is re-checked.
-5. **Recipe** — authored automatically on first approval, or explicitly from the brand-kit screen. You can also author 2–3 **candidates** concurrently, each with a different creative direction, and pick one visually (`/recipe/candidates` → `/recipe/select`). Direct knobs (accent, display case, density, motion style/pace) apply instantly without a re-author.
-6. **Compose** — `/projects/new`: pick a brand, carousel or story plus a format, and write the **brief**; `POST /projects/:id/compose` replaces the slides (the previous state is version-snapshotted). The brief is a small language, not just a paragraph — see [The brief](#the-brief) below. How many slides the deck gets is derived from the material, not dialled in. A slide that wants imagery arrives with the brand's own photograph already in its slot, and only ever asks for a slot the brand can fill.
-7. **Studio** — `/projects/:id/review`: reorder the deck, **direct one slide** (a prompt, or exact copy in quotes, that rewrites that slide alone), re-compose a single slide into alternatives (keeping the copy) or into new copy (keeping the arrangement), apply instant deterministic tweaks (headline size, inverse surface), edit copy on-canvas, attach photos (uploads, harvested site photos, a Pexels stock picker; background / slot / free placements), replay the motion, write or regenerate the caption, browse and restore version history (up to 20 snapshots).
-8. **Export** — PNG zip or animated MP4 (details below). The Share button surfaces LAN links: `/preview/:id` (live, swipeable, works before any export) and `/share/:id` (phone hand-off that feeds exported PNGs to the native share sheet).
-9. **Desk** — the home page: every post across every brand on a lifecycle board (`idea → drafting → ready → shipped`). A final export (the Studio's Export button, or `POST /export` with `{ "final": true }`) advances a post to `shipped`; a review export leaves the stage alone. The rest is drag/edit.
-
-## AI touchpoints
-
-Every touchpoint resolves its model as: per-feature override saved in Settings (`/settings`, stored in Mongo) → env tier → fallback down the stack. Token usage and estimated cost are recorded and shown on the Settings page (`GET /usage`).
-
-| Feature | Env tier (fallbacks) | When it runs | Without a key |
-| --- | --- | --- | --- |
-| Brand vision (color roles, style, voice) | `ANTHROPIC_MODEL_FREE` → `ANTHROPIC_MODEL` | Once per analyze | Heuristic color roles |
-| Recipe author (the design system) | `ANTHROPIC_MODEL_DESIGN` → `_FREE` → `_SMALL` → `ANTHROPIC_MODEL` | Once per brand (approval or on demand; ×2–3 for candidates) | Disabled |
-| Parse (brief + source → the deck's copy) | `ANTHROPIC_MODEL_FREE` → `_SMALL` → `ANTHROPIC_MODEL` | Once per post (twice if a budget or a verbatim line needs correcting); once per slide for a Studio rewrite | Disabled |
-| Compose (copy → authored slides; slide variants) | `ANTHROPIC_MODEL_SMALL` → `ANTHROPIC_MODEL` | Once per slide (skipped entirely when the recipe has fragments) — the **classic** engine | Disabled |
-| Design (copy → the whole deck, pictures and a deck stylesheet) | `ANTHROPIC_MODEL_DESIGN` → `_FREE` → `_SMALL` → `ANTHROPIC_MODEL` | Once per post, plus one revision when the review earns it — the **designer** engine (docs/designer.md) | Disabled |
-| Design review (the rendered deck, scored on the rubric) | same as Design | Once per design round | Disabled |
-| Caption | `ANTHROPIC_MODEL_FREE` → `_SMALL` → `ANTHROPIC_MODEL` | On demand per post | Disabled |
-
-`POST /projects/:id/compose` runs the **designer** engine whenever a design tier is configured (Settings › Compose engine chooses explicitly; a request may pass `engine`). The designer sees the brand's stylesheet and fragments, every slide's copy and the tagged library, writes the whole deck in one call, is shown the rendered contact sheet scored on `docs/audit/rubric.md`, and revises once when that review finds a blocking fault or a dimension at 2. The better round ships. A slide that lost or added copy falls back to the classic composer for that slide alone.
-
-The two halves of a compose sit on **different tiers on purpose**. The parse writes
-every headline and row from one sentence of idea — it runs once per deck and is the
-most quality-determining output in the product, so it gets the better model. The
-compose only arranges copy it may not alter, into classes the recipe already fixed,
-under a guard chain that repairs it mechanically — it runs once per slide, so it
-gets the cheap tier. Each is independently overridable from Settings
-(`parseModel`, `composeModel`).
-
-(`ANTHROPIC_MODEL_FREE` is historical naming — it is the vision/judgment tier, not a free tier.)
-
-## The brief
-
-What you type into the composer is parsed (`packages/shared/src/brief.ts`), not merely
-forwarded. Nothing here costs a model call — it is all string work, and the composer
-screen runs the same parser so it can show you what it understood *before* you spend a
-compose on it.
-
-- **A link is read.** Any `http(s)` URL in the brief is fetched, reduced to readable text
-  with its structure intact — headings, paragraphs, list items in document order — and
-  handed to the copywriter as THE MATERIAL (`apps/api/src/lib/sourceIngest.ts`). "Create a
-  carousel based on this blog post <url>" now writes from the post's real headline, real
-  structure and best actual lines instead of from the slug. SSRF-guarded by the same gate
-  analyze uses, capped, and best-effort: a link that will not load is reported back with
-  the reason and the deck is written from your own words.
-- **A plan is an order.** The composer's optional slide-plan editor takes one direction per
-  slide; a brief that already contains `Slide 1: … / Slide 2: …` is lifted into the same
-  shape automatically. A plan fixes the deck exactly: one slide per entry, in that order.
-- **Quotes are verbatim.** Anything in `"double quotes"` must appear word for word in the
-  slide it belongs to. It survives the copywriter (a corrective re-parse fires if it does
-  not), and it is never shortened by a copy budget.
-- **The deck length is derived.** With no plan, the count follows the volume of material,
-  weighted by kind — your words are already slide-shaped, an article is prose that has to
-  be cut down. The old manual stepper is gone.
-
-The same language works on ONE slide: the Studio's *Direct this slide* box rewrites the
-selected slide alone from a prompt, honouring quoted copy, leaving the rest of the deck
-untouched.
-
-## What the app learns from you
-
-Every post is a small experiment, and until now nobody was recording it. The app
-wrote a deck, you quietly cut the headline in half, deleted the tagline and
-shipped it — and the next post was written by a copywriter that had never heard
-about any of it. The corrections were the most valuable thing in the product and
-they evaporated on save.
-
-So the loop is closed, in four deterministic steps:
-
-| Step | Where | What happens |
-| --- | --- | --- |
-| **Capture** | `apps/api/src/models/Generation.ts` | Every compose stores what made it: the copywriter's USER message, each slide's composer message, the copy parts it wrote and the markup it shipped. (The SYSTEM prompts are not stored — they are identical for every brand and already versioned in the prompt registry.) |
-| **Signal** | `apps/api/src/lib/learningLoop.ts` | Saving or exporting a post diffs what shipped against what was generated, **by copy part**, not by markup — so a font size the type floor raised is never mistaken for a person's edit. Three things the copy diff *cannot* see are recorded as they happen: which slide you **dragged**, a **tweak** you pressed, and an **arrangement** you swapped for an alternative. |
-| **Lesson** | `packages/shared/src/learning.ts` | The signal is aggregated until it repeats. A lesson exists only when at least **three** independent corrections agree, and it carries the posts it came from. |
-| **Apply** | the parse step | Lessons ride in the copywriter's USER message — and where a lesson is numeric, it moves the copy budget too. A sentence can be ignored; a clamp cannot. |
-
-**No model is involved in any of it.** Every function is arithmetic over strings,
-because a learning system that needs a model to decide what it learned cannot be
-audited, cannot be tested, and cannot explain itself to the person it is learning
-about.
-
-What it can currently learn: a part you consistently **shorten** (with the median
-amount), a part you consistently **delete**, a **role** whose slides you keep
-cutting or keep **moving** (and in which direction), a role whose **arrangement**
-you keep swapping out, and words you always take out or always put in.
-
-Two of those deserve a note, because they are where the signal is easiest to get
-wrong:
-
-- **Pressing "smaller headline" counts the same as retyping the headline
-  shorter.** Both are you saying the line is too long for the canvas; only one
-  leaves a copy diff, and counting only that one taught nothing to anyone who
-  uses the button. Presses are netted — pressing "bigger" after "smaller" is a
-  withdrawal, not two opinions.
-- **A reorder records the slide you dragged, not the ones it pushed.** Moving one
-  slide to the front displaces every slide it passed, so a single drag produces
-  three or four movements and only one was a decision. Recording all of them
-  taught *"you move the statement slide later"* from a user who had dragged the
-  stat slide earlier — true, and the wrong lesson.
-
-**You can see all of it, and switch any of it off.** The brand screen lists every
-lesson with its evidence — the actual before/after of the edits it came from —
-and one click stops it being applied. Nothing here re-composes a post or rewrites
-a recipe on its own.
-
-### Photographs are never a placeholder
-
-A slide only asks for a photo slot when the brand can actually fill one — the role's
-recipe fragment has a hole for it, AND the brand's media library has an unspent picture
-whose bytes are really in storage. Composing then attaches the brand's own photographs
-(harvested site images first, then uploads; never stock) into the slots it left. An empty
-`cb-shot` renders as a dead grey rectangle over a third of the poster, which is strictly
-worse than a slide composed as pure type.
-
-## Environment variables
-
-All read from a single `.env` at the repo root (see `.env.example`).
-
-| Var | Purpose |
-| --- | --- |
-| `MONGODB_URI` | MongoDB connection string (default `mongodb://127.0.0.1:27017/contentbuilder`) |
-| `API_PORT` / `API_URL` | Express port (default 4000) / its URL (used by the web proxy and exporters) |
-| `WEB_URL` | Next.js URL (default `http://localhost:3000`) — CORS origin + what Puppeteer renders against |
-| `NEXT_PUBLIC_API_URL` | Optional override for the browser bundle; by default the browser uses the same-origin `/api` proxy |
-| `APP_PASSWORD` | Optional shared password. When set it gates **both** the web UI (Basic auth in `apps/web/middleware.ts`) **and** the API (Basic auth in `apps/api/src/app.ts`, exempting `/health` and media reads). Unset = open (local dev). |
-| `STORAGE_PROVIDER` / `STORAGE_DIR` | Storage backend (`disk` only for now) + its directory (default `./storage`) |
-| `ANTHROPIC_API_KEY` | Optional — unset disables the AI touchpoints as described above |
-| `ANTHROPIC_MODEL` | Base model tier (also the "vision configured" requirement) |
-| `ANTHROPIC_MODEL_SMALL` | Cheap tier: the per-slide compose + the "AI draft configured" gate (compose/caption routes) |
-| `ANTHROPIC_MODEL_FREE` | Vision/judgment tier (vision, captions, photo fit) |
-| `ANTHROPIC_MODEL_DESIGN` | Design-critical tier: recipe authoring; falls back down the stack when unset |
-| `PEXELS_API_KEY` | Optional — enables the stock-photo search/picker (free at pexels.com/api) |
-| `ALLOW_PRIVATE_URLS` | `true` disables the SSRF guard so analyze/harvest may hit private/localhost hosts. Dev only. |
-
-Independent of auth, expensive POST routes (`/analyze`, `/recipe`, `/recipe/candidates`, `/compose`, `/caption`, `/export`) are rate-limited to 30 requests per 5 minutes per IP.
-
-## Getting started
-
-Prerequisites: Node ≥ 20. No system MongoDB needed — `npm run dev` starts a bundled, prebuilt `mongod` (via `mongodb-memory-server`) on `localhost:27017` with a persistent data dir at `.mongo-data/`. Any real MongoDB drops in by pointing `MONGODB_URI` at it.
-
-```bash
-cp .env.example .env        # AI keys optional — leave blank to run without AI
-npm install                 # installs all workspaces
-npm run fonts               # bundle license-clear fonts into apps/web/public/fonts
-npm run dev                 # bundled Mongo (:27017) + API (:4000) + Web (:3000)
+```sh
+npm install
+cp .env.example .env  # only for a new installation; keep an existing .env
+# Set ANTHROPIC_API_KEY in .env; optionally set ANTHROPIC_MODEL as the default.
+npm run dev
 ```
 
-Then, in another shell:
+Open http://localhost:3000. The server binds to the local computer only. Choose an available Claude model independently for website analysis, generation and revisions. The lists come from your configured Anthropic provider and are cached for five minutes; new drafts use Latest Sonnet for analysis/rephrasing/chat, Latest Haiku for autocomplete, and Latest Opus for generation/revision. Latest-category choices resolve against the provider catalog at request time and never switch tiers. You can still pin an individual version; the optional ANTHROPIC_MODEL supplies the legacy configured-default choice. Explicitly unsupported choices are disabled. There is no database service or separate API server.
 
-```bash
-npm run seed
-```
+## Conversation
 
-> **`npm run seed` is destructive.** It wipes ALL businesses, brand kits, projects, and media before recreating the demo state. It seeds three real brands — **Apex Auto Detailing**, **Dynatós Program**, and **DetailMasters CRM** — with approved kits (Dynatós and DetailMasters include hand-authored reference recipes).
+The workspace opens in **Conversation**. Ask for ideas, attach reference images, discuss a selected slide, or describe the result you want. The agent receives the current brief, active numbered directions, website notes, rendered slides, uploaded images, and recent conversation. It can ask a focused clarification question or offer alternatives with selectable replies; free-text answers work too. **Agent settings** selects its model independently (Latest Sonnet by default).
 
-- Web: http://localhost:3000
-- API health: http://localhost:4000/health (reports DB state + which AI paths are configured)
+Creating, revising, reordering, duplicating, deleting, undoing and redoing slides always require **Apply proposal**. You can explore alternatives or dismiss a proposal. Discussing a change does not apply it. Proposals that refer to a changed deck, brief, model, reference or selected slide cannot be applied until the context matches or the agent makes a new proposal. A proposed main-brief rewrite also requires approval and shows a wording diff.
 
-### Migrations
+Website analysis, render inspection and PNG preparation can run directly when requested. Results return to the conversation. The agent can chain up to five read-only steps per reply; each proposed mutation pauses for approval. It cannot publish posts, send messages, change model settings, or perform arbitrary web research. Website analysis remains its browsing tool.
 
-Schema changes are normally tolerated on read (Mongoose strict mode ignores unknown stored fields; zod strips them at the wire boundary), so most old documents need nothing. A migration exists only where ignoring a field would lose data.
+Messages, pending proposals, the unsent message and attachments save with the draft and portable files. The latest 100 messages are retained; each reply receives the latest 30, up to eight recent uploaded references, a deck contact sheet and the selected slide. Reloading keeps pending proposals; an unanswered saved message offers **Resume reply**. Requests can be stopped and failed actions do not retry automatically. The original instruction fields are preserved unless you explicitly apply a brief rewrite. Approved conversational direction is sent alongside the original brief; newly generated decks retain it for later revisions.
 
-```bash
-npm run migrate:photos -- --dry-run   # report what would change; writes nothing
-npm run migrate:photos                # migrate (honours MONGODB_URI)
-npm run media:orphans                 # media records whose file is gone — report only
-npm run media:orphans -- --apply      # …and remove the ones nothing points at
-```
+## Brief & settings
 
-**`migrate:photos`** retires the pre-photos-layer `slide.mediaAssetId`. A slide's pictures now live in `slide.photos[]` (slot fills / background / free overlays); the single legacy id is folded in as a `background` photo (`fit: 'cover'`), or simply dropped when `photos[]` already declares a background — the array is authoritative. It covers version snapshots too, so restoring an old version keeps its photo. Idempotent: a second run reports zero changes.
+The detailed controls remain available in the **Brief & settings** tab:
 
-## Testing
+1. Optionally enter a public website and click **Analyze**. The app samples up to three sections, extracts text, colors, fonts, logos and photos (including CSS backgrounds), prioritizes logos and larger images, then writes an editable inspiration note. Open the reference to choose which images the model may use and inspect larger previews, dimensions and descriptions. Selections of up to four images reach the model as individual 500 × 400 previews; larger selections use labeled contact sheets. Usable original images are retained locally when available (up to 5 MB per image and 24 MB per analysis). Analyzing another website adds a separate reference; analyzing the same URL refreshes it. Each reference has independent notes and image selection. Inline SVG/text header wordmarks are retained as rendered PNG assets when detected.
+2. Write your instructions. Specify exact copy, slide count, each slide's layout, or leave those decisions open. Optionally enable **Give instructions per slide**, add free-text fields, and choose the slide number for each. You can direct slides 1 and 4 and leave 2 and 3 to the model; the fields do not set a fixed total slide count. Keep general direction in the main brief and slide-specific text in the numbered fields; there is no need to duplicate it. The main brief can set the total. Specific slide instructions take priority for their slide, and you can generate using only these fields. Blank fields are ignored. Turning the option off keeps your notes for later but excludes them from generation. Choose the canvas dimensions.
+3. Choose the **Generation model** (or keep the configured default), then click **Create with the agent** (or **Discuss a new version**). Review its proposal and apply it. The generation model writes a complete deck of standalone HTML/CSS slides in one call.
+4. Select a slide, choose the **Revision model** if desired, and describe a revision. Choose that slide or the whole deck, click **Discuss this change**, and apply the resulting proposal. The revision includes a render of the selected slide, or contact sheets for a whole deck. **Compare previous** lets you inspect the prior version; **Undo last change** and **Redo last change** prepare proposals to restore or reapply it, including after a reload. Revision text, scope, target and pending reference images also survive reloads. **Add reference images** beneath the revision input accepts up to eight PNG, JPEG or WebP files (10 MB / 40 megapixels each). The model sees optimized image previews and can place the retained originals when requested; the canvas size stays fixed. Thumbnails can be opened or removed. Attachments clear after a successful revision, remain after a failed or stopped attempt, and are recorded under **Creation flow → Inputs used**. Pending and historical attachments travel with portable drafts. Revisions use the brief saved with the deck; the saved numbered directions travel with it too. If you edit the main brief or per-slide instructions, a checkbox explicitly opts into using the edited generation instructions for the revision. Manual slide moves, duplication and deletion keep saved directions associated with their slides; Undo/Redo restores that context. Older decks without a saved brief use the current main brief and show that limitation. Thumbnails and Fit / 100% zoom help review the result.
+5. **Download PNGs** renders the version you are viewing at its original pixel dimensions and downloads a ZIP. While comparing, the title, count, canvas dimensions and export all refer to the previous version. **Slide actions** offers reorder, duplicate, delete (with Undo), and a single-slide PNG download. Arrow keys and Home/End navigate the focused thumbnail strip.
+6. Generation runs informational render checks for missing assets, failed fonts and possible clipped text. Open the review notes or use **Check slides** to refresh them. Intentional text crops and transformed text can be flagged. Diagnostics never change HTML, rewrite copy or impose a design score.
+7. Open **Creation flow** above the preview for the live stage timeline, actual inputs, requested and reported model, timings and token usage. The last ten actions include successful, failed and cancelled runs. This is an event log of engine work; it adds no planning calls. Each completed run accepts optional instruction/copy/layout feedback and a note. Feedback saves with the run’s inputs, measurements and available output. The newest output and annotated outputs are retained within the last ten runs; older unannotated output snapshots are discarded. Save a portable draft before old runs leave the bounded history.
+8. The **Draft** menu saves and opens portable JSON bundles containing the workspace, both history slots, revision draft and retained image files. Opening validates the whole bundle before replacing anything; replacing existing work asks for confirmation. Portable files support up to 40 MB of embedded assets / 64 MB total.
 
-```bash
-npm test                    # vitest, one root config across all workspaces
+The current brief, reference, deck, Undo/Redo history, pending revision, agent conversation and attachments, writing conversation, generating brief, last applied instruction, per-action model choices and recent activity save automatically to `.data/workspace.json`. Website screenshots, thumbnails and retained original images are stored once by content hash in `.data/assets/`; the draft contains small image references. The asset cache is retained when starting or resetting drafts.
+
+**New draft** starts a new deck while keeping the website inspiration, canvas size and model choices. **Reset all** clears both the draft and its reference. Canvas changes apply to a new generation; revisions keep the current deck's dimensions.
+
+Opening a tab does not write anything. Saves are debounced and coalesced; each uses the version it loaded. If another tab saved first, the stale write is rejected. The local draft stays on screen so you can save a portable copy before loading the latest saved version. A text-only recovery download remains available if image bundling fails. Pending edits also get a versioned browser-local backup after 100 ms and when the page becomes hidden. On reopening, recovery is offered explicitly instead of silently overwriting the saved workspace. Browser storage limits or unavailable storage are reported; this is a recovery aid, not a guarantee against losing the final keystroke. The version guard assumes one running app process using this data directory.
+
+Operations show real phases, elapsed time and **Stop**, while existing slides remain browsable. Stopping leaves the current deck unchanged and aborts the model/render work. **Creation flow** shows each recorded stage and its duration, the exact brief and per-slide directions used, website notes and image URLs, revision scope, outcome, requested/reported model, input/output tokens, cache reads/writes, model time, rendering time and reused slide renders. Activity persists on completion, failure or cancellation; reloading an active request is warned against. Website contact-sheet preparation is included in total duration; rendering time measures slide capture/check work. Cancelled requests may have incomplete usage totals.
+
+## Writing assistance
+
+The main description has **Autocomplete** enabled by default. After you type at least eight characters and pause for 1.2 seconds, it requests a short continuation at the cursor. Press **Tab** or click **Accept continuation** to insert it; **Esc** dismisses it. Editing, selecting text, leaving the field, composition input, or starting a main action cancels pending suggestions. Suggestions never insert themselves. Turn the checkbox off to stop automatic requests; that preference survives a new draft.
+
+**Suggest rephrasing** reviews grammar and clarity. A word-level comparison shows additions and removals, with changed numbers, quoted wording and slide counts highlighted. Review and edit its proposed wording, then choose **Use this wording**. Rephrasing that drops quoted copy is rejected. New edits disable older proposals so they cannot overwrite newer work. **Undo accepted wording** restores the preceding description while the applied text is still unchanged.
+
+Use **Conversation** for clarification, creative alternatives and proposed brief rewrites. Earlier writing-assistant messages remain saved and available to the agent as context.
+
+**Writing assistant models** selects separate autocomplete and rephrasing models from the configured provider. These text-only actions require structured-output support, not vision. Autocomplete uses a small output budget, debounces typing, cancels superseded requests, and does not retry automatically. Usage shows requests, outcomes and reported tokens for the current draft, counted once per request even when stream events repeat totals. Three consecutive failures pause autocomplete until you resume it. Failed, stopped and interrupted requests can have incomplete usage; these are not billing totals. Each typing-pause request can incur provider usage. Rephrasing and chat run only on request. Model suggestions still need review for intent and factual accuracy.
+
+## Engine
+
+The generation path is deliberately small:
+
+- `src/lib/content-agent.ts` and `useContentAgent.ts`: contextual conversation, validated actions, proposals and explicit approval.
+- `src/lib/analyze.ts`: capture the website and describe its identity as inspiration.
+- `src/lib/ai.ts`: send the **original brief unchanged**, optional website evidence, and (for revisions) the current deck. The system prompt lives here, in plain text.
+- `src/lib/document.ts`: isolate active browser content while preserving static HTML, CSS, SVG and copy.
+- `src/lib/render.ts` and `export.ts`: capture the same sandboxed document for visual revisions and PNG export.
+- `src/lib/operation.ts`: stream progress and usage, and propagate cancellation.
+- `src/lib/storage.ts`: check the expected version and atomically save one JSON file.
+- `src/lib/useWorkspace.ts`: coalesce edits without saving unchanged loaded drafts.
+
+The model's structured output is `{ title, slides: [{ html }] }`. Only this transport envelope is constrained; the HTML strings have no design schema. The deck stores its generating brief, numbered slide directions, and a map of the retained image versions it uses. Preview, checks, revisions and export resolve those same originals without rewriting authored HTML. A bounded 64 MB / 100-entry in-memory cache reuses contact sheets and slide captures by HTML, canvas, renderer version and asset hashes. Captures with remote image/font resources expire after 30 seconds; self-contained captures and reference sheets expire after ten minutes. Failed asset loads are not cached, and **Check slides** bypasses the capture cache. Stable website reference blocks use explicit prompt caching when the provider's minimum token threshold is met. The original brief and latest instructions follow the cached prefix. Analysis models must support vision; generation and revision models must also support JSON-schema structured outputs. Saved choices are resolved against the provider, and an unavailable explicit choice returns an error without switching to the default. No slide roles, brand recipes, component vocabulary, fragment library, copy parser, text shortening, type floors, palette enforcement, scoring, learning loop, automatic repair, or template fallback remains. Website identity is optional context; explicit user instructions take priority. Invalid model output returns an error and leaves the current deck unchanged.
+
+Model compliance still depends on the model. A new generation that omits an explicitly directed slide returns an error. Beyond that structural check, the app does not claim to guarantee a requested total slide count or exact wording; it passes those directions through without converting them into a restrictive intermediate format.
+
+## Technical boundaries
+
+Slides are static documents. Scripts, event handlers, embedded pages, metadata redirects and base URLs are removed; the iframe sandbox and content policy disable executable content and forms. Layouts, colors, CSS selectors, type sizes, inline SVG and visual choices are left alone. HTTPS images and fonts are allowed. Retained image originals travel with portable drafts. Fonts and images that could not be retained still depend on the source website; missing image elements stop export with an explicit error. Background-image and font availability may still depend on the source site.
+
+Public website requests and export resources reject private network addresses. Website analysis uses an isolated browser context and checks redirected requests. This is a local tool, not a hardened multi-user hosting service. Do not expose it publicly without adding authentication and network-level egress controls.
+
+Canvas dimensions are 200–2400 px per edge and JSON request payloads are limited to 8 MB to bound browser memory. Reference-image uploads have a separate 10 MB limit per file. Slide generation reserves up to 64,000 output tokens (bounded by the provider model’s limit), including reasoning and HTML. Supported models use medium effort for slides. Writing assistance uses low effort for autocomplete and medium for rephrasing/chat; Haiku 5.5 disables thinking and Sonnet 5.5 uses its documented between-tools mode for these short interactive actions. Full model streams have deadlines: ten minutes for slide generation/revision, five minutes for website analysis, 90 seconds for rephrasing/chat, and 20 seconds for autocomplete. First-output latency, reported reasoning tokens, effort and model time are recorded separately from render time. A response-start event and explicit thinking blocks update the visible stage without exposing reasoning text. A failure never silently switches models or substitutes a template.
+
+## Checks
+
+```sh
 npm run typecheck
 npm run lint
+npm test
+npm run build
+npm start
 ```
 
-- **Unit tests** live next to their sources in `packages/shared/src` (contrast math, formats, recipe schema/gates, type floor, slide motion/photos, schemas) and `apps/api/src/lib` (AI helper, caption, fonts, sanitizers, stock, the legacy-photo migration).
-- **Integration suite** — `apps/api/src/routes/routes.integration.test.ts` runs the real Express app against an in-memory Mongo with every AI/Puppeteer boundary mocked. It covers validation → normalization → persistence → response, the foreign-media scrub, the SSRF guard, the rate limiter, recipe candidates/select, and the video-job lifecycle (including cancel).
+Tests also verify proposal requirements, stale-context invalidation, clarification stopping, image context, legacy conversation defaults, and portable conversation attachments. Tests cover untouched instructions and visual choices, selected image references, rendered revision context, isolated one-slide revisions, malformed-output errors, version conflicts, legacy draft loading, asset externalization, streamed progress/cancellation, network chunk boundaries, browser isolation, private URL rejection, and real Chromium PNG/ZIP export at exact dimensions. Coverage also includes portable restoration into a clean directory, tampered assets, pending browser recovery, Undo/Redo, generating-brief and per-slide-direction retention, sparse instructions, duplicate targets, portable per-slide drafts, model routing and capability checks, model-discovery outages, bounded activity history, clipped text, failed fonts, offline originals, and cache invalidation. The test suite makes no paid AI calls.
 
-## Export
+## Output quality benchmark
 
-**PNG** — `POST /projects/:id/export` renders every slide through the hidden `/render` route with Puppeteer at the project's exact pixel dimensions (the same React renderer the editor uses — what you see is what exports), persists the PNGs through the StorageProvider, and streams a zip (`01.png`, `02.png`, …). Exporting snapshots a version; with `{ "final": true }` in the body it also advances the Desk stage to `shipped` (the Studio sends it; a script pulling PNGs to review does not).
+With the app running, explicitly run:
 
-**MP4** — `POST /projects/:id/export-video` starts a durable job (`202` + job id; state lives in Mongo, the artifact in storage, so jobs survive a restart). Output is **one clip per slide** — correct for Instagram, where the viewer advances slides — each playing the brand's reveal choreography and then holding the settled composition. Capture is deterministic: CSS animations are paused and the timeline is stepped frame-by-frame at 30fps, then encoded with bundled ffmpeg. The client polls `GET /projects/:id/export-video/:jobId`; the same URL serves the finished download (a lone slide is one MP4, several are a zip). `POST …/cancel` stops a running job within a second or two. Finished artifacts are swept after ~24h.
+```sh
+npm run benchmark -- --name baseline
+npm run benchmark -- --name candidate --compare baseline
+# Recheck saved HTML with the current renderer, without model calls:
+npm run benchmark -- --name render-review --replay baseline --compare baseline
+```
 
-## The design system contract (the Brand Recipe)
+Normal runs use the configured paid model. The six fixed cases cover exact copy, unusual composition, overriding website identity, a narrow revision with an unrelated edited brief, a whole-deck revision, and dense copy. Use `--case exact-copy` (or another case ID from `benchmark.mjs`) for a focused run. Results never touch the saved workspace.
 
-Defined in `packages/shared/src/recipe.ts` (zod schema, versioned — stored recipes are migrated on read). A recipe carries:
+Each run writes PNGs, `results.json` with instructions/model/usage/timings and mechanical checks, and `review.html` in `.data/benchmarks/<name>/`. Names cannot overwrite an existing run. Open the review URL printed by the command (or the saved HTML file). The report compares renders side by side and provides explicit human judgment fields with a downloadable `judgments.json`. Ratings start **unreviewed**; record your assessment before changing prompts. Mechanical checks inspect rendered text and slide counts; they cannot establish overall design quality. The two verbatim-copy cases are case-sensitive; other cases allow typographic capitalization. Replays identify their source and make no model call.
 
-- **`tokens`** — ground/ink/accent colors, font families, radius; injected as `--cb-*` CSS custom properties on the slide root.
-- **`stylesheet`** — the authored, sanitized brand CSS, scoped to `.cb-slide` and written against the tokens; optionally split into `layers` (background / type / components) so a refinement can rewrite one layer without touching the rest.
-- **`components`** — the class vocabulary the composer is allowed to use, each with a one-line purpose. Per slide, the model writes only semantic markup using these classes.
-- **`composition.patterns`** — ordered arrangement recipes per slide role, with deterministic variant rotation so posts vary inside the system.
-- **`formats`** — per-format vertical overrides (all Instagram formats are 1080px wide; only vertical metrics differ across 1:1 / 4:5 / 9:16).
-- **`signature`**, **`typography`**, **`imagery`**, **`surfaces.inverse`**, **`voice`**, **`rationale`** — the recurring signature move, type settings, photo treatment and stock subjects, an optional inverse surface for rhythm, voice do's/don'ts, and why the choices were made.
-- **`motion`** — the brand's motion signature for video export: reveal style + pace, optional per-role overrides, ambient drift, and stat count-up.
-
-At render time the app assembles: base type CSS → the authored stylesheet passed through the **type floor** → surface CSS → the photo/media layer — and the **contrast gate** has already repaired any illegible tokens. Kit edits and recipe knobs re-point tokens without re-authoring, so the kit stays the single source of truth.
+The reset removed the previous applications and shared package, Mongo data, stored brands/projects/uploads/exports, recipe systems, reference collections, audit reports, experiments and old worktrees. Git history remains; the working app starts empty.

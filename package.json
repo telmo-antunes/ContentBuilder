@@ -1,47 +1,37 @@
 {
   "name": "contentbuilder",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "On-brand Instagram carousel & story asset generator (internal tool)",
-  "workspaces": [
-    "packages/*",
-    "apps/*"
-  ],
   "scripts": {
-    "dev": "concurrently -n db,api,web -c green,blue,magenta \"npm:db\" \"npm:dev:api\" \"npm:dev:web\"",
-    "db": "node scripts/start-mongo.mjs",
-    "dev:api": "npm --prefix apps/api run dev",
-    "dev:web": "npm --prefix apps/web run dev",
-    "build": "npm run build --workspace apps/api && npm run build --workspace apps/web",
-    "typecheck": "npm run typecheck --workspaces --if-present",
+    "dev": "next dev -H 127.0.0.1",
+    "build": "next build",
+    "start": "next start -H 127.0.0.1",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest",
-    "fonts": "node scripts/copy-fonts.mjs",
-    "seed": "npm --prefix apps/api run seed",
-    "eval:compose": "npm --prefix apps/api run eval:compose --",
-    "migrate:photos": "npm --prefix apps/api run migrate:photos --",
-    "migrate:media-urls": "npm --prefix apps/api run migrate:media-urls --",
-    "lint": "eslint .",
-    "migrate:recipes": "npm --prefix apps/api run migrate:recipes --",
-    "media:orphans": "npm --prefix apps/api run media:orphans --",
-    "media:tag": "npm --prefix apps/api run media:tag --",
-    "corpus:gate": "npm --prefix apps/api run corpus:gate --",
-    "scaffolds:orphans": "npm --prefix apps/api run scaffolds:orphans --",
-    "layout:corpus": "npm --prefix apps/api run layout:corpus --"
+    "lint": "next lint",
+    "benchmark": "node benchmark.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "0.106.0",
+    "archiver": "8.0.0",
+    "next": "14.2.35",
+    "parse5": "^7.2.1",
+    "puppeteer": "25.2.1",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@types/supertest": "^7.2.0",
-    "concurrently": "^9.1.0",
-    "eslint": "^10.6.0",
-    "eslint-plugin-react-hooks": "^7.1.1",
-    "eslint-plugin-unused-imports": "^4.4.1",
-    "mongodb-memory-server": "^11.2.0",
-    "supertest": "^7.2.2",
+    "@types/archiver": "^8.0.0",
+    "@types/node": "^22.9.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "eslint": "^8.57.1",
+    "eslint-config-next": "14.2.35",
     "typescript": "^5.6.3",
-    "typescript-eslint": "^8.62.1",
     "vitest": "^2.1.9"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.12"
   }
 }
