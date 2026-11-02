@@ -1,0 +1,115 @@
+'use client';
+import { useRef, useState } from 'react';
+import type { Brand, Workspace } from '@/lib/schema';
+import type { ModelCatalog } from '@/lib/models';
+import { keepReference, removeReference, selectedReferenceImages, websiteReferences } from '@/lib/references';
+import { ModelPicker } from '../ModelPicker';
+import { Formats } from './Formats';
+import { Icon } from './Icon';
+
+type Props = {
+  workspace: Workspace; edit: (change: (current: Workspace) => Workspace) => void; locked: boolean; configured: boolean;
+  catalog: ModelCatalog | null; modelError: string; modelsLoading: boolean; reloadModels: () => void;
+  analyzing: string | null; onAnalyze: (url: string) => void;
+  direct: boolean; onDirect: (value: boolean) => void;
+  fileBusy: boolean; onSavePortable: () => void; onOpenPortable: (file: File) => void; onNew: () => void; onResetAll: () => void;
+  onCheck: () => void; checking: boolean;
+};
+
+// Everything optional lives here, so the main screen only needs the command bar.
+export function Settings(props: Props) {
+  const { workspace, edit, locked, configured, catalog, modelError, modelsLoading, reloadModels, analyzing, onAnalyze, direct, onDirect } = props;
+  const [url, setUrl] = useState('');
+  const fileInput = useRef<HTMLInputElement>(null);
+  const references = websiteReferences(workspace);
+  const deck = workspace.deck;
+  const notes = deck?.slides.flatMap((slide, i) => (slide.diagnostics ?? []).map(note => ({ slide: i + 1, note }))) ?? [];
+  const update = (brand: Brand, patch: Brand | null) => edit(current => ({ ...current, ...(patch ? keepReference(current, patch) : removeReference(current, brand.url)) }));
+  const picker = (action: 'agent' | 'generate' | 'revise' | 'analyze') => <ModelPicker action={action} value={workspace.models[action]} catalog={catalog} error={modelError} loading={modelsLoading}
+    retry={reloadModels} onChange={model => edit(current => ({ ...current, models: { ...current.models, [action]: model } }))} />;
+
+  return <div className="settings">
+    <section className="tile">
+      <h3>Format</h3>
+      <Formats width={workspace.width} height={workspace.height} disabled={locked} onChange={size => edit(current => ({ ...current, ...size }))} />
+      {deck && (deck.width !== workspace.width || deck.height !== workspace.height) ? <p className="hint">Applies to your next new post. This one stays {deck.width} × {deck.height}.</p> : null}
+    </section>
+
+    <section className="tile">
+      <h3><Icon name="globe" size={18} />Brand &amp; inspiration</h3>
+      <p className="hint">Paste a website and ContentBuilder borrows its look and images. You can also just paste a link in the bar.</p>
+      <form className="inline-form" onSubmit={event => { event.preventDefault(); if (url.trim()) { onAnalyze(url.trim()); setUrl(''); } }}>
+        <input type="url" inputMode="url" placeholder="https://yourbrand.com" value={url} onChange={event => setUrl(event.target.value)} disabled={locked || !configured} aria-label="Website to learn from" />
+        <button className="button primary" disabled={locked || !configured || !url.trim()}>{analyzing ? <span className="spinner" /> : 'Learn'}</button>
+      </form>
+      {analyzing ? <p className="hint live" role="status">{analyzing}</p> : null}
+      {references.map(brand => {
+        const chosen = selectedReferenceImages(brand);
+        const host = hostOf(brand.url);
+        return <details className="reference" key={brand.url}>
+          <summary>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={brand.screenshot} alt="" width={56} height={40} />
+            <span><strong>{host}</strong><small>{chosen.length} of {brand.images.length} images in use</small></span>
+            <Icon name="right" size={16} className="chev" />
+          </summary>
+          <label className="field-label" htmlFor={`notes-${host}`}>What we noticed</label>
+          <textarea id={`notes-${host}`} rows={5} value={brand.notes} disabled={locked} onChange={event => update(brand, { ...brand, notes: event.target.value })} />
+          {brand.images.length ? <>
+            <div className="field-row"><span className="field-label">Images it may use</span>
+              <button type="button" className="link" disabled={locked} onClick={() => update(brand, { ...brand, selectedImages: chosen.length ? [] : brand.images })}>{chosen.length ? 'None' : 'All'}</button></div>
+            <div className="image-grid">{brand.images.map((image, i) => {
+              const on = chosen.includes(image);
+              return <button type="button" key={image} className={`pick${on ? ' on' : ''}`} aria-pressed={on} disabled={locked} aria-label={`Image ${i + 1}`}
+                onClick={() => update(brand, { ...brand, selectedImages: on ? chosen.filter(item => item !== image) : [...chosen, image] })}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={brand.previews.find(preview => preview.url === image)?.thumbnail ?? image} alt="" loading="lazy" referrerPolicy="no-referrer" />
+                <span className="tick"><Icon name="check" size={14} /></span>
+              </button>;
+            })}</div>
+          </> : <p className="hint">No usable images found. The look and notes still help.</p>}
+          <button type="button" className="link danger" disabled={locked} onClick={() => update(brand, null)}>Forget {host}</button>
+        </details>;
+      })}
+    </section>
+
+    <section className="tile">
+      <h3>Brief for this post</h3>
+      <p className="hint">Filled in from your first message. Edit it to steer every change that follows: audience, tone, exact wording.</p>
+      <textarea rows={4} value={workspace.brief} disabled={locked} placeholder="e.g. For detailing studio owners in Portugal. Write in European Portuguese. Calm, expert, no hype."
+        onChange={event => { const brief = event.target.value; edit(current => ({ ...current, brief })); }} aria-label="Brief for this post" />
+    </section>
+
+    <section className="tile">
+      <h3>How it works with you</h3>
+      <label className="toggle"><input type="checkbox" checked={!direct} onChange={event => onDirect(!event.target.checked)} />
+        <span className="switch" aria-hidden="true" /><span><strong>Ask before changing slides</strong><small>Off: changes happen straight away and you can undo them.</small></span></label>
+      {deck ? <div className="field-row">
+        <span><strong>Render checks</strong><small className="block">{notes.length ? `${notes.length} note${notes.length === 1 ? '' : 's'} on this post` : 'Missing images, fonts and clipped text.'}</small></span>
+        <button type="button" className="button" disabled={locked} onClick={props.onCheck}>{props.checking ? <span className="spinner" /> : 'Check now'}</button>
+      </div> : null}
+      {notes.length ? <ul className="notes">{notes.map((item, i) => <li key={i}><b>Slide {item.slide}</b> {item.note}</li>)}</ul> : null}
+    </section>
+
+    <section className="tile">
+      <details className="models">
+        <summary><h3>AI models</h3><Icon name="right" size={16} className="chev" /></summary>
+        <p className="hint">The defaults pick the newest model in each family. Change them only if you need to.</p>
+        {picker('agent')}{picker('generate')}{picker('revise')}{picker('analyze')}
+      </details>
+    </section>
+
+    <section className="tile">
+      <h3>This draft</h3>
+      <div className="button-grid">
+        <button type="button" className="button" disabled={locked} onClick={props.onNew}><Icon name="plus" size={16} />New post</button>
+        <button type="button" className="button" disabled={locked || props.fileBusy} onClick={props.onSavePortable}><Icon name="download" size={16} />{props.fileBusy ? 'Preparing…' : 'Save a copy'}</button>
+        <button type="button" className="button" disabled={locked || props.fileBusy} onClick={() => fileInput.current?.click()}><Icon name="layers" size={16} />Open a copy</button>
+        <button type="button" className="button ghost danger" disabled={locked} onClick={props.onResetAll}><Icon name="trash" size={16} />Reset everything</button>
+      </div>
+      <input ref={fileInput} type="file" accept="application/json,.json" hidden onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) props.onOpenPortable(file); }} />
+    </section>
+  </div>;
+}
+
+export function hostOf(url: string) { try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; } }

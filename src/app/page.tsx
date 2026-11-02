@@ -1,368 +1,341 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { emptyWorkspace, type AgentAction, type AgentContext, type Brand, type Deck, type RunRecord, type Workspace } from '@/lib/schema';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { emptyWorkspace, type AgentAction, type Brand, type Deck, type RunRecord, type Workspace } from '@/lib/schema';
 import { downloadJson, streamRequest, jsonRequest } from '@/lib/client';
 import { useWorkspace } from '@/lib/useWorkspace';
 import type { UsageInfo } from '@/lib/operation';
 import { changeSlide, commitDeck, travel } from '@/lib/history';
-import { activeDirections, duplicateDirection, directionSummary, generationContext } from '@/lib/directions';
 import type { ModelCatalog } from '@/lib/models';
-import { appendStage, recordRun, updateRunFeedback } from '@/lib/flow';
-import { ModelPicker } from './ModelPicker';
-import { CreationFlow } from './CreationFlow';
-import { BriefComposer } from './BriefComposer';
-import { SlideDirectionsEditor } from './SlideDirectionsEditor';
-import { SlidePreview } from './SlidePreview';
-import { RevisionReferences } from './RevisionReferences';
-import { ContentAgent } from './ContentAgent';
+import { appendStage, recordRun } from '@/lib/flow';
 import { useContentAgent } from '@/lib/useContentAgent';
-import { actionLabel, agentReferences, appendAgentMessage, validateAgentAction } from '@/lib/agent-state';
-import { websiteReferences, selectedReferenceImages, keepReference, removeReference } from '@/lib/references';
+import { actionLabel, agentContextKey, agentReferences, validateAgentAction } from '@/lib/agent-state';
+import { websiteReferences, keepReference } from '@/lib/references';
+import { Stage, type StageWork } from './studio/Stage';
+import { CommandBar } from './studio/CommandBar';
+import { Sheet } from './studio/Sheet';
+import { Choices, Proposal, Thread } from './studio/Thread';
+import { Settings, hostOf } from './studio/Settings';
+import { Formats } from './studio/Formats';
+import { Icon } from './studio/Icon';
 
 type Action = RunRecord['operation'];
+type Busy = { action: Action; started: number; phase: string; target: number | null };
+type Toast = { id: number; text: string; undo?: 'undo' | 'redo'; tone?: 'error' };
+
+const starters = [
+  '5-slide carousel: the mistakes that cost detailing studios their regulars',
+  'Story announcing we’re open this Saturday, 9:00–13:00',
+  'Before/after post for a full interior detail, bold and minimal',
+  'Quote card from a happy client, big serif type',
+];
+const slug = (text: string) => text.toLowerCase().normalize('NFKD').replace(/[^\w\s-]/g, '').trim().replace(/[\s_-]+/g, '-').slice(0, 48);
+
 export default function Studio() {
   const { workspace, getWorkspace, edit, ready, configured, status, error: saveError, flush, load, recovery, recover, dismissRecovery, backupError } = useWorkspace();
-  const { brief, brand, deck, width, height, previous, lastRun } = workspace;
-  const [url, setUrl] = useState('');
-  const [busy, setBusy] = useState<{ action: Action; started: number; phase: string; record: RunRecord } | null>(null);
+  const { deck, previous, redo, width, height } = workspace;
+  const [busy, setBusy] = useState<Busy | null>(null);
   const [catalog, setCatalog] = useState<ModelCatalog | null>(null);
   const [modelError, setModelError] = useState('');
   const [modelsLoading, setModelsLoading] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
-  const [error, setError] = useState<{ action: Action; message: string } | null>(null);
   const [selected, setSelected] = useState(0);
-  const instruction = workspace.revisionText; const scope = workspace.revisionScope;
-  const setInstruction = (text: string) => update({ revisionText: text, revisionTarget: selected });
-  const setScope = (value: 'slide' | 'deck') => update({ revisionScope: value, revisionTarget: selected });
-  const [useUpdatedBrief, setUseUpdatedBrief] = useState(false);
-  const [fileBusy, setFileBusy] = useState(false);
+  const [slideScope, setSlideScope] = useState(false);
+  const [sheet, setSheet] = useState<'thread' | 'settings' | null>(null);
+  const [peek, setPeek] = useState(false);
+  const [toast, setToast] = useState<Toast | null>(null);
+  const [direct, setDirectState] = useState(true);
   const [uploadBusy, setUploadBusy] = useState(false);
-  const [composerKey, setComposerKey] = useState(0);
+  const [fileBusy, setFileBusy] = useState(false);
   const [fileError, setFileError] = useState('');
-  const [enlarged, setEnlarged] = useState<string | null>(null);
-  const fileInput = useRef<HTMLInputElement>(null);
-  const restoredSelection = useRef(false);
-  const [customSize, setCustomSize] = useState(false);
-  const [actualSize, setActualSize] = useState(false);
-  const [compare, setCompare] = useState(false);
-  const [sidebar, setSidebar] = useState<'conversation' | 'controls'>('conversation');
+  const [dropped, setDropped] = useState<File[] | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [seen, setSeen] = useState('');
   const active = useRef<AbortController | null>(null);
-  const resultHeading = useRef<HTMLHeadingElement>(null);
-  const agent = useContentAgent({ getWorkspace, edit, selected, configured, flush, disabled: !ready || !!busy || fileBusy || uploadBusy || status === 'conflict', execute: executeAgentAction });
+  const restored = useRef(false);
+  const agent = useContentAgent({ getWorkspace, edit, selected, configured, flush, direct, disabled: !ready || !!busy || fileBusy || uploadBusy || status === 'conflict', execute: executeAgentAction });
   const locked = !!busy || agent.busy || fileBusy || uploadBusy || status === 'conflict';
-  const preset = width === 1080 && height === 1350 ? 'portrait' : width === 1080 && height === 1080 ? 'square' : 'custom';
-  const shownDeck = compare && previous ? previous.deck : deck;
-  const shownIndex = shownDeck ? Math.min(selected, shownDeck.slides.length - 1) : 0;
-  const directions = activeDirections(workspace);
-  const duplicateSlide = duplicateDirection(directions);
-  const hasGenerationInstructions = !!brief.trim() || directions.length > 0;
-  const generationInstructionsChanged = deck && (brief !== deck.originBrief || JSON.stringify(directions) !== JSON.stringify(deck.originSlideDirections ?? []));
-  const selectedImages = websiteReferences(workspace).flatMap(selectedReferenceImages);
+  const shownDeck = peek && previous ? previous.deck : deck;
+  const index = shownDeck ? Math.min(selected, shownDeck.slides.length - 1) : 0;
+  const handle = workspace.brand ? hostOf(workspace.brand.url).split('.')[0] : 'yourbrand';
+  const messages = workspace.agent.messages;
+  // The newest assistant reply since the user last spoke, floated above the bar.
+  const reply = [...messages].reverse().find((message, i, newest) => message.role === 'assistant' && !newest.slice(0, i).some(item => item.role === 'user'));
+  const showReply = !!reply && reply.id !== seen && sheet !== 'thread' && !agent.busy;
+  const unread = messages.filter(message => message.role === 'assistant').length;
+  const contextKey = agentContextKey(workspace, selected);
 
   const loadModels = useCallback(async (refresh = false) => {
     setModelsLoading(true); setModelError('');
     try { setCatalog(await jsonRequest<ModelCatalog>(`models${refresh ? '?refresh=1' : ''}`)); }
-    catch (error) { setModelError((error as Error).message); }
+    catch (failure) { setModelError((failure as Error).message); }
     finally { setModelsLoading(false); }
   }, []);
   useEffect(() => { if (ready && configured) void loadModels(); }, [ready, configured, loadModels]);
-  useEffect(() => { if (ready && !restoredSelection.current) { setSelected(workspace.revisionTarget); restoredSelection.current = true; } }, [ready, workspace.revisionTarget]);
-  useEffect(() => { setUrl(brand?.url ?? ''); }, [brand?.url]);
+  // A reply from an earlier session stays in the conversation, not floating over the post.
+  useEffect(() => { if (ready && !restored.current) { setSelected(workspace.revisionTarget); setSeen(reply?.id ?? ''); restored.current = true; } }, [ready, workspace.revisionTarget, reply?.id]);
+  useEffect(() => { try { setDirectState(localStorage.getItem('contentbuilder-direct') !== 'off'); } catch { /* defaults to direct */ } }, []);
+  useEffect(() => { if (deck && selected > deck.slides.length - 1) setSelected(deck.slides.length - 1); }, [deck, selected]);
+  useEffect(() => { if (!previous) setPeek(false); }, [previous]);
+  useEffect(() => { if (agent.error) setToast({ id: Date.now(), text: agent.error, tone: 'error' }); }, [agent.error]);
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(current => current?.id === toast.id ? null : current), toast.tone === 'error' ? 9000 : 6000);
+    return () => clearTimeout(timer);
+  }, [toast]);
   useEffect(() => {
     if (!busy) return;
-    const tick = () => setElapsed(Math.floor((Date.now() - busy.started) / 1000)); tick();
-    const timer = setInterval(tick, 1000);
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
     window.addEventListener('beforeunload', warn);
-    return () => { clearInterval(timer); window.removeEventListener('beforeunload', warn); };
+    return () => window.removeEventListener('beforeunload', warn);
   }, [busy]);
   useEffect(() => () => active.current?.abort(), []);
-  function update(patch: Partial<Workspace>) { edit(current => ({ ...current, ...patch })); }
+  const closeSheet = useCallback(() => setSheet(null), []);
+  function setDirect(value: boolean) { setDirectState(value); try { localStorage.setItem('contentbuilder-direct', value ? 'on' : 'off'); } catch { /* per-browser preference only */ } }
+  function notify(text: string, undo?: Toast['undo']) { setToast({ id: Date.now(), text, undo }); }
 
-  function modelPicker(action: 'analyze' | 'generate' | 'revise') {
-    return <ModelPicker action={action} value={workspace.models[action]} catalog={catalog} error={modelError} loading={modelsLoading}
-      onChange={value => update({ models: { ...workspace.models, [action]: value } })} retry={() => void loadModels(true)} />;
-  }
-  async function run(action: Action, direction: string, work: (signal: AbortSignal, progress: (phase: string) => void, usage: (value: UsageInfo) => void) => Promise<Partial<Workspace> | void>, options?: { source: Workspace; target: number | null; signal: AbortSignal }) {
+  async function run(action: Action, label: string, work: (signal: AbortSignal, progress: (phase: string) => void, usage: (value: UsageInfo) => void) => Promise<Partial<Workspace> | void>, options?: { source?: Workspace; target?: number | null; signal?: AbortSignal }) {
     if (active.current || status === 'conflict') return false;
     const controller = new AbortController(); active.current = controller;
+    const abort = () => controller.abort(); options?.signal?.addEventListener('abort', abort, { once: true });
+    if (options?.signal?.aborted) controller.abort();
     const source = options?.source ?? getWorkspace();
-    const abort = () => controller.abort(); options?.signal.addEventListener('abort', abort, { once: true });
-    if (options?.signal.aborted) controller.abort();
     const started = Date.now(); let usage: UsageInfo = {};
-    let phase = 'Saving the current draft…';
-    let steps: NonNullable<RunRecord['steps']> = [{ message: phase, elapsedMs: 0 }];
-    const aiAction = action === 'analyze' || action === 'generate' || action === 'revise';
-    const context = generationContext({ ...source, ...(action === 'revise' ? { instruction: direction, useUpdatedBrief } : {}) });
-    const sourceDeck = options ? source.deck : shownDeck;
-    const size = action === 'generate' ? source : sourceDeck ?? source;
-    const record: RunRecord = { id: crypto.randomUUID(), operation: action, startedAt: new Date(started).toISOString(), durationMs: 0, instruction: direction, outcome: 'success',
-      ...(aiAction ? { requestedModel: source.models[action] || catalog?.defaultModel || 'Configured default' } : {}),
-      inputs: { brief: action === 'analyze' ? '' : aiAction ? context.brief : sourceDeck?.originBrief ?? '',
-        directions: action === 'analyze' ? [] : aiAction ? context.directions : sourceDeck?.originSlideDirections ?? [],
-        website: action === 'analyze' ? direction : aiAction ? source.brand?.url ?? null : null,
-        websiteNotes: action === 'generate' || action === 'revise' ? source.brand?.notes ?? '' : '',
-        references: aiAction && action !== 'analyze' ? websiteReferences(source).map(brand => ({ url: brand.url, notes: brand.notes, images: selectedReferenceImages(brand) })) : [],
-        revisionReferences: action === 'revise' ? source.revisionReferences : action === 'generate' ? source.agent.references : [],
-        images: action === 'analyze' ? [] : aiAction ? websiteReferences(source).flatMap(selectedReferenceImages) : Object.keys(sourceDeck?.assets ?? {}),
-        width: action === 'analyze' ? 1440 : size.width, height: action === 'analyze' ? 1000 : size.height,
-        target: action === 'analyze' ? 'Website reference' : action === 'revise' ? options ? options.target === null ? 'Whole deck' : `Slide ${options.target + 1}` : scope === 'slide' ? `Slide ${Math.min(selected, (deck?.slides.length ?? 1) - 1) + 1}` : 'Whole deck' : action === 'generate' ? 'New deck' : `${compare && !options ? 'Previous' : 'Current'} version` },
-    };
-    const publish = () => setBusy({ action, started, phase, record: { ...record, ...usage, steps, durationMs: Date.now() - started } });
-    publish(); setError(null);
+    let phase = 'Saving your draft…'; let steps: NonNullable<RunRecord['steps']> = [{ message: phase, elapsedMs: 0 }];
+    const target = options?.target ?? null;
+    const record: RunRecord = { id: crypto.randomUUID(), operation: action, startedAt: new Date(started).toISOString(), durationMs: 0, instruction: label, outcome: 'success',
+      ...(action === 'analyze' || action === 'generate' || action === 'revise' ? { requestedModel: source.models[action] || catalog?.defaultModel || 'Configured default' } : {}) };
+    setBusy({ action, started, phase, target });
     try {
-      if (!await flush()) throw new Error('Save the current draft before continuing. See the save message above.');
+      if (!await flush()) throw new Error('Your draft could not be saved. See the message at the top.');
       controller.signal.throwIfAborted();
-      const patch = await work(controller.signal, message => { phase = message; steps = appendStage(steps, message, Date.now() - started); publish(); }, value => {
-        usage = { ...usage, ...value, renderMs: (usage.renderMs ?? 0) + (value.renderMs ?? 0), renderCacheHits: (usage.renderCacheHits ?? 0) + (value.renderCacheHits ?? 0) }; publish();
+      const patch = await work(controller.signal, message => { phase = message; steps = appendStage(steps, message, Date.now() - started); setBusy({ action, started, phase, target }); }, value => {
+        usage = { ...usage, ...value, renderMs: (usage.renderMs ?? 0) + (value.renderMs ?? 0), renderCacheHits: (usage.renderCacheHits ?? 0) + (value.renderCacheHits ?? 0) };
       });
       controller.signal.throwIfAborted();
       const durationMs = Date.now() - started;
-      const result = action === 'analyze' ? `Website inspiration ready · ${websiteReferences({ ...workspace, ...patch }).length} reference(s).`
-        : action === 'generate' || action === 'revise' ? `${patch?.deck?.slides.length ?? 0} slides ready.`
-        : action === 'export' ? 'PNG download prepared.' : 'Render checks complete.';
-      const completed: RunRecord = { ...record, ...usage, durationMs, result, steps: appendStage(steps, result, durationMs),
-        ...((action === 'generate' || action === 'revise' || action === 'inspect' || action === 'export') ? { output: patch?.deck ?? patch?.previous?.deck ?? sourceDeck ?? undefined } : {}) };
-      edit(current => recordRun(current, completed, patch ?? undefined));
-      if (!options) edit(current => ({ ...current, agent: { ...current.agent, messages: appendAgentMessage(current.agent.messages, { id: crypto.randomUUID(), role: 'tool', text: `${direction}: ${result}` }) } }));
-      if (action === 'generate' || action === 'revise') {
-        setCompare(false); setUseUpdatedBrief(false); if (action !== 'revise') setSelected(0);
-        requestAnimationFrame(() => { resultHeading.current?.focus({ preventScroll: true }); resultHeading.current?.scrollIntoView({ behavior: 'instant', block: 'start' }); });
-      }
+      const result = action === 'analyze' ? 'Website learned.' : action === 'generate' || action === 'revise' ? `${patch?.deck?.slides.length ?? 0} slides ready.` : action === 'export' ? 'PNGs downloaded.' : 'Checks complete.';
+      edit(current => recordRun(current, { ...record, ...usage, durationMs, result, steps: appendStage(steps, result, durationMs), ...(patch?.deck ? { output: patch.deck } : {}) }, patch ?? undefined));
       return true;
     } catch (failure) {
       const cancelled = controller.signal.aborted;
-      const message = cancelled ? 'Stopped. Your current draft is unchanged.' : (failure as Error).message;
-      if (!options) setError({ action, message });
+      const message = cancelled ? 'Stopped. Your post is unchanged.' : (failure as Error).message;
+      if (!options?.signal) setToast({ id: Date.now(), text: message, tone: cancelled ? undefined : 'error' });
       edit(current => recordRun(current, { ...record, ...usage, steps, durationMs: Date.now() - started, outcome: cancelled ? 'cancelled' : 'failed', message }));
       return false;
-    } finally { options?.signal.removeEventListener('abort', abort); active.current = null; setBusy(null); }
+    } finally { options?.signal?.removeEventListener('abort', abort); active.current = null; setBusy(null); }
   }
-  function requestAgent(text: string, context: AgentContext = { intent: 'chat', target: selected, url: '' }) {
-    setSidebar('conversation');
-    void agent.send(text, context, context.intent === 'revise' ? workspace.revisionReferences : undefined);
-    requestAnimationFrame(() => {
-      const panel = document.getElementById('conversation-panel');
-      panel?.focus({ preventScroll: true });
-      const exchange = panel?.querySelector('.agent-progress') ?? panel?.querySelector('.agent-log') ?? panel;
-      exchange?.scrollIntoView({ behavior: 'instant', block: 'center' });
-    });
-  }
+
   async function executeAgentAction(action: AgentAction, signal: AbortSignal): Promise<string> {
     signal.throwIfAborted();
     const snapshot = getWorkspace(); const problem = validateAgentAction(action, snapshot); if (problem) throw new Error(problem);
     const images = agentReferences(snapshot).filter(image => action.referenceUrls.includes(image.original));
-    if (action.type === 'set_brief') { edit(w => ({ ...w, brief: action.instruction })); return 'The proposed main brief was applied. Per-slide instructions are unchanged.'; }
-    if (action.type === 'undo' || action.type === 'redo') { edit(w => travel(w, action.type as 'undo' | 'redo')); setCompare(false); setSelected(0); return `${actionLabel(action)} completed.`; }
+    if (action.type === 'set_brief') { edit(w => ({ ...w, brief: action.instruction })); notify('Brief updated'); return 'The brief was updated.'; }
+    if (action.type === 'undo' || action.type === 'redo') { edit(w => travel(w, action.type as 'undo' | 'redo')); setPeek(false); return `${actionLabel(action)} completed.`; }
     if (['move_earlier', 'move_later', 'duplicate', 'delete'].includes(action.type)) {
       const kind = action.type === 'move_earlier' ? 'earlier' : action.type === 'move_later' ? 'later' : action.type as 'duplicate' | 'delete';
-      const next = changeSlide(snapshot.deck!, action.target!, kind); edit(w => ({ ...commitDeck(w, next.deck, actionLabel(action)), revisionTarget: next.index })); setSelected(next.index); setCompare(false); return `${actionLabel(action)} completed. The canvas dimensions were preserved.`;
+      slideChange(changeSlide(snapshot.deck!, action.target!, kind), actionLabel(action));
+      return `${actionLabel(action)} completed.`;
     }
     const source = { ...snapshot, ...(action.type === 'revise' ? { revisionReferences: images } : {}), ...(action.type === 'generate' ? { agent: { ...snapshot.agent, references: images } } : {}) };
     const ok = await run(action.type as Action, action.type === 'analyze' ? action.url : action.instruction || actionLabel(action), async (toolSignal, progress, usage) => {
       if (action.type === 'analyze') {
-        progress('Opening the website…'); return keepReference(snapshot, await streamRequest<Brand>('analyze', { url: action.url, model: snapshot.models.analyze }, toolSignal, progress, usage));
+        progress('Opening the website…');
+        const brand = await streamRequest<Brand>('analyze', { url: action.url, model: snapshot.models.analyze }, toolSignal, progress, usage);
+        return keepReference(getWorkspace(), brand);
       }
       if (action.type === 'generate' || action.type === 'revise') {
         const revise = action.type === 'revise';
+        progress(revise ? 'Reworking your slides…' : 'Designing your post…');
         const next = await streamRequest<Deck>('generate', { ...source, brief: snapshot.brief || action.instruction, previous: null, redo: null, recentRuns: [], lastRun: null,
           agent: { ...snapshot.agent, messages: [], references: [] }, writing: { ...snapshot.writing, messages: [], draft: '' },
-          ...(revise ? { instruction: action.instruction, useUpdatedBrief, ...(action.target !== null ? { slideIndex: action.target } : {}) } : { generationTask: action.instruction, generationReferences: images }) }, toolSignal, progress, usage);
-        const committed = commitDeck(snapshot, next, action.instruction);
-        if (revise && action.target !== null) setSelected(action.target);
+          ...(revise ? { instruction: action.instruction, useUpdatedBrief: true, ...(action.target !== null ? { slideIndex: action.target } : {}) } : { generationTask: action.instruction, generationReferences: images }) }, toolSignal, progress, usage);
+        const committed = commitDeck(getWorkspace(), next, action.instruction);
+        setSelected(revise && action.target !== null ? action.target : revise ? index : 0); setPeek(false);
+        notify(revise ? action.target !== null ? `Slide ${action.target + 1} updated` : 'Post updated' : 'Your post is ready', committed.previous ? 'undo' : undefined);
         return { deck: committed.deck, previous: committed.previous, redo: committed.redo, lastInstruction: committed.lastInstruction,
-          ...(!snapshot.brief && !revise ? { brief: action.instruction } : {}), ...(revise ? { ...(snapshot.agent.messages.filter(m => m.role === 'user').at(-1)?.context?.intent === 'revise' && snapshot.agent.messages.filter(m => m.role === 'user').at(-1)?.text === snapshot.revisionText.trim() ? { revisionText: '' } : {}), revisionReferences: snapshot.revisionReferences.filter(image => !action.referenceUrls.includes(image.original)) } : {}) };
+          ...(!snapshot.brief && !revise ? { brief: action.instruction } : {}),
+          ...(revise ? { revisionReferences: [] } : {}) };
       }
       if (action.type === 'inspect') return { deck: await streamRequest<Deck>('inspect', snapshot.deck, toolSignal, progress, usage) };
-      progress('Preparing your PNG download…');
-      const response = await fetch(`/api/export${action.target === null ? '' : `?slide=${action.target}`}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(snapshot.deck), signal: toolSignal });
-      if (!response.ok) throw new Error((await response.json()).error || 'Export failed.');
-      const href = URL.createObjectURL(await response.blob()); toolSignal.throwIfAborted(); const link = document.createElement('a'); link.href = href; link.download = action.target === null ? 'slides.zip' : `slide-${action.target + 1}.png`; link.click(); setTimeout(() => URL.revokeObjectURL(href), 60_000);
+      await exportDeck(snapshot.deck!, action.target, toolSignal, progress, usage);
     }, { source, target: action.target, signal });
-    if (!ok) throw new Error(getWorkspace().lastRun?.message || 'The action could not finish. The current deck is unchanged.');
+    if (!ok) throw new Error(getWorkspace().lastRun?.message || 'That could not finish. Your post is unchanged.');
     const current = getWorkspace();
-    return action.type === 'analyze' ? `Website analysis completed for ${action.url}. The source notes and images are now available.`
-      : action.type === 'export' ? 'The PNG download was prepared.'
+    return action.type === 'analyze' ? `Learned ${hostOf(action.url)}. Its look and images are now available.`
+      : action.type === 'export' ? 'The PNGs were downloaded.'
       : `${actionLabel(action)} completed. ${current.deck?.slides.length} slides at ${current.deck?.width} × ${current.deck?.height}. Render notes: ${current.deck?.slides.flatMap((s, i) => (s.diagnostics ?? []).map(d => `Slide ${i + 1}: ${d}`)).join('; ') || 'none'}.`;
   }
-  function feedback(action: Action) {
-    return <div className="action-feedback" aria-live="polite">
-      {busy?.action === action ? <div className="progress"><div><strong>{busy.phase}</strong><span>{elapsed}s elapsed</span></div><button type="button" onClick={() => active.current?.abort()}>Stop</button></div> : null}
-      {error?.action === action ? <div className="error" role="alert"><p>{error.message}</p><button type="button" className="text-button" onClick={() => setError(null)}>Dismiss</button></div> : null}
-    </div>;
+
+  async function exportDeck(target: Deck, slide: number | null, signal: AbortSignal, progress: (phase: string) => void, usage: (value: UsageInfo) => void) {
+    progress(slide === null ? 'Rendering your PNGs…' : `Rendering slide ${slide + 1}…`);
+    const response = await fetch(`/api/export${slide === null ? '' : `?slide=${slide}`}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(target), signal });
+    if (!response.ok) throw new Error((await response.json()).error || 'Export failed. Please try again.');
+    usage({ renderMs: Number(response.headers.get('X-Render-Ms')), renderCacheHits: Number(response.headers.get('X-Render-Cache-Hits')) });
+    const href = URL.createObjectURL(await response.blob()); signal.throwIfAborted();
+    const name = slug(target.title) || 'post';
+    const link = document.createElement('a'); link.href = href; link.download = slide === null ? `${name}.zip` : `${name}-${slide + 1}.png`; link.click();
+    setTimeout(() => URL.revokeObjectURL(href), 60_000);
+  }
+  function download(slide: number | null = null) {
+    if (!shownDeck) return;
+    const target = shownDeck;
+    void run('export', slide === null ? `Download ${target.slides.length} slides` : `Download slide ${slide + 1}`, async (signal, progress, usage) => {
+      await exportDeck(target, slide, signal, progress, usage); notify(slide === null ? 'Downloaded · ready to post' : `Slide ${slide + 1} downloaded`);
+    }, { target: slide });
+  }
+  function inspect() {
+    if (!deck) return;
+    void run('inspect', 'Check slides', async (signal, progress, usage) => ({ deck: await streamRequest<Deck>('inspect', deck, signal, progress, usage) }));
+  }
+  function analyze(url: string) {
+    void run('analyze', url, async (signal, progress, usage) => {
+      progress('Opening the website…');
+      const brand = await streamRequest<Brand>('analyze', { url, model: getWorkspace().models.analyze }, signal, progress, usage);
+      notify(`Learned ${hostOf(url)}`);
+      return keepReference(getWorkspace(), brand);
+    });
+  }
+
+  // Direct manipulation never needs the model: the change lands at once and Undo brings it back.
+  function slideChange(next: { deck: Deck; index: number }, label: string) {
+    edit(w => ({ ...commitDeck(w, next.deck, label), revisionTarget: next.index })); setSelected(next.index); setPeek(false); notify(label, 'undo');
+  }
+  function move(from: number, to: number) {
+    if (!deck || locked) return;
+    let next = { deck, index: from };
+    while (next.index < to) next = changeSlide(next.deck, next.index, 'later');
+    while (next.index > to) next = changeSlide(next.deck, next.index, 'earlier');
+    slideChange(next, `Moved slide ${from + 1} to ${to + 1}`);
+  }
+  function time(direction: 'undo' | 'redo') {
+    if (locked) return;
+    edit(w => travel(w, direction)); setPeek(false);
+    notify(direction === 'undo' ? 'Undone' : 'Redone', direction === 'undo' ? 'redo' : 'undo');
+  }
+  function send(text: string) {
+    setSeen('');
+    void agent.send(text, { intent: 'chat', target: deck && slideScope ? index : null, url: '' });
+  }
+  function hasWork() {
+    return !!(workspace.brief || deck || messages.length || workspace.agent.draft.trim() || workspace.agent.references.length);
   }
   function reset(all = false) {
-    if ((brief || deck || workspace.agent.messages.length || workspace.agent.draft.trim() || workspace.agent.references.length || workspace.writing.messages.length || workspace.writing.draft.trim() || workspace.slideDirections.some(item => item.text.trim()) || (all && brand)) && !window.confirm(all ? 'Clear this draft and its website reference?' : 'Start a new deck? Your website inspiration will stay.')) return;
-    edit({ ...emptyWorkspace, ...(all ? {} : { brand, references: workspace.references ?? [], width, height, models: workspace.models, writing: { ...emptyWorkspace.writing, autocomplete: workspace.writing.autocomplete } }) });
-    setComposerKey(value => value + 1);
-    if (all) setUrl('');
-    setSelected(0); setCompare(false); setUseUpdatedBrief(false); setEnlarged(null); setError(null); setCustomSize(false); setActualSize(false);
-  }
-  function reload() {
-    if (window.confirm('Load the latest saved draft? Download your local draft first if you need to keep unsaved changes.')) {
-      setCompare(false); setComposerKey(value => value + 1); restoredSelection.current = false; void load();
-    }
-  }
-  function download(single = false) {
-    if (!shownDeck) return;
-    const target = shownDeck; const index = shownIndex; const version = compare ? 'previous' : 'current';
-    void run('export', `Export ${version} ${single ? `slide ${index + 1}` : `${target.slides.length} slides`} as PNG`, async (signal, progress, usage) => {
-      progress('Rendering PNGs…');
-      const response = await fetch(`/api/export${single ? `?slide=${index}` : ''}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(target), signal });
-      if (!response.ok) throw new Error((await response.json()).error || 'Export failed. Please try again.');
-      usage({ renderMs: Number(response.headers.get('X-Render-Ms')), renderCacheHits: Number(response.headers.get('X-Render-Cache-Hits')) });
-      progress('Preparing the download…');
-      const href = URL.createObjectURL(await response.blob()); signal.throwIfAborted();
-      const link = document.createElement('a'); link.href = href; link.download = single ? `${version}-slide-${index + 1}.png` : `${version}-slides.zip`; link.click();
-      setTimeout(() => URL.revokeObjectURL(href), 60_000);
-    });
+    if (hasWork() && !window.confirm(all ? 'Clear this post and everything ContentBuilder learned from websites?' : 'Start a new post? Your websites and format stay.')) return;
+    edit({ ...emptyWorkspace, ...(all ? {} : { brand: workspace.brand, references: workspace.references ?? [], width, height, models: workspace.models }) });
+    setSelected(0); setSlideScope(false); setPeek(false); setSheet(null); setSeen('');
   }
   async function savePortable(value = workspace) {
     if (fileBusy || uploadBusy) return; setFileBusy(true); setFileError('');
-    try { downloadJson(await jsonRequest('draft', { action: 'save', workspace: value }), 'contentbuilder-portable.json'); }
-    catch (error) { setFileError((error as Error).message); }
+    try { downloadJson(await jsonRequest('draft', { action: 'save', workspace: value }), 'contentbuilder-draft.json'); }
+    catch (failure) { setFileError((failure as Error).message); }
     finally { setFileBusy(false); }
   }
   async function openPortable(file: File) {
-    if (file.size > 64 * 1024 * 1024) { setFileError('Choose a portable draft smaller than 64 MB.'); return; }
+    if (file.size > 64 * 1024 * 1024) { setFileError('Choose a saved copy smaller than 64 MB.'); return; }
     setFileBusy(true); setFileError('');
     try {
-      const bundle = JSON.parse(await file.text());
-      const imported = await jsonRequest<Workspace>('draft', { action: 'open', bundle });
-      if ((brief || deck || brand || workspace.agent.messages.length || workspace.agent.draft.trim() || workspace.agent.references.length || workspace.writing.messages.length || workspace.writing.draft.trim() || workspace.slideDirections.some(item => item.text.trim())) && !window.confirm('Replace this workspace with the opened draft? Save a portable copy first if you want to keep the current draft.')) return;
-      edit(imported); setComposerKey(value => value + 1); setSelected(imported.revisionTarget); setCompare(false); setEnlarged(null); setUseUpdatedBrief(false);
-    } catch (error) { setFileError(error instanceof SyntaxError ? 'This file is not a valid portable draft.' : (error as Error).message); }
-    finally { setFileBusy(false); if (fileInput.current) fileInput.current.value = ''; }
+      const imported = await jsonRequest<Workspace>('draft', { action: 'open', bundle: JSON.parse(await file.text()) });
+      if (hasWork() && !window.confirm('Replace this post with the opened copy?')) return;
+      edit(imported); setSelected(imported.revisionTarget); setPeek(false); setSheet(null);
+    } catch (failure) { setFileError(failure instanceof SyntaxError ? 'This file is not a ContentBuilder copy.' : (failure as Error).message); }
+    finally { setFileBusy(false); }
   }
-  function slideAction(action: 'earlier' | 'later' | 'duplicate' | 'delete') {
-    if (!deck || compare || locked) return;
-    requestAgent(`${action === 'delete' ? 'Delete' : action === 'duplicate' ? 'Duplicate' : `Move ${action}`} slide ${shownIndex + 1}. Show me the proposal first.`);
-  }
-  function inspect() {
-    if (!shownDeck) return;
-    const target = shownDeck; const wasPrevious = compare;
-    void run('inspect', `Check ${wasPrevious ? 'previous' : 'current'} version`, async (signal, progress, usage) => {
-      const checked = await streamRequest<Deck>('inspect', target, signal, progress, usage);
-      return wasPrevious && previous ? { previous: { ...previous, deck: checked } } : { deck: checked };
-    });
+  function reload() {
+    if (window.confirm('Load the latest saved draft? Save a copy first if you need what is on screen.')) { restored.current = false; void load(); }
   }
 
+  const work: StageWork | null = busy && (busy.action === 'generate' || busy.action === 'revise') ? { kind: busy.action, phase: busy.phase, target: busy.target } : null;
+  const phase = busy?.phase || agent.phase;
+  const placeholder = !configured ? 'Add an API key to start' : !deck ? 'Describe your post…' : slideScope ? 'Change this slide…' : 'Ask for a change…';
 
-  return <>
-    <header className="topbar"><a className="wordmark" href="/">ContentBuilder<span className="wordmark-dot" /></a>
-      <div className="header-actions"><span className={`save-status ${status}`} role="status">{!ready ? 'Opening…' : status === 'saved' ? 'Saved on this computer' : status === 'saving' ? 'Saving…' : status === 'conflict' ? 'Newer draft in another tab' : 'Not saved'}</span>
-        <button onClick={() => reset()} disabled={!ready || locked}>New draft</button>
-        <details className="draft-menu"><summary>Draft</summary><div>
-          <button disabled={!ready || locked} onClick={() => void savePortable()}>{fileBusy ? 'Preparing file…' : 'Save portable draft'}</button>
-          <button disabled={!ready || locked} onClick={() => fileInput.current?.click()}>Open draft…</button>
-          <button className="text-button" onClick={() => reset(true)} disabled={!ready || locked}>Reset all</button>
-        </div></details><input ref={fileInput} type="file" accept="application/json,.json" hidden onChange={event => { const file = event.target.files?.[0]; if (file) void openPortable(file); }} /></div>
+  const empty = <div className="hello">
+    <span className="orb" aria-hidden="true" />
+    <p className="eyebrow"><Icon name="sparkle" size={14} />New post</p>
+    <h1>What are we posting today?</h1>
+    <p className="lede">Describe it in your own words. Paste a link or drop images if you have them.</p>
+    <Formats width={width} height={height} disabled={locked} onChange={size => edit(current => ({ ...current, ...size }))} />
+    <div className="starters">{starters.map((text, i) => <button type="button" key={text} className="chip starter" style={{ '--i': i } as CSSProperties} disabled={locked || !configured}
+      onClick={() => { edit(w => ({ ...w, agent: { ...w.agent, draft: text } })); requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('.command textarea')?.focus()); }}>{text}</button>)}</div>
+  </div>;
+
+  return <div className={`app sheet-${sheet ?? 'none'}${dragging ? ' dropping' : ''}`}
+    onDragOver={event => { if (event.dataTransfer.types.includes('Files')) { event.preventDefault(); setDragging(true); } }}
+    onDragLeave={event => { if (event.currentTarget === event.target) setDragging(false); }}
+    onDrop={event => { if (!event.dataTransfer.files.length) return; event.preventDefault(); setDragging(false); setDropped(Array.from(event.dataTransfer.files)); }}>
+    <div className="ambient" aria-hidden="true"><i /><i /><i /></div>
+    <header className="topbar">
+      <a className="wordmark" href="/"><span className="mark" aria-hidden="true" />ContentBuilder</a>
+      <span className={`save-dot ${!ready ? 'saving' : status}`} role="status" title={!ready ? 'Opening…' : status === 'saved' ? 'Saved on this computer' : status === 'saving' ? 'Saving…' : status === 'conflict' ? 'A newer draft is open in another tab' : 'Not saved'}>
+        <span className="sr-only">{status === 'saved' ? 'Saved' : status === 'saving' ? 'Saving' : 'Not saved'}</span></span>
+      <div className="top-actions">
+        {previous ? <button type="button" className="icon-button" aria-label="Undo" title="Undo" disabled={locked} onClick={() => time('undo')}><Icon name="undo" /></button> : null}
+        {redo ? <button type="button" className="icon-button" aria-label="Redo" title="Redo" disabled={locked} onClick={() => time('redo')}><Icon name="redo" /></button> : null}
+        {previous && deck ? <button type="button" className={`icon-button peek${peek ? ' on' : ''}`} aria-label="Hold to see the version before" title="Hold to compare" aria-pressed={peek}
+          onPointerDown={() => setPeek(true)} onPointerUp={() => setPeek(false)} onPointerLeave={() => setPeek(false)} onPointerCancel={() => setPeek(false)}
+          onKeyDown={event => { if (event.key === ' ' || event.key === 'Enter') { event.preventDefault(); setPeek(true); } }} onKeyUp={() => setPeek(false)} onBlur={() => setPeek(false)}><Icon name="eye" /></button> : null}
+        <button type="button" className="icon-button" aria-label={`Conversation${unread ? `, ${unread} replies` : ''}`} title="Conversation" onClick={() => setSheet(sheet === 'thread' ? null : 'thread')}>
+          <Icon name="chat" />{agent.busy ? <span className="badge pulse" /> : unread ? <span className="badge">{Math.min(unread, 99)}</span> : null}</button>
+        <button type="button" className="icon-button" aria-label="Settings" title="Settings" onClick={() => setSheet(sheet === 'settings' ? null : 'settings')}><Icon name="sliders" /></button>
+        {deck ? <button type="button" className="button primary download" disabled={locked} onClick={() => download()}>
+          {busy?.action === 'export' ? <span className="spinner" /> : <Icon name="download" size={18} />}<span>{peek ? 'Download before' : 'Download'}</span></button> : null}
+      </div>
     </header>
-    {recovery ? <div className="save-error"><p>A pending draft from {new Date(recovery.savedAt).toLocaleString()} is available. Restoring replaces this workspace.</p><div><button disabled={locked} onClick={() => { setSelected(recovery.workspace.revisionTarget); setCompare(false); setComposerKey(value => value + 1); recover(); }}>Restore pending draft</button><button disabled={fileBusy} onClick={() => void savePortable(recovery.workspace)}>Save recovery copy</button><button onClick={dismissRecovery}>Dismiss</button></div></div> : null}
-    {backupError || fileError ? <div className="save-error" role="alert"><p>{fileError || backupError}</p>{fileError ? <button onClick={() => setFileError('')}>Dismiss</button> : null}</div> : null}
-    {ready && saveError ? <div className="save-error" role="alert"><p>{saveError}</p><div>
-      <button disabled={fileBusy} onClick={() => void savePortable()}>Save portable draft</button><button onClick={() => downloadJson(workspace)}>Save text-only recovery</button>
-      {status === 'conflict' ? <button onClick={reload} disabled={!!busy || agent.busy}>Load saved draft</button> : <button onClick={() => void flush()}>Retry save</button>}
-    </div></div> : null}
-    {!ready ? <main className="load-state">{saveError ? <><p role="alert">{saveError}</p><button onClick={load}>Retry loading</button></> : <p role="status">Opening your workspace…</p>}</main> : <main className="studio">
-      <aside className="brief-panel" aria-label="ContentBuilder agent and brief">
-        <div className="workspace-tabs" role="tablist" aria-label="Workspace tools"><button role="tab" aria-selected={sidebar === 'conversation'} aria-controls="conversation-panel" id="conversation-tab" tabIndex={sidebar === 'conversation' ? 0 : -1} onKeyDown={event => { if (['ArrowRight', 'ArrowLeft', 'End'].includes(event.key)) { event.preventDefault(); setSidebar('controls'); document.getElementById('controls-tab')?.focus(); } }} onClick={() => setSidebar('conversation')}>Conversation</button><button role="tab" aria-selected={sidebar === 'controls'} aria-controls="brief-controls" id="controls-tab" tabIndex={sidebar === 'controls' ? 0 : -1} onKeyDown={event => { if (['ArrowRight', 'ArrowLeft', 'Home'].includes(event.key)) { event.preventDefault(); setSidebar('conversation'); document.getElementById('conversation-tab')?.focus(); } }} onClick={() => setSidebar('controls')}>Brief & settings</button></div>
-        <div className="brief-scroll">
-        <div id="conversation-panel" role="tabpanel" tabIndex={-1} aria-labelledby="conversation-tab" hidden={sidebar !== 'conversation'}><ContentAgent workspace={workspace} edit={edit} agent={agent} selected={selected} disabled={!!busy || fileBusy || uploadBusy || status === 'conflict'} configured={configured}
-          catalog={catalog} modelError={modelError} modelsLoading={modelsLoading} reloadModels={() => void loadModels(true)} onUploadBusy={setUploadBusy} /></div>
-        <div id="brief-controls" role="tabpanel" aria-labelledby="controls-tab" hidden={sidebar !== 'controls'}>
-        <div className="intro"><h1>What are we making?</h1><p>Your brief leads. Your website inspires.</p></div>
-        {!configured ? <p className="notice">Add <code>ANTHROPIC_API_KEY</code> to <code>.env</code>, then restart to enable generation.</p> : null}
-        <form onSubmit={event => { event.preventDefault(); requestAgent(`Analyze ${url} as optional inspiration for this post.`, { intent: 'analyze', target: null, url }); }}><fieldset disabled={locked}>
-          <label htmlFor="website">Website inspiration <span className="optional">Optional</span></label>
-          <div className="input-action"><input id="website" type="url" placeholder="https://yourbrand.com" value={url} onChange={e => setUrl(e.target.value)} required />
-            <button type="submit" disabled={!configured || !url.trim()}>Analyze</button></div>
-          {modelPicker('analyze')}
-          {brand ? <p className="field-hint">Analyze another website to add its identity and images. Your existing references stay available.</p> : null}
-        </fieldset></form>{feedback('analyze')}
-        {websiteReferences(workspace).map((brand, referenceIndex) => {
-          const selectedImages = selectedReferenceImages(brand);
-          const update = (patch: { brand: Brand | null }) => edit(current => ({ ...current, ...(patch.brand ? keepReference(current, patch.brand) : removeReference(current, brand.url)) }));
-          return <details className="brand-reference" key={brand.url}><summary>{new URL(brand.url).hostname} · {selectedImages.length} image{selectedImages.length === 1 ? '' : 's'} selected</summary>
-          <fieldset disabled={locked}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img className="site-screenshot" src={brand.screenshot} alt={`Website reference from ${new URL(brand.url).hostname}`} />
-            <label htmlFor={`brand-notes-${referenceIndex}`}>{referenceIndex ? `Inspiration notes — ${new URL(brand.url).hostname}` : 'Inspiration notes'}</label><textarea id={`brand-notes-${referenceIndex}`} rows={5} value={brand.notes} onChange={e => update({ brand: { ...brand, notes: e.target.value } })} />
-            {brand.images.length ? <><div className="image-heading"><span>Images the model may use</span><button className="text-button" type="button" onClick={() => update({ brand: { ...brand, selectedImages: selectedImages.length ? [] : brand.images } })}>{selectedImages.length ? 'Deselect all' : 'Select all'}</button></div>
-              <div className="image-picker">{brand.images.map((image, i) => <div key={image} className={selectedImages.includes(image) ? 'chosen' : ''}><label>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={brand.previews.find(p => p.url === image)?.thumbnail ?? image} alt={`Website image ${i + 1}`} loading="lazy" referrerPolicy="no-referrer" />
-                <span><input type="checkbox" checked={selectedImages.includes(image)} onChange={event => update({ brand: { ...brand, selectedImages: event.target.checked ? [...selectedImages, image] : selectedImages.filter(url => url !== image) } })} />Image {i + 1}</span></label><button className="image-view" type="button" onClick={() => setEnlarged(enlarged === image ? null : image)}>View image {i + 1}</button>
-              </div>)}</div>
-              {enlarged && brand.previews.find(p => p.url === enlarged) ? <figure className="image-detail">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={brand.previews.find(p => p.url === enlarged)!.original ?? brand.previews.find(p => p.url === enlarged)!.thumbnail} alt={brand.previews.find(p => p.url === enlarged)!.description || 'Expanded website image'} />
-                <figcaption>{brand.previews.find(p => p.url === enlarged)!.description}<br />{brand.previews.find(p => p.url === enlarged)!.width ?? '?'} × {brand.previews.find(p => p.url === enlarged)!.height ?? '?'} px · {brand.previews.find(p => p.url === enlarged)!.original ? 'Original retained' : 'Remote original'}</figcaption><button type="button" onClick={() => setEnlarged(null)}>Close image</button>
-              </figure> : null}</> : <p className="field-hint">No usable images were found. The website appearance and notes are still available as inspiration.</p>}
-            <button type="button" className="text-button" onClick={() => update({ brand: null })}>Remove website reference</button>
-          </fieldset>
-        </details>; })}
-        <form id="generate-form" className="generation-form" onSubmit={event => { event.preventDefault(); requestAgent('Create slides from my saved main brief and per-slide instructions. Ask if an important detail needs clarification; otherwise show me your proposal.', { intent: 'generate', target: null, url: '' }); }}><fieldset disabled={locked}>
-          <BriefComposer key={composerKey} workspace={workspace} edit={edit} disabled={locked} configured={configured} required={!directions.length} showChat={false}
-            catalog={catalog} modelError={modelError} modelsLoading={modelsLoading} reloadModels={() => void loadModels(true)} />
-          <SlideDirectionsEditor enabled={workspace.slideDirectionsEnabled} directions={workspace.slideDirections} onChange={(slideDirectionsEnabled, slideDirections) => update({ slideDirectionsEnabled, slideDirections })} />
-          {duplicateSlide !== undefined ? <p className="error" role="alert">Slide {duplicateSlide} has two instruction fields. Combine them or choose a different slide number.</p> : null}
-          {modelPicker('generate')}
-          <div className="canvas-controls"><label htmlFor="format">Canvas</label><select id="format" value={customSize ? 'custom' : preset} onChange={e => {
-            setCustomSize(e.target.value === 'custom');
-            if (e.target.value === 'portrait') update({ width: 1080, height: 1350 });
-            if (e.target.value === 'square') update({ width: 1080, height: 1080 });
-          }}><option value="portrait">Portrait · 4:5</option><option value="square">Square · 1:1</option><option value="custom">Custom size</option></select>
-          {customSize || preset === 'custom' ? <div className="dimensions"><label>Width<input type="number" min={200} max={2400} required value={width || ''} onChange={e => update({ width: Number(e.target.value) })} /></label><span aria-hidden="true">×</span><label>Height<input type="number" min={200} max={2400} required value={height || ''} onChange={e => update({ height: Number(e.target.value) })} /></label><span>px</span></div> : null}
-          {deck && (width !== deck.width || height !== deck.height) ? <p className="field-hint">This size applies to the next generation. The current deck stays {deck.width} × {deck.height}.</p> : null}</div>
-        </fieldset></form>
-      </div></div>{sidebar === 'controls' ? <div className="generate-footer">{feedback('generate')}<button className="primary generate" type="submit" form="generate-form" disabled={locked || !configured || !hasGenerationInstructions || duplicateSlide !== undefined}>{deck ? 'Discuss a new version' : 'Create with the agent'}</button><p className="field-hint">Review the proposal in the conversation before creating slides.</p></div> : null}</aside>
 
-      <section className="preview-panel" aria-label="Slide workspace">
-        <CreationFlow active={busy?.record ?? null} elapsedMs={elapsed * 1000} runs={workspace.recentRuns} lastRun={lastRun} disabled={locked}
-          onFeedback={(key, feedback) => edit(current => updateRunFeedback(current, key, feedback))} onSave={() => void savePortable()} />
-        {deck && shownDeck ? <>
-          <div className="deck-toolbar"><div><h2 ref={resultHeading} tabIndex={-1}>{shownDeck.title || 'Untitled deck'}</h2><p>{shownDeck.slides.length} slides · {shownDeck.width} × {shownDeck.height} px</p></div>
-            <div className="toolbar-actions">{previous ? <><button disabled={locked} onClick={() => requestAgent('Undo the last slide change. Show me the proposal first.')}>Undo last change</button><button aria-pressed={compare} onClick={() => setCompare(value => !value)}>{compare ? 'Show current' : 'Compare previous'}</button></> : null}{workspace.redo ? <button disabled={locked} onClick={() => requestAgent('Redo the last slide change. Show me the proposal first.')}>Redo last change</button> : null}<button className="primary" onClick={() => download()} disabled={locked}>{compare ? 'Download previous PNGs' : 'Download PNGs'}</button></div></div>
-          {feedback('export')}
-          <div className="preview-controls"><span>{compare ? 'Previous version' : 'Current version'}</span><div role="group" aria-label="Preview zoom"><button aria-pressed={!actualSize} onClick={() => setActualSize(false)}>Fit</button><button aria-pressed={actualSize} onClick={() => setActualSize(true)}>100%</button></div></div>
-          <div className={`canvas-area${actualSize ? ' actual-size' : ''}`}><SlidePreview html={shownDeck.slides[shownIndex].html} width={shownDeck.width} height={shownDeck.height} index={shownIndex} actualSize={actualSize} assets={shownDeck.assets} /></div>
-          <nav className="slide-nav" aria-label="Slides" onKeyDown={event => {
-            const next = event.key === 'ArrowRight' ? Math.min(shownIndex + 1, shownDeck.slides.length - 1) : event.key === 'ArrowLeft' ? Math.max(0, shownIndex - 1) : event.key === 'Home' ? 0 : event.key === 'End' ? shownDeck.slides.length - 1 : null;
-            if (next !== null) { event.preventDefault(); setSelected(next); event.currentTarget.querySelectorAll<HTMLButtonElement>('button')[next]?.focus(); }
-          }}>{shownDeck.slides.map((slide, i) => <div className={`thumbnail${shownIndex === i ? ' selected' : ''}`} key={i}>
-            <SlidePreview html={slide.html} width={shownDeck.width} height={shownDeck.height} index={i} thumbnail assets={shownDeck.assets} />
-            <button aria-current={shownIndex === i ? 'page' : undefined} onClick={() => setSelected(i)}><span>Slide {i + 1}</span></button>
-          </div>)}</nav>
-          <div className="slide-actions"><span>Slide {shownIndex + 1}</span><details><summary>Slide actions</summary><div>
-            <button onClick={() => slideAction('earlier')} disabled={locked || compare || shownIndex === 0}>Move earlier</button>
-            <button onClick={() => slideAction('later')} disabled={locked || compare || shownIndex === shownDeck.slides.length - 1}>Move later</button>
-            <button onClick={() => slideAction('duplicate')} disabled={locked || compare}>Duplicate</button>
-            <button onClick={() => slideAction('delete')} disabled={locked || compare || shownDeck.slides.length === 1}>Delete slide</button>
-            <button onClick={() => download(true)} disabled={locked}>Download this PNG</button>
-          </div></details><button onClick={inspect} disabled={locked}>Check slides</button></div>
-          {feedback('inspect')}
-          <details className="diagnostics"><summary>{shownDeck.slides.some(s => s.diagnostics?.length) ? `${shownDeck.slides.filter(s => s.diagnostics?.length).length} slide(s) with review notes` : shownDeck.slides.every(s => s.diagnostics) ? 'Render checks complete · no issues detected' : 'Render checks available'}</summary>
-            <p>Checks flag missing assets, failed fonts and possible clipped text. Intentional crops may be flagged; design choices stay yours. Checks do not assess factual accuracy or overall design quality.</p>
-            {shownDeck.slides.map((slide, i) => slide.diagnostics?.length ? <div key={i}><button className="text-button" onClick={() => setSelected(i)}>Slide {i + 1}</button><ul>{slide.diagnostics.map((issue, j) => <li key={j}>{issue}</li>)}</ul></div> : null)}
-          </details>
-          <form className="revision-form" onSubmit={e => { e.preventDefault(); requestAgent(instruction, { intent: 'revise', target: scope === 'slide' ? selected : null, url: '' }); }}>
-            <fieldset disabled={locked || compare}><div className="revision-heading"><label htmlFor="revision">What would you change?</label><select aria-label="Revision scope" value={scope} onChange={e => setScope(e.target.value as 'slide' | 'deck')}><option value="slide">Slide {Math.min(selected, deck.slides.length - 1) + 1} only</option><option value="deck">Whole deck</option></select></div>
-              <textarea id="revision" rows={3} value={instruction} onChange={e => setInstruction(e.target.value)} placeholder="Move the headline lower and give the photo more room…" required />
-              <RevisionReferences images={workspace.revisionReferences} disabled={locked || compare} onBusyChange={setUploadBusy}
-                onAdd={image => edit(current => ({ ...current, revisionTarget: selected, revisionReferences: [...current.revisionReferences.filter(item => item.original !== image.original), image] }))}
-                onRemove={original => edit(current => ({ ...current, revisionReferences: current.revisionReferences.filter(image => image.original !== original) }))} />
-              {deck.originBrief !== undefined && generationInstructionsChanged ? <label className="check-label"><input type="checkbox" checked={useUpdatedBrief} onChange={e => setUseUpdatedBrief(e.target.checked)} />Use edited main and slide instructions for this revision</label> : null}
-              <details className="revision-context"><summary>Instructions used for revisions</summary><p>{directionSummary(useUpdatedBrief ? brief : deck.originBrief ?? brief, useUpdatedBrief ? directions : deck.originSlideDirections ?? [])}</p>{deck.originBrief === undefined ? <p className="field-hint">This older deck has no saved original brief; the current main brief is used.</p> : null}</details>
-              {modelPicker('revise')}
-              <div className="revision-actions"><span className="field-hint">I’ll review your request and show a proposal before changing the slides.</span><button type="submit" className="primary" disabled={!configured || !instruction.trim() || (useUpdatedBrief && duplicateSlide !== undefined)}>Discuss this change</button></div>
-            </fieldset>{feedback('revise')}
-            {workspace.lastInstruction ? <details className="last-direction"><summary>Last applied instruction</summary><p>{workspace.lastInstruction}</p></details> : null}
-          </form>
-        </> : <div className="empty-preview"><div className="empty-sheet"><span>A blank canvas.</span><p>Your direction comes first.</p></div><h2>Your slides will appear here</h2><p>Start with your instructions. Add a website when you want a brand reference.</p></div>}
+    <div className="banners">
+      {recovery ? <div className="banner"><p>Unsaved changes from {new Date(recovery.savedAt).toLocaleString()} were found.</p><div>
+        <button className="button" disabled={locked} onClick={() => { setSelected(recovery.workspace.revisionTarget); recover(); }}>Restore</button>
+        <button className="button ghost" disabled={fileBusy} onClick={() => void savePortable(recovery.workspace)}>Save a copy</button>
+        <button className="button ghost" onClick={dismissRecovery}>Dismiss</button></div></div> : null}
+      {ready && saveError ? <div className="banner warn" role="alert"><p>{saveError}</p><div>
+        <button className="button" disabled={fileBusy} onClick={() => void savePortable()}>Save a copy</button>
+        <button className="button ghost" onClick={() => downloadJson(workspace)}>Text-only copy</button>
+        {status === 'conflict' ? <button className="button ghost" onClick={reload} disabled={locked}>Load saved draft</button> : <button className="button ghost" onClick={() => void flush()}>Retry</button>}</div></div> : null}
+      {backupError || fileError ? <div className="banner warn" role="alert"><p>{fileError || backupError}</p>{fileError ? <button className="button ghost" onClick={() => setFileError('')}>Dismiss</button> : null}</div> : null}
+      {ready && !configured ? <div className="banner"><p>Add <code>ANTHROPIC_API_KEY</code> to <code>.env</code> and restart to start creating.</p></div> : null}
+    </div>
 
-      </section>
-    </main>}
-  </>;
+    {!ready ? <main className="loading" aria-busy="true">{saveError ? <><p role="alert">{saveError}</p><button className="button" onClick={load}>Try again</button></> : <span className="spinner big" />}</main>
+      : <main className="studio">
+        <Stage deck={shownDeck} width={width} height={height} selected={index} handle={handle} peeking={peek && !!previous} locked={locked} work={work} empty={empty}
+          onSelect={setSelected} onAim={i => { setSelected(i); setSlideScope(true); }} onMove={move}
+          onDuplicate={i => deck && slideChange(changeSlide(deck, i, 'duplicate'), `Duplicated slide ${i + 1}`)}
+          onDelete={i => deck && slideChange(changeSlide(deck, i, 'delete'), `Deleted slide ${i + 1}`)}
+          onDownloadSlide={i => download(i)} />
+        {deck && !peek ? <p className="scope-hint">Tap a thumbnail to aim your next change at one slide{deck.slides.length > 1 ? ' · drag to reorder' : ''}.</p> : null}
+      </main>}
+
+    <div className="dock">
+      {toast ? <div key={toast.id} className={`toast${toast.tone === 'error' ? ' error' : ''}`} role={toast.tone === 'error' ? 'alert' : 'status'}>
+        <Icon name={toast.tone === 'error' ? 'alert' : 'check'} size={16} /><span>{toast.text}</span>
+        {toast.undo && (toast.undo === 'undo' ? previous : redo) ? <button type="button" onClick={() => time(toast.undo!)}>{toast.undo === 'undo' ? 'Undo' : 'Redo'}</button> : null}
+        <button type="button" className="toast-close" aria-label="Dismiss" onClick={() => setToast(null)}><Icon name="close" size={14} /></button>
+      </div> : null}
+      {showReply && reply ? <div className="reply" key={reply.id}>
+        <button type="button" className="reply-close" aria-label="Hide reply" onClick={() => setSeen(reply.id)}><Icon name="close" size={14} /></button>
+        <p>{reply.text}</p>
+        <Choices message={reply} disabled={locked || !configured} onSend={send} />
+        <Proposal message={reply} contextKey={contextKey} disabled={locked || !configured} onSend={send} onApply={id => void agent.apply(id)} onDismiss={agent.dismiss} />
+        <button type="button" className="link" onClick={() => setSheet('thread')}>Open conversation</button>
+      </div> : null}
+      <CommandBar value={workspace.agent.draft} onChange={draft => edit(w => ({ ...w, agent: { ...w.agent, draft } }))} onSend={send}
+        onStop={() => { agent.stop(); active.current?.abort(); }} busy={agent.busy || !!busy} phase={phase} disabled={!ready || !configured || status === 'conflict' || fileBusy}
+        placeholder={placeholder} scope={deck ? { label: slideScope ? `Slide ${index + 1}` : 'Whole post', slide: slideScope } : null} onToggleScope={() => setSlideScope(value => !value)}
+        images={workspace.agent.references} onUploadBusy={setUploadBusy}
+        onAddImage={image => edit(w => ({ ...w, agent: { ...w.agent, references: [...w.agent.references.filter(r => r.original !== image.original), image] } }))}
+        onRemoveImage={original => edit(w => ({ ...w, agent: { ...w.agent, references: w.agent.references.filter(r => r.original !== original) } }))}
+        fileDrop={dropped} onFileDropHandled={() => setDropped(null)} />
+    </div>
+
+    <Sheet open={sheet === 'thread'} title="Conversation" onClose={closeSheet} className="thread-sheet">
+      <Thread messages={messages} contextKey={contextKey} disabled={locked || !configured} busy={agent.busy} phase={agent.phase}
+        onSend={send} onApply={id => void agent.apply(id)} onDismiss={agent.dismiss} onResume={() => void agent.resume()} />
+    </Sheet>
+    <Sheet open={sheet === 'settings'} title="Settings" onClose={closeSheet}>
+      <Settings workspace={workspace} edit={edit} locked={locked} configured={configured} catalog={catalog} modelError={modelError} modelsLoading={modelsLoading} reloadModels={() => void loadModels(true)}
+        analyzing={busy?.action === 'analyze' ? busy.phase : null} onAnalyze={analyze} direct={direct} onDirect={setDirect}
+        fileBusy={fileBusy} onSavePortable={() => void savePortable()} onOpenPortable={file => void openPortable(file)} onNew={() => reset()} onResetAll={() => reset(true)}
+        onCheck={inspect} checking={busy?.action === 'inspect'} />
+    </Sheet>
+    {dragging ? <div className="drop-hint" aria-hidden="true"><Icon name="image" size={28} /><span>Drop images to use them</span></div> : null}
+  </div>;
 }

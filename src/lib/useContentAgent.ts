@@ -9,6 +9,8 @@ import { streamRequest } from './client';
 type Props = {
   getWorkspace: () => Workspace; edit: (change: (current: Workspace) => Workspace) => void;
   selected: number; disabled: boolean; configured: boolean; flush: () => Promise<boolean>;
+  // Direct mode runs slide changes as soon as the agent chooses them; Undo is the safety net.
+  direct: boolean;
   execute: (action: AgentAction, signal: AbortSignal) => Promise<string>;
 };
 export function useContentAgent(props: Props) {
@@ -36,14 +38,17 @@ export function useContentAgent(props: Props) {
       const workspace = latest.current.getWorkspace(); const selectedSlide = latest.current.selected;
       const sourceKey = agentContextKey(workspace, selectedSlide); let usage: UsageInfo = {};
       setPhase('Considering your request…');
-      const reply = await streamRequest<AgentReply>('agent', { workspace: { ...workspace, recentRuns: [], lastRun: null }, selectedSlide }, signal, setPhase, value => { usage = { ...usage, ...value }; });
+      const direct = latest.current.direct;
+      const reply = await streamRequest<AgentReply>('agent', { workspace: { ...workspace, recentRuns: [], lastRun: null }, selectedSlide, direct }, signal, setPhase, value => { usage = { ...usage, ...value }; });
       signal.throwIfAborted();
       const message: AgentMessage = { id: crypto.randomUUID(), role: 'assistant', text: reply.reply, choices: reply.choices, model: usage.model,
         usage: { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, modelMs: usage.modelMs },
         ...(reply.action ? { action: reply.action, actionStatus: 'proposed', sourceKey } : {}) };
       append(message);
-      if (!reply.action || requiresProposal(reply.action)) return;
+      if (!reply.action || (requiresProposal(reply.action) && !direct)) return;
       await execute(message, signal);
+      // A direct slide change reports itself; skip the extra model call that would only narrate it.
+      if (requiresProposal(reply.action)) return;
     }
     append({ id: crypto.randomUUID(), role: 'assistant', text: 'I’ve completed five steps. Tell me what you’d like to do next.' });
   }
