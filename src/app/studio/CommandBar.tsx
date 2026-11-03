@@ -9,14 +9,14 @@ type Props = {
   value: string; onChange: (text: string) => void; onSend: (text: string) => void; onStop: () => void;
   busy: boolean; phase: string; disabled: boolean; placeholder: string;
   scope: { label: string; slide: boolean } | null; onToggleScope: () => void;
-  images: RevisionReference[]; onAddImage: (image: RevisionReference) => void; onRemoveImage: (original: string) => void; onUploadBusy: (busy: boolean) => void;
+  images: RevisionReference[]; onAddImage: (image: RevisionReference) => void; onRemoveImage: (original: string) => void; onPinImage: (image: RevisionReference) => void; onUploadBusy: (busy: boolean) => void;
   fileDrop: File[] | null; onFileDropHandled: () => void;
 };
 
 const urlPattern = /https?:\/\/[^\s)]+/i;
 
 // One place to ask for anything: a new post, a change to the selected slide, a question.
-export function CommandBar({ value, onChange, onSend, onStop, busy, phase, disabled, placeholder, scope, onToggleScope, images, onAddImage, onRemoveImage, onUploadBusy, fileDrop, onFileDropHandled }: Props) {
+export function CommandBar({ value, onChange, onSend, onStop, busy, phase, disabled, placeholder, scope, onToggleScope, images, onAddImage, onRemoveImage, onPinImage, onUploadBusy, fileDrop, onFileDropHandled }: Props) {
   const input = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
   const [composing, setComposing] = useState(false);
@@ -44,6 +44,7 @@ export function CommandBar({ value, onChange, onSend, onStop, busy, phase, disab
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={image.thumbnail} alt={image.name} width={40} height={40} />
         <button type="button" aria-label={`Remove ${image.name}`} onClick={() => onRemoveImage(image.original)} disabled={busy}><Icon name="close" size={12} /></button>
+        <button type="button" className="pin" aria-label={`Pin ${image.name} as standing inspiration`} title="Pin as inspiration for every post" onClick={() => onPinImage(image)} disabled={busy}><Icon name="pin" size={11} /></button>
       </span>)}
       {uploads.progress ? <span className="chip soft"><span className="spinner" />{uploads.progress}</span> : null}
       {url ? <span className="chip soft"><Icon name="link" size={14} />I&apos;ll look at {safeHost(url)}</span> : null}

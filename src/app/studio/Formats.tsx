@@ -1,11 +1,6 @@
 'use client';
 import type { CSSProperties } from 'react';
-
-export const formats = [
-  { id: 'post', label: 'Post', ratio: '4:5', width: 1080, height: 1350 },
-  { id: 'square', label: 'Square', ratio: '1:1', width: 1080, height: 1080 },
-  { id: 'story', label: 'Story', ratio: '9:16', width: 1080, height: 1920 },
-] as const;
+import { formats } from '@/lib/formats';
 
 export function Formats({ width, height, onChange, disabled }: { width: number; height: number; onChange: (size: { width: number; height: number }) => void; disabled?: boolean }) {
   return <div className="formats" role="radiogroup" aria-label="Format">

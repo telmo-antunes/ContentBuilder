@@ -39,7 +39,7 @@ export function useContentAgent(props: Props) {
       const sourceKey = agentContextKey(workspace, selectedSlide); let usage: UsageInfo = {};
       setPhase('Considering your request…');
       const direct = latest.current.direct;
-      const reply = await streamRequest<AgentReply>('agent', { workspace: { ...workspace, recentRuns: [], lastRun: null }, selectedSlide, direct }, signal, setPhase, value => { usage = { ...usage, ...value }; });
+      const reply = await streamRequest<AgentReply>('agent', { workspace: { ...workspace, recentRuns: [], lastRun: null, history: [], future: [] }, selectedSlide, direct }, signal, setPhase, value => { usage = { ...usage, ...value }; });
       signal.throwIfAborted();
       const message: AgentMessage = { id: crypto.randomUUID(), role: 'assistant', text: reply.reply, choices: reply.choices, model: usage.model,
         usage: { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, modelMs: usage.modelMs },

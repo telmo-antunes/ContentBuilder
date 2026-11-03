@@ -21,7 +21,7 @@ export function slideDocument(html: string, assets: Record<string, string> = {})
     if ('content' in node) clean(node.content as Node);
   }
   clean(document);
-  const policy = "default-src 'none'; script-src 'none'; style-src 'unsafe-inline' https:; img-src data: https:; font-src data: https:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'";
+  const policy = "default-src 'none'; script-src 'none'; style-src 'unsafe-inline' https: data:; img-src data: https:; font-src data: https:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'";
   // Insert before authored markup, so it cannot loosen this policy. The same
   // document is used in an empty-sandbox iframe for preview AND PNG export.
   return serialize(document).replace('<head>', `<head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${policy}"><style>html,body{margin:0;width:100%;height:100%;overflow:hidden}</style>`);

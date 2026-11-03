@@ -50,7 +50,7 @@ describe('direct generation', () => {
     const brand = { url: 'https://example.com', notes: 'Reference', screenshot: 'data:image/jpeg;base64,d2Vic2l0ZQ==', captures: [], previews: [],
       images: ['https://example.com/keep.jpg', 'https://example.com/exclude.jpg'], selectedImages: ['https://example.com/keep.jpg'] };
     const deck = { width: 600, height: 750, title: 'Deck', slides: [{ html: 'Original words' }] };
-    const blocks = generationMessage({ ...input, brand, deck, instruction: 'Move the headline', slideIndex: 0 }, [], [{ label: 'Slide 1', data: 'data:image/jpeg;base64,cmVuZGVy' }]);
+    const blocks = generationMessage({ ...input, brand, deck, instruction: 'Move the headline', slideIndex: 0 }, { renders: [{ label: 'Slide 1', data: 'data:image/jpeg;base64,cmVuZGVy' }] });
     const json = JSON.stringify(blocks);
     expect(json).toContain('keep.jpg'); expect(json).not.toContain('exclude.jpg');
     expect(json).toContain('CURRENT RENDER'); expect(json).toContain('cmVuZGVy'); expect(json).toContain('Original words');

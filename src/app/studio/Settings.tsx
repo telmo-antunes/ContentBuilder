@@ -1,6 +1,8 @@
 'use client';
 import { useRef, useState } from 'react';
-import type { Brand, Workspace } from '@/lib/schema';
+import type { Brand, Kit, Workspace } from '@/lib/schema';
+import { MAX_REVISION_REFERENCES } from '@/lib/schema';
+import { useUploads } from './useUploads';
 import type { ModelCatalog } from '@/lib/models';
 import { keepReference, removeReference, selectedReferenceImages, websiteReferences } from '@/lib/references';
 import { ModelPicker } from '../ModelPicker';
@@ -20,6 +22,12 @@ type Props = {
 export function Settings(props: Props) {
   const { workspace, edit, locked, configured, catalog, modelError, modelsLoading, reloadModels, analyzing, onAnalyze, direct, onDirect } = props;
   const [url, setUrl] = useState('');
+  const [pinBusy, setPinBusy] = useState(false);
+  const kit = workspace.kit;
+  const setKit = (patch: Partial<Kit>) => edit(current => ({ ...current, kit: { ...current.kit, ...patch } }));
+  const pins = useUploads({ count: workspace.pinned.length, onBusyChange: setPinBusy,
+    onAdd: image => edit(current => ({ ...current, pinned: [...current.pinned.filter(item => item.original !== image.original), image].slice(-MAX_REVISION_REFERENCES) })) });
+  const pinInput = useRef<HTMLInputElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const references = websiteReferences(workspace);
   const deck = workspace.deck;
@@ -74,6 +82,45 @@ export function Settings(props: Props) {
     </section>
 
     <section className="tile">
+      <h3><Icon name="sparkle" size={18} />Brand kit</h3>
+      <p className="hint">Every post starts from this, and it stays when you start a new post. Learning a website fills the empty fields.</p>
+      <div className="kit-grid">
+        <label className="field"><span className="field-label">Instagram handle</span>
+          <input value={kit.handle} disabled={locked} placeholder="@yourbrand" onChange={event => setKit({ handle: event.target.value.replace(/^@/, '') })} /></label>
+        <label className="field"><span className="field-label">Fonts</span>
+          <input value={kit.fonts.join(', ')} disabled={locked} placeholder="Poppins, Inter" onChange={event => setKit({ fonts: event.target.value.split(',').map(item => item.trimStart()).filter((item, i, all) => item || i === all.length - 1).slice(0, 6) })} /></label>
+      </div>
+      <div className="field"><span className="field-label">Colours</span>
+        <div className="swatches">{kit.colors.map((color, i) => <span className="swatch" key={i}>
+          <input type="color" value={/^#[0-9a-f]{6}$/i.test(color) ? color : '#000000'} disabled={locked} aria-label={`Colour ${i + 1}`} onChange={event => setKit({ colors: kit.colors.map((item, j) => j === i ? event.target.value : item) })} />
+          <button type="button" aria-label={`Remove colour ${color}`} disabled={locked} onClick={() => setKit({ colors: kit.colors.filter((_, j) => j !== i) })}><Icon name="close" size={12} /></button></span>)}
+          {kit.colors.length < 12 ? <button type="button" className="swatch add" aria-label="Add a colour" disabled={locked} onClick={() => setKit({ colors: [...kit.colors, '#5b5bf6'] })}><Icon name="plus" size={16} /></button> : null}</div></div>
+      <label className="field"><span className="field-label">Voice</span>
+        <textarea rows={2} value={kit.voice} disabled={locked} placeholder="Calm, expert, a little playful. Speaks to studio owners as peers." onChange={event => setKit({ voice: event.target.value })} /></label>
+      <label className="field"><span className="field-label">Always and never</span>
+        <textarea rows={2} value={kit.rules} disabled={locked} placeholder="Always European Portuguese. Never use “barato”. Logo top-left." onChange={event => setKit({ rules: event.target.value })} /></label>
+      {kit.logo ? <div className="field-row"><span className="kit-logo">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={kit.logo} alt="Brand logo" /><span className="field-label">Logo</span></span>
+        <button type="button" className="link danger" disabled={locked} onClick={() => setKit({ logo: undefined })}>Remove</button></div> : null}
+      {kit.lessons.length ? <div className="field"><span className="field-label">Learned from your changes</span>
+        <ul className="lessons">{kit.lessons.map(lesson => <li key={lesson}><span>{lesson}</span>
+          <button type="button" aria-label={`Forget: ${lesson}`} disabled={locked} onClick={() => setKit({ lessons: kit.lessons.filter(item => item !== lesson) })}><Icon name="close" size={12} /></button></li>)}</ul></div> : null}
+    </section>
+
+    <section className="tile">
+      <h3><Icon name="pin" size={18} />Pinned inspiration</h3>
+      <p className="hint">Posts or images whose look you love. Every new post learns from their style, never their content.</p>
+      {workspace.pinned.length ? <div className="image-grid">{workspace.pinned.map(image => <span className="pick on pinned" key={image.original}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={image.thumbnail} alt={image.name} />
+        <button type="button" aria-label={`Unpin ${image.name}`} disabled={locked} onClick={() => edit(current => ({ ...current, pinned: current.pinned.filter(item => item.original !== image.original) }))}><Icon name="close" size={12} /></button></span>)}</div> : null}
+      <div className="field-row"><span className="hint">{pins.progress || pins.error || `${workspace.pinned.length} of ${MAX_REVISION_REFERENCES}`}</span>
+        <button type="button" className="button" disabled={locked || pinBusy || workspace.pinned.length >= MAX_REVISION_REFERENCES} onClick={() => pinInput.current?.click()}><Icon name="plus" size={16} />Add images</button></div>
+      <input ref={pinInput} type="file" accept="image/png,image/jpeg,image/webp" multiple hidden onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ''; void pins.upload(files); }} />
+    </section>
+
+    <section className="tile">
       <h3>Brief for this post</h3>
       <p className="hint">Filled in from your first message. Edit it to steer every change that follows: audience, tone, exact wording.</p>
       <textarea rows={4} value={workspace.brief} disabled={locked} placeholder="e.g. For detailing studio owners in Portugal. Write in European Portuguese. Calm, expert, no hype."
@@ -84,6 +131,8 @@ export function Settings(props: Props) {
       <h3>How it works with you</h3>
       <label className="toggle"><input type="checkbox" checked={!direct} onChange={event => onDirect(!event.target.checked)} />
         <span className="switch" aria-hidden="true" /><span><strong>Ask before changing slides</strong><small>Off: changes happen straight away and you can undo them.</small></span></label>
+      <label className="toggle"><input type="checkbox" checked={workspace.polish} disabled={locked} onChange={event => { const polish = event.target.checked; edit(current => ({ ...current, polish })); }} />
+        <span className="switch" aria-hidden="true" /><span><strong>Polish pass</strong><small>After a new post or a whole-post change, the AI looks at the result at phone size and fixes clipped text, small type and weak contrast. One extra call.</small></span></label>
       {deck ? <div className="field-row">
         <span><strong>Render checks</strong><small className="block">{notes.length ? `${notes.length} note${notes.length === 1 ? '' : 's'} on this post` : 'Missing images, fonts and clipped text.'}</small></span>
         <button type="button" className="button" disabled={locked} onClick={props.onCheck}>{props.checking ? <span className="spinner" /> : 'Check now'}</button>
