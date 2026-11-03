@@ -1,6 +1,6 @@
 'use client';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { previewAsset } from '@/lib/client';
+import { cachedPreviewAsset, previewAsset } from '@/lib/client';
 import { slideDocument } from '@/lib/document';
 
 export const SlidePreview = memo(function SlidePreview({ html, width, height, index, actualSize = false, thumbnail = false, fill = false, assets }: {
@@ -9,11 +9,14 @@ export const SlidePreview = memo(function SlidePreview({ html, width, height, in
 }) {
   const container = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0);
-  const [hydrated, setHydrated] = useState<{ key: string; values: Record<string, string> }>({ key: '', values: {} });
+  const assetKey = JSON.stringify(assets ?? {});
+  // Assets read before are used straight away, so switching views shows the slide without a blank wait.
+  const [hydrated, setHydrated] = useState<{ key: string; values: Record<string, string> }>(() => ({ key: cachedValues(assetKey) ? assetKey : '', values: cachedValues(assetKey) ?? {} }));
   const [assetError, setAssetError] = useState('');
   const [loaded, setLoaded] = useState('');
-  const assetKey = JSON.stringify(assets ?? {});
   useEffect(() => {
+    const cached = cachedValues(assetKey);
+    if (cached) { setHydrated(current => current.key === assetKey ? current : { key: assetKey, values: cached }); return; }
     let current = true; setAssetError('');
     const references = JSON.parse(assetKey) as Record<string, string>;
     void Promise.all(Object.entries(references).map(async ([url, ref]) => [url, await previewAsset(ref)] as const))
@@ -35,3 +38,10 @@ export const SlidePreview = memo(function SlidePreview({ html, width, height, in
       style={{ width, height, transform: `scale(${scale})`, visibility: scale ? 'visible' : 'hidden' }} />}
   </div>;
 });
+function cachedValues(assetKey: string): Record<string, string> | null {
+  const values: Record<string, string> = {};
+  for (const [url, reference] of Object.entries(JSON.parse(assetKey) as Record<string, string>)) {
+    const value = cachedPreviewAsset(reference); if (value === undefined) return null; values[url] = value;
+  }
+  return values;
+}

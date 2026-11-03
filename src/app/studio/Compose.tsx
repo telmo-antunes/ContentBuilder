@@ -5,11 +5,12 @@ import { formats, isStory } from '@/lib/formats';
 import { Formats } from './Formats';
 import { Icon } from './Icon';
 import { useUploads } from './useUploads';
+import { brandList, switchProfile } from '@/lib/profiles';
 
 export type ComposeRequest = { url: string; count: number | null };
 type Props = {
   workspace: Workspace; edit: (change: (current: Workspace) => Workspace) => void; locked: boolean; configured: boolean;
-  onCreate: (request: ComposeRequest) => void; onClose: (() => void) | null; onUploadBusy: (busy: boolean) => void;
+  onCreate: (request: ComposeRequest) => void; onClose: (() => void) | null; onUploadBusy: (busy: boolean) => void; onManageBrands: () => void;
 };
 
 const COUNTS = [1, 3, 4, 5, 6, 7, 8, 10];
@@ -25,13 +26,17 @@ const hostOf = (url: string) => { try { return new URL(url).hostname.replace(/^w
 const slideRole = (slide: number, count: number | null) => slide === 1 ? 'Cover' : count && slide === count && count > 2 ? 'Close' : '';
 
 // Three beats: say what the post is about, shape the slides if you want to, make it.
-export function Compose({ workspace, edit, locked, configured, onCreate, onClose, onUploadBusy }: Props) {
+export function Compose({ workspace, edit, locked, configured, onCreate, onClose, onUploadBusy, onManageBrands }: Props) {
   const [step, setStep] = useState(0);
   const [back, setBack] = useState(false);
   const [url, setUrl] = useState(() => workspace.brief.match(urlPattern)?.[0] ?? '');
-  const [count, setCount] = useState<number | null>(null);
+  const [brandMenu, setBrandMenu] = useState(false);
+  const count = workspace.slideCount;
+  const brands = brandList(workspace);
+  const brand = brands.find(item => item.active)!;
   const picker = useRef<HTMLInputElement>(null);
   const brief = useRef<HTMLTextAreaElement>(null);
+  const brandRoot = useRef<HTMLDivElement>(null);
   const images = workspace.agent.references;
   const uploads = useUploads({ count: images.length, onBusyChange: onUploadBusy,
     onAdd: image => edit(w => ({ ...w, agent: { ...w.agent, references: [...w.agent.references.filter(r => r.original !== image.original), image] } })) });
@@ -41,6 +46,12 @@ export function Compose({ workspace, edit, locked, configured, onCreate, onClose
   const format = formats.find(item => item.width === workspace.width && item.height === workspace.height);
   const ready = configured && !locked && !!workspace.brief.trim();
   useEffect(() => { if (step === 0) brief.current?.focus({ preventScroll: true }); }, [step]);
+  useEffect(() => {
+    if (!brandMenu) return;
+    const close = (event: PointerEvent | KeyboardEvent) => { if (event instanceof KeyboardEvent ? event.key === 'Escape' : !brandRoot.current?.contains(event.target as Node)) setBrandMenu(false); };
+    window.addEventListener('pointerdown', close); window.addEventListener('keydown', close);
+    return () => { window.removeEventListener('pointerdown', close); window.removeEventListener('keydown', close); };
+  }, [brandMenu]);
 
   function go(next: number) { setBack(next < step); setStep(next); }
   function setDirection(slide: number, text: string) {
@@ -52,9 +63,8 @@ export function Compose({ workspace, edit, locked, configured, onCreate, onClose
     });
   }
   function chooseCount(next: number | null) {
-    setCount(next);
     // Instructions for slides beyond the new count would ask for slides that no longer exist.
-    if (next) edit(w => { const slideDirections = w.slideDirections.filter(item => item.slide <= next); return { ...w, slideDirections, slideDirectionsEnabled: slideDirections.some(item => item.text.trim()) }; });
+    edit(w => { const slideDirections = next ? w.slideDirections.filter(item => item.slide <= next) : w.slideDirections; return { ...w, slideCount: next, slideDirections, slideDirectionsEnabled: slideDirections.some(item => item.text.trim()) }; });
   }
   function create() { if (ready) onCreate({ url: url.trim(), count }); }
   // With the AI choosing the count, show the slides that already have instructions plus one empty card.
@@ -76,7 +86,17 @@ export function Compose({ workspace, edit, locked, configured, onCreate, onClose
 
     <div key={step} className={`beat ${back ? 'from-left' : 'from-right'}`}>
       {step === 0 ? <>
-        <header className="beat-head"><p className="eyebrow"><Icon name="sparkle" size={14} />New post</p><h1>What are we posting today?</h1>
+        <header className="beat-head"><div className="posting-as" ref={brandRoot}>
+            <button type="button" className="chip brand-chip" aria-expanded={brandMenu} aria-haspopup="menu" disabled={locked} onClick={() => setBrandMenu(open => !open)}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              {brand.logo ? <img src={brand.logo} alt="" /> : <span className="brand-initial" aria-hidden="true">{brand.name.replace(/^@/, '').slice(0, 1).toUpperCase()}</span>}
+              <span>Posting as <strong>{brand.name}</strong></span><Icon name="more" size={14} /></button>
+            {brandMenu ? <div className="menu" role="menu">
+              {brands.map(item => <button key={item.id} role="menuitemradio" aria-checked={item.active} onClick={() => { setBrandMenu(false); edit(w => switchProfile(w, item.id)); }}>
+                {item.active ? <Icon name="check" /> : <span className="menu-gap" />}{item.name}</button>)}
+              <button role="menuitem" onClick={() => { setBrandMenu(false); onManageBrands(); }}><Icon name="sliders" />Manage brands</button>
+            </div> : null}
+          </div><h1>What are we posting today?</h1>
           <p className="lede">Say it in your own words: the topic, who it’s for, anything it must say.</p></header>
         <div className="field-card">
           <textarea ref={brief} rows={4} value={workspace.brief} disabled={locked} aria-label="What the post is about" placeholder="A carousel for detailing studio owners: three signs a client is ready for a ceramic coating. Calm and expert, in European Portuguese."

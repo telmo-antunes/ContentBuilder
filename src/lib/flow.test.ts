@@ -1,24 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { appendStage, recordRun, runKey, updateRunFeedback } from './flow';
+import { appendStage, recordRun } from './flow';
 import { emptyWorkspace, workspaceSchema, type RunRecord } from './schema';
 const run: RunRecord = { operation: 'generate', startedAt: '2026-11-02T12:00:00Z', durationMs: 2000, instruction: 'Create', outcome: 'success' };
 const output = { width: 1080, height: 1350, title: 'Original', slides: [{ html: '<h1>Original</h1>' }] };
 describe('creation activity', () => {
-  it('keeps annotated output attached to its run across later changes and clears empty feedback', () => {
+  it('keeps no deck copies in the run log, since the versions hold them', () => {
     let workspace = recordRun(emptyWorkspace, { ...run, id: 'first', output });
-    workspace = updateRunFeedback(workspace, 'first', { categories: ['layout', 'layout'], note: 'Title overlaps', updatedAt: 'now' });
-    expect(workspace.lastRun?.feedback?.categories).toEqual(['layout']);
-    workspace = recordRun(workspace, { ...run, id: 'second', output: { ...output, title: 'Revised' } });
-    expect(workspace.recentRuns[1].output?.title).toBe('Original');
-    workspace = updateRunFeedback(workspace, 'first', { categories: [], note: ' ', updatedAt: 'later' });
-    expect(workspace.recentRuns[1].output).toBeUndefined();
-    expect(workspace.recentRuns[1].feedback).toBeUndefined();
-    expect(workspace.recentRuns[0].output?.title).toBe('Revised');
-  });
-  it('supports feedback on legacy runs without inventing an output', () => {
-    const workspace = updateRunFeedback({ ...emptyWorkspace, lastRun: run }, runKey(run), { categories: ['instructions'], note: 'Missing direction', updatedAt: 'now' });
-    expect(workspace.lastRun).toEqual(workspace.recentRuns[0]);
-    expect(workspace.lastRun?.output).toBeUndefined();
+    workspace = recordRun({ ...workspace, recentRuns: [{ ...run, id: 'legacy', output }] }, { ...run, id: 'second' });
+    expect(workspace.recentRuns.map(item => item.output)).toEqual([undefined, undefined]);
+    expect(workspace.lastRun?.id).toBe('second');
   });
   it('records distinct stages with monotonic elapsed times', () => {
     const steps = appendStage([], 'Preparing', 0);

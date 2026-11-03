@@ -4,6 +4,8 @@ export interface UsageInfo {
   model?: string; inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheWriteTokens?: number;
   renderMs?: number; modelMs?: number; firstTokenMs?: number; renderCacheHits?: number;
   thinkingTokens?: number; effort?: string;
+  // callUsd: one model call's cost; the response turns these into spentUsd, the running total for the request.
+  callUsd?: number; spentUsd?: number;
 }
 export interface SlideEvent { index: number; html: string; mode: 'full' | 'patch' | 'variant'; pass?: 'polish' }
 export interface Operation {
@@ -30,10 +32,11 @@ export function operationResponse(request: Request, work: (operation: Operation)
         }
       };
       const heartbeat = setInterval(() => send({ type: 'heartbeat' }), 15_000);
+      let spent = 0;
       try {
         const value = await work({ signal: abort.signal,
           progress: message => send({ type: 'progress', message }),
-          usage: usage => send({ type: 'usage', usage }),
+          usage: ({ callUsd, ...usage }) => { if (callUsd) { spent += callUsd; usage.spentUsd = spent; } send({ type: 'usage', usage }); },
           slide: event => send({ type: 'slide', ...event }) });
         abort.signal.throwIfAborted();
         send({ type: 'result', value });

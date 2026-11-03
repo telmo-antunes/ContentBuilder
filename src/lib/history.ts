@@ -58,3 +58,8 @@ export function changeSlide(deck: Deck, index: number, action: 'earlier' | 'late
 export function replaceSlide(deck: Deck, index: number, html: string, assets: Deck['assets'] = {}): Deck {
   return { ...deck, assets: { ...deck.assets, ...assets }, slides: deck.slides.map((slide, i) => i === index ? { html, ...(slide.alt ? { alt: slide.alt } : {}) } : slide) };
 }
+// Saves skip the version stacks while they are unchanged; the server keeps the stored ones.
+type Stacks = Pick<Workspace, 'previous' | 'redo' | 'history' | 'future'>;
+export function sameStacks(a: Stacks, b: Stacks) { return a.history === b.history && a.future === b.future && a.previous === b.previous && a.redo === b.redo; }
+export function withoutStacks<T extends Stacks>(workspace: T): T { return { ...workspace, previous: null, redo: null, history: [], future: [] }; }
+export function stacksOf(workspace: Stacks): Stacks { return { previous: workspace.previous, redo: workspace.redo, history: workspace.history, future: workspace.future }; }

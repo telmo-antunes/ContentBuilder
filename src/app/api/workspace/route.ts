@@ -11,8 +11,8 @@ export async function GET(request: Request) {
 }
 export async function PUT(request: Request) {
   try {
-    const input = await body(request, z.object({ workspace: workspaceSchema, version: z.string() }));
-    return Response.json(await saveWorkspace(input.workspace, input.version));
+    const input = await body(request, z.object({ workspace: workspaceSchema, version: z.string(), keepStacks: z.boolean().optional() }));
+    return Response.json(await saveWorkspace(input.workspace, input.version, input.keepStacks));
   }
   catch (error) { return failure(error); }
 }

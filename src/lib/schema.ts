@@ -55,6 +55,11 @@ export const kitSchema = z.object({
 export type Kit = z.infer<typeof kitSchema>;
 export const versionSchema = z.object({ deck: deckSchema, instruction: z.string() });
 export type Version = z.infer<typeof versionSchema>;
+// A brand you post for. The active brand lives in the workspace's kit, brand, references and pinned fields; the others wait here.
+export const profileSchema = z.object({ id: z.string().min(1).max(64), kit: kitSchema, brand: brandSchema.nullable().default(null), references: z.array(brandSchema).default([]), pinned: z.array(revisionReferenceSchema).max(MAX_REVISION_REFERENCES).default([]) });
+export type Profile = z.infer<typeof profileSchema>;
+// What the model calls cost, in US dollars: for the current post, and in total since a date.
+export const spendSchema = z.object({ post: z.number().nonnegative().default(0), total: z.number().nonnegative().default(0), since: z.string().default('') }).default({});
 export const MAX_VERSIONS = 15;
 export const modelSelectionSchema = z.object({
   analyze: z.string().max(200).default('latest:sonnet'), generate: z.string().max(200).default('latest:opus'), revise: z.string().max(200).default('latest:opus'),
@@ -94,6 +99,8 @@ export const agentMessageSchema = z.object({
   context: agentContextSchema.optional(), attachments: z.array(revisionReferenceSchema).optional(),
   action: agentActionSchema.optional(), actionStatus: z.enum(['proposed', 'done', 'dismissed']).optional(), sourceKey: z.string().optional(),
   deckId: z.string().max(64).optional(),
+  // A failed step keeps what to run again; also used to offer a one-tap fix.
+  retry: z.object({ label: z.string().max(60), actions: z.array(agentActionSchema).min(1).max(3) }).optional(),
   usage: z.object({ inputTokens: z.number().optional(), outputTokens: z.number().optional(), modelMs: z.number().optional() }).optional(),
 });
 export type AgentMessage = z.infer<typeof agentMessageSchema>;
@@ -129,6 +136,11 @@ export const workspaceSchema = sizeSchema.extend({
   references: z.array(brandSchema).default([]),
   kit: kitSchema,
   pinned: z.array(revisionReferenceSchema).max(MAX_REVISION_REFERENCES).default([]),
+  profileId: z.string().max(64).default(''),
+  profiles: z.array(profileSchema).max(12).default([]),
+  spend: spendSchema,
+  // The slide count chosen in Shape it; null lets the AI decide.
+  slideCount: z.number().int().positive().max(20).nullable().default(null),
   polish: z.boolean().default(true),
   deck: deckSchema.nullable(),
   previous: z.object({ deck: deckSchema, instruction: z.string() }).nullable().default(null),
@@ -157,4 +169,4 @@ export type Brand = z.infer<typeof brandSchema>;
 export type Workspace = z.infer<typeof workspaceSchema>;
 export type GenerationInput = z.infer<typeof generateSchema>;
 export type RunRecord = z.infer<typeof runSchema>;
-export const emptyWorkspace: Workspace = { brief: '', models: modelSelectionSchema.parse(undefined), writing: writingSchema.parse(undefined), agent: agentStateSchema.parse(undefined), recentRuns: [], slideDirectionsEnabled: false, slideDirections: [], brand: null, references: [], kit: kitSchema.parse(undefined), pinned: [], polish: true, deck: null, width: 1080, height: 1350, previous: null, redo: null, history: [], future: [], revisionText: '', revisionScope: 'slide', revisionTarget: 0, revisionReferences: [], lastInstruction: '', lastRun: null };
+export const emptyWorkspace: Workspace = { brief: '', models: modelSelectionSchema.parse(undefined), writing: writingSchema.parse(undefined), agent: agentStateSchema.parse(undefined), recentRuns: [], slideDirectionsEnabled: false, slideDirections: [], brand: null, references: [], kit: kitSchema.parse(undefined), pinned: [], profileId: '', profiles: [], spend: spendSchema.parse(undefined), slideCount: null, polish: true, deck: null, width: 1080, height: 1350, previous: null, redo: null, history: [], future: [], revisionText: '', revisionScope: 'slide', revisionTarget: 0, revisionReferences: [], lastInstruction: '', lastRun: null };
