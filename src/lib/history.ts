@@ -8,7 +8,10 @@ function withStacks(workspace: Workspace, history: Version[], future: Version[])
   return { ...workspace, history, future, previous: history.at(-1) ?? null, redo: future.at(-1) ?? null };
 }
 
+const newId = () => (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`).slice(0, 64);
+/** Every committed deck is a new version with its own id. */
 export function commitDeck(workspace: Workspace, deck: Deck, instruction: string): Workspace {
+  deck = { ...deck, id: newId() };
   const history = workspace.deck ? [...undoStack(workspace), { deck: workspace.deck, instruction: workspace.lastInstruction }] : undoStack(workspace);
   return withStacks({ ...workspace, deck, lastInstruction: instruction }, history, []);
 }
@@ -25,6 +28,10 @@ export function travel(workspace: Workspace, direction: 'undo' | 'redo', steps =
   }
   if (!current) return workspace;
   return withStacks({ ...workspace, deck: current.deck, lastInstruction: current.instruction }, history, future);
+}
+/** Finds a version by id: where it sits, and how to bring it back. */
+export function findVersion(workspace: Workspace, id: string) {
+  return versions(workspace).find(item => item.version.deck.id === id) ?? null;
 }
 // Every saved version, newest first, with the step count that restores it.
 export function versions(workspace: Workspace): { version: Version; direction: 'undo' | 'redo' | null; steps: number }[] {

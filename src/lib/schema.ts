@@ -13,6 +13,8 @@ export type Caption = z.infer<typeof captionSchema>;
 export const slideDirectionSchema = z.object({ slide: z.number().int().positive().max(Number.MAX_SAFE_INTEGER), text: z.string() });
 export const slideDirectionDraftSchema = slideDirectionSchema.extend({ id: z.string().min(1) });
 export const deckSchema = sizeSchema.extend({
+  // Identifies a version, so the conversation can show the deck a message produced.
+  id: z.string().max(64).optional(),
   title: z.string(),
   slides: z.array(slideSchema).min(1),
   originBrief: z.string().optional(),
@@ -91,6 +93,7 @@ export const agentMessageSchema = z.object({
   choices: z.array(z.object({ label: z.string(), message: z.string() })).optional(),
   context: agentContextSchema.optional(), attachments: z.array(revisionReferenceSchema).optional(),
   action: agentActionSchema.optional(), actionStatus: z.enum(['proposed', 'done', 'dismissed']).optional(), sourceKey: z.string().optional(),
+  deckId: z.string().max(64).optional(),
   usage: z.object({ inputTokens: z.number().optional(), outputTokens: z.number().optional(), modelMs: z.number().optional() }).optional(),
 });
 export type AgentMessage = z.infer<typeof agentMessageSchema>;

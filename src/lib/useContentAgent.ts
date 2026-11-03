@@ -11,7 +11,7 @@ type Props = {
   selected: number; disabled: boolean; configured: boolean; flush: () => Promise<boolean>;
   // Direct mode runs slide changes as soon as the agent chooses them; Undo is the safety net.
   direct: boolean;
-  execute: (action: AgentAction, signal: AbortSignal) => Promise<string>;
+  execute: (action: AgentAction, signal: AbortSignal) => Promise<string | { text: string; deckId?: string }>;
 };
 export function useContentAgent(props: Props) {
   const latest = useRef(props); latest.current = props;
@@ -30,7 +30,7 @@ export function useContentAgent(props: Props) {
     signal.throwIfAborted();
     const result = await latest.current.execute(message.action, signal);
     signal.throwIfAborted(); mark(message.id, 'done');
-    append({ id: crypto.randomUUID(), role: 'tool', text: result });
+    append({ id: crypto.randomUUID(), role: 'tool', ...(typeof result === 'string' ? { text: result } : result) });
   }
   async function think(signal: AbortSignal) {
     for (let step = 0; step < 5; step++) {
