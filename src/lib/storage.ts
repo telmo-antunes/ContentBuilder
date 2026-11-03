@@ -4,6 +4,7 @@ import { randomUUID, createHash } from 'node:crypto';
 import { emptyWorkspace, workspaceSchema, type Workspace } from './schema';
 import { externalizeBrand } from './assets';
 import { RequestError } from './http';
+import { stacksOf } from './history';
 
 const directory = resolve(process.cwd(), '.data');
 const file = resolve(directory, 'workspace.json');
@@ -24,10 +25,12 @@ export async function readWorkspace(): Promise<SavedWorkspace> {
     throw error;
   }
 }
-export function saveWorkspace(workspace: Workspace, expectedVersion: string): Promise<SavedWorkspace> {
+export function saveWorkspace(workspace: Workspace, expectedVersion: string, keepStacks = false): Promise<SavedWorkspace> {
   const save = (queues.contentBuilderSaves!.get(file) ?? Promise.resolve()).catch(() => {}).then(async () => {
     const current = await readWorkspace();
     if (current.version !== expectedVersion) throw new RequestError('This draft changed in another tab. Download your local draft if needed, then load the latest saved version.', 409);
+    // The client left out unchanged versions; keep the stored ones.
+    if (keepStacks) workspace = { ...workspace, ...stacksOf(current.workspace) };
     const saved = { workspace: { ...workspace, brand: await externalizeBrand(workspace.brand), references: await Promise.all((workspace.references ?? []).map(async brand => (await externalizeBrand(brand))!)) }, version: randomUUID() };
     await mkdir(directory, { recursive: true });
     const temporary = resolve(directory, `${randomUUID()}.tmp`);

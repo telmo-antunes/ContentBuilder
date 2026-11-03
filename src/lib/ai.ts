@@ -10,6 +10,7 @@ import { imageSheets, revisionImages, type VisualReference } from './render';
 import { websiteReferences, selectedReferenceImages } from './references';
 import { viewingNotes } from './formats';
 import { captionSchema, type Caption } from './schema';
+import { callCost } from './pricing';
 
 export const DESIGN_PROMPT = `You design Instagram posts (carousels, single posts and stories) as static slides.
 The user's brief and latest revision determine the content, slide count, layout, imagery, typography and visual direction. Follow explicit slide-by-slide instructions and preserve text the user asks to keep verbatim.
@@ -86,7 +87,8 @@ export async function ask(system: string, content: Anthropic.MessageParam['conte
       }
     });
     const response = await stream.finalMessage();
-    operation.usage({ ...usage, model: response.model, inputTokens: response.usage.input_tokens, outputTokens: response.usage.output_tokens, thinkingTokens: response.usage.output_tokens_details?.thinking_tokens, modelMs: Date.now() - modelStart });
+    const final = { model: response.model, inputTokens: response.usage.input_tokens, outputTokens: response.usage.output_tokens, cacheReadTokens: response.usage.cache_read_input_tokens ?? 0, cacheWriteTokens: response.usage.cache_creation_input_tokens ?? 0 };
+    operation.usage({ ...usage, ...final, thinkingTokens: response.usage.output_tokens_details?.thinking_tokens, modelMs: Date.now() - modelStart, callUsd: callCost(final) ?? undefined });
     if (response.stop_reason === 'max_tokens') throw new RequestError('The model exhausted its response budget before finishing. Retry or choose another model. Your current draft is unchanged.', 502);
     if (response.stop_reason === 'refusal') throw new RequestError('The model declined this request. Try adjusting your brief.', 502);
     const text = response.content.filter(b => b.type === 'text').map(b => b.text).join('\n');

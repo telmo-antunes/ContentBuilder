@@ -35,7 +35,15 @@ export async function contentAgent(input: z.infer<typeof agentRequestSchema>, op
   const messages = w.agent.messages.slice(-30);
   if (!messages.length || messages.at(-1)?.role === 'assistant') throw new RequestError('Send a message to the agent first.');
   const refs = agentReferences(w);
-  const content: Anthropic.ContentBlockParam[] = [{ type: 'text', text: JSON.stringify({
+  // The deck renders come first and are cached: while the deck is unchanged, later turns read them from the prompt cache.
+  const content: Anthropic.ContentBlockParam[] = [];
+  if (w.deck) {
+    operation.progress('Looking at the current slides…');
+    const captures = await revisionImages(w.deck, undefined, operation);
+    captures.forEach(c => content.push({ type: 'text', text: c.label }, { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: c.data.split(',')[1] } }));
+    const last = content.at(-1); if (last?.type === 'image') last.cache_control = { type: 'ephemeral' };
+  }
+  content.push({ type: 'text', text: JSON.stringify({
     canvas: w.deck ? { width: w.deck.width, height: w.deck.height } : { width: w.width, height: w.height },
     selectedSlide: input.selectedSlide, mainBrief: w.brief, slideDirections: activeDirections(w),
     websites: websiteReferences(w).map(b => ({ url: b.url, notes: b.notes, selectedImages: selectedReferenceImages(b) })),
@@ -43,13 +51,7 @@ export async function contentAgent(input: z.infer<typeof agentRequestSchema>, op
     canUndo: undoStack(w).length, canRedo: redoStack(w).length, caption: w.deck?.caption, brandKit: w.kit, uploadedReferences: refs.map(r => ({ name: r.name, original: r.original, width: r.width, height: r.height })),
     earlierBriefConversation: w.writing.messages.slice(-10).map(m => ({ role: m.role, text: m.text })),
     conversation: messages,
-  }) }];
-  if (w.deck) {
-    operation.progress('Looking at the current slides…');
-    const captures = await revisionImages(w.deck, undefined, operation);
-    if (w.deck.slides.length > 1 && w.deck.slides[input.selectedSlide]) captures.push(...await revisionImages(w.deck, input.selectedSlide, operation));
-    captures.forEach(c => content.push({ type: 'text', text: c.label }, { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: c.data.split(',')[1] } }));
-  }
+  }) });
   const referenceData = await Promise.all(refs.map(r => imageData(r.preview)));
   referenceData.forEach((data, i) => content.push({ type: 'text', text: `UPLOADED REFERENCE: ${refs[i].name} — ${refs[i].original}` }, { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: data.split(',')[1] } }));
   const raw = await ask(AGENT_PROMPT + (input.direct ? DIRECT_MODE : ''), content, operation, true, w.models.agent, { schema: AGENT_OUTPUT_SCHEMA, maxTokens: 6000, effort: 'medium', quickWriting: true, timeoutMs: 90_000, writingLabel: 'Replying to you…' });

@@ -5,6 +5,7 @@ import type { AgentReply } from './content-agent';
 import type { UsageInfo } from './operation';
 import { actionLabel, agentContextKey, appendAgentMessage, requiresProposal, validateAgentAction } from './agent-state';
 import { streamRequest } from './client';
+import { addSpend } from './pricing';
 
 type Props = {
   getWorkspace: () => Workspace; edit: (change: (current: Workspace) => Workspace) => void;
@@ -39,12 +40,13 @@ export function useContentAgent(props: Props) {
       const sourceKey = agentContextKey(workspace, selectedSlide); let usage: UsageInfo = {};
       setPhase('Considering your request…');
       const direct = latest.current.direct;
-      const reply = await streamRequest<AgentReply>('agent', { workspace: { ...workspace, recentRuns: [], lastRun: null, history: [], future: [] }, selectedSlide, direct }, signal, setPhase, value => { usage = { ...usage, ...value }; });
+      const reply = await streamRequest<AgentReply>('agent', { workspace: { ...workspace, profiles: [], recentRuns: [], lastRun: null, history: [], future: [] }, selectedSlide, direct }, signal, setPhase, value => { usage = { ...usage, ...value }; });
       signal.throwIfAborted();
       const message: AgentMessage = { id: crypto.randomUUID(), role: 'assistant', text: reply.reply, choices: reply.choices, model: usage.model,
         usage: { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, modelMs: usage.modelMs },
         ...(reply.action ? { action: reply.action, actionStatus: 'proposed', sourceKey } : {}) };
       append(message);
+      latest.current.edit(w => addSpend(w, usage.spentUsd));
       if (!reply.action || (requiresProposal(reply.action) && !direct)) return;
       await execute(message, signal);
       // A direct slide change reports itself; skip the extra model call that would only narrate it.

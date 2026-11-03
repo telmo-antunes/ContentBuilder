@@ -8,13 +8,15 @@ import { keepReference, removeReference, selectedReferenceImages, websiteReferen
 import { ModelPicker } from '../ModelPicker';
 import { Formats } from './Formats';
 import { Icon } from './Icon';
+import { addProfile, brandList, MAX_BRANDS, removeProfile, switchProfile } from '@/lib/profiles';
+import { dollars } from '@/lib/pricing';
 
 type Props = {
   workspace: Workspace; edit: (change: (current: Workspace) => Workspace) => void; locked: boolean; configured: boolean;
   catalog: ModelCatalog | null; modelError: string; modelsLoading: boolean; reloadModels: () => void;
   analyzing: string | null; onAnalyze: (url: string) => void;
   direct: boolean; onDirect: (value: boolean) => void;
-  fileBusy: boolean; onSavePortable: () => void; onOpenPortable: (file: File) => void; onNew: () => void; onResetAll: () => void;
+  fileBusy: boolean; onSavePortable: () => void; onOpenPortable: (file: File) => void; onNew: () => void; onDrafts: () => void; onResetAll: () => void;
   onCheck: () => void; checking: boolean;
 };
 
@@ -30,6 +32,7 @@ export function Settings(props: Props) {
   const pinInput = useRef<HTMLInputElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const references = websiteReferences(workspace);
+  const brands = brandList(workspace);
   const deck = workspace.deck;
   const notes = deck?.slides.flatMap((slide, i) => (slide.diagnostics ?? []).map(note => ({ slide: i + 1, note }))) ?? [];
   const update = (brand: Brand, patch: Brand | null) => edit(current => ({ ...current, ...(patch ? keepReference(current, patch) : removeReference(current, brand.url)) }));
@@ -41,6 +44,17 @@ export function Settings(props: Props) {
       <h3>Format</h3>
       <Formats width={workspace.width} height={workspace.height} disabled={locked} onChange={size => edit(current => ({ ...current, ...size }))} />
       {deck && (deck.width !== workspace.width || deck.height !== workspace.height) ? <p className="hint">Applies to your next new post. This one stays {deck.width} × {deck.height}.</p> : null}
+    </section>
+
+    <section className="tile">
+      <h3><Icon name="sparkle" size={18} />Posting as</h3>
+      <p className="hint">Each brand keeps its own kit, websites, lessons and pinned inspiration. Switching keeps the post you’re working on.</p>
+      <div className="brand-chips" role="radiogroup" aria-label="Brand">{brands.map(item => <button type="button" key={item.id} role="radio" aria-checked={item.active} className={`chip brand-chip${item.active ? ' on' : ''}`}
+        disabled={locked} onClick={() => edit(current => switchProfile(current, item.id))}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        {item.logo ? <img src={item.logo} alt="" /> : <span className="brand-initial" aria-hidden="true">{item.name.replace(/^@/, '').slice(0, 1).toUpperCase()}</span>}{item.name}</button>)}
+        {brands.length < MAX_BRANDS ? <button type="button" className="chip" disabled={locked} onClick={() => edit(addProfile)}><Icon name="plus" size={14} />New brand</button> : null}</div>
+      {brands.length > 1 ? <button type="button" className="link danger" disabled={locked} onClick={() => { if (window.confirm(`Forget ${brands.find(item => item.active)?.name}, with its kit, websites and lessons?`)) edit(removeProfile); }}>Forget this brand</button> : null}
     </section>
 
     <section className="tile">
@@ -83,7 +97,7 @@ export function Settings(props: Props) {
 
     <section className="tile">
       <h3><Icon name="sparkle" size={18} />Brand kit</h3>
-      <p className="hint">Every post starts from this, and it stays when you start a new post. Learning a website fills the empty fields.</p>
+      <p className="hint">Every post for this brand starts from this, and it stays when you start a new post. Learning a website fills the empty fields.</p>
       <div className="kit-grid">
         <label className="field"><span className="field-label">Instagram handle</span>
           <input value={kit.handle} disabled={locked} placeholder="@yourbrand" onChange={event => setKit({ handle: event.target.value.replace(/^@/, '') })} /></label>
@@ -149,9 +163,18 @@ export function Settings(props: Props) {
     </section>
 
     <section className="tile">
+      <h3>AI cost</h3>
+      <p className="hint">An estimate from the tokens each call used, at Anthropic’s list prices.</p>
+      <div className="field-row"><span><strong>{dollars(workspace.spend.post)}</strong><small className="block">this post</small></span>
+        <span><strong>{dollars(workspace.spend.total)}</strong><small className="block">{workspace.spend.since ? `since ${new Date(workspace.spend.since).toLocaleDateString(undefined, { dateStyle: 'medium' })}` : 'in total'}</small></span>
+        <button type="button" className="link" disabled={!workspace.spend.total} onClick={() => edit(current => ({ ...current, spend: { post: current.spend.post, total: 0, since: '' } }))}>Reset total</button></div>
+    </section>
+
+    <section className="tile">
       <h3>This draft</h3>
       <div className="button-grid">
         <button type="button" className="button" disabled={locked} onClick={props.onNew}><Icon name="plus" size={16} />New post</button>
+        <button type="button" className="button" disabled={locked} onClick={props.onDrafts}><Icon name="layers" size={16} />Drafts</button>
         <button type="button" className="button" disabled={locked || props.fileBusy} onClick={props.onSavePortable}><Icon name="download" size={16} />{props.fileBusy ? 'Preparing…' : 'Save a copy'}</button>
         <button type="button" className="button" disabled={locked || props.fileBusy} onClick={() => fileInput.current?.click()}><Icon name="layers" size={16} />Open a copy</button>
         <button type="button" className="button ghost danger" disabled={locked} onClick={props.onResetAll}><Icon name="trash" size={16} />Reset everything</button>

@@ -44,7 +44,7 @@ describe('content agent safeguards and context', () => {
     expect(appendAgentMessage(messages, { id: 'new', role: 'assistant', text: 'reply' })).toHaveLength(100);
     expect(agentReferences({ ...workspace, revisionReferences: [image], agent: { ...workspace.agent, references: [image] } })).toEqual([image]);
   });
-  it('passes exact instructions, prior answers, selected slide renders and uploads to the chosen agent model', async () => {
+  it('passes exact instructions, prior answers, the selected slide, cached renders and uploads to the chosen agent model', async () => {
     vi.mocked(ask).mockResolvedValue(JSON.stringify({ reply: 'I can space slide 2 more generously.', choices: [], action: action('revise', { target: 1, referenceUrls: [image.original] }) }));
     const input = agentRequestSchema.parse({ workspace, selectedSlide: 1 }); const op = operation();
     const reply = await contentAgent(input, op);
@@ -53,7 +53,11 @@ describe('content agent safeguards and context', () => {
     expect(model).toBe('latest:sonnet'); expect(prompt).toContain('proposal');
     const serialized = JSON.stringify(content);
     expect(serialized).toContain(workspace.brief); expect(serialized).toContain('EXACT second-slide instruction.');
-    expect(serialized).toContain('Selected slide 2'); expect(serialized).toContain(image.original); expect(serialized).toContain('cmVmZXJlbmNl');
+    expect(serialized).toMatch(/selectedSlide\\":1/); expect(serialized).toContain(image.original); expect(serialized).toContain('cmVmZXJlbmNl');
+    // The deck renders lead the message and end in a cache breakpoint, so unchanged decks are read from the prompt cache.
+    const blocks = content as { type: string; cache_control?: unknown }[];
+    expect(blocks[1]).toMatchObject({ type: 'image', cache_control: { type: 'ephemeral' } });
+    expect(blocks.filter(block => block.type === 'image')).toHaveLength(2);
     expect(workspace.deck!.slides[1].html).toBe('<p>Two</p>');
   });
   it('questions and choices stop execution even if the model also supplies an action', async () => {

@@ -2,7 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { emptyWorkspace, type AgentAction, type Brand, type Deck, type RunRecord, type Workspace } from '@/lib/schema';
+import { emptyWorkspace, type AgentAction, type AgentMessage, type Brand, type Caption, type Deck, type RunRecord, type Workspace } from '@/lib/schema';
+import { addSpend } from '@/lib/pricing';
+import { hasPost, postOf, withPost, type DraftSummary, type Post } from '@/lib/drafts';
+import { switchProfile } from '@/lib/profiles';
 import { downloadJson, streamRequest, jsonRequest } from '@/lib/client';
 import { useWorkspace } from '@/lib/useWorkspace';
 import type { SlideEvent, UsageInfo } from '@/lib/operation';
@@ -23,7 +26,7 @@ import { ThreadView } from './studio/ThreadView';
 import { Compose, type ComposeRequest } from './studio/Compose';
 import { Settings, hostOf } from './studio/Settings';
 import { Icon } from './studio/Icon';
-import { CaptionPanel, OptionsTray, VersionList } from './studio/Extras';
+import { CaptionPanel, DraftList, OptionsTray, VersionList } from './studio/Extras';
 
 type Action = RunRecord['operation'];
 type Busy = { action: Action; started: number; phase: string; target: number | null };
@@ -31,12 +34,12 @@ type Toast = { id: number; text: string; undo?: 'undo' | 'redo'; tone?: 'error';
 // Slides that have streamed in for the deck being written; a patch overlays them on the current deck.
 type Stream = { base: Deck | null; size: { width: number; height: number }; assets: Deck['assets']; slides: Record<number, string>; mode: 'full' | 'patch' };
 type View = 'compose' | 'thread' | 'stage';
-type Result = string | { text: string; deckId?: string };
+type Result = string | { text: string; deckId?: string; retry?: AgentMessage['retry'] };
 type Options = { index: number; htmls: string[]; assets: Deck['assets']; busy: boolean; controller: AbortController };
 
 const urlPattern = /https?:\/\/[^\s)]+/i;
 // Heavy history never needs to travel with a request.
-const lean = (w: Workspace): Workspace => ({ ...w, previous: null, redo: null, history: [], future: [], recentRuns: [], lastRun: null, agent: { ...w.agent, messages: [], references: [] }, writing: { ...w.writing, messages: [], draft: '' } });
+const lean = (w: Workspace): Workspace => ({ ...w, profiles: [], previous: null, redo: null, history: [], future: [], recentRuns: [], lastRun: null, agent: { ...w.agent, messages: [], references: [] }, writing: { ...w.writing, messages: [], draft: '' } });
 // Every image a freshly written slide may reference, so streamed slides preview with their pictures.
 const knownAssets = (w: Workspace): Deck['assets'] => ({ ...w.deck?.assets,
   ...Object.fromEntries(websiteReferences(w).flatMap(brand => brand.previews).filter(p => p.original).map(p => [p.url, p.original!])),
@@ -52,7 +55,10 @@ export default function Studio() {
   const [modelsLoading, setModelsLoading] = useState(false);
   const [selected, setSelected] = useState(0);
   const [slideScope, setSlideScope] = useState(false);
-  const [sheet, setSheet] = useState<'settings' | 'caption' | 'versions' | null>(null);
+  const [sheet, setSheet] = useState<'settings' | 'caption' | 'versions' | 'drafts' | null>(null);
+  const [drafts, setDrafts] = useState<DraftSummary[] | null>(null);
+  const [draftsError, setDraftsError] = useState('');
+  const [rewriting, setRewriting] = useState(false);
   // Compose in three beats, work in the conversation, review on the stage.
   const [view, setView] = useState<View>('compose');
   const [stream, setStream] = useState<Stream | null>(null);
@@ -112,6 +118,10 @@ export default function Studio() {
     return () => window.removeEventListener('beforeunload', warn);
   }, [busy]);
   useEffect(() => () => active.current?.abort(), []);
+  useEffect(() => {
+    const back = () => { if (document.visibilityState === 'visible') document.title = 'ContentBuilder'; };
+    document.addEventListener('visibilitychange', back); return () => document.removeEventListener('visibilitychange', back);
+  }, []);
   const closeSheet = useCallback(() => setSheet(null), []);
   function setDirect(value: boolean) { setDirectState(value); try { localStorage.setItem('contentbuilder-direct', value ? 'on' : 'off'); } catch { /* per-browser preference only */ } }
   // View changes morph where the browser supports it: the current version card grows into the stage.
@@ -128,6 +138,13 @@ export default function Studio() {
     edit(current => ({ ...current, agent: { ...current.agent, messages: appendAgentMessage(current.agent.messages, { id: crypto.randomUUID(), role: 'tool', ...entry }) } }));
   }
   function notify(text: string, undo?: Toast['undo'], action?: Toast['action']) { setToast({ id: Date.now(), text, undo, action }); }
+  // A post takes minutes; if you went to another app, say when it lands: a title badge, a notification if allowed, a buzz.
+  function announce(text: string) {
+    if (document.visibilityState === 'visible') return;
+    document.title = `● ${text} · ContentBuilder`;
+    try { if ('Notification' in window && Notification.permission === 'granted') new Notification('ContentBuilder', { body: text, tag: 'contentbuilder-ready' }); } catch { /* the title badge still shows */ }
+    navigator.vibrate?.(120);
+  }
   function onSlide(event: SlideEvent) {
     setStream(current => current ? { ...current, mode: event.pass || event.mode !== 'patch' ? current.mode : 'patch', slides: { ...current.slides, [event.index]: event.html } } : current);
     if (event.mode === 'full' && !event.pass) setSelected(event.index);
@@ -154,13 +171,13 @@ export default function Studio() {
       controller.signal.throwIfAborted();
       const durationMs = Date.now() - started;
       const result = action === 'analyze' ? 'Website learned.' : action === 'generate' || action === 'revise' ? `${patch?.deck?.slides.length ?? 0} slides ready.` : action === 'export' ? 'PNGs downloaded.' : 'Checks complete.';
-      edit(current => recordRun(current, { ...record, ...usage, durationMs, result, steps: appendStage(steps, result, durationMs), ...(patch?.deck ? { output: patch.deck } : {}) }, patch ?? undefined));
+      edit(current => addSpend(recordRun(current, { ...record, ...usage, durationMs, result, steps: appendStage(steps, result, durationMs) }, patch ?? undefined), usage.spentUsd));
       return true;
     } catch (failure) {
       const cancelled = controller.signal.aborted;
       const message = cancelled ? 'Stopped. Your post is unchanged.' : (failure as Error).message;
       if (!options?.signal) setToast({ id: Date.now(), text: message, tone: cancelled ? undefined : 'error' });
-      edit(current => recordRun(current, { ...record, ...usage, steps, durationMs: Date.now() - started, outcome: cancelled ? 'cancelled' : 'failed', message }));
+      edit(current => addSpend(recordRun(current, { ...record, ...usage, steps, durationMs: Date.now() - started, outcome: cancelled ? 'cancelled' : 'failed', message }), usage.spentUsd));
       return false;
     } finally { options?.signal?.removeEventListener('abort', abort); active.current = null; setBusy(null); }
   }
@@ -174,8 +191,8 @@ export default function Studio() {
     if (action.type === 'set_canvas') { const size = parseCanvas(action.instruction)!; edit(w => ({ ...w, ...size })); notify(`Format set to ${size.width} × ${size.height}`); return `The next new post will be ${size.width} × ${size.height}.`; }
     if (['move_earlier', 'move_later', 'duplicate', 'delete'].includes(action.type)) {
       const kind = action.type === 'move_earlier' ? 'earlier' : action.type === 'move_later' ? 'later' : action.type as 'duplicate' | 'delete';
-      slideChange(changeSlide(snapshot.deck!, action.target!, kind), actionLabel(action));
-      return `${actionLabel(action)} completed.`;
+      const deckId = slideChange(changeSlide(snapshot.deck!, action.target!, kind), actionLabel(action));
+      return { text: `${actionLabel(action)} completed.`, deckId };
     }
     const remixSize = action.type === 'remix' ? parseCanvas(action.instruction)! : null;
     const source = { ...snapshot, ...(remixSize ?? {}), ...(action.type === 'revise' ? { revisionReferences: images } : {}), ...(action.type === 'generate' || action.type === 'remix' ? { agent: { ...snapshot.agent, references: images } } : {}) };
@@ -200,6 +217,7 @@ export default function Studio() {
         setSelected(revise && action.target !== null ? action.target : revise ? index : 0); setPeek(false);
         notify(revise ? action.target !== null ? `Slide ${action.target + 1} updated` : 'Post updated' : remix ? `${remixSize!.height > remixSize!.width * 1.6 ? 'Story' : 'Feed'} version ready` : 'Your post is ready', committed.previous ? 'undo' : undefined);
         if (revise) void learn(action.instruction);
+        announce(revise ? 'Your change is ready' : 'Your post is ready');
         return { deck: committed.deck, previous: committed.previous, redo: committed.redo, history: committed.history, future: committed.future, lastInstruction: committed.lastInstruction,
           ...(remixSize ?? {}), ...(!snapshot.brief && !revise && !remix ? { brief: action.instruction } : {}),
           ...(revise ? { revisionReferences: [] } : {}) };
@@ -253,33 +271,55 @@ export default function Studio() {
   function quiet() { setSeen(reply?.id ?? ''); }
   function slideChange(next: { deck: Deck; index: number }, label: string) {
     quiet(); edit(w => ({ ...commitDeck(w, next.deck, label), revisionTarget: next.index })); setSelected(next.index); setPeek(false); notify(label, 'undo');
+    return getWorkspace().deck?.id;
+  }
+  // A change made by hand shows up in the conversation as its own version.
+  function changeByHand(next: { deck: Deck; index: number }, label: string) {
+    const deckId = slideChange(next, label);
+    if (deckId) log({ text: label, deckId });
   }
   function move(from: number, to: number) {
     if (!deck || locked) return;
     let next = { deck, index: from };
     while (next.index < to) next = changeSlide(next.deck, next.index, 'later');
     while (next.index > to) next = changeSlide(next.deck, next.index, 'earlier');
-    slideChange(next, `Moved slide ${from + 1} to ${to + 1}`);
+    changeByHand(next, `Moved slide ${from + 1} to ${to + 1}`);
   }
   function time(direction: 'undo' | 'redo') {
     if (locked) return;
     quiet(); edit(w => travel(w, direction)); setPeek(false);
     notify(direction === 'undo' ? 'Undone' : 'Redone', direction === 'undo' ? 'redo' : 'undo');
+    log(direction === 'undo' ? 'Undid the last change.' : 'Redid the change.');
   }
   function restore(direction: 'undo' | 'redo', steps: number) {
     if (locked) return;
     edit(w => travel(w, direction, steps)); setPeek(false); setSheet(null);
-    notify(`Went ${direction === 'undo' ? 'back' : 'forward'} ${steps} version${steps === 1 ? '' : 's'}`, direction === 'undo' ? 'redo' : 'undo');
+    const text = `Went ${direction === 'undo' ? 'back' : 'forward'} ${steps} version${steps === 1 ? '' : 's'}`;
+    notify(text, direction === 'undo' ? 'redo' : 'undo'); log(`${text}.`);
   }
-  // Runs one action straight from the interface, reporting failures as a toast.
-  async function perform(action: AgentAction) {
+  // Runs actions straight from the interface, in order, logging each result. A failure is logged with the
+  // steps still to run, so Retry picks up where it stopped.
+  async function runSteps(actions: AgentAction[]) {
     const controller = new AbortController();
-    try { log(await executeAgentAction(action, controller.signal)); }
-    catch (failure) { if (!controller.signal.aborted) setToast({ id: Date.now(), text: (failure as Error).message, tone: 'error' }); }
+    for (const [i, action] of actions.entries()) {
+      try { log(await executeAgentAction(action, controller.signal)); }
+      catch (failure) {
+        const message = (failure as Error).message;
+        log({ text: message, retry: { label: 'Try again', actions: actions.slice(i) } });
+        setToast({ id: Date.now(), text: message, tone: 'error' }); announce('Something needs your attention');
+        return false;
+      }
+    }
+    return true;
+  }
+  function retry(message: AgentMessage) {
+    if (!message.retry || locked) return;
+    edit(w => ({ ...w, agent: { ...w.agent, messages: w.agent.messages.map(item => item.id === message.id ? { ...item, retry: undefined } : item) } }));
+    void runSteps(message.retry.actions);
   }
   function remix(format: 'story' | 'post') {
     quiet();
-    void perform({ type: 'remix', instruction: format, url: '', target: null, referenceUrls: [] });
+    void runSteps([{ type: 'remix', instruction: format, url: '', target: null, referenceUrls: [] }]);
   }
   async function showOptions(slide: number) {
     const source = getWorkspace();
@@ -299,16 +339,16 @@ export default function Studio() {
   }
   function pickOption(html: string) {
     if (!deck || !options) return;
-    slideChange({ deck: replaceSlide(deck, options.index, html, options.assets), index: options.index }, `Slide ${options.index + 1}: picked an option`);
-    const id = getWorkspace().deck?.id;
-    if (id) log({ text: `Picked an option for slide ${options.index + 1}.`, deckId: id });
+    changeByHand({ deck: replaceSlide(deck, options.index, html, options.assets), index: options.index }, `Picked an option for slide ${options.index + 1}`);
     setOptions(null);
   }
   // A revision that states a lasting preference becomes a brand lesson the next post will follow.
   async function learn(instruction: string) {
     const w = getWorkspace();
     try {
-      const { lesson } = await streamRequest<{ lesson: string }>('lesson', { instruction, lessons: w.kit.lessons, model: w.models.complete }, new AbortController().signal, () => {}, () => {});
+      let spent = 0;
+      const { lesson } = await streamRequest<{ lesson: string }>('lesson', { instruction, lessons: w.kit.lessons, model: w.models.complete }, new AbortController().signal, () => {}, value => { spent = value.spentUsd ?? spent; });
+      edit(current => addSpend(current, spent));
       if (!lesson || addLesson(getWorkspace().kit, lesson) === getWorkspace().kit) return;
       edit(current => ({ ...current, kit: addLesson(current.kit, lesson) }));
       notify(`Learned: ${lesson}`, undefined, { label: 'Forget', run: () => edit(current => ({ ...current, kit: { ...current.kit, lessons: current.kit.lessons.filter(item => item !== lesson) } })) });
@@ -319,27 +359,20 @@ export default function Studio() {
     const attachments = getWorkspace().agent.references;
     edit(current => ({ ...current, agent: { ...current.agent, draft: current.agent.draft.trim() === text.trim() ? '' : current.agent.draft, references: [],
       messages: appendAgentMessage(current.agent.messages, { id: crypto.randomUUID(), role: 'user', text, context: { intent: 'revise', target: slide, url: '' }, attachments }) } }));
-    const controller = new AbortController();
-    try { log(await executeAgentAction({ type: 'revise', instruction: text, url: '', target: slide, referenceUrls: attachments.map(image => image.original) }, controller.signal)); }
-    catch (failure) {
-      const message = (failure as Error).message; log(message);
-      if (!controller.signal.aborted) setToast({ id: Date.now(), text: message, tone: 'error' });
-    }
+    await runSteps([{ type: 'revise', instruction: text, url: '', target: slide, referenceUrls: attachments.map(image => image.original) }]);
   }
   // A plain request for a post skips the agent and goes straight to generation (after reading any link).
-  async function create(text: string, options: { url?: string; instruction?: string; summary?: string } = {}) {
+  async function create(text: string, options: { url?: string; instruction?: string; summary?: string; count?: number | null } = {}) {
     const w = getWorkspace(); const attachments = w.agent.references;
     const url = options.url ?? text.match(urlPattern)?.[0] ?? '';
     edit(current => ({ ...current, agent: { ...current.agent, draft: current.agent.draft.trim() === text.trim() ? '' : current.agent.draft, references: [],
       messages: appendAgentMessage(current.agent.messages, { id: crypto.randomUUID(), role: 'user', text: options.summary ?? text, context: { intent: 'generate', target: null, url }, attachments }) } }));
-    const controller = new AbortController();
-    try {
-      if (url) log(await executeAgentAction({ type: 'analyze', url, instruction: '', target: null, referenceUrls: [] }, controller.signal));
-      log(await executeAgentAction({ type: 'generate', instruction: options.instruction ?? text, url: '', target: null, referenceUrls: attachments.map(image => image.original) }, controller.signal));
-    } catch (failure) {
-      const message = (failure as Error).message; log(message);
-      if (!controller.signal.aborted) setToast({ id: Date.now(), text: message, tone: 'error' });
-    }
+    const made = await runSteps([...(url ? [{ type: 'analyze' as const, url, instruction: '', target: null, referenceUrls: [] }] : []),
+      { type: 'generate', instruction: options.instruction ?? text, url: '', target: null, referenceUrls: attachments.map(image => image.original) }]);
+    // The count is asked for in words; when the model misses it, say so and offer the fix.
+    const count = options.count, slides = getWorkspace().deck?.slides.length;
+    if (made && count && slides && slides !== count) log({ text: `You asked for ${count} slide${count === 1 ? '' : 's'}; this version has ${slides}.`,
+      retry: { label: `Make it ${count}`, actions: [{ type: 'revise', instruction: `Make the post exactly ${count} slide${count === 1 ? '' : 's'}: keep the content, language and design, splitting or merging slides as needed.`, url: '', target: null, referenceUrls: [] }] } });
   }
   // The three beats hand over a brief, optional per-slide instructions and a slide count; the conversation takes it from there.
   function compose({ url, count }: ComposeRequest) {
@@ -347,7 +380,8 @@ export default function Studio() {
     const directions = activeDirections(w);
     const summary = [w.brief.trim(), count ? `${count} slide${count === 1 ? '' : 's'}.` : '', ...directions.map(item => `Slide ${item.slide}: ${item.text.trim()}`), url].filter(Boolean).join('\n');
     go('thread');
-    void create(w.brief, { url, summary, instruction: count ? `Make exactly ${count} slide${count === 1 ? '' : 's'}.` : 'Make the post described in the brief.' });
+    try { if ('Notification' in window && Notification.permission === 'default') void Notification.requestPermission().catch(() => {}); } catch { /* the title badge still works */ }
+    void create(w.brief, { url, summary, count, instruction: count ? `Make exactly ${count} slide${count === 1 ? '' : 's'}.` : 'Make the post described in the brief.' });
   }
   function restoreVersion(id: string) {
     const found = findVersion(getWorkspace(), id);
@@ -360,16 +394,77 @@ export default function Studio() {
   function send(text: string) {
     setSeen('');
     if (!getWorkspace().deck && direct && looksLikeCreate(text)) { void create(text); return; }
+    // In the conversation an aimed message aims once; on the stage the slide chip stays in view, so the aim stays.
+    if (view === 'thread') setSlideScope(false);
     if (deck && slideScope && direct && !isQuestion(text)) { void reviseSlide(text, index); return; }
     void agent.send(text, { intent: 'chat', target: deck && slideScope ? index : null, url: '' });
   }
   function hasWork() {
     return !!(workspace.brief || deck || messages.length || workspace.agent.draft.trim() || workspace.agent.references.length);
   }
-  function reset(all = false) {
-    if (hasWork() && !window.confirm(all ? 'Clear this post and everything ContentBuilder learned from websites?' : 'Start a new post? Your websites and format stay.')) return;
-    edit({ ...emptyWorkspace, ...(all ? {} : { brand: workspace.brand, references: workspace.references ?? [], kit: workspace.kit, pinned: workspace.pinned, polish: workspace.polish, width, height, models: workspace.models }) });
-    setSelected(0); setSlideScope(false); setPeek(false); setSheet(null); setSeen(''); go('compose');
+  function fresh(post?: Post) {
+    setSelected(post?.revisionTarget ?? 0); setSlideScope(false); setPeek(false); setSheet(null);
+    setSeen([...(post?.agent.messages ?? [])].reverse().find(message => message.role === 'assistant')?.id ?? '');
+    go(post && (post.deck || post.agent.messages.length) ? 'thread' : 'compose');
+  }
+  function resetAll() {
+    if (hasWork() && !window.confirm('Clear this post, your brands and everything ContentBuilder learned from websites? Drafts stay.')) return;
+    edit({ ...emptyWorkspace, models: workspace.models }); fresh();
+  }
+  // A new post sets the current one aside in Drafts; Undo brings it straight back.
+  async function newPost() {
+    if (locked) return;
+    const before = getWorkspace();
+    let saved: DraftSummary | null = null;
+    if (hasPost(before)) {
+      try { saved = await jsonRequest<DraftSummary>('drafts', { action: 'save', post: postOf(before) }); }
+      catch (failure) { setToast({ id: Date.now(), text: `This post could not be set aside, so it is still open. ${(failure as Error).message}`, tone: 'error' }); return; }
+    }
+    edit(current => withPost(current, postOf({ ...emptyWorkspace, width: current.width, height: current.height })));
+    fresh();
+    if (saved) notify('Saved to Drafts', undefined, { label: 'Undo', run: () => {
+      edit(current => withPost(current, postOf(before))); fresh(postOf(before));
+      void jsonRequest('drafts', { action: 'delete', id: saved!.id }).catch(() => {});
+    } });
+  }
+  async function loadDrafts() {
+    setDrafts(null); setDraftsError('');
+    try { setDrafts((await jsonRequest<{ drafts: DraftSummary[] }>('drafts')).drafts); }
+    catch (failure) { setDraftsError((failure as Error).message); }
+  }
+  function showDrafts() { setSheet('drafts'); void loadDrafts(); }
+  // Opening a draft swaps it with the current post, which waits in Drafts in its place.
+  async function openDraft(id: string) {
+    if (locked) return;
+    const current = getWorkspace();
+    try {
+      const { post } = await jsonRequest<{ post: Post }>('drafts', { action: 'open', id });
+      if (hasPost(current)) await jsonRequest('drafts', { action: 'save', post: postOf(current) });
+      await jsonRequest('drafts', { action: 'delete', id });
+      edit(w => withPost(post.profileId ? switchProfile(w, post.profileId) : w, post));
+      fresh(post);
+      notify(hasPost(current) ? 'Opened · the other post waits in Drafts' : 'Draft opened');
+    } catch (failure) { setDraftsError((failure as Error).message); }
+  }
+  async function deleteDraft(id: string) {
+    try { await jsonRequest('drafts', { action: 'delete', id }); setDrafts(list => list?.filter(draft => draft.id !== id) ?? null); }
+    catch (failure) { setDraftsError((failure as Error).message); }
+  }
+  async function rewriteCaption(wish: string) {
+    const w = getWorkspace();
+    if (!w.deck || rewriting || locked) return;
+    setRewriting(true); let spent = 0;
+    try {
+      const { caption } = await streamRequest<{ caption: Caption }>('caption', { brief: w.brief.slice(0, 20_000), title: w.deck.title.slice(0, 300), kit: w.kit, model: w.models.complete, wish,
+        slides: w.deck.slides.map(slide => ({ text: (slide.renderedText ?? '').slice(0, 4000), alt: (slide.alt ?? '').slice(0, 1000) })), ...(w.deck.caption ? { current: w.deck.caption } : {}) },
+        new AbortController().signal, () => {}, value => { spent = value.spentUsd ?? spent; });
+      const label = wish ? `Caption: ${wish}` : w.deck.caption ? 'Rewrote the caption' : 'Wrote the caption';
+      edit(current => current.deck ? addSpend(commitDeck(current, { ...current.deck, caption }, label), spent) : current);
+      const deckId = getWorkspace().deck?.id;
+      if (deckId) log({ text: `${label}.`, deckId });
+      notify(label, 'undo');
+    } catch (failure) { setToast({ id: Date.now(), text: (failure as Error).message, tone: 'error' }); }
+    finally { setRewriting(false); }
   }
   async function savePortable(value = workspace) {
     if (fileBusy || uploadBusy) return; setFileBusy(true); setFileError('');
@@ -395,7 +490,8 @@ export default function Studio() {
   // Another slide is still coming while the model writes a new deck.
   const pending = !!stream && stream.mode === 'full' && !!busy && /Designing|Writing|Re-flowing|preparing its response|Considering/i.test(busy.phase);
   const phase = busy?.phase || agent.phase;
-  const placeholder = !configured ? 'Add an API key to start' : !deck ? 'Describe your post…' : slideScope ? 'Change this slide…' : 'Ask for a change…';
+  // Short enough to fit beside the scope chip on a phone.
+  const placeholder = !configured ? 'Add an API key to start' : !deck ? 'Describe your post…' : slideScope ? `Change slide ${index + 1}…` : 'Change it…';
 
   const banners = <div className="banners">
     {recovery ? <div className="banner"><p>Unsaved changes from {new Date(recovery.savedAt).toLocaleString()} were found.</p><div>
@@ -418,7 +514,7 @@ export default function Studio() {
   const live = generating && stream ? { deck: streamDeck, size: stream.size, phase: busy!.phase, pending } : null;
   const bar = <CommandBar value={workspace.agent.draft} onChange={draft => edit(w => ({ ...w, agent: { ...w.agent, draft } }))} onSend={send}
     onStop={() => { agent.stop(); active.current?.abort(); }} busy={agent.busy || !!busy} phase={phase} disabled={!ready || !configured || status === 'conflict' || fileBusy}
-    placeholder={view === 'thread' && deck ? (slideScope ? `Change slide ${index + 1}…` : 'Reply, or tap a slide to change it…') : placeholder}
+    placeholder={view === 'thread' && deck && !slideScope ? 'Reply…' : placeholder}
     scope={deck ? { label: slideScope ? `Slide ${index + 1}` : 'Whole post', slide: slideScope } : null} onToggleScope={() => setSlideScope(value => !value)}
     images={workspace.agent.references} onUploadBusy={setUploadBusy}
     onAddImage={image => edit(w => ({ ...w, agent: { ...w.agent, references: [...w.agent.references.filter(r => r.original !== image.original), image] } }))}
@@ -445,11 +541,13 @@ export default function Studio() {
           {previous || redo ? <button type="button" className="icon-button" aria-label="Versions" title="Versions" onClick={() => setSheet(sheet === 'versions' ? null : 'versions')}><Icon name="clock" /></button> : null}
           {settingsButton}{downloadButton}
         </> : view === 'thread' ? <>
-          <button type="button" className="icon-button" aria-label="New post" title="New post" disabled={locked} onClick={() => reset()}><Icon name="plus" /></button>
+          <button type="button" className="icon-button" aria-label="New post" title="New post" disabled={locked} onClick={() => void newPost()}><Icon name="plus" /></button>
+          <button type="button" className="icon-button" aria-label="Drafts" title="Drafts" disabled={locked} onClick={showDrafts}><Icon name="layers" /></button>
           {settingsButton}
           {deck ? <button type="button" className="button primary download" onClick={() => go('stage')}><Icon name="phone" size={18} /><span>Review</span></button> : null}
         </> : <>
           {messages.length || deck ? <button type="button" className="icon-button" aria-label="Back to the conversation" title="Conversation" onClick={() => go('thread')}><Icon name="chat" /></button> : null}
+          <button type="button" className="icon-button" aria-label="Drafts" title="Drafts" disabled={locked} onClick={showDrafts}><Icon name="layers" /></button>
           {settingsButton}
         </>}
       </div>
@@ -458,21 +556,22 @@ export default function Studio() {
 
     {!ready ? <main className="loading" aria-busy="true">{saveError ? <><p role="alert">{saveError}</p><button className="button" onClick={load}>Try again</button></> : <span className="spinner big" />}</main>
       : view === 'compose' ? <main className="studio compose-view">
-        <Compose workspace={workspace} edit={edit} locked={locked} configured={configured} onCreate={compose} onUploadBusy={setUploadBusy}
+        <Compose workspace={workspace} edit={edit} locked={locked} configured={configured} onCreate={compose} onUploadBusy={setUploadBusy} onManageBrands={() => setSheet('settings')}
           onClose={messages.length || deck ? () => go('thread') : null} />
       </main>
       : view === 'thread' ? <main className="studio thread-view">
         <ThreadView workspace={workspace} contextKey={contextKey} disabled={locked || !configured} thinking={agent.busy && !busy ? agent.phase || 'Thinking…' : null} live={live}
           onSend={send} onApply={id => void agent.apply(id)} onDismiss={agent.dismiss} onResume={() => void agent.resume()}
-          onReview={slide => { setSelected(slide); go('stage'); }} onRestore={restoreVersion} onDownload={() => download()} onQuote={quote} />
+          onReview={slide => { setSelected(slide); go('stage'); }} onRestore={restoreVersion} onDownload={() => download()} onQuote={quote}
+          onOptions={slide => { setSelected(slide); void showOptions(slide); }} onRetry={retry} />
       </main>
       : <main className="studio stage-view">
-        <Stage deck={shownDeck} width={width} height={height} selected={index} handle={handle} peeking={peek && !!previous} locked={locked} work={work}
+        <Stage deck={shownDeck} width={width} height={height} selected={index} handle={handle} logo={workspace.kit.logo} peeking={peek && !!previous} locked={locked} work={work}
           empty={<div className="hello"><p className="lede">No post yet.</p></div>}
           fresh={streamed} pending={pending} onCaption={() => setSheet('caption')} onOptions={i => void showOptions(i)} onRemix={remix}
           onSelect={setSelected} onAim={i => { setSelected(i); setSlideScope(true); }} onMove={move}
-          onDuplicate={i => deck && slideChange(changeSlide(deck, i, 'duplicate'), `Duplicated slide ${i + 1}`)}
-          onDelete={i => deck && slideChange(changeSlide(deck, i, 'delete'), `Deleted slide ${i + 1}`)}
+          onDuplicate={i => deck && changeByHand(changeSlide(deck, i, 'duplicate'), `Duplicated slide ${i + 1}`)}
+          onDelete={i => deck && changeByHand(changeSlide(deck, i, 'delete'), `Deleted slide ${i + 1}`)}
           onDownloadSlide={i => download(i)} />
         {deck && !peek ? <p className="scope-hint">Tap a thumbnail to aim your next change at one slide{deck.slides.length > 1 ? ' · drag to reorder' : ''}.</p> : null}
       </main>}
@@ -484,7 +583,7 @@ export default function Studio() {
         {toast.action ? <button type="button" onClick={() => { toast.action!.run(); setToast(null); }}>{toast.action.label}</button> : null}
         <button type="button" className="toast-close" aria-label="Dismiss" onClick={() => setToast(null)}><Icon name="close" size={14} /></button>
       </div> : null}
-      {view === 'stage' && options && deck ? <OptionsTray deck={deck} index={options.index} options={options.htmls.filter(Boolean)} assets={options.assets} busy={options.busy}
+      {view !== 'compose' && options && deck ? <OptionsTray deck={deck} index={options.index} options={options.htmls.filter(Boolean)} assets={options.assets} busy={options.busy}
         onPick={pickOption} onClose={() => { options.controller.abort(); setOptions(null); }} /> : null}
       {showReply && reply && !options ? <div className="reply" key={reply.id}>
         <button type="button" className="reply-close" aria-label="Hide reply" onClick={() => setSeen(reply.id)}><Icon name="close" size={14} /></button>
@@ -496,12 +595,14 @@ export default function Studio() {
       {view !== 'compose' ? bar : null}
     </div>
 
-    <Sheet open={sheet === 'caption'} title="Caption" onClose={closeSheet}>{deck ? <CaptionPanel deck={deck} /> : null}</Sheet>
+    <Sheet open={sheet === 'caption'} title="Caption" onClose={closeSheet}>{deck ? <CaptionPanel deck={deck} locked={locked || rewriting} rewriting={rewriting}
+      onChange={caption => edit(w => w.deck ? { ...w, deck: { ...w.deck, caption } } : w)} onRewrite={wish => void rewriteCaption(wish)} /> : null}</Sheet>
+    <Sheet open={sheet === 'drafts'} title="Drafts" onClose={closeSheet}><DraftList drafts={drafts} error={draftsError} disabled={locked} onOpen={id => void openDraft(id)} onDelete={id => void deleteDraft(id)} /></Sheet>
     <Sheet open={sheet === 'versions'} title="Versions" onClose={closeSheet}><VersionList workspace={workspace} disabled={locked} onRestore={restore} /></Sheet>
     <Sheet open={sheet === 'settings'} title="Settings" onClose={closeSheet}>
       <Settings workspace={workspace} edit={edit} locked={locked} configured={configured} catalog={catalog} modelError={modelError} modelsLoading={modelsLoading} reloadModels={() => void loadModels(true)}
         analyzing={busy?.action === 'analyze' ? busy.phase : null} onAnalyze={analyze} direct={direct} onDirect={setDirect}
-        fileBusy={fileBusy} onSavePortable={() => void savePortable()} onOpenPortable={file => void openPortable(file)} onNew={() => reset()} onResetAll={() => reset(true)}
+        fileBusy={fileBusy} onSavePortable={() => void savePortable()} onOpenPortable={file => void openPortable(file)} onNew={() => void newPost()} onDrafts={showDrafts} onResetAll={resetAll}
         onCheck={inspect} checking={busy?.action === 'inspect'} />
     </Sheet>
     {dragging ? <div className="drop-hint" aria-hidden="true"><Icon name="image" size={28} /><span>Drop images to use them</span></div> : null}

@@ -45,6 +45,9 @@ export function downloadJson(value: unknown, filename = 'contentbuilder-draft.js
 }
 
 const assetPromises = new Map<string, Promise<string>>();
+// Assets already read, so a preview that mounts again (another view, another card) is ready at once.
+const assetValues = new Map<string, string>();
+export function cachedPreviewAsset(reference: string): string | undefined { return assetValues.get(reference); }
 export function previewAsset(reference: string): Promise<string> {
   if (!/^\/api\/assets\/[a-f0-9]{64}\.(jpg|png|webp|gif|svg|avif|css)$/.test(reference)) return Promise.reject(new Error('Invalid saved image'));
   let promise = assetPromises.get(reference);
@@ -52,7 +55,9 @@ export function previewAsset(reference: string): Promise<string> {
     promise = fetch(reference).then(async response => {
       if (!response.ok) throw new Error('A saved image is missing. Open a portable backup or analyze the website again.');
       const blob = await response.blob();
-      return new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsDataURL(blob); });
+      const value = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsDataURL(blob); });
+      assetValues.set(reference, value); if (assetValues.size > 64) assetValues.delete(assetValues.keys().next().value!);
+      return value;
     }).catch(error => { assetPromises.delete(reference); throw error; });
     assetPromises.set(reference, promise);
     if (assetPromises.size > 64) assetPromises.delete(assetPromises.keys().next().value!);

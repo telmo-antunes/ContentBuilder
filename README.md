@@ -28,8 +28,12 @@ A post moves through three views.
 - **Download:** the Download button renders PNGs at full size and saves a ZIP named after the post.
 - **Settings** (sliders button) holds the format, websites the agent learned from (notes and which images it may use), the brief for this post, AI models, render checks, and saving or opening a portable copy.
 - **Watch it being made:** slides appear one by one as the model writes them. A polish pass then looks at the result at phone size and fixes clipped text, small type and weak contrast (switch it off in Settings).
-- **Caption:** every post comes with its Instagram caption, hashtags, a first comment and alt text per slide. Tap the caption under the post to copy them; the ZIP includes `caption.txt`.
-- **Options:** the slide menu's "Show me 3 options" designs three alternatives for that slide; tap one to use it.
+- **Caption:** every post comes with its Instagram caption, hashtags, a first comment and alt text per slide. Tap the caption under the post to edit, rewrite (on the small model) or copy them; the ZIP includes `caption.txt`.
+- **Options:** the slide menu's "Show me 3 options" (or the grid button on a slide in a version card) designs three alternatives for that slide; tap one to use it.
+- **Brands:** "Posting as" in Compose (or Settings) switches between brands. Each keeps its own kit, websites, lessons and pinned inspiration.
+- **Drafts:** New post sets the current post aside in Drafts (`.data/drafts/`, newest 40 kept), with Undo. Opening a draft swaps it with the post on screen.
+- **Retry:** a failed step in the conversation has a Try again button that re-runs it; if a post comes back with a different slide count than you chose, a button offers the fix.
+- **Cost:** Settings shows what the AI calls cost for this post and in total, estimated from each call's tokens at list prices.
 - **Story or feed version:** the slide menu re-flows the post into a 9:16 story (or back into a feed post) as a new version. The agent can also do it ("make a story version") and change the format for the next post.
 - **Versions:** the clock button lists up to 15 earlier versions; tap one to return to it, and come forward again the same way.
 - **Brand kit** (Settings): handle, colours, fonts, voice, logo and always/never rules that every post follows and that survive "New post". Learning a website fills the empty fields. Revisions that state a lasting preference ("never say cliente") are saved as lessons; remove any you don't want.

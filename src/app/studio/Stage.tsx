@@ -8,7 +8,7 @@ import { Icon } from './Icon';
 export type StageWork = { kind: 'generate' | 'revise' | 'other'; phase: string; target: number | null };
 type Props = {
   deck: Deck | null; width: number; height: number; selected: number; onSelect: (index: number) => void;
-  work: StageWork | null; handle: string; peeking: boolean; locked: boolean; empty: ReactNode;
+  work: StageWork | null; handle: string; logo?: string; peeking: boolean; locked: boolean; empty: ReactNode;
   // Slides that just streamed in (no busy overlay), and whether another one is still being written.
   fresh?: number[]; pending?: boolean;
   onCaption: () => void; onOptions: (index: number) => void; onRemix: (format: 'story' | 'post') => void;
@@ -16,7 +16,7 @@ type Props = {
 };
 
 // The post as Instagram will show it: swipe it, tap a frame to aim the next instruction at it.
-export function Stage({ deck, width, height, selected, onSelect, onAim, work, handle, peeking, locked, empty, fresh = [], pending = false, onCaption, onOptions, onRemix, onMove, onDuplicate, onDelete, onDownloadSlide }: Props) {
+export function Stage({ deck, width, height, selected, onSelect, onAim, work, handle, logo, peeking, locked, empty, fresh = [], pending = false, onCaption, onOptions, onRemix, onMove, onDuplicate, onDelete, onDownloadSlide }: Props) {
   const track = useRef<HTMLDivElement>(null);
   const frame = useRef(0);
   const menuRoot = useRef<HTMLDivElement>(null);
@@ -58,7 +58,8 @@ export function Stage({ deck, width, height, selected, onSelect, onAim, work, ha
   return <section className={`stage${story ? ' is-story' : ''}`} style={{ '--ratio': `${w} / ${h}`, '--ar': w / h } as CSSProperties} aria-label="Post preview">
     <article className="post">
       <header className="post-head">
-        <span className="avatar" aria-hidden="true"><span>{handle.slice(0, 1).toUpperCase()}</span></span>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <span className="avatar" aria-hidden="true">{logo ? <img src={logo} alt="" /> : <span>{handle.slice(0, 1).toUpperCase()}</span>}</span>
         <span className="handle"><strong>{handle}</strong><small>{story ? 'Story' : count > 1 ? 'Carousel' : 'Post'} · {w} × {h}</small></span>
         {peeking ? <span className="peek-badge">Before</span> : null}
         {count ? <div className="slide-menu" ref={menuRoot}>
@@ -100,6 +101,8 @@ export function Stage({ deck, width, height, selected, onSelect, onAim, work, ha
           <Icon name="bookmark" size={24} /></div>
         {deck?.caption ? <button type="button" className="caption" onClick={onCaption} aria-label="Open the caption">
           <strong>{handle}</strong> {deck.caption.text.split('\n')[0]} <span className="more">more</span></button>
+          : count && !generating ? <button type="button" className="caption" onClick={onCaption} aria-label="Write the caption">
+            <strong>{handle}</strong> {deck?.title} <span className="more">add caption</span></button>
           : <p className="caption"><strong>{handle}</strong> {deck?.title || (generating ? 'Writing your post…' : 'Your caption will live here.')}</p>}
       </footer> : null}
     </article>
