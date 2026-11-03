@@ -24,8 +24,12 @@ const question = /^(what|how|why|which|who|when|where|can you|could you|would yo
  * A request that plainly asks for a post can go straight to generation, saving an agent call.
  * Questions, and topics too thin to have an angle (the agent offers hooks for those), still go to the agent.
  */
+export function isQuestion(text: string): boolean {
+  const clean = text.trim();
+  return clean.endsWith('?') || question.test(clean);
+}
 export function looksLikeCreate(text: string): boolean {
   const clean = text.trim();
-  if (clean.endsWith('?') || question.test(clean)) return false;
+  if (isQuestion(clean)) return false;
   return clean.split(/\s+/).filter(Boolean).length >= 6;
 }

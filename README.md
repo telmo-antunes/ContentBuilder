@@ -17,16 +17,16 @@ Open http://localhost:3000. The server binds to the local computer only. Choose 
 
 ## Using it
 
-The screen is the post, previewed the way Instagram shows it, and one bar at the bottom.
+A post moves through three views.
 
-- **Make a post:** describe it in the bar and press Enter. Pick Post (4:5), Square (1:1) or Story (9:16) on the blank card first if you like, or tap an example. Paste a link to have its look and images analyzed; paste or drop images to use them.
-- **Change it:** type in the bar. Tap a thumbnail to aim the next change at that slide (the chip in the bar switches between "Slide N" and "Whole post").
+1. **Compose (three beats).** *Say it*: what the post is about, with optional images, a link to read, and the format (Post 4:5, Square, Story 9:16). *Shape it* (optional): how many slides, and instructions for any slide; slides left empty are designed freely. *Make it*: a storyboard of what will be made, the polish switch, and **Create the post**. "Create now" on the first beat skips the shaping.
+2. **Conversation.** Your request becomes the first message and the slides stream into a version card. Every change adds a new card (v2, v3…); older cards can be brought back. Type in the bar to ask or change anything. Tap the speech bubble on a slide to aim the next change at that slide: an aimed change revises only that slide, directly, without an agent call; an aimed question still goes to the agent.
+3. **Review (stage).** **Review** on the current card (or in the top bar) opens the post full size, framed the way Instagram shows it, with the filmstrip, slide menu, caption, versions, undo and **Download**. "‹ Conversation" goes back.
+
 - **Rearrange:** drag thumbnails, or use the slide menu (•••) to move, duplicate, delete or download one slide. These are instant and never call the model.
-- **Undo:** every change shows a toast with Undo; the top bar has Undo and Redo, and holding the eye button shows the version before. History keeps one earlier version.
+- **Undo:** every change shows a toast with Undo; the top bar has Undo and Redo, and holding the eye button shows the version before. Up to 15 versions are kept.
 - **Download:** the Download button renders PNGs at full size and saves a ZIP named after the post.
-- **Conversation** (speech-bubble button) shows the full exchange with the agent; the latest reply also floats above the bar with tappable choices.
 - **Settings** (sliders button) holds the format, websites the agent learned from (notes and which images it may use), the brief for this post, AI models, render checks, and saving or opening a portable copy.
-
 - **Watch it being made:** slides appear one by one as the model writes them. A polish pass then looks at the result at phone size and fixes clipped text, small type and weak contrast (switch it off in Settings).
 - **Caption:** every post comes with its Instagram caption, hashtags, a first comment and alt text per slide. Tap the caption under the post to copy them; the ZIP includes `caption.txt`.
 - **Options:** the slide menu's "Show me 3 options" designs three alternatives for that slide; tap one to use it.

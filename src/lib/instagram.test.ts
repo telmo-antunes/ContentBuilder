@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { decodeDeck, generationMessage, parseTagged, slideStreamer, DESIGN_PROMPT, brandKitText } from './ai';
 import { emptyWorkspace, kitSchema, type Deck, type Workspace } from './schema';
-import { commitDeck, travel, undoStack, versions } from './history';
+import { commitDeck, findVersion, travel, undoStack, versions } from './history';
 import { parseCanvas, viewingNotes } from './formats';
-import { addLesson, looksLikeCreate, seedKit } from './kit';
+import { addLesson, isQuestion, looksLikeCreate, seedKit } from './kit';
 import { fontStylesheets } from './fonts';
 import { validateAgentAction } from './agent-state';
 import { captionText } from './caption';
@@ -108,6 +108,14 @@ describe('versions', () => {
     w = travel(w, 'redo');
     expect(w.deck?.slides[0].html).toBe('v2');
   });
+  it('gives every committed version an id the conversation can point at', () => {
+    let w = commitDeck(start, deck(['v2']), 'second');
+    const v2 = w.deck!.id!;
+    w = commitDeck(w, deck(['v3']), 'third');
+    expect(w.deck!.id).not.toBe(v2);
+    expect(findVersion(w, v2)).toMatchObject({ direction: 'undo', steps: 1 });
+    expect(travel(w, 'undo').deck!.id).toBe(v2);
+  });
   it('reads an older single previous version as a one-entry stack', () => {
     const legacy = { ...start, previous: { deck: deck(['old']), instruction: '' } };
     expect(travel(legacy, 'undo').deck?.slides[0].html).toBe('old');
@@ -133,6 +141,8 @@ describe('small helpers', () => {
     expect(looksLikeCreate('Which slide is weakest?')).toBe(false);
     expect(looksLikeCreate('Como posso melhorar o slide 2')).toBe(false);
     expect(looksLikeCreate('ceramic coatings')).toBe(false);
+    expect(isQuestion('Porque é que este slide está fraco?')).toBe(true);
+    expect(isQuestion('Título mais curto, no máximo quatro palavras.')).toBe(false);
   });
   it('finds Google Fonts stylesheets, including escaped ones', () => {
     const fonts = fontStylesheets(deck(['<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@700&amp;display=swap" rel="stylesheet">']));
